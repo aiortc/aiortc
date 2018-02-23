@@ -9,6 +9,7 @@ install:
       source env/bin/activate
     fi
   - pip install aioice coveralls flake8
+  - pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 language: python
 matrix:
   include:
