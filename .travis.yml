@@ -5,6 +5,9 @@ install:
     if [[ "$(uname -s)" == 'Darwin' ]]; then
       brew update
       brew install python3
+      brew install openssl@1.1
+      export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
+      export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
       python3 -m venv env
       source env/bin/activate
     fi
