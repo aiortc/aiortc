@@ -19,9 +19,6 @@ class RTCPeerConnection:
     def iceGatheringState(self):
         return self.__iceGatheringState
 
-    def addTrack(self, track):
-        pass
-
     async def createAnswer(self):
         return {
             'sdp': self.__createSdp(),
