@@ -13,7 +13,12 @@ def get_ntp_seconds():
 class RTCPeerConnection:
     def __init__(self):
         self.__iceConnection = None
+        self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
+
+    @property
+    def iceConnectionState(self):
+        return self.__iceConnectionState
 
     @property
     def iceGatheringState(self):
@@ -55,7 +60,14 @@ class RTCPeerConnection:
                     self.__iceConnection.remote_username = value
                 elif attr == 'ice-pwd':
                     self.__iceConnection.remote_password = value
-        asyncio.ensure_future(self.__iceConnection.connect())
+
+        if self.__iceConnection.remote_candidates and self.iceConnectionState == 'new':
+            asyncio.ensure_future(self.__connect())
+
+    async def __connect(self):
+        self.__iceConnectionState = 'checking'
+        await self.__iceConnection.connect()
+        self.__iceConnectionState = 'completed'
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
