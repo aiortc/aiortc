@@ -1,0 +1,21 @@
+after_success: coveralls
+dist: trusty
+install:
+  - |
+    if [[ "$(uname -s)" == 'Darwin' ]]; then
+      brew update
+      brew install python3
+      python3 -m venv env
+      source env/bin/activate
+    fi
+  - pip install aioice coveralls flake8
+language: python
+matrix:
+  include:
+  - language: generic
+    os: osx
+  - python: "3.5"
+  - python: "3.6"
+script:
+  - flake8 aiowebrtc tests
+  - coverage run setup.py test
