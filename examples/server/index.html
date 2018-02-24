@@ -1,0 +1,80 @@
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <title>WebRTC demo</title>
+</head>
+<body>
+
+<h2>State</h2>
+<p>
+    ICE gathering state: <span id="ice-gathering-state"></span>
+</p>
+<p>
+    ICE connection state: <span id="ice-connection-state"></span>
+</p>
+
+<h2>Offer SDP</h2>
+<pre id="offer-sdp"></pre>
+
+<h2>Answer SDP</h2>
+<pre id="answer-sdp"></pre>
+
+<script>
+var pc = new RTCPeerConnection();
+
+// register some listeners to help debugging
+pc.addEventListener('icegatheringstatechange', function(ev, candidate) {
+    document.getElementById('ice-gathering-state').textContent = pc.iceGatheringState;
+}, false);
+document.getElementById('ice-gathering-state').textContent = pc.iceGatheringState;
+
+pc.addEventListener('iceconnectionstatechange', function() {
+    document.getElementById('ice-connection-state').textContent = pc.iceConnectionState;
+}, false);
+document.getElementById('ice-connection-state').textContent = pc.iceConnectionState;
+
+navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: false
+}).then(function(stream) {
+    stream.getTracks().forEach(function(track) {
+        pc.addTrack(track, stream);
+    });
+    return pc.createOffer();
+}).then(function(offer) {
+    return pc.setLocalDescription(offer);
+}).then(function() {
+    // wait for ICE gathering to complete
+    return new Promise(function(resolve) {
+        if (pc.iceGatheringState === 'complete') {
+            resolve();
+        } else {
+            function checkState() {
+                if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }
+            }
+            pc.addEventListener('icegatheringstatechange', checkState);
+        }
+    });
+}).then(function() {
+    var offer = pc.localDescription;
+    document.getElementById('offer-sdp').textContent = offer.sdp;
+    return fetch('/offer', {
+        body: JSON.stringify(offer),
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        method: 'POST'
+    });
+}).then(function(response) {
+    return response.json();
+}).then(function(answer) {
+    document.getElementById('answer-sdp').textContent = answer.sdp;
+    return pc.setRemoteDescription(answer);
+});
+
+</script>
+</body>
+</html>
