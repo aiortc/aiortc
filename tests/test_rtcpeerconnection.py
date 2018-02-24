@@ -36,8 +36,13 @@ class RTCPeerConnectionTest(TestCase):
 
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
         self.assertEqual(pc2.iceConnectionState, 'new')
         self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
 
         # create offer
         offer = run(pc1.createOffer())
@@ -46,8 +51,11 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(offer['type'], 'offer')
 
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+
         # create answer
-        run(pc2.setRemoteDescription(offer))
         answer = run(pc2.createAnswer())
         run(pc2.setLocalDescription(answer))
         self.assertEqual(pc2.iceConnectionState, 'checking')
@@ -55,7 +63,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(answer['type'], 'answer')
 
         # handle answer
-        run(pc1.setRemoteDescription(answer))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome

@@ -18,8 +18,12 @@ class RTCPeerConnection(EventEmitter):
         super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
+
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
+
+        self.__currentLocalDescription = None
+        self.__currentRemoteDescription = None
 
     @property
     def iceConnectionState(self):
@@ -28,6 +32,14 @@ class RTCPeerConnection(EventEmitter):
     @property
     def iceGatheringState(self):
         return self.__iceGatheringState
+
+    @property
+    def localDescription(self):
+        return self.__currentLocalDescription
+
+    @property
+    def remoteDescription(self):
+        return self.__currentRemoteDescription
 
     async def close(self):
         """
@@ -64,7 +76,7 @@ class RTCPeerConnection(EventEmitter):
         }
 
     async def setLocalDescription(self, sessionDescription):
-        pass
+        self.__currentLocalDescription = sessionDescription
 
     async def setRemoteDescription(self, sessionDescription):
         if self.__iceConnection is None:
@@ -90,6 +102,8 @@ class RTCPeerConnection(EventEmitter):
 
         if self.__iceConnection.remote_candidates and self.iceConnectionState == 'new':
             asyncio.ensure_future(self.__connect())
+
+        self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
         self.__setIceConnectionState('checking')

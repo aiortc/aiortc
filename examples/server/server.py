@@ -23,7 +23,7 @@ async def offer(request):
     await pc.setLocalDescription(answer)
 
     return web.Response(content_type='application/json',
-                        text=json.dumps(answer))
+                        text=json.dumps(pc.localDescription))
 
 
 logging.basicConfig(level=logging.DEBUG)
