@@ -3,6 +3,8 @@ import datetime
 
 import aioice
 
+from . import dtls
+
 
 def get_ntp_seconds():
     return int((
@@ -12,6 +14,7 @@ def get_ntp_seconds():
 
 class RTCPeerConnection:
     def __init__(self):
+        self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
@@ -32,6 +35,10 @@ class RTCPeerConnection:
 
     async def createOffer(self):
         self.__iceConnection = aioice.Connection(ice_controlling=True)
+        self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
+                                                  is_server=True,
+                                                  transport=self.__iceConnection)
+
         self.__iceGatheringState = 'gathering'
         await self.__iceConnection.gather_candidates()
         self.__iceGatheringState = 'complete'
@@ -47,6 +54,10 @@ class RTCPeerConnection:
     async def setRemoteDescription(self, sessionDescription):
         if self.__iceConnection is None:
             self.__iceConnection = aioice.Connection(ice_controlling=False)
+            self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
+                                                      is_server=False,
+                                                      transport=self.__iceConnection)
+
             self.__iceGatheringState = 'gathering'
             await self.__iceConnection.gather_candidates()
             self.__iceGatheringState = 'complete'
@@ -56,6 +67,10 @@ class RTCPeerConnection:
                 attr, value = line[2:].split(':', 1)
                 if attr == 'candidate':
                     self.__iceConnection.remote_candidates.append(aioice.Candidate.from_sdp(value))
+                elif attr == 'fingerprint':
+                    algo, fingerprint = value.split()
+                    assert algo == 'sha-256'
+                    self.__dtlsSession.remote_fingerprint = fingerprint
                 elif attr == 'ice-ufrag':
                     self.__iceConnection.remote_username = value
                 elif attr == 'ice-pwd':
@@ -67,6 +82,7 @@ class RTCPeerConnection:
     async def __connect(self):
         self.__iceConnectionState = 'checking'
         await self.__iceConnection.connect()
+        await self.__dtlsSession.connect()
         self.__iceConnectionState = 'completed'
 
     def __createSdp(self):
@@ -86,5 +102,6 @@ class RTCPeerConnection:
         sdp += [
             'a=ice-pwd:%s' % self.__iceConnection.local_password,
             'a=ice-ufrag:%s' % self.__iceConnection.local_username,
+            'a=fingerprint:sha-256 %s' % self.__dtlsSession.local_fingerprint,
         ]
         return '\r\n'.join(sdp) + '\r\n'
