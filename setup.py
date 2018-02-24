@@ -29,5 +29,5 @@ setuptools.setup(
         'Programming Language :: Python :: 3.6',
     ],
     packages=['aiowebrtc'],
-    install_requires=['aioice', 'pylibsrtp'],
+    install_requires=['aioice', 'pyee', 'pylibsrtp'],
 )

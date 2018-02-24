@@ -9,10 +9,31 @@ def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
+def track_states(pc):
+    states = {
+        'iceConnectionState': [pc.iceConnectionState],
+        'iceGatheringState': [pc.iceGatheringState],
+    }
+
+    @pc.on('iceconnectionstatechange')
+    def iceconnectionstatechange():
+        states['iceConnectionState'].append(pc.iceConnectionState)
+
+    @pc.on('icegatheringstatechange')
+    def icegatheringstatechange():
+        states['iceGatheringState'].append(pc.iceGatheringState)
+
+    return states
+
+
 class RTCPeerConnectionTest(TestCase):
     def test_connect(self):
         pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
         pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'new')
         self.assertEqual(pc2.iceConnectionState, 'new')
@@ -41,6 +62,12 @@ class RTCPeerConnectionTest(TestCase):
         run(asyncio.sleep(1))
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], ['new', 'checking', 'completed'])
+        self.assertEqual(pc1_states['iceGatheringState'], ['new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['iceConnectionState'], ['new', 'checking', 'completed'])
+        self.assertEqual(pc2_states['iceGatheringState'], ['new', 'gathering', 'complete'])
 
 
 logging.basicConfig(level=logging.DEBUG)

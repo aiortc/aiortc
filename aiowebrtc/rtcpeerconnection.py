@@ -2,6 +2,7 @@ import asyncio
 import datetime
 
 import aioice
+from pyee import EventEmitter
 
 from . import dtls
 
@@ -12,8 +13,9 @@ def get_ntp_seconds():
     ).total_seconds())
 
 
-class RTCPeerConnection:
-    def __init__(self):
+class RTCPeerConnection(EventEmitter):
+    def __init__(self, loop=None):
+        super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
         self.__iceConnectionState = 'new'
@@ -83,14 +85,22 @@ class RTCPeerConnection:
 
     async def __connect(self):
         self.__iceConnectionState = 'checking'
+        self.emit('iceconnectionstatechange')
+
         await self.__iceConnection.connect()
         await self.__dtlsSession.connect()
+
         self.__iceConnectionState = 'completed'
+        self.emit('iceconnectionstatechange')
 
     async def __gather(self):
         self.__iceGatheringState = 'gathering'
+        self.emit('icegatheringstatechange')
+
         await self.__iceConnection.gather_candidates()
+
         self.__iceGatheringState = 'complete'
+        self.emit('icegatheringstatechange')
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
