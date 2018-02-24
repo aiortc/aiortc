@@ -29,6 +29,14 @@ class RTCPeerConnection(EventEmitter):
     def iceGatheringState(self):
         return self.__iceGatheringState
 
+    async def close(self):
+        """
+        Terminate the ICE agent, ending ICE processing and streams.
+        """
+        if self.__iceConnection is not None:
+            await self.__iceConnection.close()
+            self.__setIceConnectionState('closed')
+
     async def createAnswer(self):
         """
         Create an SDP answer to an offer received from a remote peer during
@@ -84,23 +92,15 @@ class RTCPeerConnection(EventEmitter):
             asyncio.ensure_future(self.__connect())
 
     async def __connect(self):
-        self.__iceConnectionState = 'checking'
-        self.emit('iceconnectionstatechange')
-
+        self.__setIceConnectionState('checking')
         await self.__iceConnection.connect()
         await self.__dtlsSession.connect()
-
-        self.__iceConnectionState = 'completed'
-        self.emit('iceconnectionstatechange')
+        self.__setIceConnectionState('completed')
 
     async def __gather(self):
-        self.__iceGatheringState = 'gathering'
-        self.emit('icegatheringstatechange')
-
+        self.__setIceGatheringState('gathering')
         await self.__iceConnection.gather_candidates()
-
-        self.__iceGatheringState = 'complete'
-        self.emit('icegatheringstatechange')
+        self.__setIceGatheringState('complete')
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
@@ -137,3 +137,11 @@ class RTCPeerConnection(EventEmitter):
         sdp += ['a=rtpmap:0 PCMU/8000']
 
         return '\r\n'.join(sdp) + '\r\n'
+
+    def __setIceConnectionState(self, state):
+        self.__iceConnectionState = state
+        self.emit('iceconnectionstatechange')
+
+    def __setIceGatheringState(self, state):
+        self.__iceGatheringState = state
+        self.emit('icegatheringstatechange')

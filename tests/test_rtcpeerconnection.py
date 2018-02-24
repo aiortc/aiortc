@@ -63,10 +63,16 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
         # check state changes
-        self.assertEqual(pc1_states['iceConnectionState'], ['new', 'checking', 'completed'])
+        self.assertEqual(pc1_states['iceConnectionState'], ['new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], ['new', 'gathering', 'complete'])
-        self.assertEqual(pc2_states['iceConnectionState'], ['new', 'checking', 'completed'])
+        self.assertEqual(pc2_states['iceConnectionState'], ['new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc2_states['iceGatheringState'], ['new', 'gathering', 'complete'])
 
 
