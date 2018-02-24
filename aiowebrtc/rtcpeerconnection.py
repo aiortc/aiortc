@@ -38,10 +38,7 @@ class RTCPeerConnection:
         self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
                                                   is_server=True,
                                                   transport=self.__iceConnection)
-
-        self.__iceGatheringState = 'gathering'
-        await self.__iceConnection.gather_candidates()
-        self.__iceGatheringState = 'complete'
+        await self.__gather()
 
         return {
             'sdp': self.__createSdp(),
@@ -57,10 +54,7 @@ class RTCPeerConnection:
             self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
                                                       is_server=False,
                                                       transport=self.__iceConnection)
-
-            self.__iceGatheringState = 'gathering'
-            await self.__iceConnection.gather_candidates()
-            self.__iceGatheringState = 'complete'
+            await self.__gather()
 
         for line in sessionDescription['sdp'].splitlines():
             if line.startswith('a=') and ':' in line:
@@ -84,6 +78,11 @@ class RTCPeerConnection:
         await self.__iceConnection.connect()
         await self.__dtlsSession.connect()
         self.__iceConnectionState = 'completed'
+
+    async def __gather(self):
+        self.__iceGatheringState = 'gathering'
+        await self.__iceConnection.gather_candidates()
+        self.__iceGatheringState = 'complete'
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
