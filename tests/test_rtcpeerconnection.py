@@ -79,10 +79,14 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceConnectionState, 'closed')
 
         # check state changes
-        self.assertEqual(pc1_states['iceConnectionState'], ['new', 'checking', 'completed', 'closed'])
-        self.assertEqual(pc1_states['iceGatheringState'], ['new', 'gathering', 'complete'])
-        self.assertEqual(pc2_states['iceConnectionState'], ['new', 'checking', 'completed', 'closed'])
-        self.assertEqual(pc2_states['iceGatheringState'], ['new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
 
 
 logging.basicConfig(level=logging.DEBUG)
