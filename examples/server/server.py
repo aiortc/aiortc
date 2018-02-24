@@ -3,7 +3,7 @@ import logging
 import os
 
 from aiohttp import web
-from aiowebrtc import RTCPeerConnection
+from aiowebrtc import RTCPeerConnection, RTCSessionDescription
 
 
 ROOT = os.path.dirname(__file__)
@@ -16,14 +16,21 @@ async def index(request):
 
 async def offer(request):
     offer = await request.json()
+    offer = RTCSessionDescription(
+        sdp=offer['sdp'],
+        type=offer['type'])
 
     pc = RTCPeerConnection()
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
-    return web.Response(content_type='application/json',
-                        text=json.dumps(pc.localDescription))
+    return web.Response(
+        content_type='application/json',
+        text=json.dumps({
+            'sdp': pc.localDescription.sdp,
+            'type': pc.localDescription.type
+        }))
 
 
 logging.basicConfig(level=logging.DEBUG)

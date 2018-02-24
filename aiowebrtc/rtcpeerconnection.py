@@ -5,6 +5,7 @@ import aioice
 from pyee import EventEmitter
 
 from . import dtls
+from .rtcsessiondescription import RTCSessionDescription
 
 
 def get_ntp_seconds():
@@ -54,10 +55,9 @@ class RTCPeerConnection(EventEmitter):
         Create an SDP answer to an offer received from a remote peer during
         the offer/answer negotiation of a WebRTC connection.
         """
-        return {
-            'sdp': self.__createSdp(),
-            'type': 'answer',
-        }
+        return RTCSessionDescription(
+            sdp=self.__createSdp(),
+            type='answer')
 
     async def createOffer(self):
         """
@@ -70,10 +70,9 @@ class RTCPeerConnection(EventEmitter):
                                                   transport=self.__iceConnection)
         await self.__gather()
 
-        return {
-            'sdp': self.__createSdp(),
-            'type': 'offer',
-        }
+        return RTCSessionDescription(
+            sdp=self.__createSdp(),
+            type='offer')
 
     async def setLocalDescription(self, sessionDescription):
         self.__currentLocalDescription = sessionDescription
@@ -86,7 +85,7 @@ class RTCPeerConnection(EventEmitter):
                                                       transport=self.__iceConnection)
             await self.__gather()
 
-        for line in sessionDescription['sdp'].splitlines():
+        for line in sessionDescription.sdp.splitlines():
             if line.startswith('a=') and ':' in line:
                 attr, value = line[2:].split(':', 1)
                 if attr == 'candidate':
