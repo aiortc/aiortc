@@ -2,7 +2,7 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import AudioStreamTrack, RTCPeerConnection
+from aiowebrtc import AudioStreamTrack, RTCPeerConnection, VideoStreamTrack
 
 
 def run(coro):
@@ -27,6 +27,30 @@ def track_states(pc):
 
 
 class RTCPeerConnectionTest(TestCase):
+    def test_addTrack(self):
+        pc = RTCPeerConnection()
+
+        # add audio track
+        track = AudioStreamTrack()
+        sender = pc.addTrack(track)
+        self.assertIsNotNone(sender)
+        self.assertEqual(sender.track, track)
+        self.assertEqual(pc.getSenders(), [sender])
+
+        # add same track again
+        sender2 = pc.addTrack(track)
+        self.assertEqual(sender2, sender)
+
+        # try adding another audio track
+        with self.assertRaises(ValueError) as cm:
+            pc.addTrack(AudioStreamTrack())
+        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+
+        # try adding a video track
+        with self.assertRaises(ValueError) as cm:
+            pc.addTrack(VideoStreamTrack())
+        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+
     def test_connect(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -44,14 +68,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
 
-        # add audio track
-        track = AudioStreamTrack()
-        sender = pc1.addTrack(track)
-        self.assertIsNotNone(sender)
-        self.assertEqual(sender.track, track)
-        self.assertEqual(pc1.getSenders(), [sender])
-
         # create offer
+        pc1.addTrack(AudioStreamTrack())
         offer = run(pc1.createOffer())
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
@@ -61,6 +79,9 @@ class RTCPeerConnectionTest(TestCase):
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+
+        # FIXME!
+        self.assertEqual(pc2.getReceivers(), [])
 
         # create answer
         answer = run(pc2.createAnswer())

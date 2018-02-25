@@ -21,6 +21,7 @@ class RTCPeerConnection(EventEmitter):
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
         self.__senders = []
+        self.__receivers = []
 
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
@@ -49,6 +50,15 @@ class RTCPeerConnection(EventEmitter):
         Add a new media track to the set of media tracks while will be
         transmitted to the other peer.
         """
+        # don't add track twice
+        for sender in self.__senders:
+            if sender.track == track:
+                return sender
+
+        # we only support a single track for now
+        if track.kind != 'audio' or len(self.__senders):
+            raise ValueError('Only a single audio track is supported for now')
+
         sender = RTCRtpSender(track)
         self.__senders.append(sender)
         return sender
@@ -85,8 +95,11 @@ class RTCPeerConnection(EventEmitter):
             sdp=self.__createSdp(),
             type='offer')
 
+    def getReceivers(self):
+        return self.__receivers[:]
+
     def getSenders(self):
-        return self.__senders
+        return self.__senders[:]
 
     async def setLocalDescription(self, sessionDescription):
         self.__currentLocalDescription = sessionDescription
