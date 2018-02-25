@@ -5,6 +5,7 @@ import aioice
 from pyee import EventEmitter
 
 from . import dtls
+from .exceptions import InvalidStateError
 from .rtcrtpsender import RTCRtpSender
 from .rtcsessiondescription import RTCSessionDescription
 
@@ -25,6 +26,7 @@ class RTCPeerConnection(EventEmitter):
 
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
+        self.__isClosed = False
 
         self.__currentLocalDescription = None
         self.__currentRemoteDescription = None
@@ -50,6 +52,9 @@ class RTCPeerConnection(EventEmitter):
         Add a new media track to the set of media tracks while will be
         transmitted to the other peer.
         """
+        if self.__isClosed:
+            raise InvalidStateError('RTCPeerConnection is closed')
+
         # don't add track twice
         for sender in self.__senders:
             if sender.track == track:
@@ -70,6 +75,7 @@ class RTCPeerConnection(EventEmitter):
         if self.__iceConnection is not None:
             await self.__iceConnection.close()
             self.__setIceConnectionState('closed')
+        self.__isClosed = True
 
     async def createAnswer(self):
         """

@@ -2,7 +2,8 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import AudioStreamTrack, RTCPeerConnection, VideoStreamTrack
+from aiowebrtc import (AudioStreamTrack, InvalidStateError, RTCPeerConnection,
+                       VideoStreamTrack)
 
 
 def run(coro):
@@ -50,6 +51,13 @@ class RTCPeerConnectionTest(TestCase):
         with self.assertRaises(ValueError) as cm:
             pc.addTrack(VideoStreamTrack())
         self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+
+    def test_addTrack_closed(self):
+        pc = RTCPeerConnection()
+        run(pc.close())
+        with self.assertRaises(InvalidStateError) as cm:
+            pc.addTrack(AudioStreamTrack())
+        self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
 
     def test_connect(self):
         pc1 = RTCPeerConnection()
