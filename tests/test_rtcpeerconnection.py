@@ -2,8 +2,8 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import (AudioStreamTrack, InvalidStateError, RTCPeerConnection,
-                       VideoStreamTrack)
+from aiowebrtc import (AudioStreamTrack, InvalidAccessError, InvalidStateError,
+                       RTCPeerConnection, VideoStreamTrack)
 
 
 def run(coro):
@@ -38,9 +38,10 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(sender.track, track)
         self.assertEqual(pc.getSenders(), [sender])
 
-        # add same track again
-        sender2 = pc.addTrack(track)
-        self.assertEqual(sender2, sender)
+        # try to add same track again
+        with self.assertRaises(InvalidAccessError) as cm:
+            pc.addTrack(track)
+        self.assertEqual(str(cm.exception), 'Track already has a sender')
 
         # try adding another audio track
         with self.assertRaises(ValueError) as cm:

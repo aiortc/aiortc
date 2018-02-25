@@ -5,7 +5,7 @@ import aioice
 from pyee import EventEmitter
 
 from . import dtls
-from .exceptions import InvalidStateError
+from .exceptions import InvalidAccessError, InvalidStateError
 from .rtcrtpsender import RTCRtpSender
 from .rtcsessiondescription import RTCSessionDescription
 
@@ -58,7 +58,7 @@ class RTCPeerConnection(EventEmitter):
         # don't add track twice
         for sender in self.__senders:
             if sender.track == track:
-                return sender
+                raise InvalidAccessError('Track already has a sender')
 
         # we only support a single track for now
         if track.kind != 'audio' or len(self.__senders):
