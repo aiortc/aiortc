@@ -20,7 +20,7 @@ class RTCPeerConnection(EventEmitter):
         super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
-        self.__tracks = []
+        self.__senders = []
 
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
@@ -49,8 +49,9 @@ class RTCPeerConnection(EventEmitter):
         Add a new media track to the set of media tracks while will be
         transmitted to the other peer.
         """
-        self.__tracks.append(track)
-        return RTCRtpSender(track)
+        sender = RTCRtpSender(track)
+        self.__senders.append(sender)
+        return sender
 
     async def close(self):
         """
@@ -83,6 +84,9 @@ class RTCPeerConnection(EventEmitter):
         return RTCSessionDescription(
             sdp=self.__createSdp(),
             type='offer')
+
+    def getSenders(self):
+        return self.__senders
 
     async def setLocalDescription(self, sessionDescription):
         self.__currentLocalDescription = sessionDescription

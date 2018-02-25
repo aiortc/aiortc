@@ -49,6 +49,7 @@ class RTCPeerConnectionTest(TestCase):
         sender = pc1.addTrack(track)
         self.assertIsNotNone(sender)
         self.assertEqual(sender.track, track)
+        self.assertEqual(pc1.getSenders(), [sender])
 
         # create offer
         offer = run(pc1.createOffer())
