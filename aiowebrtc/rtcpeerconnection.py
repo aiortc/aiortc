@@ -5,6 +5,7 @@ import aioice
 from pyee import EventEmitter
 
 from . import dtls
+from .rtcrtpsender import RTCRtpSender
 from .rtcsessiondescription import RTCSessionDescription
 
 
@@ -19,6 +20,7 @@ class RTCPeerConnection(EventEmitter):
         super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
+        self.__tracks = []
 
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
@@ -41,6 +43,14 @@ class RTCPeerConnection(EventEmitter):
     @property
     def remoteDescription(self):
         return self.__currentRemoteDescription
+
+    def addTrack(self, track):
+        """
+        Add a new media track to the set of media tracks while will be
+        transmitted to the other peer.
+        """
+        self.__tracks.append(track)
+        return RTCRtpSender(track)
 
     async def close(self):
         """

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import RTCPeerConnection
+from aiowebrtc import AudioStreamTrack, RTCPeerConnection
 
 
 def run(coro):
@@ -43,6 +43,12 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceGatheringState, 'new')
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
+
+        # add audio track
+        track = AudioStreamTrack()
+        sender = pc1.addTrack(track)
+        self.assertIsNotNone(sender)
+        self.assertEqual(sender.track, track)
 
         # create offer
         offer = run(pc1.createOffer())
