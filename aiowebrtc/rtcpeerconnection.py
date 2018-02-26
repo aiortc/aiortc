@@ -174,6 +174,7 @@ class RTCPeerConnection(EventEmitter):
             'o=- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds),
             's=-',
             't=0 0',
+            'a=fingerprint:sha-256 %s' % self.__dtlsContext.local_fingerprint,
         ]
 
         default_candidate = self.__iceConnection.get_default_candidate(1)
@@ -189,7 +190,6 @@ class RTCPeerConnection(EventEmitter):
         sdp += [
             'a=ice-pwd:%s' % self.__iceConnection.local_password,
             'a=ice-ufrag:%s' % self.__iceConnection.local_username,
-            'a=fingerprint:sha-256 %s' % self.__dtlsSession.local_fingerprint,
         ]
         if self.__iceConnection.ice_controlling:
             sdp += ['a=setup:actpass']
