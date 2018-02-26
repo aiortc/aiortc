@@ -73,6 +73,11 @@ class RTCPeerConnection(EventEmitter):
             if sender.track == track:
                 raise InvalidAccessError('Track already has a sender')
 
+        for transceiver in self.__transceivers:
+            if transceiver._kind == track.kind and transceiver.sender.track is None:
+                transceiver.sender._track = track
+                return transceiver.sender
+
         # we only support a single track for now
         if track.kind != 'audio' or len(self.__transceivers):
             raise ValueError('Only a single audio track is supported for now')
@@ -258,7 +263,7 @@ class RTCPeerConnection(EventEmitter):
                 sdp += ['a=setup:actpass']
             else:
                 sdp += ['a=setup:active']
-            sdp += ['a=sendrecv']
+            sdp += ['a=%s' % transceiver.direction]
             sdp += ['a=rtcp-mux']
 
             # FIXME: negotiate codec
