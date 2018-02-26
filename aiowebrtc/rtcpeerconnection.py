@@ -10,7 +10,7 @@ from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
 from .rtcsessiondescription import RTCSessionDescription
 
 
-dummy_candidate = aioice.Candidate(
+DUMMY_CANDIDATE = aioice.Candidate(
     foundation='',
     component=1,
     transport='udp',
@@ -18,6 +18,7 @@ dummy_candidate = aioice.Candidate(
     host='0.0.0.0',
     port=0,
     type='host')
+MEDIA_KINDS = ['audio', 'video']
 
 
 def get_ntp_seconds():
@@ -67,6 +68,8 @@ class RTCPeerConnection(EventEmitter):
         """
         # check state is valid
         self.__assertNotClosed()
+        if track.kind not in ['audio', 'video']:
+            raise ValueError('Invalid track kind "%s"' % track.kind)
 
         # don't add track twice
         for sender in self.getSenders():
@@ -78,9 +81,9 @@ class RTCPeerConnection(EventEmitter):
                 transceiver.sender._track = track
                 return transceiver.sender
 
-        # we only support a single track for now
-        if track.kind != 'audio' or len(self.__transceivers):
-            raise ValueError('Only a single audio track is supported for now')
+        # we only support a single media track for now
+        if len(self.__transceivers):
+            raise ValueError('Only a single media track is supported for now')
 
         transceiver = RTCRtpTransceiver(
             receiver=RTCRtpReceiver(),
@@ -166,17 +169,17 @@ class RTCPeerConnection(EventEmitter):
                                         self.signalingState)
 
         # parse description
-        parsedRemoteDescription = sdp.ParsedDescription(sessionDescription.sdp)
+        parsedRemoteDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
 
         # apply description
         for media in parsedRemoteDescription.media:
-            if media.type not in ['audio', 'video']:
+            if media.kind not in ['audio', 'video']:
                 continue
 
             # find transceiver
             transceiver = None
             for t in self.__transceivers:
-                if t._kind == media.type:
+                if t._kind == media.kind:
                     transceiver = t
             if transceiver is None:
                 transceiver = RTCRtpTransceiver(
@@ -187,7 +190,7 @@ class RTCPeerConnection(EventEmitter):
                     self.__dtlsContext,
                     is_server=False,
                     transport=transceiver._iceConnection)
-                transceiver._kind = media.type
+                transceiver._kind = media.kind
                 self.__transceivers.append(transceiver)
 
             # configure transport
@@ -245,7 +248,7 @@ class RTCPeerConnection(EventEmitter):
             iceConnection = transceiver._iceConnection
             default_candidate = iceConnection.get_default_candidate(1)
             if default_candidate is None:
-                default_candidate = dummy_candidate
+                default_candidate = DUMMY_CANDIDATE
             sdp += [
                 # FIXME: negotiate codec
                 'm=audio %d UDP/TLS/RTP/SAVPF 0' % default_candidate.port,

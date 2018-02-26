@@ -4,6 +4,11 @@ from unittest import TestCase
 
 from aiowebrtc import (AudioStreamTrack, InvalidAccessError, InvalidStateError,
                        RTCPeerConnection, RTCSessionDescription, VideoStreamTrack)
+from aiowebrtc.mediastreams import MediaStreamTrack
+
+
+class BogusStreamTrack(MediaStreamTrack):
+    kind = 'bogus'
 
 
 def run(coro):
@@ -33,7 +38,7 @@ def track_states(pc):
 
 
 class RTCPeerConnectionTest(TestCase):
-    def test_addTrack(self):
+    def test_addTrack_audio(self):
         pc = RTCPeerConnection()
 
         # add audio track
@@ -51,12 +56,35 @@ class RTCPeerConnectionTest(TestCase):
         # try adding another audio track
         with self.assertRaises(ValueError) as cm:
             pc.addTrack(AudioStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+        self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
 
-        # try adding a video track
+    def test_addTrack_bogus(self):
+        pc = RTCPeerConnection()
+
+        # try adding a bogus track
         with self.assertRaises(ValueError) as cm:
-            pc.addTrack(VideoStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+            pc.addTrack(BogusStreamTrack)
+        self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
+
+    def test_addTrack_video(self):
+        pc = RTCPeerConnection()
+
+        # add video track
+        track = VideoStreamTrack()
+        sender = pc.addTrack(track)
+        self.assertIsNotNone(sender)
+        self.assertEqual(sender.track, track)
+        self.assertEqual(pc.getSenders(), [sender])
+
+        # try to add same track again
+        with self.assertRaises(InvalidAccessError) as cm:
+            pc.addTrack(track)
+        self.assertEqual(str(cm.exception), 'Track already has a sender')
+
+        # try adding an audio track
+        with self.assertRaises(ValueError) as cm:
+            pc.addTrack(AudioStreamTrack())
+        self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
 
     def test_addTrack_closed(self):
         pc = RTCPeerConnection()

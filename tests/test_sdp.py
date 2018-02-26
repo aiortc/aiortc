@@ -1,11 +1,11 @@
 from unittest import TestCase
 
-from aiowebrtc.sdp import ParsedDescription
+from aiowebrtc.sdp import SessionDescription
 
 
 class SdpTest(TestCase):
-    def test_chrome_audio(self):
-        d = ParsedDescription("""v=0
+    def test_audio_chrome(self):
+        d = SessionDescription.parse("""v=0
 o=- 863426017819471768 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -47,8 +47,12 @@ a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-a
 a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
 a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12""")  # noqa
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].type, 'audio')
+        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].host, '192.168.99.58')
         self.assertEqual(d.media[0].port, 45076)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].fmt, [
+            111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_ufrag, '5+Ix')
         self.assertEqual(d.media[0].ice_pwd, 'uK8IlylxzDMUhrkVzdmj0M+v')
@@ -56,8 +60,8 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12""")  # noqa
             d.media[0].dtls_fingerprint,
             '6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC')  # noqa
 
-    def test_firefox_audio(self):
-        d = ParsedDescription("""v=0
+    def test_audio_firefox(self):
+        d = SessionDescription.parse("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -97,11 +101,61 @@ a=setup:actpass
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 """)  # noqa
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].type, 'audio')
+        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].host, '192.168.99.58')
         self.assertEqual(d.media[0].port, 45274)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].fmt, [
+            109, 9, 0, 8, 101])
+
+        # ice
         self.assertEqual(len(d.media[0].ice_candidates), 8)
         self.assertEqual(d.media[0].ice_ufrag, '403a81e1')
         self.assertEqual(d.media[0].ice_pwd, 'f9b83487285016f7492197a5790ceee5')
+
+        # dtls
         self.assertEqual(
             d.media[0].dtls_fingerprint,
             'EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17')  # noqa
+
+    def test_datachannel_firefox(self):
+        d = SessionDescription.parse("""v=0
+o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=sendrecv
+a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
+a=group:BUNDLE sdparta_0
+a=ice-options:trickle
+a=msid-semantic:WMS *
+m=application 45791 DTLS/SCTP 5000
+c=IN IP4 192.168.99.58
+a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
+a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
+a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=sendrecv
+a=end-of-candidates
+a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=ice-ufrag:9889e0c4
+a=mid:sdparta_0
+a=sctpmap:5000 webrtc-datachannel 256
+a=setup:actpass
+a=max-message-size:1073741823
+""")  # noqa
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'application')
+        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].port, 45791)
+        self.assertEqual(d.media[0].profile, 'DTLS/SCTP')
+        self.assertEqual(d.media[0].fmt, [5000])
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 4)
+        self.assertEqual(d.media[0].ice_ufrag, '9889e0c4')
+        self.assertEqual(d.media[0].ice_pwd, 'd30a5aec4dd81f07d4ff3344209400ab')
+
+        # dtls
+        self.assertEqual(
+            d.media[0].dtls_fingerprint,
+            '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa

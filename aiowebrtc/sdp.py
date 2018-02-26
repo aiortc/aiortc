@@ -3,33 +3,49 @@ import re
 import aioice
 
 
-class ParsedMedia:
-    def __init__(self, type, port, dtls_fingerprint=None, ice_ufrag=None, ice_pwd=None):
-        self.type = type
+class MediaDescription:
+    def __init__(self, kind, port, profile, fmt):
+        self.kind = kind
         self.port = port
-        self.dtls_fingerprint = dtls_fingerprint
+        self.host = None
+        self.profile = profile
+        self.fmt = fmt
+
+        # DTLS
+        self.dtls_fingerprint = None
+
+        # ICE
         self.ice_candidates = []
-        self.ice_ufrag = ice_ufrag
-        self.ice_pwd = ice_pwd
+        self.ice_ufrag = None
+        self.ice_pwd = None
 
 
-class ParsedDescription:
-    def __init__(self, sdp):
+class SessionDescription:
+    def __init__(self):
         self.media = []
 
+    @classmethod
+    def parse(cls, sdp):
         current_media = None
         dtls_fingerprint = None
+        session = cls()
 
         for line in sdp.splitlines():
             if line.startswith('m='):
-                m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)', line)
+                m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$', line)
                 assert m
-                current_media = ParsedMedia(
-                    type=m.group(1), port=int(m.group(2)),
-                    dtls_fingerprint=dtls_fingerprint)
-                self.media.append(current_media)
-
-            if line.startswith('a=') and ':' in line:
+                current_media = MediaDescription(
+                    kind=m.group(1),
+                    port=int(m.group(2)),
+                    profile=m.group(3),
+                    fmt=[int(x) for x in m.group(4).split()])
+                current_media.dtls_fingerprint = dtls_fingerprint
+                session.media.append(current_media)
+            elif line.startswith('c=') and current_media:
+                m = re.match('^c=IN (IP4|IP6) ([^ ]+)$', line)
+                assert m
+                current_media.host = m.group(2)
+            elif line.startswith('a=') and ':' in line:
                 attr, value = line[2:].split(':', 1)
                 if current_media:
                     if attr == 'candidate':
@@ -48,3 +64,5 @@ class ParsedDescription:
                         algo, fingerprint = value.split()
                         assert algo == 'sha-256'
                         dtls_fingerprint = fingerprint
+
+        return session
