@@ -4,7 +4,7 @@ import datetime
 import aioice
 from pyee import EventEmitter
 
-from . import dtls, sdp
+from . import dtls, sdp, sctp
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import RTCDataChannel
 from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
@@ -255,6 +255,9 @@ class RTCPeerConnection(EventEmitter):
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
                 await dtlsSession.connect()
+            if self.__sctp:
+                conn = sctp.Transport(transport=self.__sctp._dtlsSession)
+                asyncio.ensure_future(conn.run())
             self.__setIceConnectionState('completed')
 
     async def __gather(self):

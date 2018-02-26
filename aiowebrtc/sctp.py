@@ -7,23 +7,33 @@ import crcmod.predefined
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 
 
+PARAMETERS = {
+    0x8002: 'RANDOM',
+    0x8003: 'CHUNKS',
+    0x8004: 'HMAC-ALGO',
+    0x8008: 'Supported-Extension',
+    0xc000: 'Forward-TSN-Supported',
+}
+
+
 def decode_params(body):
     params = []
     pos = 0
     while pos < len(body) - 4:
-        tag_type, tag_length = unpack('!HH', body[pos:pos + 4])
-        params.append((tag_type, body[pos + 4:pos + tag_length]))
-        pos += tag_length + padl(tag_length)
+        param_type, param_length = unpack('!HH', body[pos:pos + 4])
+        params.append((param_type, body[pos + 4:pos + param_length]))
+        pos += param_length + padl(param_length)
     return params
 
 
 def encode_params(params):
     body = b''
     padding = b''
-    for tag_type, tag_value in params:
+    for param_type, param_value in params:
+        param_length = len(param_value) + 4
         body += padding
-        body += pack('!HH', tag_type, len(tag_value) + 4) + tag_value
-        padding = b'\x00' * padl(len(tag_value))
+        body += pack('!HH', param_type, param_length) + param_value
+        padding = b'\x00' * padl(param_length)
     return body
 
 
@@ -41,6 +51,7 @@ class Chunk:
         data = pack('!BBH', self.type, self.flags, len(body) + 4) + body
         data += b'\x00' * padl(len(body))
         return data
+
 
 class InitChunk(Chunk):
     def __init__(self, type, flags, body=None):
@@ -141,3 +152,5 @@ class Transport:
                 continue
 
             print('FROM port', packet.source_port, 'to', packet.destination_port)
+            for chunk in packet.chunks:
+                print(chunk.type, chunk.params)

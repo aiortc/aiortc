@@ -152,11 +152,21 @@ class DtlsSrtpSession:
 
     async def recv(self):
         data = await self.transport.recv()
-        if is_rtcp(data):
-            data = self._rx_srtp.unprotect_rtcp(data)
-            logger.debug('Unprotected RTCP data %d bytes', len(data))
-        else:
-            data = self._rx_srtp.unprotect(data)
+
+        first_byte = data[0]
+        if first_byte > 19 and first_byte < 64:
+            # DTLS
+            lib.BIO_write(self.read_bio, data, len(data))
+            buf = ffi.new("char[]", 1500)
+            result = lib.SSL_read(self.ssl, buf, len(buf))
+            return ffi.buffer(buf)[0:result]
+        elif first_byte > 127 and first_byte < 192:
+            # SRTP / SRTCP
+            if is_rtcp(data):
+                data = self._rx_srtp.unprotect_rtcp(data)
+                logger.debug('Unprotected RTCP data %d bytes', len(data))
+            else:
+                data = self._rx_srtp.unprotect(data)
         return data
 
     async def send(self, data):
@@ -166,6 +176,10 @@ class DtlsSrtpSession:
         else:
             data = self._tx_srtp.protect(data)
         await self.transport.send(data)
+
+    async def send_dtls(self, data):
+        lib.SSL_write(self.ssl, data, len(data))
+        self._write_ssl()
 
     async def _write_ssl(self):
         pending = lib.BIO_ctrl_pending(self.write_bio)
