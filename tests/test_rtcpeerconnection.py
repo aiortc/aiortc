@@ -110,9 +110,7 @@ class RTCPeerConnectionTest(TestCase):
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
-
-        # FIXME!
-        self.assertEqual(pc2.getReceivers(), [])
+        self.assertEqual(len(pc2.getReceivers()), 1)
 
         # create answer
         answer = run(pc2.createAnswer())

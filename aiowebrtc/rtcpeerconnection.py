@@ -4,7 +4,7 @@ import datetime
 import aioice
 from pyee import EventEmitter
 
-from . import dtls
+from . import dtls, sdp
 from .exceptions import InvalidAccessError, InvalidStateError
 from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
 from .rtcsessiondescription import RTCSessionDescription
@@ -30,7 +30,6 @@ class RTCPeerConnection(EventEmitter):
     def __init__(self, loop=None):
         super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
-        self.__iceConnection = None
         self.__transceivers = []
 
         self.__iceConnectionState = 'new'
@@ -81,6 +80,11 @@ class RTCPeerConnection(EventEmitter):
         transceiver = RTCRtpTransceiver(
             receiver=RTCRtpReceiver(),
             sender=RTCRtpSender(track))
+        transceiver._kind = track.kind
+        transceiver._iceConnection = aioice.Connection(ice_controlling=True)
+        transceiver._dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
+                                                        is_server=True,
+                                                        transport=transceiver._iceConnection)
         self.__transceivers.append(transceiver)
         return transceiver.sender
 
@@ -92,9 +96,9 @@ class RTCPeerConnection(EventEmitter):
             return
         self.__isClosed = True
         self.__setSignalingState('closed')
-        if self.__iceConnection is not None:
-            await self.__iceConnection.close()
-            self.__setIceConnectionState('closed')
+        for transceiver in self.__transceivers:
+            await transceiver._iceConnection.close()
+        self.__setIceConnectionState('closed')
 
     async def createAnswer(self):
         """
@@ -119,11 +123,6 @@ class RTCPeerConnection(EventEmitter):
         # check state is valid
         self.__assertNotClosed()
 
-        self.__iceConnection = aioice.Connection(ice_controlling=True)
-        self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
-                                                  is_server=True,
-                                                  transport=self.__iceConnection)
-
         return RTCSessionDescription(
             sdp=self.__createSdp(),
             type='offer')
@@ -140,13 +139,11 @@ class RTCPeerConnection(EventEmitter):
         elif sessionDescription.type == 'answer':
             self.__setSignalingState('stable')
 
-        if self.iceGatheringState == 'new':
-            await self.__gather()
+        # gather
+        await self.__gather()
 
-        if (self.iceConnectionState == 'new' and
-           self.__iceConnection.local_candidates and
-           self.__iceConnection.remote_candidates):
-            asyncio.ensure_future(self.__connect())
+        # connect
+        asyncio.ensure_future(self.__connect())
 
         self.__currentLocalDescription = RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -163,30 +160,39 @@ class RTCPeerConnection(EventEmitter):
                 raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
                                         self.signalingState)
 
-        if self.__iceConnection is None:
-            self.__iceConnection = aioice.Connection(ice_controlling=False)
-            self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
-                                                      is_server=False,
-                                                      transport=self.__iceConnection)
+        # parse description
+        parsedRemoteDescription = sdp.ParsedDescription(sessionDescription.sdp)
 
-        for line in sessionDescription.sdp.splitlines():
-            if line.startswith('a=') and ':' in line:
-                attr, value = line[2:].split(':', 1)
-                if attr == 'candidate':
-                    self.__iceConnection.remote_candidates.append(aioice.Candidate.from_sdp(value))
-                elif attr == 'fingerprint':
-                    algo, fingerprint = value.split()
-                    assert algo == 'sha-256'
-                    self.__dtlsSession.remote_fingerprint = fingerprint
-                elif attr == 'ice-ufrag':
-                    self.__iceConnection.remote_username = value
-                elif attr == 'ice-pwd':
-                    self.__iceConnection.remote_password = value
+        # apply description
+        for media in parsedRemoteDescription.media:
+            if media.type not in ['audio', 'video']:
+                continue
 
-        if (self.iceConnectionState == 'new' and
-           self.__iceConnection.local_candidates and
-           self.__iceConnection.remote_candidates):
-            asyncio.ensure_future(self.__connect())
+            # find transceiver
+            transceiver = None
+            for t in self.__transceivers:
+                if t._kind == media.type:
+                    transceiver = t
+            if transceiver is None:
+                transceiver = RTCRtpTransceiver(
+                    sender=RTCRtpSender(),
+                    receiver=RTCRtpReceiver())
+                transceiver._iceConnection = aioice.Connection(ice_controlling=False)
+                transceiver._dtlsSession = dtls.DtlsSrtpSession(
+                    self.__dtlsContext,
+                    is_server=False,
+                    transport=transceiver._iceConnection)
+                transceiver._kind = media.type
+                self.__transceivers.append(transceiver)
+
+            # configure transport
+            transceiver._iceConnection.remote_candidates = media.ice_candidates
+            transceiver._iceConnection.remote_username = media.ice_ufrag
+            transceiver._iceConnection.remote_password = media.ice_pwd
+            transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+
+        # connect
+        asyncio.ensure_future(self.__connect())
 
         # update signaling state
         if sessionDescription.type == 'offer':
@@ -197,15 +203,24 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        self.__setIceConnectionState('checking')
-        await self.__iceConnection.connect()
-        await self.__dtlsSession.connect()
-        self.__setIceConnectionState('completed')
+        for transceiver in self.__transceivers:
+            if (not transceiver._iceConnection.local_candidates or
+               not transceiver._iceConnection.remote_candidates):
+                return
+
+        if self.iceConnectionState == 'new':
+            self.__setIceConnectionState('checking')
+            for transceiver in self.__transceivers:
+                await transceiver._iceConnection.connect()
+                await transceiver._dtlsSession.connect()
+            self.__setIceConnectionState('completed')
 
     async def __gather(self):
-        self.__setIceGatheringState('gathering')
-        await self.__iceConnection.gather_candidates()
-        self.__setIceGatheringState('complete')
+        if self.__iceGatheringState == 'new':
+            self.__setIceGatheringState('gathering')
+            for transceiver in self.__transceivers:
+                await transceiver._iceConnection.gather_candidates()
+            self.__setIceGatheringState('complete')
 
     def __assertNotClosed(self):
         if self.__isClosed:
@@ -221,31 +236,33 @@ class RTCPeerConnection(EventEmitter):
             'a=fingerprint:sha-256 %s' % self.__dtlsContext.local_fingerprint,
         ]
 
-        default_candidate = self.__iceConnection.get_default_candidate(1)
-        if default_candidate is None:
-            default_candidate = dummy_candidate
-        sdp += [
+        for transceiver in self.__transceivers:
+            iceConnection = transceiver._iceConnection
+            default_candidate = iceConnection.get_default_candidate(1)
+            if default_candidate is None:
+                default_candidate = dummy_candidate
+            sdp += [
+                # FIXME: negotiate codec
+                'm=audio %d UDP/TLS/RTP/SAVPF 0' % default_candidate.port,
+                'c=IN IP4 %s' % default_candidate.host,
+                'a=rtcp:9 IN IP4 0.0.0.0',
+            ]
+
+            for candidate in iceConnection.local_candidates:
+                sdp += ['a=candidate:%s' % candidate.to_sdp()]
+            sdp += [
+                'a=ice-pwd:%s' % iceConnection.local_password,
+                'a=ice-ufrag:%s' % iceConnection.local_username,
+            ]
+            if iceConnection.ice_controlling:
+                sdp += ['a=setup:actpass']
+            else:
+                sdp += ['a=setup:active']
+            sdp += ['a=sendrecv']
+            sdp += ['a=rtcp-mux']
+
             # FIXME: negotiate codec
-            'm=audio %d UDP/TLS/RTP/SAVPF 0' % default_candidate.port,
-            'c=IN IP4 %s' % default_candidate.host,
-            'a=rtcp:9 IN IP4 0.0.0.0',
-        ]
-
-        for candidate in self.__iceConnection.local_candidates:
-            sdp += ['a=candidate:%s' % candidate.to_sdp()]
-        sdp += [
-            'a=ice-pwd:%s' % self.__iceConnection.local_password,
-            'a=ice-ufrag:%s' % self.__iceConnection.local_username,
-        ]
-        if self.__iceConnection.ice_controlling:
-            sdp += ['a=setup:actpass']
-        else:
-            sdp += ['a=setup:active']
-        sdp += ['a=sendrecv']
-        sdp += ['a=rtcp-mux']
-
-        # FIXME: negotiate codec
-        sdp += ['a=rtpmap:0 PCMU/8000']
+            sdp += ['a=rtpmap:0 PCMU/8000']
 
         return '\r\n'.join(sdp) + '\r\n'
 

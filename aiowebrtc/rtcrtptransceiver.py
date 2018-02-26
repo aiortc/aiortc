@@ -3,7 +3,7 @@ class RTCRtpReceiver:
 
 
 class RTCRtpSender:
-    def __init__(self, track):
+    def __init__(self, track=None):
         self.__track = track
 
     @property
