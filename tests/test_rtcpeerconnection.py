@@ -14,6 +14,7 @@ def track_states(pc):
     states = {
         'iceConnectionState': [pc.iceConnectionState],
         'iceGatheringState': [pc.iceGatheringState],
+        'signalingState': [pc.signalingState],
     }
 
     @pc.on('iceconnectionstatechange')
@@ -23,6 +24,10 @@ def track_states(pc):
     @pc.on('icegatheringstatechange')
     def icegatheringstatechange():
         states['iceGatheringState'].append(pc.iceGatheringState)
+
+    @pc.on('signalingstatechange')
+    def signalingstatechange():
+        states['signalingState'].append(pc.signalingState)
 
     return states
 
@@ -59,6 +64,18 @@ class RTCPeerConnectionTest(TestCase):
         with self.assertRaises(InvalidStateError) as cm:
             pc.addTrack(AudioStreamTrack())
         self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
+
+    def test_close(self):
+        pc = RTCPeerConnection()
+        pc_states = track_states(pc)
+
+        # close once
+        run(pc.close())
+
+        # close twice
+        run(pc.close())
+
+        self.assertEqual(pc_states['signalingState'], ['stable', 'closed'])
 
     def test_connect(self):
         pc1 = RTCPeerConnection()
@@ -120,10 +137,15 @@ class RTCPeerConnectionTest(TestCase):
             'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], [
             'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
         self.assertEqual(pc2_states['iceConnectionState'], [
             'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc2_states['iceGatheringState'], [
             'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
 
 
 logging.basicConfig(level=logging.DEBUG)

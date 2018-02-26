@@ -27,6 +27,7 @@ class RTCPeerConnection(EventEmitter):
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
         self.__isClosed = False
+        self.__signalingState = 'stable'
 
         self.__currentLocalDescription = None
         self.__currentRemoteDescription = None
@@ -46,6 +47,10 @@ class RTCPeerConnection(EventEmitter):
     @property
     def remoteDescription(self):
         return self.__currentRemoteDescription
+
+    @property
+    def signalingState(self):
+        return self.__signalingState
 
     def addTrack(self, track):
         """
@@ -72,10 +77,13 @@ class RTCPeerConnection(EventEmitter):
         """
         Terminate the ICE agent, ending ICE processing and streams.
         """
+        if self.__isClosed:
+            return
+        self.__isClosed = True
+        self.__setSignalingState('closed')
         if self.__iceConnection is not None:
             await self.__iceConnection.close()
             self.__setIceConnectionState('closed')
-        self.__isClosed = True
 
     async def createAnswer(self):
         """
@@ -108,9 +116,19 @@ class RTCPeerConnection(EventEmitter):
         return self.__senders[:]
 
     async def setLocalDescription(self, sessionDescription):
+        if sessionDescription.type == 'offer':
+            self.__setSignalingState('have-local-offer')
+        elif sessionDescription.type == 'answer':
+            self.__setSignalingState('stable')
+
         self.__currentLocalDescription = sessionDescription
 
     async def setRemoteDescription(self, sessionDescription):
+        if sessionDescription.type == 'offer':
+            self.__setSignalingState('have-remote-offer')
+        elif sessionDescription.type == 'answer':
+            self.__setSignalingState('stable')
+
         if self.__iceConnection is None:
             self.__iceConnection = aioice.Connection(ice_controlling=False)
             self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
@@ -191,3 +209,7 @@ class RTCPeerConnection(EventEmitter):
     def __setIceGatheringState(self, state):
         self.__iceGatheringState = state
         self.emit('icegatheringstatechange')
+
+    def __setSignalingState(self, state):
+        self.__signalingState = state
+        self.emit('signalingstatechange')
