@@ -10,6 +10,16 @@ from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
 from .rtcsessiondescription import RTCSessionDescription
 
 
+dummy_candidate = aioice.Candidate(
+    foundation='',
+    component=1,
+    transport='udp',
+    priority=1,
+    host='0.0.0.0',
+    port=0,
+    type='host')
+
+
 def get_ntp_seconds():
     return int((
         datetime.datetime.utcnow() - datetime.datetime(1900, 1, 1, 0, 0, 0)
@@ -113,7 +123,6 @@ class RTCPeerConnection(EventEmitter):
         self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
                                                   is_server=True,
                                                   transport=self.__iceConnection)
-        await self.__gather()
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -131,7 +140,17 @@ class RTCPeerConnection(EventEmitter):
         elif sessionDescription.type == 'answer':
             self.__setSignalingState('stable')
 
-        self.__currentLocalDescription = sessionDescription
+        if self.iceGatheringState == 'new':
+            await self.__gather()
+
+        if (self.iceConnectionState == 'new' and
+           self.__iceConnection.local_candidates and
+           self.__iceConnection.remote_candidates):
+            asyncio.ensure_future(self.__connect())
+
+        self.__currentLocalDescription = RTCSessionDescription(
+            sdp=self.__createSdp(),
+            type=sessionDescription.type)
 
     async def setRemoteDescription(self, sessionDescription):
         if sessionDescription.type == 'offer':
@@ -144,7 +163,6 @@ class RTCPeerConnection(EventEmitter):
             self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
                                                       is_server=False,
                                                       transport=self.__iceConnection)
-            await self.__gather()
 
         for line in sessionDescription.sdp.splitlines():
             if line.startswith('a=') and ':' in line:
@@ -160,7 +178,9 @@ class RTCPeerConnection(EventEmitter):
                 elif attr == 'ice-pwd':
                     self.__iceConnection.remote_password = value
 
-        if self.__iceConnection.remote_candidates and self.iceConnectionState == 'new':
+        if (self.iceConnectionState == 'new' and
+           self.__iceConnection.local_candidates and
+           self.__iceConnection.remote_candidates):
             asyncio.ensure_future(self.__connect())
 
         self.__currentRemoteDescription = sessionDescription
@@ -191,6 +211,8 @@ class RTCPeerConnection(EventEmitter):
         ]
 
         default_candidate = self.__iceConnection.get_default_candidate(1)
+        if default_candidate is None:
+            default_candidate = dummy_candidate
         sdp += [
             # FIXME: negotiate codec
             'm=audio %d UDP/TLS/RTP/SAVPF 0' % default_candidate.port,

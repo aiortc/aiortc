@@ -97,10 +97,15 @@ class RTCPeerConnectionTest(TestCase):
         # create offer
         pc1.addTrack(AudioStreamTrack())
         offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in pc1.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -111,10 +116,15 @@ class RTCPeerConnectionTest(TestCase):
 
         # create answer
         answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+
         run(pc2.setLocalDescription(answer))
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
-        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
