@@ -147,5 +147,25 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_createAnswer_closed(self):
+        pc = RTCPeerConnection()
+        run(pc.close())
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.createAnswer())
+        self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
+
+    def test_createAnswer_without_offer(self):
+        pc = RTCPeerConnection()
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.createAnswer())
+        self.assertEqual(str(cm.exception), 'Cannot create answer in signaling state "stable"')
+
+    def test_createOffer_closed(self):
+        pc = RTCPeerConnection()
+        run(pc.close())
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.createOffer())
+        self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
+
 
 logging.basicConfig(level=logging.DEBUG)

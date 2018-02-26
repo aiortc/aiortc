@@ -56,8 +56,8 @@ class RTCPeerConnection(EventEmitter):
         Add a new media track to the set of media tracks while will be
         transmitted to the other peer.
         """
-        if self.__isClosed:
-            raise InvalidStateError('RTCPeerConnection is closed')
+        # check state is valid
+        self.__assertNotClosed()
 
         # don't add track twice
         for sender in self.getSenders():
@@ -91,6 +91,12 @@ class RTCPeerConnection(EventEmitter):
         Create an SDP answer to an offer received from a remote peer during
         the offer/answer negotiation of a WebRTC connection.
         """
+        # check state is valid
+        self.__assertNotClosed()
+        if self.signalingState not in ['have-remote-offer', 'have-local-pranswer']:
+            raise InvalidStateError('Cannot create answer in signaling state "%s"' %
+                                    self.signalingState)
+
         return RTCSessionDescription(
             sdp=self.__createSdp(),
             type='answer')
@@ -100,6 +106,9 @@ class RTCPeerConnection(EventEmitter):
         Create an SDP offer for the purpose of starting a new WebRTC
         connection to a remote peer.
         """
+        # check state is valid
+        self.__assertNotClosed()
+
         self.__iceConnection = aioice.Connection(ice_controlling=True)
         self.__dtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
                                                   is_server=True,
@@ -166,6 +175,10 @@ class RTCPeerConnection(EventEmitter):
         self.__setIceGatheringState('gathering')
         await self.__iceConnection.gather_candidates()
         self.__setIceGatheringState('complete')
+
+    def __assertNotClosed(self):
+        if self.__isClosed:
+            raise InvalidStateError('RTCPeerConnection is closed')
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
