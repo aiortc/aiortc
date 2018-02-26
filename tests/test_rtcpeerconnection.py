@@ -288,6 +288,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
+        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -307,6 +308,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
+        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

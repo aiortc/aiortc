@@ -315,6 +315,7 @@ class RTCPeerConnection(EventEmitter):
                 'c=IN IP4 %s' % default_candidate.host,
             ]
             sdp += ice_connection_sdp(self.__dataIceConnection)
+            sdp += ['a=sctpmap:5000 webrtc-datachannel 256']
 
         return '\r\n'.join(sdp) + '\r\n'
 
