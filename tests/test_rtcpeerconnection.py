@@ -2,9 +2,11 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import (AudioStreamTrack, InvalidAccessError, InvalidStateError,
-                       RTCPeerConnection, RTCSessionDescription, VideoStreamTrack)
-from aiowebrtc.mediastreams import MediaStreamTrack
+from aiowebrtc import RTCPeerConnection, RTCSessionDescription
+from aiowebrtc.exceptions import (InternalError, InvalidAccessError,
+                                  InvalidStateError)
+from aiowebrtc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
+                                    VideoStreamTrack)
 
 
 class BogusStreamTrack(MediaStreamTrack):
@@ -54,7 +56,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), 'Track already has a sender')
 
         # try adding another audio track
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(InternalError) as cm:
             pc.addTrack(AudioStreamTrack())
         self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
 
@@ -62,7 +64,7 @@ class RTCPeerConnectionTest(TestCase):
         pc = RTCPeerConnection()
 
         # try adding a bogus track
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(InternalError) as cm:
             pc.addTrack(BogusStreamTrack)
         self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
@@ -82,7 +84,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), 'Track already has a sender')
 
         # try adding an audio track
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(InternalError) as cm:
             pc.addTrack(AudioStreamTrack())
         self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
 
@@ -140,6 +142,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc2.setRemoteDescription(pc1.localDescription))
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -266,6 +269,76 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_connect_datachannel(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        # create offer
+        pc1.createDataChannel('chat')
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=application ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc1.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=application ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_createAnswer_closed(self):
         pc = RTCPeerConnection()
         run(pc.close())
@@ -294,6 +367,7 @@ class RTCPeerConnectionTest(TestCase):
 
     def test_setRemoteDescription_unexpected_offer(self):
         pc = RTCPeerConnection()
+        pc.addTrack(AudioStreamTrack())
         offer = run(pc.createOffer())
         run(pc.setLocalDescription(offer))
         with self.assertRaises(InvalidStateError) as cm:

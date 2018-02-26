@@ -1,3 +1,7 @@
+class InternalError(Exception):
+    pass
+
+
 class InvalidAccessError(Exception):
     pass
 

@@ -5,7 +5,8 @@ import aioice
 from pyee import EventEmitter
 
 from . import dtls, sdp
-from .exceptions import InvalidAccessError, InvalidStateError
+from .exceptions import InternalError, InvalidAccessError, InvalidStateError
+from .rtcdatachannel import RTCDataChannel
 from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
 from .rtcsessiondescription import RTCSessionDescription
 
@@ -27,9 +28,26 @@ def get_ntp_seconds():
     ).total_seconds())
 
 
+def ice_connection_sdp(iceConnection):
+    sdp = []
+    for candidate in iceConnection.local_candidates:
+        sdp += ['a=candidate:%s' % candidate.to_sdp()]
+    sdp += [
+        'a=ice-pwd:%s' % iceConnection.local_password,
+        'a=ice-ufrag:%s' % iceConnection.local_username,
+    ]
+    if iceConnection.ice_controlling:
+        sdp += ['a=setup:actpass']
+    else:
+        sdp += ['a=setup:active']
+    return sdp
+
+
 class RTCPeerConnection(EventEmitter):
     def __init__(self, loop=None):
         super().__init__(loop=loop)
+        self.__datachannels = []
+        self.__dataIceConnection = None
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__transceivers = []
 
@@ -69,7 +87,7 @@ class RTCPeerConnection(EventEmitter):
         # check state is valid
         self.__assertNotClosed()
         if track.kind not in ['audio', 'video']:
-            raise ValueError('Invalid track kind "%s"' % track.kind)
+            raise InternalError('Invalid track kind "%s"' % track.kind)
 
         # don't add track twice
         for sender in self.getSenders():
@@ -83,7 +101,7 @@ class RTCPeerConnection(EventEmitter):
 
         # we only support a single media track for now
         if len(self.__transceivers):
-            raise ValueError('Only a single media track is supported for now')
+            raise InternalError('Only a single media track is supported for now')
 
         transceiver = RTCRtpTransceiver(
             receiver=RTCRtpReceiver(),
@@ -123,6 +141,18 @@ class RTCPeerConnection(EventEmitter):
             sdp=self.__createSdp(),
             type='answer')
 
+    def createDataChannel(self, label):
+        channel = RTCDataChannel(label=label)
+        self.__datachannels.append(channel)
+
+        if not self.__dataIceConnection:
+            self.__dataIceConnection = aioice.Connection(ice_controlling=True)
+            self.__dataDtlsSession = dtls.DtlsSrtpSession(self.__dtlsContext,
+                                                          is_server=True,
+                                                          transport=self.__dataIceConnection)
+
+        return channel
+
     async def createOffer(self):
         """
         Create an SDP offer for the purpose of starting a new WebRTC
@@ -130,6 +160,9 @@ class RTCPeerConnection(EventEmitter):
         """
         # check state is valid
         self.__assertNotClosed()
+
+        if not self.__datachannels and not self.__transceivers:
+            raise InternalError('Cannot create an offer with no media and not data channels')
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -173,31 +206,42 @@ class RTCPeerConnection(EventEmitter):
 
         # apply description
         for media in parsedRemoteDescription.media:
-            if media.kind not in ['audio', 'video']:
-                continue
+            if media.kind in ['audio', 'video']:
+                # find transceiver
+                transceiver = None
+                for t in self.__transceivers:
+                    if t._kind == media.kind:
+                        transceiver = t
+                if transceiver is None:
+                    transceiver = RTCRtpTransceiver(
+                        sender=RTCRtpSender(),
+                        receiver=RTCRtpReceiver())
+                    transceiver._iceConnection = aioice.Connection(ice_controlling=False)
+                    transceiver._dtlsSession = dtls.DtlsSrtpSession(
+                        self.__dtlsContext,
+                        is_server=False,
+                        transport=transceiver._iceConnection)
+                    transceiver._kind = media.kind
+                    self.__transceivers.append(transceiver)
 
-            # find transceiver
-            transceiver = None
-            for t in self.__transceivers:
-                if t._kind == media.kind:
-                    transceiver = t
-            if transceiver is None:
-                transceiver = RTCRtpTransceiver(
-                    sender=RTCRtpSender(),
-                    receiver=RTCRtpReceiver())
-                transceiver._iceConnection = aioice.Connection(ice_controlling=False)
-                transceiver._dtlsSession = dtls.DtlsSrtpSession(
-                    self.__dtlsContext,
-                    is_server=False,
-                    transport=transceiver._iceConnection)
-                transceiver._kind = media.kind
-                self.__transceivers.append(transceiver)
+                # configure transport
+                transceiver._iceConnection.remote_candidates = media.ice_candidates
+                transceiver._iceConnection.remote_username = media.ice_ufrag
+                transceiver._iceConnection.remote_password = media.ice_pwd
+                transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+            elif media.kind == 'application':
+                if not self.__dataIceConnection:
+                    self.__dataIceConnection = aioice.Connection(ice_controlling=False)
+                    self.__dataDtlsSession = dtls.DtlsSrtpSession(
+                        self.__dtlsContext,
+                        is_server=False,
+                        transport=self.__dataIceConnection)
 
-            # configure transport
-            transceiver._iceConnection.remote_candidates = media.ice_candidates
-            transceiver._iceConnection.remote_username = media.ice_ufrag
-            transceiver._iceConnection.remote_password = media.ice_pwd
-            transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+                # configure transport
+                self.__dataIceConnection.remote_candidates = media.ice_candidates
+                self.__dataIceConnection.remote_username = media.ice_ufrag
+                self.__dataIceConnection.remote_password = media.ice_pwd
+                self.__dataDtlsSession.remote_fingerprint = media.dtls_fingerprint
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -211,23 +255,23 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        for transceiver in self.__transceivers:
-            if (not transceiver._iceConnection.local_candidates or
-               not transceiver._iceConnection.remote_candidates):
+        for iceConnection, dtlsSession in self.__transports():
+            print(iceConnection)
+            if (not iceConnection.local_candidates or not iceConnection.remote_candidates):
                 return
 
         if self.iceConnectionState == 'new':
             self.__setIceConnectionState('checking')
-            for transceiver in self.__transceivers:
-                await transceiver._iceConnection.connect()
-                await transceiver._dtlsSession.connect()
+            for iceConnection, dtlsSession in self.__transports():
+                await iceConnection.connect()
+                await dtlsSession.connect()
             self.__setIceConnectionState('completed')
 
     async def __gather(self):
         if self.__iceGatheringState == 'new':
             self.__setIceGatheringState('gathering')
-            for transceiver in self.__transceivers:
-                await transceiver._iceConnection.gather_candidates()
+            for iceConnection, dtlsSession in self.__transports():
+                await iceConnection.gather_candidates()
             self.__setIceGatheringState('complete')
 
     def __assertNotClosed(self):
@@ -255,22 +299,22 @@ class RTCPeerConnection(EventEmitter):
                 'c=IN IP4 %s' % default_candidate.host,
                 'a=rtcp:9 IN IP4 0.0.0.0',
             ]
-
-            for candidate in iceConnection.local_candidates:
-                sdp += ['a=candidate:%s' % candidate.to_sdp()]
-            sdp += [
-                'a=ice-pwd:%s' % iceConnection.local_password,
-                'a=ice-ufrag:%s' % iceConnection.local_username,
-            ]
-            if iceConnection.ice_controlling:
-                sdp += ['a=setup:actpass']
-            else:
-                sdp += ['a=setup:active']
+            sdp += ice_connection_sdp(iceConnection)
             sdp += ['a=%s' % transceiver.direction]
             sdp += ['a=rtcp-mux']
 
             # FIXME: negotiate codec
             sdp += ['a=rtpmap:0 PCMU/8000']
+
+        if self.__dataIceConnection:
+            default_candidate = self.__dataIceConnection.get_default_candidate(1)
+            if default_candidate is None:
+                default_candidate = DUMMY_CANDIDATE
+            sdp += [
+                'm=application %d DTLS/SCTP 5000' % default_candidate.port,
+                'c=IN IP4 %s' % default_candidate.host,
+            ]
+            sdp += ice_connection_sdp(self.__dataIceConnection)
 
         return '\r\n'.join(sdp) + '\r\n'
 
@@ -285,3 +329,9 @@ class RTCPeerConnection(EventEmitter):
     def __setSignalingState(self, state):
         self.__signalingState = state
         self.emit('signalingstatechange')
+
+    def __transports(self):
+        for transceiver in self.__transceivers:
+            yield transceiver._iceConnection, transceiver._dtlsSession
+        if self.__dataIceConnection:
+            yield self.__dataIceConnection, self.__dataDtlsSession
