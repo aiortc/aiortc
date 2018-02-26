@@ -3,7 +3,7 @@ import logging
 from unittest import TestCase
 
 from aiowebrtc import (AudioStreamTrack, InvalidAccessError, InvalidStateError,
-                       RTCPeerConnection, VideoStreamTrack)
+                       RTCPeerConnection, RTCSessionDescription, VideoStreamTrack)
 
 
 def run(coro):
@@ -176,6 +176,21 @@ class RTCPeerConnectionTest(TestCase):
         with self.assertRaises(InvalidStateError) as cm:
             run(pc.createOffer())
         self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
+
+    def test_setRemoteDescription_unexpected_answer(self):
+        pc = RTCPeerConnection()
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.setRemoteDescription(RTCSessionDescription(sdp='', type='answer')))
+        self.assertEqual(str(cm.exception), 'Cannot handle answer in signaling state "stable"')
+
+    def test_setRemoteDescription_unexpected_offer(self):
+        pc = RTCPeerConnection()
+        offer = run(pc.createOffer())
+        run(pc.setLocalDescription(offer))
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.setRemoteDescription(RTCSessionDescription(sdp='', type='offer')))
+        self.assertEqual(str(cm.exception),
+                         'Cannot handle offer in signaling state "have-local-offer"')
 
 
 logging.basicConfig(level=logging.DEBUG)

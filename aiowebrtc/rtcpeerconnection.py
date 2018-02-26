@@ -153,10 +153,15 @@ class RTCPeerConnection(EventEmitter):
             type=sessionDescription.type)
 
     async def setRemoteDescription(self, sessionDescription):
+        # check description is compatible with signaling state
         if sessionDescription.type == 'offer':
-            self.__setSignalingState('have-remote-offer')
+            if self.signalingState not in ['stable', 'have-remote-offer']:
+                raise InvalidStateError('Cannot handle offer in signaling state "%s"' %
+                                        self.signalingState)
         elif sessionDescription.type == 'answer':
-            self.__setSignalingState('stable')
+            if self.signalingState not in ['have-local-offer', 'have-remote-pranswer']:
+                raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
+                                        self.signalingState)
 
         if self.__iceConnection is None:
             self.__iceConnection = aioice.Connection(ice_controlling=False)
@@ -182,6 +187,12 @@ class RTCPeerConnection(EventEmitter):
            self.__iceConnection.local_candidates and
            self.__iceConnection.remote_candidates):
             asyncio.ensure_future(self.__connect())
+
+        # update signaling state
+        if sessionDescription.type == 'offer':
+            self.__setSignalingState('have-remote-offer')
+        elif sessionDescription.type == 'answer':
+            self.__setSignalingState('stable')
 
         self.__currentRemoteDescription = sessionDescription
 
