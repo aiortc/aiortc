@@ -6,7 +6,7 @@ from pyee import EventEmitter
 
 from . import dtls
 from .exceptions import InvalidAccessError, InvalidStateError
-from .rtcrtpsender import RTCRtpSender
+from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
 from .rtcsessiondescription import RTCSessionDescription
 
 
@@ -21,8 +21,7 @@ class RTCPeerConnection(EventEmitter):
         super().__init__(loop=loop)
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__iceConnection = None
-        self.__senders = []
-        self.__receivers = []
+        self.__transceivers = []
 
         self.__iceConnectionState = 'new'
         self.__iceGatheringState = 'new'
@@ -61,17 +60,19 @@ class RTCPeerConnection(EventEmitter):
             raise InvalidStateError('RTCPeerConnection is closed')
 
         # don't add track twice
-        for sender in self.__senders:
+        for sender in self.getSenders():
             if sender.track == track:
                 raise InvalidAccessError('Track already has a sender')
 
         # we only support a single track for now
-        if track.kind != 'audio' or len(self.__senders):
+        if track.kind != 'audio' or len(self.__transceivers):
             raise ValueError('Only a single audio track is supported for now')
 
-        sender = RTCRtpSender(track)
-        self.__senders.append(sender)
-        return sender
+        transceiver = RTCRtpTransceiver(
+            receiver=RTCRtpReceiver(),
+            sender=RTCRtpSender(track))
+        self.__transceivers.append(transceiver)
+        return transceiver.sender
 
     async def close(self):
         """
@@ -110,10 +111,10 @@ class RTCPeerConnection(EventEmitter):
             type='offer')
 
     def getReceivers(self):
-        return self.__receivers[:]
+        return list(map(lambda x: x.receiver, self.__transceivers))
 
     def getSenders(self):
-        return self.__senders[:]
+        return list(map(lambda x: x.sender, self.__transceivers))
 
     async def setLocalDescription(self, sessionDescription):
         if sessionDescription.type == 'offer':
