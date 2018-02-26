@@ -9,7 +9,11 @@ class MediaDescription:
         self.port = port
         self.host = None
         self.profile = profile
+
+        # formats
         self.fmt = fmt
+        self.rtpmap = {}
+        self.sctpmap = {}
 
         # DTLS
         self.dtls_fingerprint = None
@@ -58,6 +62,9 @@ class SessionDescription:
                         current_media.ice_ufrag = value
                     elif attr == 'ice-pwd':
                         current_media.ice_pwd = value
+                    elif attr in ['rtpmap', 'sctpmap']:
+                        format_id, format_desc = value.split(' ', 1)
+                        getattr(current_media, attr)[int(format_id)] = format_desc
                 else:
                     # session-level attributes
                     if attr == 'fingerprint':

@@ -53,9 +53,29 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12""")  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].fmt, [
             111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
+        self.assertEqual(d.media[0].rtpmap, {
+            0: 'PCMU/8000',
+            8: 'PCMA/8000',
+            9: 'G722/8000',
+            13: 'CN/8000',
+            103: 'ISAC/16000',
+            104: 'ISAC/32000',
+            105: 'CN/16000',
+            106: 'CN/32000',
+            110: 'telephone-event/48000',
+            111: 'opus/48000/2',
+            112: 'telephone-event/32000',
+            113: 'telephone-event/16000',
+            126: 'telephone-event/8000',
+        })
+        self.assertEqual(d.media[0].sctpmap, {})
+
+        # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_ufrag, '5+Ix')
         self.assertEqual(d.media[0].ice_pwd, 'uK8IlylxzDMUhrkVzdmj0M+v')
+
+        # dtls
         self.assertEqual(
             d.media[0].dtls_fingerprint,
             '6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC')  # noqa
@@ -107,6 +127,14 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].fmt, [
             109, 9, 0, 8, 101])
+        self.assertEqual(d.media[0].rtpmap, {
+            0: 'PCMU/8000',
+            8: 'PCMA/8000',
+            9: 'G722/8000/1',
+            101: 'telephone-event/8000',
+            109: 'opus/48000/2',
+        })
+        self.assertEqual(d.media[0].sctpmap, {})
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 8)
@@ -149,6 +177,10 @@ a=max-message-size:1073741823
         self.assertEqual(d.media[0].port, 45791)
         self.assertEqual(d.media[0].profile, 'DTLS/SCTP')
         self.assertEqual(d.media[0].fmt, [5000])
+        self.assertEqual(d.media[0].rtpmap, {})
+        self.assertEqual(d.media[0].sctpmap, {
+            5000: 'webrtc-datachannel 256',
+        })
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
