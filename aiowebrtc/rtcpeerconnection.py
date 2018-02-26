@@ -246,7 +246,6 @@ class RTCPeerConnection(EventEmitter):
 
     async def __connect(self):
         for iceConnection, dtlsSession in self.__transports():
-            print(iceConnection)
             if (not iceConnection.local_candidates or not iceConnection.remote_candidates):
                 return
 
@@ -255,8 +254,11 @@ class RTCPeerConnection(EventEmitter):
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
                 await dtlsSession.connect()
+                asyncio.ensure_future(dtlsSession.run())
             if self.__sctp:
-                conn = sctp.Transport(transport=self.__sctp._dtlsSession)
+                conn = sctp.Transport(
+                    is_server=not self.__sctp._iceConnection.ice_controlling,
+                    transport=self.__sctp._dtlsSession.data)
                 asyncio.ensure_future(conn.run())
             self.__setIceConnectionState('completed')
 

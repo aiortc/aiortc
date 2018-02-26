@@ -8,13 +8,11 @@ from aiowebrtc.exceptions import (InternalError, InvalidAccessError,
 from aiowebrtc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                     VideoStreamTrack)
 
+from .utils import run
+
 
 class BogusStreamTrack(MediaStreamTrack):
     kind = 'bogus'
-
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 
 def track_states(pc):

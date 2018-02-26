@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import logging
@@ -84,12 +85,28 @@ class DtlsSrtpContext:
         lib.SSL_free(ssl)
 
 
+class Channel:
+    def __init__(self, recv, send):
+        self.recv = recv
+        self.send = send
+
+
 class DtlsSrtpSession:
     def __init__(self, context, is_server, transport):
         self.encrypted = False
         self.is_server = is_server
         self.remote_fingerprint = None
         self.transport = transport
+
+        self.data_queue = asyncio.Queue()
+        self.data = Channel(
+            recv=self.data_queue.get,
+            send=self._send_data)
+
+        self.rtp_queue = asyncio.Queue()
+        self.rtp = Channel(
+            recv=self.rtp_queue.get,
+            send=self._send_rtp)
 
         ssl = lib.SSL_new(context.ctx)
         self.ssl = ffi.gc(ssl, lib.SSL_free)
@@ -150,36 +167,34 @@ class DtlsSrtpSession:
         tx_policy = Policy(key=srtp_tx_key, ssrc_type=Policy.SSRC_ANY_OUTBOUND)
         self._tx_srtp = Session(tx_policy)
 
-    async def recv(self):
-        data = await self.transport.recv()
+    async def run(self):
+        while True:
+            data = await self.transport.recv()
+            first_byte = data[0]
+            if first_byte > 19 and first_byte < 64:
+                # DTLS
+                lib.BIO_write(self.read_bio, data, len(data))
+                buf = ffi.new("char[]", 1500)
+                result = lib.SSL_read(self.ssl, buf, len(buf))
+                await self.data_queue.put(ffi.buffer(buf)[0:result])
+            elif first_byte > 127 and first_byte < 192:
+                # SRTP / SRTCP
+                if is_rtcp(data):
+                    data = self._rx_srtp.unprotect_rtcp(data)
+                else:
+                    data = self._rx_srtp.unprotect(data)
+                await self.rtp_queue.put(data)
 
-        first_byte = data[0]
-        if first_byte > 19 and first_byte < 64:
-            # DTLS
-            lib.BIO_write(self.read_bio, data, len(data))
-            buf = ffi.new("char[]", 1500)
-            result = lib.SSL_read(self.ssl, buf, len(buf))
-            return ffi.buffer(buf)[0:result]
-        elif first_byte > 127 and first_byte < 192:
-            # SRTP / SRTCP
-            if is_rtcp(data):
-                data = self._rx_srtp.unprotect_rtcp(data)
-                logger.debug('Unprotected RTCP data %d bytes', len(data))
-            else:
-                data = self._rx_srtp.unprotect(data)
-        return data
+    async def _send_data(self, data):
+        lib.SSL_write(self.ssl, data, len(data))
+        await self._write_ssl()
 
-    async def send(self, data):
+    async def _send_rtp(self, data):
         if is_rtcp(data):
-            logger.debug('Protecting RTCP data %d bytes', len(data))
             data = self._tx_srtp.protect_rtcp(data)
         else:
             data = self._tx_srtp.protect(data)
         await self.transport.send(data)
-
-    async def send_dtls(self, data):
-        lib.SSL_write(self.ssl, data, len(data))
-        self._write_ssl()
 
     async def _write_ssl(self):
         pending = lib.BIO_ctrl_pending(self.write_bio)
