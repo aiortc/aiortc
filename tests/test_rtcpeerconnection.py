@@ -4,9 +4,9 @@ from unittest import TestCase
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
-                                  InvalidStateError)
+                               InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
-                                    VideoStreamTrack)
+                                 VideoStreamTrack)
 
 from .utils import run
 
