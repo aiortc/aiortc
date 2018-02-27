@@ -80,6 +80,7 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(protocol, 50)
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 
+        run(client.close())
         run(asyncio.sleep(0.5))
 
 

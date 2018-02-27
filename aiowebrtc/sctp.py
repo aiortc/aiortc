@@ -175,6 +175,37 @@ class SackChunk(Chunk):
         return body
 
 
+class ShutdownChunk(Chunk):
+    type = ChunkType.SHUTDOWN
+
+    def __init__(self, flags=0, body=None):
+        self.flags = flags
+        if body:
+            self.cumulative_tsn = unpack('!L', body[0:4])[0]
+        else:
+            self.cumulative_tsn = 0
+
+    @property
+    def body(self):
+        return pack('!L', self.cumulative_tsn)
+
+
+class ShutdownAckChunk(Chunk):
+    type = ChunkType.SHUTDOWN_ACK
+
+    def __init__(self, flags=0, body=b''):
+        self.flags = flags
+        self.body = body
+
+
+class ShutdownCompleteChunk(Chunk):
+    type = ChunkType.SHUTDOWN_COMPLETE
+
+    def __init__(self, flags=0, body=b''):
+        self.flags = flags
+        self.body = body
+
+
 class UnknownChunk(Chunk):
     def __init__(self, type, flags, body):
         self.type = type
@@ -234,6 +265,12 @@ class Packet:
                 cls = SackChunk
             elif chunk_type == ChunkType.ABORT:
                 cls = AbortChunk
+            elif chunk_type == ChunkType.SHUTDOWN:
+                cls = ShutdownChunk
+            elif chunk_type == ChunkType.SHUTDOWN_ACK:
+                cls = ShutdownAckChunk
+            elif chunk_type == ChunkType.SHUTDOWN_COMPLETE:
+                cls = ShutdownCompleteChunk
             elif chunk_type == ChunkType.COOKIE_ECHO:
                 cls = CookieEchoChunk
             elif chunk_type == ChunkType.COOKIE_ACK:
@@ -294,6 +331,12 @@ class Transport:
             sack.cumulative_tsn = chunk.tsn
             await self.send_chunk(sack)
             await self.queue.put((chunk.protocol, chunk.user_data))
+        elif isinstance(chunk, ShutdownChunk):
+            ack = ShutdownAckChunk()
+            await self.send_chunk(ack)
+        elif isinstance(chunk, ShutdownAckChunk):
+            complete = ShutdownCompleteChunk()
+            await self.send_chunk(complete)
 
     async def send_chunk(self, chunk):
         logger.info('%s > %s', self.role, chunk.__class__.__name__)
@@ -303,6 +346,10 @@ class Transport:
             verification_tag=self.remote_initiate_tag)
         packet.chunks.append(chunk)
         await self.transport.send(bytes(packet))
+
+    async def close(self):
+        chunk = ShutdownChunk()
+        await self.send_chunk(chunk)
 
     async def recv(self):
         return await self.queue.get()
