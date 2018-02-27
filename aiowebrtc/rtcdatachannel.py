@@ -33,7 +33,7 @@ class DataChannelManager:
     def create_channel(self, label, protocol):
         # register channel
         channel = RTCDataChannel(id=self.stream_id, label=label, protocol=protocol,
-                                 manager=self)
+                                 manager=self, readyState='connecting')
         self.channels[channel.id] = channel
         self.stream_id += 2
 
@@ -82,7 +82,7 @@ class DataChannelManager:
 
                     # register channel
                     channel = RTCDataChannel(id=stream_id, label=label, protocol=protocol,
-                                             manager=self)
+                                             manager=self, readyState='open')
                     self.channels[stream_id] = channel
 
                     # send ack
@@ -91,7 +91,9 @@ class DataChannelManager:
                     # emit channel
                     self.pc.emit('datachannel', channel)
                 elif msg_type == DATA_CHANNEL_ACK:
-                    pass
+                    assert stream_id in self.channels
+                    channel = self.channels[stream_id]
+                    channel._setReadyState('open')
             elif pp_id == WEBRTC_STRING and stream_id in self.channels:
                 # emit message
                 self.channels[stream_id].emit('message', data.decode('utf8'))
@@ -112,12 +114,13 @@ class RTCDataChannel(EventEmitter):
     for bidirectional peer-to-peer transfers of arbitrary data.
     """
 
-    def __init__(self, id, label, protocol, manager):
+    def __init__(self, id, label, protocol, manager, readyState):
         super().__init__()
         self.__id = id
         self.__label = label
         self.__manager = manager
         self.__protocol = protocol
+        self.__readyState = readyState
 
     @property
     def id(self):
@@ -142,14 +145,25 @@ class RTCDataChannel(EventEmitter):
         """
         return self.__protocol
 
+    @property
+    def readyState(self):
+        """
+        A string indicating the current state of the underlying data transport.
+        """
+        return self.__readyState
+
     def close(self):
         """
         Close the data channel.
         """
-        pass
+        self._setReadyState('closed')
 
     def send(self, data):
         """
         Send `data` across the data channel to the remote peer.
         """
         self.__manager.send(self, data)
+
+    def _setReadyState(self, state):
+        if state != self.__readyState:
+            self.__readyState = state

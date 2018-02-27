@@ -279,6 +279,7 @@ class RTCPeerConnectionTest(TestCase):
 
         @pc2.on('datachannel')
         def on_datachannel(channel):
+            self.assertEqual(channel.readyState, 'open')
             pc2_data_channels.append(channel)
 
             @channel.on('message')
@@ -294,6 +295,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.id, 1)
         self.assertEqual(dc.label, 'chat')
         self.assertEqual(dc.protocol, 'bob')
+        self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
         dc.send('hello')
@@ -349,6 +351,7 @@ class RTCPeerConnectionTest(TestCase):
         run(asyncio.sleep(1))
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertEqual(dc.readyState, 'open')
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -369,6 +372,10 @@ class RTCPeerConnectionTest(TestCase):
             'string-echo: ',
             b'binary-echo: \x00\x01\x02\x03',
             b'binary-echo: '])
+
+        # close data channel
+        dc.close()
+        self.assertEqual(dc.readyState, 'closed')
 
         # close
         run(pc1.close())
