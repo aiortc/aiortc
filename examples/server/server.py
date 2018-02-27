@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ async def offer(request):
         type=offer['type'])
 
     pc = RTCPeerConnection()
+    pcs.append(pc)
 
     @pc.on('datachannel')
     def on_datachannel(channel):
@@ -40,8 +42,15 @@ async def offer(request):
         }))
 
 
+pcs = []
+
+async def on_shutdown(app):
+    coros = [pc.close() for pc in pcs]
+    await asyncio.gather(*coros)
+
 logging.basicConfig(level=logging.DEBUG)
 app = web.Application()
+app.on_shutdown.append(on_shutdown)
 app.router.add_get('/', index)
 app.router.add_post('/offer', offer)
 web.run_app(app, host='127.0.0.1', port=8080)
