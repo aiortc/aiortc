@@ -107,18 +107,17 @@ class DataChannelManager:
 
 
 class RTCDataChannel(EventEmitter):
-    def __init__(self, id, label, protocol, manager, loop=None):
-        super().__init__(loop=loop)
+    """
+    The RTCDataChannel interface represents a network channel which can be used
+    for bidirectional peer-to-peer transfers of arbitrary data.
+    """
+
+    def __init__(self, id, label, protocol, manager):
+        super().__init__()
         self.__id = id
         self.__label = label
         self.__manager = manager
         self.__protocol = protocol
-
-    def close(self):
-        pass
-
-    def send(self, data):
-        self.__manager.send(self, data)
 
     @property
     def id(self):
@@ -142,3 +141,15 @@ class RTCDataChannel(EventEmitter):
         The name of the subprotocol in use.
         """
         return self.__protocol
+
+    def close(self):
+        """
+        Close the data channel.
+        """
+        pass
+
+    def send(self, data):
+        """
+        Send `data` across the data channel to the remote peer.
+        """
+        self.__manager.send(self, data)

@@ -52,6 +52,10 @@ async def run_dtls(dtlsSession):
 
 
 class RTCPeerConnection(EventEmitter):
+    """
+    The RTCPeerConnection interface represents a WebRTC connection between
+    the local computer and a remote peer.
+    """
     def __init__(self, loop=None):
         super().__init__(loop=loop)
         self.__datachannelManager = None
@@ -77,10 +81,18 @@ class RTCPeerConnection(EventEmitter):
 
     @property
     def localDescription(self):
+        """
+        An :class:`RTCSessionDescription` describing the session for
+        the local end of the connection.
+        """
         return self.__currentLocalDescription
 
     @property
     def remoteDescription(self):
+        """
+        An :class:`RTCSessionDescription` describing the session for
+        the remote end of the connection.
+        """
         return self.__currentRemoteDescription
 
     @property
@@ -139,6 +151,8 @@ class RTCPeerConnection(EventEmitter):
         """
         Create an SDP answer to an offer received from a remote peer during
         the offer/answer negotiation of a WebRTC connection.
+
+        :rtype: :class:`RTCSessionDescription`
         """
         # check state is valid
         self.__assertNotClosed()
@@ -151,6 +165,11 @@ class RTCPeerConnection(EventEmitter):
             type='answer')
 
     def createDataChannel(self, label, protocol=''):
+        """
+        Create a data channel with the given label.
+
+        :rtype: :class:`RTCDataChannel`
+        """
         if not self.__sctp:
             self.__sctp = RTCSctpTransport()
             self.__createTransport(self.__sctp, controlling=True)
@@ -165,6 +184,8 @@ class RTCPeerConnection(EventEmitter):
         """
         Create an SDP offer for the purpose of starting a new WebRTC
         connection to a remote peer.
+
+        :rtype: :class:`RTCSessionDescription`
         """
         # check state is valid
         self.__assertNotClosed()
@@ -183,6 +204,12 @@ class RTCPeerConnection(EventEmitter):
         return list(map(lambda x: x.sender, self.__transceivers))
 
     async def setLocalDescription(self, sessionDescription):
+        """
+        Change the local description associated with the connection.
+
+        :param: sessionDescription: An :class:`RTCSessionDescription` generated
+                                    by :meth:`createOffer` or :meth:`createAnswer()`.
+        """
         if sessionDescription.type == 'offer':
             self.__setSignalingState('have-local-offer')
         elif sessionDescription.type == 'answer':
@@ -199,6 +226,12 @@ class RTCPeerConnection(EventEmitter):
             type=sessionDescription.type)
 
     async def setRemoteDescription(self, sessionDescription):
+        """
+        Changes the remote description associated with the connection.
+
+        :param: sessionDescription: An :class:`RTCSessionDescription` created from
+                                    information received over the signaling channel.
+        """
         # check description is compatible with signaling state
         if sessionDescription.type == 'offer':
             if self.signalingState not in ['stable', 'have-remote-offer']:
