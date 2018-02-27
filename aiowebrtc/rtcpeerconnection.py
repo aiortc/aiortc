@@ -123,13 +123,10 @@ class RTCPeerConnection(EventEmitter):
         if len(self.__transceivers):
             raise InternalError('Only a single media track is supported for now')
 
-        transceiver = RTCRtpTransceiver(
-            receiver=RTCRtpReceiver(),
-            sender=RTCRtpSender(track))
-        transceiver._kind = track.kind
-        self.__createTransport(transceiver, controlling=True)
-
-        self.__transceivers.append(transceiver)
+        transceiver = self.__createTransceiver(
+            kind=track.kind,
+            controlling=True,
+            sender_track=track)
         return transceiver.sender
 
     async def close(self):
@@ -171,12 +168,7 @@ class RTCPeerConnection(EventEmitter):
         :rtype: :class:`RTCDataChannel`
         """
         if not self.__sctp:
-            self.__sctp = RTCSctpTransport()
-            self.__createTransport(self.__sctp, controlling=True)
-            self.__sctpEndpoint = sctp.Endpoint(
-                is_server=False,
-                transport=self.__sctp._dtlsSession.data)
-            self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
+            self.__createSctp(controlling=True)
 
         return self.__datachannelManager.create_channel(label=label, protocol=protocol)
 
@@ -254,12 +246,9 @@ class RTCPeerConnection(EventEmitter):
                     if t._kind == media.kind:
                         transceiver = t
                 if transceiver is None:
-                    transceiver = RTCRtpTransceiver(
-                        sender=RTCRtpSender(),
-                        receiver=RTCRtpReceiver())
-                    self.__createTransport(transceiver, controlling=False)
-                    transceiver._kind = media.kind
-                    self.__transceivers.append(transceiver)
+                    transceiver = self.__createTransceiver(
+                        kind=media.kind,
+                        controlling=False)
 
                 # configure transport
                 transceiver._iceConnection.remote_candidates = media.ice_candidates
@@ -268,12 +257,7 @@ class RTCPeerConnection(EventEmitter):
                 transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
             elif media.kind == 'application':
                 if not self.__sctp:
-                    self.__sctp = RTCSctpTransport()
-                    self.__createTransport(self.__sctp, controlling=False)
-                    self.__sctpEndpoint = sctp.Endpoint(
-                        is_server=True,
-                        transport=self.__sctp._dtlsSession.data)
-                    self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
+                    self.__createSctp(controlling=False)
 
                 # configure transport
                 self.__sctp._iceConnection.remote_candidates = media.ice_candidates
@@ -319,6 +303,14 @@ class RTCPeerConnection(EventEmitter):
         if self.__isClosed:
             raise InvalidStateError('RTCPeerConnection is closed')
 
+    def __createSctp(self, controlling):
+        self.__sctp = RTCSctpTransport()
+        self.__createTransport(self.__sctp, controlling=controlling)
+        self.__sctpEndpoint = sctp.Endpoint(
+            is_server=not controlling,
+            transport=self.__sctp._dtlsSession.data)
+        self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
+
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
         sdp = [
@@ -360,6 +352,15 @@ class RTCPeerConnection(EventEmitter):
             sdp += ['a=sctpmap:5000 webrtc-datachannel 256']
 
         return '\r\n'.join(sdp) + '\r\n'
+
+    def __createTransceiver(self, controlling, kind, sender_track=None):
+        transceiver = RTCRtpTransceiver(
+            sender=RTCRtpSender(sender_track),
+            receiver=RTCRtpReceiver())
+        transceiver._kind = kind
+        self.__createTransport(transceiver, controlling=controlling)
+        self.__transceivers.append(transceiver)
+        return transceiver
 
     def __createTransport(self, transceiver, controlling):
         transceiver._iceConnection = aioice.Connection(ice_controlling=controlling)
