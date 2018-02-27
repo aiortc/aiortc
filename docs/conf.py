@@ -20,6 +20,21 @@ import sys, os
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('..'))
 
+# Mock out binding
+class MockLib:
+    ssrc_undefined = 0
+    ssrc_specific = 1
+    ssrc_any_inbound = 2
+    ssrc_any_outbound = 3
+
+    def srtp_init(self):
+        pass
+
+class MockBinding:
+    ffi = None
+    _lib = MockLib()
+
+sys.modules.update({'pylibsrtp._binding': MockBinding()})
 
 # -- General configuration ------------------------------------------------
 
