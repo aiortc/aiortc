@@ -313,7 +313,7 @@ class Endpoint:
         self.advertised_rwnd = 131072
         self.outbound_streams = 256
         self.inbound_streams = 2048
-        self.stream_seq = 0
+        self.stream_seq = {}
         self.local_tsn = randl()
 
         self.remote_initiate_tag = 0
@@ -381,12 +381,12 @@ class Endpoint:
             chunk.flags = SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG
             chunk.tsn = self.local_tsn
             chunk.stream_id = stream_id
-            chunk.stream_seq = self.stream_seq
+            chunk.stream_seq = self.stream_seq.get(stream_id, 0)
             chunk.protocol = protocol
             chunk.user_data = user_data
 
             self.local_tsn += 1
-            self.stream_seq += 1
+            self.stream_seq[stream_id] = chunk.stream_seq + 1
             await self.__send_chunk(chunk)
         self.send_queue = []
 
