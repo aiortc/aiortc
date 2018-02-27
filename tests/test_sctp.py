@@ -64,6 +64,22 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
+    def test_parse_abort(self):
+        data = load('sctp_abort.bin')
+        packet = sctp.Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 3763951554)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertEqual(packet.chunks[0].type, sctp.ChunkType.ABORT)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].params, [
+            (13, b'Expected B-bit for TSN=4ce1f17f, SID=0001, SSN=0000'),
+        ])
+
+        self.assertEqual(bytes(packet), data)
+
 
 class SctpAssociationTest(TestCase):
     def test_server(self):
