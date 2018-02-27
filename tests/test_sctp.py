@@ -1,17 +1,10 @@
 import asyncio
 import logging
-import os
 from unittest import TestCase
 
 from aiortc import sctp
 
-from .utils import run
-
-
-def load(name):
-    path = os.path.join(os.path.dirname(__file__), name)
-    with open(path, 'rb') as fp:
-        return fp.read()
+from .utils import load, run
 
 
 def dummy_transport_pair():
