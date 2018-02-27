@@ -2,10 +2,10 @@ import asyncio
 import logging
 from unittest import TestCase
 
-from aiowebrtc import RTCPeerConnection, RTCSessionDescription
-from aiowebrtc.exceptions import (InternalError, InvalidAccessError,
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.exceptions import (InternalError, InvalidAccessError,
                                   InvalidStateError)
-from aiowebrtc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
+from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                     VideoStreamTrack)
 
 from .utils import run

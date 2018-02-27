@@ -1,2 +1,2 @@
 [run]
-source = aiowebrtc
+source = aiortc

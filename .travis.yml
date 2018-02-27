@@ -28,5 +28,5 @@ matrix:
   - python: "3.5"
   - python: "3.6"
 script:
-  - flake8 aiowebrtc examples tests
+  - flake8 aiortc examples tests
   - coverage run setup.py test

@@ -1,7 +1,7 @@
 API Reference
 =============
 
-.. automodule:: aiowebrtc
+.. automodule:: aiortc
 
    .. autoclass:: RTCPeerConnection
       :members:

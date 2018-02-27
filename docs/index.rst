@@ -1,4 +1,4 @@
-aiowebrtc
+aiortc
 =========
 
 .. toctree::

@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiowebrtc.sdp import SessionDescription
+from aiortc.sdp import SessionDescription
 
 
 class SdpTest(TestCase):

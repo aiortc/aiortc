@@ -9,11 +9,11 @@ with open(readme_file, encoding='utf-8') as f:
     long_description = f.read()
 
 setuptools.setup(
-    name='aiowebrtc',
+    name='aiortc',
     version='0.1.0',
     description='An implementation of WebRTC',
     long_description=long_description,
-    url='https://github.com/jlaine/aiowebrtc',
+    url='https://github.com/jlaine/aiortc',
     author='Jeremy Lainé',
     author_email='jeremy.laine@m4x.org',
     license='BSD',
@@ -28,7 +28,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
-    packages=['aiowebrtc'],
+    packages=['aiortc'],
     install_requires=['aioice', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp'],
     dependency_links=[
         'git+https://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography-2.2.dev1',

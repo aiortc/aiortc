@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiowebrtc import RTCSessionDescription
+from aiortc import RTCSessionDescription
 
 
 class RTCSessionDescriptionTest(TestCase):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# aiowebrtc documentation build configuration file, created by
+# aiortc documentation build configuration file, created by
 # sphinx-quickstart on Thu Feb  8 17:22:14 2018.
 #
 # This file is execfile()d with the current directory set to its
@@ -46,7 +46,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'aiowebrtc'
+project = 'aiortc'
 copyright = u'2018, Jeremy Lainé'
 author = u'Jeremy Lainé'
 
@@ -92,7 +92,7 @@ html_theme = 'alabaster'
 html_theme_options = {
     'github_button': True,
     'github_user': 'jlaine',
-    'github_repo': 'aiowebrtc',
+    'github_repo': 'aiortc',
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -116,7 +116,7 @@ html_sidebars = {
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'aiowebrtcdoc'
+htmlhelp_basename = 'aiortcdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -143,7 +143,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'aiowebrtc.tex', 'aiowebrtc Documentation',
+    (master_doc, 'aiortc.tex', 'aiortc Documentation',
      u'Jeremy Lainé', 'manual'),
 ]
 
@@ -153,7 +153,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'aiowebrtc', 'aiowebrtc Documentation',
+    (master_doc, 'aiortc', 'aiortc Documentation',
      [author], 1)
 ]
 
@@ -164,8 +164,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'aiowebrtc', 'aiowebrtc Documentation',
-     author, 'aiowebrtc', 'One line description of project.',
+    (master_doc, 'aiortc', 'aiortc Documentation',
+     author, 'aiortc', 'One line description of project.',
      'Miscellaneous'),
 ]
 

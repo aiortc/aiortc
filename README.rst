@@ -1,13 +1,13 @@
-aiowebrtc
-=========
+aiortc
+======
 
 |travis| |coveralls|
 
-.. |travis| image:: https://img.shields.io/travis/jlaine/aiowebrtc.svg
-    :target: https://travis-ci.org/jlaine/aiowebrtc
+.. |travis| image:: https://img.shields.io/travis/jlaine/aiortc.svg
+    :target: https://travis-ci.org/jlaine/aiortc
 
-.. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiowebrtc.svg
-    :target: https://coveralls.io/github/jlaine/aiowebrtc
+.. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiortc.svg
+    :target: https://coveralls.io/github/jlaine/aiortc
 
 Asyncio-based WebRTC implementation.
 

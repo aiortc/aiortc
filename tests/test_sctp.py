@@ -3,7 +3,7 @@ import logging
 import os
 from unittest import TestCase
 
-from aiowebrtc import sctp
+from aiortc import sctp
 
 from .utils import run
 

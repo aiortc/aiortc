@@ -3,7 +3,7 @@ import logging
 import os
 
 from aiohttp import web
-from aiowebrtc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription
 
 
 ROOT = os.path.dirname(__file__)
