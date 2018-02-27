@@ -240,13 +240,16 @@ class Packet:
 
     @classmethod
     def parse(cls, data):
+        if len(data) < 12:
+            raise ValueError('SCTP packet length is less than 12 bytes')
+
         source_port, destination_port, verification_tag, checksum = unpack(
             '!HHII', data[0:12])
 
         # verify checksum
         check_data = data[0:8] + b'\x00\x00\x00\x00' + data[12:]
         if checksum != swapl(crc32c(check_data)):
-            raise ValueError('Invalid checksum')
+            raise ValueError('SCTP packet has invalid checksum')
 
         packet = cls(
             source_port=source_port,
@@ -313,7 +316,7 @@ class Endpoint:
         self.remote_initiate_tag = 0
 
     async def receive_chunk(self, chunk):
-        logger.info('%s < %s', self.role, chunk.__class__.__name__)
+        logger.debug('%s < %s', self.role, chunk.__class__.__name__)
         if isinstance(chunk, InitChunk) and self.is_server:
             self.remote_initiate_tag = chunk.initiate_tag
 
@@ -355,7 +358,7 @@ class Endpoint:
             self.set_state(self.State.CLOSED)
 
     async def send_chunk(self, chunk):
-        logger.info('%s > %s', self.role, chunk.__class__.__name__)
+        logger.debug('%s > %s', self.role, chunk.__class__.__name__)
         packet = Packet(
             source_port=5000,
             destination_port=5000,
@@ -364,6 +367,10 @@ class Endpoint:
         await self.transport.send(bytes(packet))
 
     async def close(self):
+        if self.state == self.State.CLOSED:
+            self.closed.set()
+            return
+
         chunk = ShutdownChunk()
         await self.send_chunk(chunk)
         self.set_state(self.State.SHUTDOWN_SENT)
@@ -426,7 +433,7 @@ class Endpoint:
 
     def set_state(self, state):
         if state != self.state:
-            logger.info('%s - %s -> %s' % (self.role, self.state, state))
+            logger.debug('%s - %s -> %s' % (self.role, self.state, state))
             self.state = state
             if state == self.State.ESTABLISHED:
                 asyncio.ensure_future(self.__flush())

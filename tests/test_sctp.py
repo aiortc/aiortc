@@ -80,9 +80,22 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
+    def test_invalid_checksum(self):
+        data = load('sctp_init.bin')
+        data = data[0:8] + b'\x01\x02\x03\x04' + data[12:]
+        with self.assertRaises(ValueError) as cm:
+            sctp.Packet.parse(data)
+        self.assertEqual(str(cm.exception), 'SCTP packet has invalid checksum')
+
+    def test_truncated_packet_header(self):
+        data = load('sctp_init.bin')[0:10]
+        with self.assertRaises(ValueError) as cm:
+            sctp.Packet.parse(data)
+        self.assertEqual(str(cm.exception), 'SCTP packet length is less than 12 bytes')
+
 
 class SctpAssociationTest(TestCase):
-    def test_server(self):
+    def test_ok(self):
         client_transport, server_transport = dummy_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
@@ -98,6 +111,14 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 
         run(client.close())
+
+    def test_garbage(self):
+        client_transport, server_transport = dummy_transport_pair()
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        asyncio.ensure_future(server.run())
+        asyncio.ensure_future(client_transport.send(b'garbage'))
+        run(asyncio.sleep(0))
+        run(server.close())
 
 
 logging.basicConfig(level=logging.DEBUG)
