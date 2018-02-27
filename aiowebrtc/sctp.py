@@ -10,6 +10,8 @@ import crcmod.predefined
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
+SCTP_DATA_LAST_FRAG = 0x01
+SCTP_DATA_FIRST_FRAG = 0x02
 
 STATE_COOKIE = 0x0007
 
@@ -338,6 +340,8 @@ class Endpoint:
             sack.cumulative_tsn = chunk.tsn
             await self.send_chunk(sack)
             await self.recv_queue.put((chunk.stream_id, chunk.protocol, chunk.user_data))
+        elif isinstance(chunk, AbortChunk):
+            self.set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
             self.set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
@@ -406,7 +410,9 @@ class Endpoint:
             return
 
         for stream_id, protocol, user_data in self.send_queue:
+            # FIXME : handle fragmentation!
             chunk = DataChunk()
+            chunk.flags = SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG
             chunk.tsn = self.local_tsn
             chunk.stream_id = stream_id
             chunk.stream_seq = self.stream_seq
