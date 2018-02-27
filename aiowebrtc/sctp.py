@@ -54,33 +54,25 @@ class Error(Exception):
 
 
 class Chunk:
+    def __init__(self, flags=0, body=b''):
+        self.flags = flags
+        self.body = body
+
     def __bytes__(self):
         body = self.body
         data = pack('!BBH', self.type, self.flags, len(body) + 4) + body
         data += b'\x00' * padl(len(body))
         return data
 
-
-class ChunkType(enum.IntEnum):
-    DATA = 0
-    INIT = 1
-    INIT_ACK = 2
-    SACK = 3
-    HEARTBEAT = 4
-    HEARTBEAT_ACK = 5
-    ABORT = 6
-    SHUTDOWN = 7
-    SHUTDOWN_ACK = 8
-    ERROR = 9
-    COOKIE_ECHO = 10
-    COOKIE_ACK = 11
-    SHUTDOWN_COMPLETE = 14
+    @property
+    def type(self):
+        for k, cls in CHUNK_TYPES.items():
+            if isinstance(self, cls):
+                return k
 
 
 class AbortChunk(Chunk):
-    type = ChunkType.ABORT
-
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
             self.params = decode_params(body)
@@ -93,25 +85,15 @@ class AbortChunk(Chunk):
 
 
 class CookieAckChunk(Chunk):
-    type = ChunkType.COOKIE_ACK
-
-    def __init__(self, flags=0, body=None):
-        self.flags = flags
-        self.body = b''
+    pass
 
 
 class CookieEchoChunk(Chunk):
-    type = ChunkType.COOKIE_ECHO
-
-    def __init__(self, flags=0, body=b''):
-        self.flags = flags
-        self.body = body
+    pass
 
 
 class DataChunk(Chunk):
-    type = ChunkType.DATA
-
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
             (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack('!LHHL', body[0:12])
@@ -131,9 +113,7 @@ class DataChunk(Chunk):
 
 
 class InitChunk(Chunk):
-    type = ChunkType.INIT
-
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
             (self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
@@ -157,13 +137,11 @@ class InitChunk(Chunk):
 
 
 class InitAckChunk(InitChunk):
-    type = ChunkType.INIT_ACK
+    type = 2
 
 
 class SackChunk(Chunk):
-    type = ChunkType.SACK
-
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags=0, body=b''):
         self.flags = flags
         self.gaps = []
         self.duplicates = []
@@ -182,9 +160,7 @@ class SackChunk(Chunk):
 
 
 class ShutdownChunk(Chunk):
-    type = ChunkType.SHUTDOWN
-
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
             self.cumulative_tsn = unpack('!L', body[0:4])[0]
@@ -197,19 +173,11 @@ class ShutdownChunk(Chunk):
 
 
 class ShutdownAckChunk(Chunk):
-    type = ChunkType.SHUTDOWN_ACK
-
-    def __init__(self, flags=0, body=b''):
-        self.flags = flags
-        self.body = body
+    pass
 
 
 class ShutdownCompleteChunk(Chunk):
-    type = ChunkType.SHUTDOWN_COMPLETE
-
-    def __init__(self, flags=0, body=b''):
-        self.flags = flags
-        self.body = body
+    pass
 
 
 CHUNK_TYPES = {

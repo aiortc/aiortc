@@ -44,7 +44,8 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.verification_tag, 0)
 
         self.assertEqual(len(packet.chunks), 1)
-        self.assertEqual(packet.chunks[0].type, sctp.ChunkType.INIT)
+        self.assertTrue(isinstance(packet.chunks[0], sctp.InitChunk))
+        self.assertEqual(packet.chunks[0].type, 1)
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(len(packet.chunks[0].body), 82)
 
@@ -58,7 +59,8 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.verification_tag, 1039286925)
 
         self.assertEqual(len(packet.chunks), 1)
-        self.assertEqual(packet.chunks[0].type, sctp.ChunkType.COOKIE_ECHO)
+        self.assertTrue(isinstance(packet.chunks[0], sctp.CookieEchoChunk))
+        self.assertEqual(packet.chunks[0].type, 10)
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(len(packet.chunks[0].body), 8)
 
@@ -72,7 +74,8 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.verification_tag, 3763951554)
 
         self.assertEqual(len(packet.chunks), 1)
-        self.assertEqual(packet.chunks[0].type, sctp.ChunkType.ABORT)
+        self.assertTrue(isinstance(packet.chunks[0], sctp.AbortChunk))
+        self.assertEqual(packet.chunks[0].type, 6)
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(packet.chunks[0].params, [
             (13, b'Expected B-bit for TSN=4ce1f17f, SID=0001, SSN=0000'),
