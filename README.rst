@@ -1,7 +1,10 @@
 aiortc
 ======
 
-|travis| |coveralls|
+|rtd| |travis| |coveralls|
+
+.. |rtd| image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
+   :target: https://aiortc.readthedocs.io/
 
 .. |travis| image:: https://img.shields.io/travis/jlaine/aiortc.svg
     :target: https://travis-ci.org/jlaine/aiortc
