@@ -130,9 +130,11 @@ class RTCPeerConnection(EventEmitter):
         self.__isClosed = True
         self.__setSignalingState('closed')
         for transceiver in self.__transceivers:
+            await transceiver._dtlsSession.close()
             await transceiver._iceConnection.close()
         if self.__sctp:
             await self.__sctpEndpoint.close()
+            await self.__sctp._dtlsSession.close()
             await self.__sctp._iceConnection.close()
         self.__setIceConnectionState('closed')
 

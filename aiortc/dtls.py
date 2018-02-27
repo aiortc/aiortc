@@ -132,6 +132,10 @@ class DtlsSrtpSession:
         else:
             lib.SSL_set_connect_state(self.ssl)
 
+    async def close(self):
+        lib.SSL_shutdown(self.ssl)
+        await self._write_ssl()
+
     async def connect(self):
         while not self.encrypted:
             result = lib.SSL_do_handshake(self.ssl)
