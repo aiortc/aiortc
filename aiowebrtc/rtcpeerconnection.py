@@ -256,7 +256,7 @@ class RTCPeerConnection(EventEmitter):
                 await dtlsSession.connect()
                 asyncio.ensure_future(dtlsSession.run())
             if self.__sctp:
-                conn = sctp.Transport(
+                conn = sctp.Endpoint(
                     is_server=not self.__sctp._iceConnection.ice_controlling,
                     transport=self.__sctp._dtlsSession.data)
                 asyncio.ensure_future(conn.run())

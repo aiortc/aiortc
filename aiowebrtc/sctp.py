@@ -291,12 +291,14 @@ class Packet:
         return packet
 
 
-class Transport:
+class Endpoint:
     def __init__(self, is_server, transport):
         self.is_server = is_server
         self.queue = asyncio.Queue()
         self.role = is_server and 'server' or 'client'
+        self.state = self.State.CLOSED
         self.transport = transport
+        self.closed = asyncio.Event()
 
         self.local_initiate_tag = randl()
         self.advertised_rwnd = 131072
@@ -323,20 +325,29 @@ class Transport:
         elif isinstance(chunk, InitAckChunk) and not self.is_server:
             echo = CookieEchoChunk()
             await self.send_chunk(echo)
+            self.set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             ack = CookieAckChunk()
             await self.send_chunk(ack)
+            self.set_state(self.State.ESTABLISHED)
+        elif isinstance(chunk, CookieAckChunk) and not self.is_server:
+            self.set_state(self.State.ESTABLISHED)
         elif isinstance(chunk, DataChunk):
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn
             await self.send_chunk(sack)
             await self.queue.put((chunk.protocol, chunk.user_data))
         elif isinstance(chunk, ShutdownChunk):
+            self.set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
             await self.send_chunk(ack)
+            self.set_state(self.State.SHUTDOWN_ACK_SENT)
         elif isinstance(chunk, ShutdownAckChunk):
             complete = ShutdownCompleteChunk()
             await self.send_chunk(complete)
+            self.set_state(self.State.CLOSED)
+        elif isinstance(chunk, ShutdownCompleteChunk):
+            self.set_state(self.State.CLOSED)
 
     async def send_chunk(self, chunk):
         logger.info('%s > %s', self.role, chunk.__class__.__name__)
@@ -350,6 +361,8 @@ class Transport:
     async def close(self):
         chunk = ShutdownChunk()
         await self.send_chunk(chunk)
+        self.set_state(self.State.SHUTDOWN_SENT)
+        await self.closed.wait()
 
     async def recv(self):
         return await self.queue.get()
@@ -375,9 +388,18 @@ class Transport:
             chunk.inbound_streams = self.inbound_streams
             chunk.initial_tsn = self.local_tsn
             await self.send_chunk(chunk)
+            self.set_state(self.State.COOKIE_WAIT)
 
         while True:
-            data = await self.transport.recv()
+            done, pending = await asyncio.wait(
+                [self.transport.recv(), self.closed.wait()],
+                return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            data = done.pop().result()
+            if data is True:
+                break
+
             try:
                 packet = Packet.parse(data)
             except ValueError:
@@ -385,3 +407,20 @@ class Transport:
 
             for chunk in packet.chunks:
                 await self.receive_chunk(chunk)
+
+    def set_state(self, state):
+        if state != self.state:
+            logger.info('%s - %s -> %s' % (self.role, self.state, state))
+            self.state = state
+            if state == self.State.CLOSED:
+                self.closed.set()
+
+    class State(enum.Enum):
+        CLOSED = 1
+        COOKIE_WAIT = 2
+        COOKIE_ECHOED = 3
+        ESTABLISHED = 4
+        SHUTDOWN_PENDING = 5
+        SHUTDOWN_SENT = 6
+        SHUTDOWN_RECEIVED = 7
+        SHUTDOWN_ACK_SENT = 8

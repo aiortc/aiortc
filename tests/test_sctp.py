@@ -68,8 +68,8 @@ class SctpPacketTest(TestCase):
 class SctpAssociationTest(TestCase):
     def test_server(self):
         client_transport, server_transport = dummy_transport_pair()
-        client = sctp.Transport(is_server=False, transport=client_transport)
-        server = sctp.Transport(is_server=True, transport=server_transport)
+        client = sctp.Endpoint(is_server=False, transport=client_transport)
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
         run(asyncio.sleep(0.5))
@@ -81,7 +81,6 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 
         run(client.close())
-        run(asyncio.sleep(0.5))
 
 
 logging.basicConfig(level=logging.DEBUG)
