@@ -275,7 +275,8 @@ class RTCPeerConnectionTest(TestCase):
         pc2_states = track_states(pc2)
 
         # create offer
-        pc1.createDataChannel('chat')
+        dc = pc1.createDataChannel('chat')
+        dc.send('hello')
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, 'offer')
         self.assertTrue('m=application ' in offer.sdp)

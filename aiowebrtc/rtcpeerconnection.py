@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 
-import aioice
+import aioice.exceptions
 from pyee import EventEmitter
 
 from . import dtls, sdp, sctp
@@ -42,6 +42,13 @@ def ice_connection_sdp(iceConnection):
     else:
         sdp += ['a=setup:active']
     return sdp
+
+
+async def run_dtls(dtlsSession):
+    try:
+        await dtlsSession.run()
+    except aioice.exceptions.ConnectionError:
+        pass
 
 
 class RTCPeerConnection(EventEmitter):
@@ -123,6 +130,9 @@ class RTCPeerConnection(EventEmitter):
         self.__setSignalingState('closed')
         for transceiver in self.__transceivers:
             await transceiver._iceConnection.close()
+        if self.__sctp:
+            await self.__sctpEndpoint.close()
+            await self.__sctp._iceConnection.close()
         self.__setIceConnectionState('closed')
 
     async def createAnswer(self):
@@ -141,12 +151,18 @@ class RTCPeerConnection(EventEmitter):
             type='answer')
 
     def createDataChannel(self, label):
-        channel = RTCDataChannel(label=label, loop=self._loop)
-        self.__datachannels.append(channel)
-
         if not self.__sctp:
             self.__sctp = RTCSctpTransport()
             self.__createTransport(self.__sctp, controlling=True)
+            self.__sctpEndpoint = sctp.Endpoint(
+                is_server=not self.__sctp._iceConnection.ice_controlling,
+                transport=self.__sctp._dtlsSession.data)
+            self.__sctpStream = 1
+
+        channel = RTCDataChannel(id=self.__sctpStream, label=label,
+                                 endpoint=self.__sctpEndpoint, loop=self._loop)
+        self.__datachannels.append(channel)
+        self.__sctpStream += 2
 
         return channel
 
@@ -226,6 +242,10 @@ class RTCPeerConnection(EventEmitter):
                 if not self.__sctp:
                     self.__sctp = RTCSctpTransport()
                     self.__createTransport(self.__sctp, controlling=False)
+                    self.__sctpEndpoint = sctp.Endpoint(
+                        is_server=not self.__sctp._iceConnection.ice_controlling,
+                        transport=self.__sctp._dtlsSession.data)
+                    self.__sctpStream = 0
 
                 # configure transport
                 self.__sctp._iceConnection.remote_candidates = media.ice_candidates
@@ -254,12 +274,9 @@ class RTCPeerConnection(EventEmitter):
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
                 await dtlsSession.connect()
-                asyncio.ensure_future(dtlsSession.run())
+                asyncio.ensure_future(run_dtls(dtlsSession))
             if self.__sctp:
-                conn = sctp.Endpoint(
-                    is_server=not self.__sctp._iceConnection.ice_controlling,
-                    transport=self.__sctp._dtlsSession.data)
-                asyncio.ensure_future(conn.run())
+                asyncio.ensure_future(self.__sctpEndpoint.run())
             self.__setIceConnectionState('completed')
 
     async def __gather(self):

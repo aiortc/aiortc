@@ -75,8 +75,9 @@ class SctpAssociationTest(TestCase):
         run(asyncio.sleep(0.5))
 
         # DATA_CHANNEL_OPEN
-        run(client.send(50, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat'))
-        protocol, data = run(server.recv())
+        run(client.send(1, 50, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat'))
+        stream_id, protocol, data = run(server.recv())
+        self.assertEqual(stream_id, 1)
         self.assertEqual(protocol, 50)
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 

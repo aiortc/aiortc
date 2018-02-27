@@ -294,7 +294,8 @@ class Packet:
 class Endpoint:
     def __init__(self, is_server, transport):
         self.is_server = is_server
-        self.queue = asyncio.Queue()
+        self.recv_queue = asyncio.Queue()
+        self.send_queue = []
         self.role = is_server and 'server' or 'client'
         self.state = self.State.CLOSED
         self.transport = transport
@@ -336,7 +337,7 @@ class Endpoint:
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn
             await self.send_chunk(sack)
-            await self.queue.put((chunk.protocol, chunk.user_data))
+            await self.recv_queue.put((chunk.stream_id, chunk.protocol, chunk.user_data))
         elif isinstance(chunk, ShutdownChunk):
             self.set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
@@ -365,19 +366,11 @@ class Endpoint:
         await self.closed.wait()
 
     async def recv(self):
-        return await self.queue.get()
+        return await self.recv_queue.get()
 
-    async def send(self, protocol, user_data):
-        chunk = DataChunk()
-        chunk.tsn = self.local_tsn
-        chunk.stream_id = 1
-        chunk.stream_seq = self.stream_seq
-        chunk.protocol = protocol
-        chunk.user_data = user_data
-
-        self.local_tsn += 1
-        self.stream_seq += 1
-        await self.send_chunk(chunk)
+    async def send(self, stream_id, protocol, user_data):
+        self.send_queue.append((stream_id, protocol, user_data))
+        await self.__flush()
 
     async def run(self):
         if not self.is_server:
@@ -408,11 +401,30 @@ class Endpoint:
             for chunk in packet.chunks:
                 await self.receive_chunk(chunk)
 
+    async def __flush(self):
+        if self.state != self.State.ESTABLISHED:
+            return
+
+        for stream_id, protocol, user_data in self.send_queue:
+            chunk = DataChunk()
+            chunk.tsn = self.local_tsn
+            chunk.stream_id = stream_id
+            chunk.stream_seq = self.stream_seq
+            chunk.protocol = protocol
+            chunk.user_data = user_data
+
+            self.local_tsn += 1
+            self.stream_seq += 1
+            await self.send_chunk(chunk)
+        self.send_queue = []
+
     def set_state(self, state):
         if state != self.state:
             logger.info('%s - %s -> %s' % (self.role, self.state, state))
             self.state = state
-            if state == self.State.CLOSED:
+            if state == self.State.ESTABLISHED:
+                asyncio.ensure_future(self.__flush())
+            elif state == self.State.CLOSED:
                 self.closed.set()
 
     class State(enum.Enum):
