@@ -80,8 +80,13 @@ class DataChannelManager:
                                              manager=self)
                     self.channels[stream_id] = channel
 
+                    # send ack
+                    await self.endpoint.send(channel.id, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
+
                     # emit channel
                     self.pc.emit('datachannel', channel)
+                elif msg_type == DATA_CHANNEL_ACK:
+                    pass
             elif pp_id == WEBRTC_STRING and stream_id in self.channels:
                 # emit message
                 self.channels[stream_id].emit('message', data.decode('utf8'))
