@@ -279,6 +279,11 @@ class Endpoint:
 
         self.remote_initiate_tag = 0
 
+    async def abort(self):
+        chunk = AbortChunk()
+        await self._send_chunk(chunk)
+        self._set_state(self.State.CLOSED)
+
     async def close(self):
         if self.state == self.State.CLOSED:
             self.closed.set()

@@ -123,6 +123,24 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
         self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
+    def test_abort(self):
+        client_transport, server_transport = dummy_transport_pair()
+        client = sctp.Endpoint(is_server=False, transport=client_transport)
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        asyncio.ensure_future(server.run())
+        asyncio.ensure_future(client.run())
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, sctp.Endpoint.State.ESTABLISHED)
+        self.assertEqual(server.state, sctp.Endpoint.State.ESTABLISHED)
+
+        # shutdown
+        run(client.abort())
+        run(asyncio.sleep(0))
+        self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
     def test_garbage(self):
         client_transport, server_transport = dummy_transport_pair()
         server = sctp.Endpoint(is_server=True, transport=server_transport)
