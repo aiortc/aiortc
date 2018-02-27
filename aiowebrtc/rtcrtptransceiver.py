@@ -1,5 +1,14 @@
+import asyncio
+
+
 class RTCRtpReceiver:
-    pass
+    async def _run(self, transport):
+        # for now, just drain incoming data
+        while True:
+            try:
+                await transport.recv()
+            except ConnectionError:
+                break
 
 
 class RTCRtpSender:
@@ -9,6 +18,9 @@ class RTCRtpSender:
     @property
     def track(self):
         return self._track
+
+    async def _run(self, transport):
+        pass
 
 
 class RTCRtpTransceiver:
@@ -32,9 +44,6 @@ class RTCRtpTransceiver:
         return self.__sender
 
     async def _run(self, transport):
-        # for now, just drain incoming data
-        while True:
-            try:
-                await transport.recv()
-            except ConnectionError:
-                break
+        await asyncio.wait([
+            self.receiver._run(transport),
+            self.sender._run(transport)])
