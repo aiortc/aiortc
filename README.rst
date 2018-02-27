@@ -18,11 +18,11 @@ Working:
 
 - Basic SDP generation / parsing
 - Interactive Connectivity Establishment
-- DTLS handshake and SRTP keying
+- DTLS handshake, SRTP keying and encryption
 - SRTP encryption / decryption for RTP and RTCP
+- Data channels
 
 TODO:
 
 - Actual media codec negotiation
 - Expose media to API user
-- Data channels

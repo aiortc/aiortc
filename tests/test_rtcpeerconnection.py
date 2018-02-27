@@ -269,14 +269,31 @@ class RTCPeerConnectionTest(TestCase):
 
     def test_connect_datachannel(self):
         pc1 = RTCPeerConnection()
+        pc1_data_messages = []
         pc1_states = track_states(pc1)
 
         pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
         pc2_states = track_states(pc2)
+
+        @pc2.on('datachannel')
+        def on_datachannel(channel):
+            pc2_data_channels.append(channel)
+
+            @channel.on('message')
+            def on_message(message):
+                pc2_data_messages.append(message)
+                channel.send('echo: %s' % message)
 
         # create offer
         dc = pc1.createDataChannel('chat')
         dc.send('hello')
+
+        @dc.on('message')
+        def on_message(message):
+            pc1_data_messages.append(message)
+
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, 'offer')
         self.assertTrue('m=application ' in offer.sdp)
@@ -318,6 +335,17 @@ class RTCPeerConnectionTest(TestCase):
         run(asyncio.sleep(1))
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].id, 1)
+        self.assertEqual(pc2_data_channels[0].label, 'chat')
+
+        # check pc2 got a message
+        self.assertEqual(pc2_data_messages, ['hello'])
+
+        # check pc1 got reply
+        self.assertEqual(pc1_data_messages, ['echo: hello'])
 
         # close
         run(pc1.close())

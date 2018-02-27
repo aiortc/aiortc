@@ -1,25 +1,84 @@
 import asyncio
-from struct import pack
+from struct import pack, unpack
 
 from pyee import EventEmitter
 
 
+# message types
+DATA_CHANNEL_ACK = 2
+DATA_CHANNEL_OPEN = 3
+
+# channel types
+DATA_CHANNEL_RELIABLE = 0
+
+WEBRTC_DCEP = 50
+WEBRTC_STRING = 51
+
+
+class DataChannelManager:
+    def __init__(self, pc, endpoint):
+        self.channels = {}
+        self.endpoint = endpoint
+        self.pc = pc
+        if endpoint.is_server:
+            self.stream_id = 0
+        else:
+            self.stream_id = 1
+
+    def create_channel(self, label):
+        # register channel
+        channel = RTCDataChannel(id=self.stream_id, label=label, manager=self)
+        self.channels[channel.id] = channel
+        self.stream_id += 2
+
+        # open channel
+        data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
+                    0, 0, len(label), 0) + label.encode('utf8')
+        asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_DCEP, data))
+
+        return channel
+
+    def send(self, channel, data):
+        asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING, data.encode('utf8')))
+
+    async def run(self, endpoint):
+        self.endpoint = endpoint
+        while True:
+            stream_id, pp_id, data = await self.endpoint.recv()
+            if pp_id == WEBRTC_DCEP and len(data):
+                msg_type = unpack('!B', data[0:1])[0]
+                if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
+                    # one side should be using even IDs, the other odd IDs
+                    assert (stream_id % 2) != (self.stream_id % 2)
+                    assert stream_id not in self.channels
+
+                    (msg_type, channel_type, priority, reliability,
+                     label_length, proto_length) = unpack('!BBHLHH', data[0:12])
+                    label = data[12:12 + label_length].decode('utf8')
+
+                    # register channel
+                    channel = RTCDataChannel(id=stream_id, label=label, manager=self)
+                    self.channels[stream_id] = channel
+
+                    # emit channel
+                    self.pc.emit('datachannel', channel)
+            elif pp_id == WEBRTC_STRING and stream_id in self.channels:
+                # emit message
+                self.channels[stream_id].emit('message', data.decode('utf8'))
+
+
 class RTCDataChannel(EventEmitter):
-    def __init__(self, id, label, endpoint, loop=None):
+    def __init__(self, id, label, manager, loop=None):
         super().__init__(loop=loop)
         self.__id = id
-        self.__endpoint = endpoint
         self.__label = label
-
-        # DATA_CHANNEL_OPEN
-        data = pack('!BBHLHH', 0x03, 0, 0, 0, len(label), 0) + label.encode('utf8')
-        asyncio.ensure_future(self.__endpoint.send(self.id, 50, data))
+        self.__manager = manager
 
     def close(self):
         pass
 
     def send(self, data):
-        asyncio.ensure_future(self.__endpoint.send(self.id, 51, data.encode('utf8')))
+        self.__manager.send(self, data)
 
     @property
     def id(self):
