@@ -1,7 +1,9 @@
 import asyncio
 import enum
+import hmac
 import logging
 import os
+import time
 from struct import pack, unpack
 
 import crcmod.predefined
@@ -10,8 +12,13 @@ import crcmod.predefined
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
+COOKIE_LENGTH = 24
+COOKIE_LIFETIME = 60
+
 SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
+
+STALE_COOKIE_ERROR = 3
 
 STATE_COOKIE = 0x0007
 
@@ -112,6 +119,10 @@ class DataChunk(Chunk):
         return body
 
 
+class ErrorChunk(Chunk):
+    pass
+
+
 class InitChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
@@ -188,6 +199,7 @@ CHUNK_TYPES = {
     6: AbortChunk,
     7: ShutdownChunk,
     8: ShutdownAckChunk,
+    9: ErrorChunk,
     10: CookieEchoChunk,
     11: CookieAckChunk,
     14: ShutdownCompleteChunk,
@@ -257,6 +269,7 @@ class Endpoint:
         self.transport = transport
         self.closed = asyncio.Event()
 
+        self.hmac_key = os.urandom(16)
         self.local_initiate_tag = randl()
         self.advertised_rwnd = 131072
         self.outbound_streams = 256
@@ -338,6 +351,9 @@ class Endpoint:
             await self._send_chunk(chunk)
         self.send_queue = []
 
+    def _get_timestamp(self):
+        return int(time.time())
+
     async def _receive_chunk(self, chunk):
         logger.debug('%s < %s', self.role, chunk.__class__.__name__)
         if isinstance(chunk, InitChunk) and self.is_server:
@@ -349,13 +365,37 @@ class Endpoint:
             ack.outbound_streams = self.outbound_streams
             ack.inbound_streams = self.inbound_streams
             ack.initial_tsn = self.local_tsn
-            ack.params.append((STATE_COOKIE, b'12345678'))
+
+            # generate state cookie
+            cookie = pack('!L', self._get_timestamp())
+            cookie += hmac.new(self.hmac_key, cookie, 'sha1').digest()
+            ack.params.append((STATE_COOKIE, cookie))
             await self._send_chunk(ack)
         elif isinstance(chunk, InitAckChunk) and not self.is_server:
             echo = CookieEchoChunk()
+            for k, v in chunk.params:
+                if k == STATE_COOKIE:
+                    echo.body = v
+                    break
             await self._send_chunk(echo)
             self._set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
+            # check state cookie MAC
+            cookie = chunk.body
+            if (len(cookie) != COOKIE_LENGTH or
+               hmac.new(self.hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
+                return
+
+            # check state cookie lifetime
+            now = self._get_timestamp()
+            stamp = unpack('!L', cookie[0:4])[0]
+            if stamp < now - COOKIE_LIFETIME or stamp > now:
+                logger.warning('State cookie has expired')
+                error = ErrorChunk()
+                error.body = pack('!HHL', STALE_COOKIE_ERROR, 8, 0)
+                await self._send_chunk(error)
+                return
+
             ack = CookieAckChunk()
             await self._send_chunk(ack)
             self._set_state(self.State.ESTABLISHED)

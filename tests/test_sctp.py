@@ -104,7 +104,11 @@ class SctpAssociationTest(TestCase):
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
+
+        # check outcome
         run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, sctp.Endpoint.State.ESTABLISHED)
+        self.assertEqual(server.state, sctp.Endpoint.State.ESTABLISHED)
 
         # DATA_CHANNEL_OPEN
         run(client.send(1, 50, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat'))
@@ -116,6 +120,8 @@ class SctpAssociationTest(TestCase):
         # shutdown
         run(client.close())
         run(server.close())
+        self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
     def test_garbage(self):
         client_transport, server_transport = dummy_transport_pair()
@@ -124,6 +130,34 @@ class SctpAssociationTest(TestCase):
         asyncio.ensure_future(client_transport.send(b'garbage'))
         run(asyncio.sleep(0))
         run(server.close())
+
+    def test_stale_cookie(self):
+        def mock_timestamp():
+            mock_timestamp.calls += 1
+            if mock_timestamp.calls == 1:
+                return 0
+            else:
+                return 61
+
+        mock_timestamp.calls = 0
+
+        client_transport, server_transport = dummy_transport_pair()
+        client = sctp.Endpoint(is_server=False, transport=client_transport)
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        server._get_timestamp = mock_timestamp
+        asyncio.ensure_future(server.run())
+        asyncio.ensure_future(client.run())
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, sctp.Endpoint.State.COOKIE_ECHOED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
+        # shutdown
+        run(client.close())
+        run(server.close())
+        self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
 
 logging.basicConfig(level=logging.DEBUG)
