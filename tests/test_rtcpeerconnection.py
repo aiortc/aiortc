@@ -284,14 +284,25 @@ class RTCPeerConnectionTest(TestCase):
             @channel.on('message')
             def on_message(message):
                 pc2_data_messages.append(message)
-                channel.send('echo: %s' % message)
+                if isinstance(message, str):
+                    channel.send('string-echo: ' + message)
+                else:
+                    channel.send(b'binary-echo: ' + message)
 
-        # create offer
+        # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.id, 1)
         self.assertEqual(dc.label, 'chat')
         self.assertEqual(dc.protocol, 'bob')
+
+        # send messages
         dc.send('hello')
+        dc.send('')
+        dc.send(b'\x00\x01\x02\x03')
+        dc.send(b'')
+        with self.assertRaises(ValueError) as cm:
+            dc.send(1234)
+        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')
         def on_message(message):
@@ -345,11 +356,19 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_data_channels[0].label, 'chat')
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
-        # check pc2 got a message
-        self.assertEqual(pc2_data_messages, ['hello'])
+        # check pc2 got messages
+        self.assertEqual(pc2_data_messages, [
+            'hello',
+            '',
+            b'\x00\x01\x02\x03',
+            b''])
 
-        # check pc1 got reply
-        self.assertEqual(pc1_data_messages, ['echo: hello'])
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, [
+            'string-echo: hello',
+            'string-echo: ',
+            b'binary-echo: \x00\x01\x02\x03',
+            b'binary-echo: '])
 
         # close
         run(pc1.close())

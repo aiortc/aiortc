@@ -13,6 +13,9 @@ DATA_CHANNEL_RELIABLE = 0
 
 WEBRTC_DCEP = 50
 WEBRTC_STRING = 51
+WEBRTC_BINARY = 53
+WEBRTC_STRING_EMPTY = 56
+WEBRTC_BINARY_EMPTY = 57
 
 
 class DataChannelManager:
@@ -42,7 +45,17 @@ class DataChannelManager:
         return channel
 
     def send(self, channel, data):
-        asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING, data.encode('utf8')))
+        if data == '':
+            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING_EMPTY, b'\x00'))
+        elif isinstance(data, str):
+            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING,
+                                                     data.encode('utf8')))
+        elif data == b'':
+            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_BINARY_EMPTY, b'\x00'))
+        elif isinstance(data, bytes):
+            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_BINARY, data))
+        else:
+            raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
     async def run(self, endpoint):
         self.endpoint = endpoint
@@ -72,6 +85,15 @@ class DataChannelManager:
             elif pp_id == WEBRTC_STRING and stream_id in self.channels:
                 # emit message
                 self.channels[stream_id].emit('message', data.decode('utf8'))
+            elif pp_id == WEBRTC_STRING_EMPTY and stream_id in self.channels:
+                # emit message
+                self.channels[stream_id].emit('message', '')
+            elif pp_id == WEBRTC_BINARY and stream_id in self.channels:
+                # emit message
+                self.channels[stream_id].emit('message', data)
+            elif pp_id == WEBRTC_BINARY_EMPTY and stream_id in self.channels:
+                # emit message
+                self.channels[stream_id].emit('message', b'')
 
 
 class RTCDataChannel(EventEmitter):
