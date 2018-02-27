@@ -238,9 +238,9 @@ class Packet:
         while pos <= len(data) - 4:
             chunk_type, chunk_flags, chunk_length = unpack('!BBH', data[pos:pos + 4])
             chunk_body = data[pos + 4:pos + chunk_length]
-            cls = CHUNK_TYPES.get(chunk_type)
-            if cls:
-                packet.chunks.append(cls(
+            chunk_cls = CHUNK_TYPES.get(chunk_type)
+            if chunk_cls:
+                packet.chunks.append(chunk_cls(
                     flags=chunk_flags,
                     body=chunk_body))
             pos += chunk_length + padl(chunk_length)
@@ -272,8 +272,8 @@ class Endpoint:
             return
 
         chunk = ShutdownChunk()
-        await self.__send_chunk(chunk)
-        self.set_state(self.State.SHUTDOWN_SENT)
+        await self._send_chunk(chunk)
+        self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
 
     async def recv(self):
@@ -288,7 +288,7 @@ class Endpoint:
 
     async def send(self, stream_id, protocol, user_data):
         self.send_queue.append((stream_id, protocol, user_data))
-        await self.__flush()
+        await self._flush()
 
     async def run(self):
         if not self.is_server:
@@ -298,8 +298,8 @@ class Endpoint:
             chunk.outbound_streams = self.outbound_streams
             chunk.inbound_streams = self.inbound_streams
             chunk.initial_tsn = self.local_tsn
-            await self.__send_chunk(chunk)
-            self.set_state(self.State.COOKIE_WAIT)
+            await self._send_chunk(chunk)
+            self._set_state(self.State.COOKIE_WAIT)
 
         while True:
             done, pending = await asyncio.wait(
@@ -317,9 +317,9 @@ class Endpoint:
                 continue
 
             for chunk in packet.chunks:
-                await self.__receive_chunk(chunk)
+                await self._receive_chunk(chunk)
 
-    async def __flush(self):
+    async def _flush(self):
         if self.state != self.State.ESTABLISHED:
             return
 
@@ -335,10 +335,10 @@ class Endpoint:
 
             self.local_tsn += 1
             self.stream_seq[stream_id] = chunk.stream_seq + 1
-            await self.__send_chunk(chunk)
+            await self._send_chunk(chunk)
         self.send_queue = []
 
-    async def __receive_chunk(self, chunk):
+    async def _receive_chunk(self, chunk):
         logger.debug('%s < %s', self.role, chunk.__class__.__name__)
         if isinstance(chunk, InitChunk) and self.is_server:
             self.remote_initiate_tag = chunk.initiate_tag
@@ -350,37 +350,37 @@ class Endpoint:
             ack.inbound_streams = self.inbound_streams
             ack.initial_tsn = self.local_tsn
             ack.params.append((STATE_COOKIE, b'12345678'))
-            await self.__send_chunk(ack)
+            await self._send_chunk(ack)
         elif isinstance(chunk, InitAckChunk) and not self.is_server:
             echo = CookieEchoChunk()
-            await self.__send_chunk(echo)
-            self.set_state(self.State.COOKIE_ECHOED)
+            await self._send_chunk(echo)
+            self._set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             ack = CookieAckChunk()
-            await self.__send_chunk(ack)
-            self.set_state(self.State.ESTABLISHED)
+            await self._send_chunk(ack)
+            self._set_state(self.State.ESTABLISHED)
         elif isinstance(chunk, CookieAckChunk) and not self.is_server:
-            self.set_state(self.State.ESTABLISHED)
+            self._set_state(self.State.ESTABLISHED)
         elif isinstance(chunk, DataChunk):
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn
-            await self.__send_chunk(sack)
+            await self._send_chunk(sack)
             await self.recv_queue.put((chunk.stream_id, chunk.protocol, chunk.user_data))
         elif isinstance(chunk, AbortChunk):
-            self.set_state(self.State.CLOSED)
+            self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
-            self.set_state(self.State.SHUTDOWN_RECEIVED)
+            self._set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
-            await self.__send_chunk(ack)
-            self.set_state(self.State.SHUTDOWN_ACK_SENT)
+            await self._send_chunk(ack)
+            self._set_state(self.State.SHUTDOWN_ACK_SENT)
         elif isinstance(chunk, ShutdownAckChunk):
             complete = ShutdownCompleteChunk()
-            await self.__send_chunk(complete)
-            self.set_state(self.State.CLOSED)
+            await self._send_chunk(complete)
+            self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownCompleteChunk):
-            self.set_state(self.State.CLOSED)
+            self._set_state(self.State.CLOSED)
 
-    async def __send_chunk(self, chunk):
+    async def _send_chunk(self, chunk):
         logger.debug('%s > %s', self.role, chunk.__class__.__name__)
         packet = Packet(
             source_port=5000,
@@ -389,12 +389,12 @@ class Endpoint:
         packet.chunks.append(chunk)
         await self.transport.send(bytes(packet))
 
-    def set_state(self, state):
+    def _set_state(self, state):
         if state != self.state:
             logger.debug('%s - %s -> %s' % (self.role, self.state, state))
             self.state = state
             if state == self.State.ESTABLISHED:
-                asyncio.ensure_future(self.__flush())
+                asyncio.ensure_future(self._flush())
             elif state == self.State.CLOSED:
                 self.closed.set()
 
