@@ -110,7 +110,9 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(protocol, 50)
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 
+        # shutdown
         run(client.close())
+        run(server.close())
 
     def test_garbage(self):
         client_transport, server_transport = dummy_transport_pair()
