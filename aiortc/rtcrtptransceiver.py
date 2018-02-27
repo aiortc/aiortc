@@ -1,5 +1,7 @@
 import asyncio
 
+from .utils import first_completed
+
 
 class RTCRtpReceiver:
     async def _run(self, transport):
@@ -20,7 +22,9 @@ class RTCRtpSender:
         return self._track
 
     async def _run(self, transport):
-        pass
+        # for now, do nothing
+        while True:
+            await asyncio.sleep(1)
 
 
 class RTCRtpTransceiver:
@@ -33,6 +37,7 @@ class RTCRtpTransceiver:
     def __init__(self, receiver, sender):
         self.__receiver = receiver
         self.__sender = sender
+        self.__stopped = asyncio.Event()
 
     @property
     def direction(self):
@@ -61,9 +66,10 @@ class RTCRtpTransceiver:
         """
         Permanently stops the :class:`RTCRtpTransceiver`.
         """
-        pass
+        self.__stopped.set()
 
     async def _run(self, transport):
-        await asyncio.wait([
+        await first_completed(
             self.receiver._run(transport),
-            self.sender._run(transport)])
+            self.sender._run(transport),
+            self.__stopped.wait())
