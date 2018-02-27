@@ -29,3 +29,16 @@ TODO:
 
 - Actual media codec negotiation
 - Expose media to API user
+
+Note
+----
+
+Currently, you need a development version of ``cryptography`` to use ``aiortc``,
+but this will no longer be the case once ``cryptography`` 2.2 is released.
+
+License
+-------
+
+``aiortc`` is released under the `BSD license`_.
+
+.. _BSD license: https://aiortc.readthedocs.io/en/latest/license.html
