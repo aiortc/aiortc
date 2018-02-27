@@ -1,3 +1,4 @@
+import asyncio
 import enum
 import logging
 import os
@@ -118,7 +119,9 @@ class DataChunk(Chunk):
 
     @property
     def body(self):
-        return pack('!LHHL', self.tsn, self.stream_id, self.stream_seq, self.protocol)
+        body = pack('!LHHL', self.tsn, self.stream_id, self.stream_seq, self.protocol)
+        body += self.user_data
+        return body
 
 
 class InitChunk(Chunk):
@@ -127,12 +130,12 @@ class InitChunk(Chunk):
     def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
-            (self.initiate_tag, self.advertise_rwnd, self.outbound_streams,
+            (self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
              self.inbound_streams, self.initial_tsn) = unpack('!LLHHL', body[0:16])
             self.params = decode_params(body[16:])
         else:
             self.initiate_tag = 0
-            self.advertise_rwnd = 0
+            self.advertised_rwnd = 0
             self.outbound_streams = 0
             self.inbound_streams = 0
             self.initial_tsn = 0
@@ -141,7 +144,7 @@ class InitChunk(Chunk):
     @property
     def body(self):
         body = pack(
-            '!LLHHL', self.initiate_tag, self.advertise_rwnd, self.outbound_streams,
+            '!LLHHL', self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
             self.inbound_streams, self.initial_tsn)
         body += encode_params(self.params)
         return body
@@ -149,6 +152,27 @@ class InitChunk(Chunk):
 
 class InitAckChunk(InitChunk):
     type = ChunkType.INIT_ACK
+
+
+class SackChunk(Chunk):
+    type = ChunkType.SACK
+
+    def __init__(self, flags=0, body=None):
+        self.flags = flags
+        self.gaps = []
+        self.duplicates = []
+        if body:
+            self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack(
+                '!LLHH', body[0:12])
+        else:
+            self.cumulative_tsn = 0
+            self.advertised_rwnd = 0
+
+    @property
+    def body(self):
+        body = pack('!LLHH', self.cumulative_tsn, self.advertised_rwnd,
+                    len(self.gaps), len(self.duplicates))
+        return body
 
 
 class UnknownChunk(Chunk):
@@ -206,6 +230,8 @@ class Packet:
                 cls = InitChunk
             elif chunk_type == ChunkType.INIT_ACK:
                 cls = InitAckChunk
+            elif chunk_type == ChunkType.SACK:
+                cls = SackChunk
             elif chunk_type == ChunkType.ABORT:
                 cls = AbortChunk
             elif chunk_type == ChunkType.COOKIE_ECHO:
@@ -231,11 +257,18 @@ class Packet:
 class Transport:
     def __init__(self, is_server, transport):
         self.is_server = is_server
+        self.queue = asyncio.Queue()
         self.role = is_server and 'server' or 'client'
-        self.local_initiate_tag = randl()
-        self.local_tsn = randl()
-        self.remote_initiate_tag = 0
         self.transport = transport
+
+        self.local_initiate_tag = randl()
+        self.advertised_rwnd = 131072
+        self.outbound_streams = 256
+        self.inbound_streams = 2048
+        self.stream_seq = 0
+        self.local_tsn = randl()
+
+        self.remote_initiate_tag = 0
 
     async def receive_chunk(self, chunk):
         logger.info('%s < %s', self.role, chunk.__class__.__name__)
@@ -244,9 +277,9 @@ class Transport:
 
             ack = InitAckChunk()
             ack.initiate_tag = self.local_initiate_tag
-            ack.advertise_rwnd = 131072
-            ack.outbound_streams = 256
-            ack.inbound_streams = 2048
+            ack.advertised_rwnd = self.advertised_rwnd
+            ack.outbound_streams = self.outbound_streams
+            ack.inbound_streams = self.inbound_streams
             ack.initial_tsn = self.local_tsn
             ack.params.append((STATE_COOKIE, b'12345678'))
             await self.send_chunk(ack)
@@ -257,10 +290,10 @@ class Transport:
             ack = CookieAckChunk()
             await self.send_chunk(ack)
         elif isinstance(chunk, DataChunk):
-            print('tsn', chunk.tsn)
-            print('proto', chunk.protocol)
-            print('user_data', chunk.user_data)
-            pass
+            sack = SackChunk()
+            sack.cumulative_tsn = chunk.tsn
+            await self.send_chunk(sack)
+            await self.queue.put((chunk.protocol, chunk.user_data))
 
     async def send_chunk(self, chunk):
         logger.info('%s > %s', self.role, chunk.__class__.__name__)
@@ -271,13 +304,28 @@ class Transport:
         packet.chunks.append(chunk)
         await self.transport.send(bytes(packet))
 
+    async def recv(self):
+        return await self.queue.get()
+
+    async def send(self, protocol, user_data):
+        chunk = DataChunk()
+        chunk.tsn = self.local_tsn
+        chunk.stream_id = 1
+        chunk.stream_seq = self.stream_seq
+        chunk.protocol = protocol
+        chunk.user_data = user_data
+
+        self.local_tsn += 1
+        self.stream_seq += 1
+        await self.send_chunk(chunk)
+
     async def run(self):
         if not self.is_server:
             chunk = InitChunk()
             chunk.initiate_tag = self.local_initiate_tag
-            chunk.advertise_rwnd = 131072
-            chunk.outbound_streams = 256
-            chunk.inbound_streams = 2048
+            chunk.advertised_rwnd = self.advertised_rwnd
+            chunk.outbound_streams = self.outbound_streams
+            chunk.inbound_streams = self.inbound_streams
             chunk.initial_tsn = self.local_tsn
             await self.send_chunk(chunk)
 

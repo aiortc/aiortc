@@ -72,7 +72,15 @@ class SctpAssociationTest(TestCase):
         server = sctp.Transport(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.5))
+
+        # DATA_CHANNEL_OPEN
+        run(client.send(50, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat'))
+        protocol, data = run(server.recv())
+        self.assertEqual(protocol, 50)
+        self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
+
+        run(asyncio.sleep(0.5))
 
 
 logging.basicConfig(level=logging.DEBUG)
