@@ -191,7 +191,7 @@ class RTCPeerConnection(EventEmitter):
         self.__assertNotClosed()
 
         if not self.__sctp and not self.__transceivers:
-            raise InternalError('Cannot create an offer with no media and not data channels')
+            raise InternalError('Cannot create an offer with no media and no data channels')
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
