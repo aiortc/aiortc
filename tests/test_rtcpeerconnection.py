@@ -287,7 +287,10 @@ class RTCPeerConnectionTest(TestCase):
                 channel.send('echo: %s' % message)
 
         # create offer
-        dc = pc1.createDataChannel('chat')
+        dc = pc1.createDataChannel('chat', protocol='bob')
+        self.assertEqual(dc.id, 1)
+        self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.protocol, 'bob')
         dc.send('hello')
 
         @dc.on('message')
@@ -340,6 +343,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].id, 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got a message
         self.assertEqual(pc2_data_messages, ['hello'])

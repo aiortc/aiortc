@@ -150,7 +150,7 @@ class RTCPeerConnection(EventEmitter):
             sdp=self.__createSdp(),
             type='answer')
 
-    def createDataChannel(self, label):
+    def createDataChannel(self, label, protocol=''):
         if not self.__sctp:
             self.__sctp = RTCSctpTransport()
             self.__createTransport(self.__sctp, controlling=True)
@@ -159,7 +159,7 @@ class RTCPeerConnection(EventEmitter):
                 transport=self.__sctp._dtlsSession.data)
             self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
 
-        return self.__datachannelManager.create_channel(label=label)
+        return self.__datachannelManager.create_channel(label=label, protocol=protocol)
 
     async def createOffer(self):
         """

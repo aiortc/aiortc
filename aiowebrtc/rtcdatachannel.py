@@ -25,15 +25,18 @@ class DataChannelManager:
         else:
             self.stream_id = 1
 
-    def create_channel(self, label):
+    def create_channel(self, label, protocol):
         # register channel
-        channel = RTCDataChannel(id=self.stream_id, label=label, manager=self)
+        channel = RTCDataChannel(id=self.stream_id, label=label, protocol=protocol,
+                                 manager=self)
         self.channels[channel.id] = channel
         self.stream_id += 2
 
         # open channel
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
-                    0, 0, len(label), 0) + label.encode('utf8')
+                    0, 0, len(label), len(protocol))
+        data += label.encode('utf8')
+        data += protocol.encode('utf8')
         asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_DCEP, data))
 
         return channel
@@ -53,11 +56,15 @@ class DataChannelManager:
                     assert stream_id not in self.channels
 
                     (msg_type, channel_type, priority, reliability,
-                     label_length, proto_length) = unpack('!BBHLHH', data[0:12])
-                    label = data[12:12 + label_length].decode('utf8')
+                     label_length, protocol_length) = unpack('!BBHLHH', data[0:12])
+                    pos = 12
+                    label = data[pos:pos + label_length].decode('utf8')
+                    pos += label_length
+                    protocol = data[pos:pos + protocol_length].decode('utf8')
 
                     # register channel
-                    channel = RTCDataChannel(id=stream_id, label=label, manager=self)
+                    channel = RTCDataChannel(id=stream_id, label=label, protocol=protocol,
+                                             manager=self)
                     self.channels[stream_id] = channel
 
                     # emit channel
@@ -68,11 +75,12 @@ class DataChannelManager:
 
 
 class RTCDataChannel(EventEmitter):
-    def __init__(self, id, label, manager, loop=None):
+    def __init__(self, id, label, protocol, manager, loop=None):
         super().__init__(loop=loop)
         self.__id = id
         self.__label = label
         self.__manager = manager
+        self.__protocol = protocol
 
     def close(self):
         pass
@@ -95,3 +103,10 @@ class RTCDataChannel(EventEmitter):
         These labels are not required to be unique.
         """
         return self.__label
+
+    @property
+    def protocol(self):
+        """
+        The name of the subprotocol in use.
+        """
+        return self.__protocol
