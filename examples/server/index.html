@@ -13,25 +13,40 @@
     ICE connection state: <span id="ice-connection-state"></span>
 </p>
 
-<h2>Offer SDP</h2>
+<h2>Data channel</h2>
+<pre id="data-channel"></pre>
+
+<h2>SDP</h2>
+
+<h3>Offer</h3>
 <pre id="offer-sdp"></pre>
 
-<h2>Answer SDP</h2>
+<h3>Answer</h3>
 <pre id="answer-sdp"></pre>
 
 <script>
 var pc = new RTCPeerConnection();
 
+// get DOM elements
+var dataChannelLog = document.getElementById('data-channel'),
+    iceConnectionLog = document.getElementById('ice-connection-state'),
+    iceGatheringLog = document.getElementById('ice-gathering-state');
+
 // register some listeners to help debugging
 pc.addEventListener('icegatheringstatechange', function(ev, candidate) {
-    document.getElementById('ice-gathering-state').textContent = pc.iceGatheringState;
+    iceGatheringLog.textContent = pc.iceGatheringState;
 }, false);
-document.getElementById('ice-gathering-state').textContent = pc.iceGatheringState;
+iceGatheringLog.textContent = pc.iceGatheringState;
 
 pc.addEventListener('iceconnectionstatechange', function() {
-    document.getElementById('ice-connection-state').textContent = pc.iceConnectionState;
+    iceConnectionLog.textContent = pc.iceConnectionState;
 }, false);
-document.getElementById('ice-connection-state').textContent = pc.iceConnectionState;
+iceConnectionLog.textContent = pc.iceConnectionState;
+
+var dc = pc.createDataChannel('chat');
+dc.onmessage = function(evt) {
+    dataChannelLog.textContent += '< ' + evt.data + '\n';
+};
 
 navigator.mediaDevices.getUserMedia({
     audio: true,
@@ -73,6 +88,12 @@ navigator.mediaDevices.getUserMedia({
 }).then(function(answer) {
     document.getElementById('answer-sdp').textContent = answer.sdp;
     return pc.setRemoteDescription(answer);
+}).then(function() {
+    setInterval(function() {
+        var message = 'ping';
+        dataChannelLog.textContent += '> ' + message + '\n';
+        dc.send(message);
+    }, 1000);
 });
 
 </script>

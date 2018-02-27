@@ -21,6 +21,13 @@ async def offer(request):
         type=offer['type'])
 
     pc = RTCPeerConnection()
+
+    @pc.on('datachannel')
+    def on_datachannel(channel):
+        @channel.on('message')
+        def on_message(message):
+            channel.send('pong')
+
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
