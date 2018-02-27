@@ -356,6 +356,7 @@ class Endpoint:
 
     async def _receive_chunk(self, chunk):
         logger.debug('%s < %s', self.role, chunk.__class__.__name__)
+        # server
         if isinstance(chunk, InitChunk) and self.is_server:
             self.remote_initiate_tag = chunk.initiate_tag
 
@@ -371,14 +372,6 @@ class Endpoint:
             cookie += hmac.new(self.hmac_key, cookie, 'sha1').digest()
             ack.params.append((STATE_COOKIE, cookie))
             await self._send_chunk(ack)
-        elif isinstance(chunk, InitAckChunk) and not self.is_server:
-            echo = CookieEchoChunk()
-            for k, v in chunk.params:
-                if k == STATE_COOKIE:
-                    echo.body = v
-                    break
-            await self._send_chunk(echo)
-            self._set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             # check state cookie MAC
             cookie = chunk.body
@@ -399,8 +392,25 @@ class Endpoint:
             ack = CookieAckChunk()
             await self._send_chunk(ack)
             self._set_state(self.State.ESTABLISHED)
+
+        # client
+        if isinstance(chunk, InitAckChunk) and not self.is_server:
+            echo = CookieEchoChunk()
+            for k, v in chunk.params:
+                if k == STATE_COOKIE:
+                    echo.body = v
+                    break
+            await self._send_chunk(echo)
+            self._set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieAckChunk) and not self.is_server:
             self._set_state(self.State.ESTABLISHED)
+        elif (isinstance(chunk, ErrorChunk) and not self.is_server and
+              self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
+            self._set_state(self.State.CLOSED)
+            logger.warning('Could not establish association')
+            return
+
+        # common
         elif isinstance(chunk, DataChunk):
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn

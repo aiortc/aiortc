@@ -150,7 +150,7 @@ class SctpAssociationTest(TestCase):
 
         # check outcome
         run(asyncio.sleep(0.5))
-        self.assertEqual(client.state, sctp.Endpoint.State.COOKIE_ECHOED)
+        self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
         self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
         # shutdown
