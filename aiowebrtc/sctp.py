@@ -212,11 +212,18 @@ class ShutdownCompleteChunk(Chunk):
         self.body = body
 
 
-class UnknownChunk(Chunk):
-    def __init__(self, type, flags, body):
-        self.type = type
-        self.flags = flags
-        self.body = body
+CHUNK_TYPES = {
+    0: DataChunk,
+    1: InitChunk,
+    2: InitAckChunk,
+    3: SackChunk,
+    6: AbortChunk,
+    7: ShutdownChunk,
+    8: ShutdownAckChunk,
+    10: CookieEchoChunk,
+    11: CookieAckChunk,
+    14: ShutdownCompleteChunk,
+}
 
 
 class Packet:
@@ -263,36 +270,9 @@ class Packet:
         while pos <= len(data) - 4:
             chunk_type, chunk_flags, chunk_length = unpack('!BBH', data[pos:pos + 4])
             chunk_body = data[pos + 4:pos + chunk_length]
-            if chunk_type == ChunkType.DATA:
-                cls = DataChunk
-            elif chunk_type == ChunkType.INIT:
-                cls = InitChunk
-            elif chunk_type == ChunkType.INIT_ACK:
-                cls = InitAckChunk
-            elif chunk_type == ChunkType.SACK:
-                cls = SackChunk
-            elif chunk_type == ChunkType.ABORT:
-                cls = AbortChunk
-            elif chunk_type == ChunkType.SHUTDOWN:
-                cls = ShutdownChunk
-            elif chunk_type == ChunkType.SHUTDOWN_ACK:
-                cls = ShutdownAckChunk
-            elif chunk_type == ChunkType.SHUTDOWN_COMPLETE:
-                cls = ShutdownCompleteChunk
-            elif chunk_type == ChunkType.COOKIE_ECHO:
-                cls = CookieEchoChunk
-            elif chunk_type == ChunkType.COOKIE_ACK:
-                cls = CookieAckChunk
-            else:
-                cls = None
-
+            cls = CHUNK_TYPES.get(chunk_type)
             if cls:
                 packet.chunks.append(cls(
-                    flags=chunk_flags,
-                    body=chunk_body))
-            else:
-                packet.chunks.append(UnknownChunk(
-                    type=chunk_type,
                     flags=chunk_flags,
                     body=chunk_body))
             pos += chunk_length + padl(chunk_length)
