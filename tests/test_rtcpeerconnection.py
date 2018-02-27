@@ -422,7 +422,8 @@ class RTCPeerConnectionTest(TestCase):
         pc = RTCPeerConnection()
         with self.assertRaises(InternalError) as cm:
             run(pc.createOffer())
-        self.assertEqual(str(cm.exception), 'Cannot create an offer with no media and no data channels')
+        self.assertEqual(str(cm.exception),
+                         'Cannot create an offer with no media and no data channels')
 
     def test_setRemoteDescription_unexpected_answer(self):
         pc = RTCPeerConnection()
