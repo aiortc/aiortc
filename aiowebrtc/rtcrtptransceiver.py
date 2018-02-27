@@ -30,3 +30,11 @@ class RTCRtpTransceiver:
     @property
     def sender(self):
         return self.__sender
+
+    async def _run(self, transport):
+        # for now, just drain incoming data
+        while True:
+            try:
+                await transport.recv()
+            except ConnectionError:
+                break

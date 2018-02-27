@@ -5,7 +5,6 @@ from pyee import EventEmitter
 
 from . import sctp
 
-
 # message types
 DATA_CHANNEL_ACK = 2
 DATA_CHANNEL_OPEN = 3

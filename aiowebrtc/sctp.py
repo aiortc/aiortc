@@ -8,7 +8,6 @@ from struct import pack, unpack
 
 import crcmod.predefined
 
-
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 

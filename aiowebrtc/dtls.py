@@ -1,7 +1,7 @@
 import asyncio
 import base64
-import os
 import logging
+import os
 import sys
 
 from cryptography.hazmat.bindings.openssl.binding import Binding
@@ -86,13 +86,25 @@ class DtlsSrtpContext:
 
 
 class Channel:
-    def __init__(self, recv, send):
-        self.recv = recv
+    def __init__(self, closed, queue, send):
+        self.closed = closed
+        self.queue = queue
         self.send = send
+
+    async def recv(self):
+        done, pending = await asyncio.wait([self.queue.get(), self.closed.wait()],
+                                           return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        result = done.pop().result()
+        if result is True:
+            raise ConnectionError
+        return result
 
 
 class DtlsSrtpSession:
     def __init__(self, context, is_server, transport):
+        self.closed = asyncio.Event()
         self.encrypted = False
         self.is_server = is_server
         self.remote_fingerprint = None
@@ -100,12 +112,14 @@ class DtlsSrtpSession:
 
         self.data_queue = asyncio.Queue()
         self.data = Channel(
-            recv=self.data_queue.get,
+            closed=self.closed,
+            queue=self.data_queue,
             send=self._send_data)
 
         self.rtp_queue = asyncio.Queue()
         self.rtp = Channel(
-            recv=self.rtp_queue.get,
+            closed=self.closed,
+            queue=self.rtp_queue,
             send=self._send_rtp)
 
         ssl = lib.SSL_new(context.ctx)
@@ -169,7 +183,10 @@ class DtlsSrtpSession:
 
     async def run(self):
         while True:
-            data = await self.transport.recv()
+            try:
+                data = await self.transport.recv()
+            except Exception:
+                break
             first_byte = data[0]
             if first_byte > 19 and first_byte < 64:
                 # DTLS
@@ -184,6 +201,7 @@ class DtlsSrtpSession:
                 else:
                     data = self._rx_srtp.unprotect(data)
                 await self.rtp_queue.put(data)
+        self.closed.set()
 
     async def _send_data(self, data):
         lib.SSL_write(self.ssl, data, len(data))

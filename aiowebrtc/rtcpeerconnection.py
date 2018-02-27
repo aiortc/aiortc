@@ -1,16 +1,15 @@
 import asyncio
 import datetime
 
-import aioice.exceptions
+import aioice
 from pyee import EventEmitter
 
-from . import dtls, sdp, sctp
+from . import dtls, sctp, sdp
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
 from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
-from .rtcsessiondescription import RTCSessionDescription
 from .rtcsctptransport import RTCSctpTransport
-
+from .rtcsessiondescription import RTCSessionDescription
 
 DUMMY_CANDIDATE = aioice.Candidate(
     foundation='',
@@ -42,13 +41,6 @@ def ice_connection_sdp(iceConnection):
     else:
         sdp += ['a=setup:active']
     return sdp
-
-
-async def run_dtls(dtlsSession):
-    try:
-        await dtlsSession.run()
-    except aioice.exceptions.ConnectionError:
-        pass
 
 
 class RTCPeerConnection(EventEmitter):
@@ -286,7 +278,9 @@ class RTCPeerConnection(EventEmitter):
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
                 await dtlsSession.connect()
-                asyncio.ensure_future(run_dtls(dtlsSession))
+                asyncio.ensure_future(dtlsSession.run())
+            for transceiver in self.__transceivers:
+                asyncio.ensure_future(transceiver._run(transceiver._dtlsSession.rtp))
             if self.__sctp:
                 asyncio.ensure_future(self.__sctpEndpoint.run())
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctpEndpoint))
