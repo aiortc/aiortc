@@ -8,6 +8,8 @@ from struct import pack, unpack
 
 import crcmod.predefined
 
+from .utils import first_completed
+
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
@@ -53,10 +55,6 @@ def randl():
 
 def swapl(i):
     return unpack("<I", pack(">I", i))[0]
-
-
-class Error(Exception):
-    pass
 
 
 class Chunk:
@@ -294,14 +292,10 @@ class Endpoint:
         await self.closed.wait()
 
     async def recv(self):
-        done, pending = await asyncio.wait([self.recv_queue.get(), self.closed.wait()],
-                                           return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            task.cancel()
-        result = done.pop().result()
-        if result is True:
-            raise Error('Connection closed while receiving data')
-        return result
+        data = await first_completed(self.recv_queue.get(), self.closed.wait())
+        if data is True:
+            raise ConnectionError
+        return data
 
     async def send(self, stream_id, protocol, user_data):
         self.send_queue.append((stream_id, protocol, user_data))
@@ -319,12 +313,7 @@ class Endpoint:
             self._set_state(self.State.COOKIE_WAIT)
 
         while True:
-            done, pending = await asyncio.wait(
-                [self.transport.recv(), self.closed.wait()],
-                return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            data = done.pop().result()
+            data = await first_completed(self.transport.recv(), self.closed.wait())
             if data is True:
                 break
 

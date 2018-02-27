@@ -7,6 +7,8 @@ import sys
 from cryptography.hazmat.bindings.openssl.binding import Binding
 from pylibsrtp import Policy, Session
 
+from .utils import first_completed
+
 binding = Binding()
 binding.init_static_locks()
 ffi = binding.ffi
@@ -92,14 +94,10 @@ class Channel:
         self.send = send
 
     async def recv(self):
-        done, pending = await asyncio.wait([self.queue.get(), self.closed.wait()],
-                                           return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            task.cancel()
-        result = done.pop().result()
-        if result is True:
+        data = await first_completed(self.queue.get(), self.closed.wait())
+        if data is True:
             raise ConnectionError
-        return result
+        return data
 
 
 class DtlsSrtpSession:

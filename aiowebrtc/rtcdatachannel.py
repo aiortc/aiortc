@@ -3,8 +3,6 @@ from struct import pack, unpack
 
 from pyee import EventEmitter
 
-from . import sctp
-
 # message types
 DATA_CHANNEL_ACK = 2
 DATA_CHANNEL_OPEN = 3
@@ -63,7 +61,7 @@ class DataChannelManager:
         while True:
             try:
                 stream_id, pp_id, data = await self.endpoint.recv()
-            except sctp.Error:
+            except ConnectionError:
                 return
             if pp_id == WEBRTC_DCEP and len(data):
                 msg_type = unpack('!B', data[0:1])[0]
