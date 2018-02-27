@@ -422,7 +422,9 @@ class Endpoint:
             await self._send_chunk(sack)
             await self.recv_queue.put((chunk.stream_id, chunk.protocol, chunk.user_data))
         elif isinstance(chunk, AbortChunk):
+            logger.warning('Association was aborted by remote party')
             self._set_state(self.State.CLOSED)
+            return
         elif isinstance(chunk, ShutdownChunk):
             self._set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
