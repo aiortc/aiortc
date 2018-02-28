@@ -12,23 +12,44 @@ aiortc
 .. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiortc.svg
     :target: https://coveralls.io/github/jlaine/aiortc
 
-Asyncio-based WebRTC implementation.
+What is ``aiortc``?
+-------------------
 
-This is a work in progress, but it is already possible to set up a connection
-with an actual browser (tested with Chrome and Firefox).
+``aiortc`` is a library for WebRTC (Web Real-Time Communication) in Python. It
+is built on top of ``asyncio``, Python's standard asynchronous I/O framework.
+
+The API closely follows its Javascript counterpart while using pythonic
+constructs:
+
+- promises are replaced by coroutines
+- events are emitted using ``pyee.EventEmitter``
+
+To learn more about ``aiortc`` please `read the documentation`_.
+
+.. _read the documentation: https://aiortc.readthedocs.io/en/latest/
+
+Implementation status
+---------------------
+
+``aiortc`` is a work in progress, but it is already possible to set up a
+connection with an actual browser (tested with Chrome and Firefox), exchange
+messages over a data channel and send audio to the browser.
 
 Working:
 
 - Basic SDP generation / parsing
 - Interactive Connectivity Establishment
-- DTLS handshake, SRTP keying and encryption
-- SRTP encryption / decryption for RTP and RTCP
-- Data channels
+- DTLS handshake, encryption / decryption (for SCTP)
+- SRTP keying, encryption and decryption for RTP and RTCP
+- Minimal SCTP implementation
+- Data Channels
 
 TODO:
 
 - Actual media codec negotiation
-- Expose media to API user
+- Expose media reception API
+- ICE trickle
+- Video streams
 
 Note
 ----
