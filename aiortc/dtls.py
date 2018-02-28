@@ -182,7 +182,10 @@ class DtlsSrtpSession:
         tx_policy = Policy(key=srtp_tx_key, ssrc_type=Policy.SSRC_ANY_OUTBOUND)
         self._tx_srtp = Session(tx_policy)
 
-    async def run(self):
+        # start data pump
+        asyncio.ensure_future(self.__run())
+
+    async def __run(self):
         while True:
             try:
                 data = await self.transport.recv()

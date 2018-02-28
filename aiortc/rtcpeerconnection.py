@@ -284,7 +284,6 @@ class RTCPeerConnection(EventEmitter):
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
                 await dtlsSession.connect()
-                asyncio.ensure_future(dtlsSession.run())
             for transceiver in self.__transceivers:
                 asyncio.ensure_future(transceiver._run(transceiver._dtlsSession.rtp))
             if self.__sctp:
