@@ -3,9 +3,13 @@ from unittest import TestCase
 from aiortc.sdp import SessionDescription
 
 
+def lf2crlf(x):
+    return x.replace('\n', '\r\n')
+
+
 class SdpTest(TestCase):
     def test_audio_chrome(self):
-        d = SessionDescription.parse("""v=0
+        d = SessionDescription.parse(lf2crlf("""v=0
 o=- 863426017819471768 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -45,12 +49,18 @@ a=rtpmap:126 telephone-event/8000
 a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12
 a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
-a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12""")  # noqa
+a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'audio')
         self.assertEqual(d.media[0].host, '192.168.99.58')
         self.assertEqual(d.media[0].port, 45076)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
+        self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # formats
         self.assertEqual(d.media[0].fmt, [
             111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
         self.assertEqual(d.media[0].rtpmap, {
@@ -80,8 +90,21 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12""")  # noqa
             d.media[0].dtls_fingerprint,
             '6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC')  # noqa
 
+        self.assertEqual(str(d.media[0]), lf2crlf("""m=audio 45076 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=rtcp:9 IN IP4 0.0.0.0
+a=rtcp-mux
+a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host generation 0
+a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host generation 0
+a=candidate:3496416974 1 tcp 1518283007 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active generation 0
+a=candidate:1936595596 1 tcp 1518214911 192.168.99.58 9 typ host tcptype active generation 0
+a=ice-ufrag:5+Ix
+a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+"""))
+
     def test_audio_firefox(self):
-        d = SessionDescription.parse("""v=0
+        d = SessionDescription.parse(lf2crlf("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -119,12 +142,18 @@ a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
 a=setup:actpass
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
-""")  # noqa
+"""))  # noqa
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'audio')
         self.assertEqual(d.media[0].host, '192.168.99.58')
         self.assertEqual(d.media[0].port, 45274)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
+        self.assertEqual(d.media[0].rtcp_port, 38612)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # formats
         self.assertEqual(d.media[0].fmt, [
             109, 9, 0, 8, 101])
         self.assertEqual(d.media[0].rtpmap, {
@@ -147,7 +176,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             'EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17')  # noqa
 
     def test_datachannel_firefox(self):
-        d = SessionDescription.parse("""v=0
+        d = SessionDescription.parse(lf2crlf("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -170,7 +199,7 @@ a=mid:sdparta_0
 a=sctpmap:5000 webrtc-datachannel 256
 a=setup:actpass
 a=max-message-size:1073741823
-""")  # noqa
+"""))  # noqa
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'application')
         self.assertEqual(d.media[0].host, '192.168.99.58')

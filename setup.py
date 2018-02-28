@@ -29,7 +29,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.6',
     ],
     packages=['aiortc'],
-    install_requires=['aioice', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp'],
+    install_requires=['aioice>=0.4.2', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp'],
     dependency_links=[
         'git+https://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography-2.2.dev1',
     ]
