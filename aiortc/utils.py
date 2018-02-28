@@ -1,4 +1,10 @@
 import asyncio
+import os
+from struct import unpack
+
+
+def random32():
+    return unpack('!L', os.urandom(4))[0]
 
 
 async def first_completed(*coros):

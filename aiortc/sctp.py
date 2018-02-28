@@ -8,7 +8,7 @@ from struct import pack, unpack
 
 import crcmod.predefined
 
-from .utils import first_completed
+from .utils import first_completed, random32
 
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
@@ -47,10 +47,6 @@ def encode_params(params):
 
 def padl(l):
     return 4 * ((l + 3) // 4) - l
-
-
-def randl():
-    return unpack('!L', os.urandom(4))[0]
 
 
 def swapl(i):
@@ -267,12 +263,12 @@ class Endpoint:
         self.closed = asyncio.Event()
 
         self.hmac_key = os.urandom(16)
-        self.local_initiate_tag = randl()
+        self.local_initiate_tag = random32()
         self.advertised_rwnd = 131072
         self.outbound_streams = 256
         self.inbound_streams = 2048
         self.stream_seq = {}
-        self.local_tsn = randl()
+        self.local_tsn = random32()
 
         self.remote_initiate_tag = 0
 

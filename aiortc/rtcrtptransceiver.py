@@ -1,7 +1,7 @@
 import asyncio
 
 from . import rtp
-from .utils import first_completed
+from .utils import first_completed, random32
 
 
 class RTCRtpReceiver:
@@ -24,6 +24,7 @@ class RTCRtpSender:
 
     async def _run(self, transport):
         packet = rtp.Packet(payload_type=0)
+        packet.ssrc = random32()
         while True:
             if self._track:
                 packet.payload = await self._track.recv()
