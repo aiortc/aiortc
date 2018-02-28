@@ -1,7 +1,10 @@
 aiortc
 =========
 
-|travis| |coveralls|
+|pypi-l| |travis| |coveralls|
+
+.. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
+    :target: https://pypi.python.org/pypi/aiortc
 
 .. |travis| image:: https://img.shields.io/travis/jlaine/aiortc.svg
     :target: https://travis-ci.org/jlaine/aiortc

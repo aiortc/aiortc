@@ -1,10 +1,13 @@
 aiortc
 ======
 
-|rtd| |travis| |coveralls|
+|rtd| |pypi-l| |travis| |coveralls|
 
 .. |rtd| image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
    :target: https://aiortc.readthedocs.io/
+
+.. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
+    :target: https://pypi.python.org/pypi/aiortc
 
 .. |travis| image:: https://img.shields.io/travis/jlaine/aiortc.svg
     :target: https://travis-ci.org/jlaine/aiortc
