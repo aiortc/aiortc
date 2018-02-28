@@ -4,7 +4,7 @@ import logging
 import os
 
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 
 
 ROOT = os.path.dirname(__file__)
@@ -31,6 +31,7 @@ async def offer(request):
             channel.send('pong')
 
     await pc.setRemoteDescription(offer)
+    pc.addTrack(AudioStreamTrack())
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 

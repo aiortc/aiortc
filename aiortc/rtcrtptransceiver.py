@@ -1,5 +1,6 @@
 import asyncio
 
+from . import rtp
 from .utils import first_completed
 
 
@@ -22,9 +23,15 @@ class RTCRtpSender:
         return self._track
 
     async def _run(self, transport):
-        # for now, do nothing
+        packet = rtp.Packet(payload_type=0)
         while True:
-            await asyncio.sleep(1)
+            if self._track:
+                packet.payload = await self._track.recv()
+                await transport.send(bytes(packet))
+                packet.sequence_number += 1
+                packet.timestamp += len(packet.payload)
+            else:
+                await asyncio.sleep(0.02)
 
 
 class RTCRtpTransceiver:
