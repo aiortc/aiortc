@@ -44,6 +44,7 @@ class MediaDescription:
 
         # DTLS
         self.dtls_fingerprint = None
+        self.dtls_setup = None
 
         # ICE
         self.ice_candidates = []
@@ -67,12 +68,20 @@ class MediaDescription:
         if self.rtcp_mux:
             lines.append('a=rtcp-mux')
 
+        # ice
         for candidate in self.ice_candidates:
             lines.append('a=candidate:' + candidate.to_sdp())
         if self.ice_ufrag is not None:
             lines.append('a=ice-ufrag:' + self.ice_ufrag)
         if self.ice_pwd is not None:
             lines.append('a=ice-pwd:' + self.ice_pwd)
+
+        # dtls
+        if self.dtls_fingerprint:
+            lines.append('a=fingerprint:sha-256 ' + self.dtls_fingerprint)
+        if self.dtls_setup:
+            lines.append('a=setup:' + self.dtls_setup)
+
         return '\r\n'.join(lines) + '\r\n'
 
 
@@ -121,6 +130,8 @@ class SessionDescription:
                         current_media.rtcp_host = ipaddress_from_sdp(rest)
                     elif attr == 'rtcp-mux':
                         current_media.rtcp_mux = True
+                    elif attr == 'setup':
+                        current_media.dtls_setup = value
                     elif attr in DIRECTIONS:
                         current_media.direction = attr
                     elif attr in ['rtpmap', 'sctpmap']:

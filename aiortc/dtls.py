@@ -81,11 +81,6 @@ class DtlsSrtpContext:
         if lib.SSL_CTX_set_read_ahead(self.ctx, 1):
             print("SSL could not enable read ahead")
 
-        ssl = lib.SSL_new(ctx)
-        x509 = lib.SSL_get_certificate(ssl)
-        self.local_fingerprint = certificate_digest(x509)
-        lib.SSL_free(ssl)
-
 
 class Channel:
     def __init__(self, closed, queue, send):
@@ -131,6 +126,10 @@ class DtlsSrtpSession:
             lib.SSL_set_accept_state(self.ssl)
         else:
             lib.SSL_set_connect_state(self.ssl)
+
+        # local fingerprint
+        x509 = lib.SSL_get_certificate(self.ssl)
+        self.local_fingerprint = certificate_digest(x509)
 
     async def close(self):
         lib.SSL_shutdown(self.ssl)

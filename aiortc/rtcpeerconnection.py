@@ -28,7 +28,7 @@ def get_ntp_seconds():
     ).total_seconds())
 
 
-def ice_connection_sdp(iceConnection):
+def transport_sdp(iceConnection, dtlsSession):
     sdp = []
     for candidate in iceConnection.local_candidates:
         sdp += ['a=candidate:%s' % candidate.to_sdp()]
@@ -36,10 +36,13 @@ def ice_connection_sdp(iceConnection):
         'a=ice-pwd:%s' % iceConnection.local_password,
         'a=ice-ufrag:%s' % iceConnection.local_username,
     ]
-    if iceConnection.ice_controlling:
+
+    sdp += ['a=fingerprint:sha-256 %s' % dtlsSession.local_fingerprint]
+    if dtlsSession.is_server:
         sdp += ['a=setup:actpass']
     else:
         sdp += ['a=setup:active']
+
     return sdp
 
 
@@ -315,7 +318,6 @@ class RTCPeerConnection(EventEmitter):
             'o=- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds),
             's=-',
             't=0 0',
-            'a=fingerprint:sha-256 %s' % self.__dtlsContext.local_fingerprint,
         ]
 
         for transceiver in self.__transceivers:
@@ -325,13 +327,13 @@ class RTCPeerConnection(EventEmitter):
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
                 # FIXME: negotiate codec
-                'm=audio %d UDP/TLS/RTP/SAVPF 0' % default_candidate.port,
+                'm=%s %d UDP/TLS/RTP/SAVPF 0' % (transceiver._kind, default_candidate.port),
                 'c=IN IP4 %s' % default_candidate.host,
                 'a=rtcp:9 IN IP4 0.0.0.0',
+                'a=rtcp-mux',
             ]
-            sdp += ice_connection_sdp(iceConnection)
+            sdp += transport_sdp(iceConnection, transceiver._dtlsSession)
             sdp += ['a=%s' % transceiver.direction]
-            sdp += ['a=rtcp-mux']
 
             # FIXME: negotiate codec
             sdp += ['a=rtpmap:0 PCMU/8000']
@@ -345,7 +347,7 @@ class RTCPeerConnection(EventEmitter):
                 'm=application %d DTLS/SCTP 5000' % default_candidate.port,
                 'c=IN IP4 %s' % default_candidate.host,
             ]
-            sdp += ice_connection_sdp(iceConnection)
+            sdp += transport_sdp(iceConnection, self.__sctp._dtlsSession)
             sdp += ['a=sctpmap:5000 webrtc-datachannel 256']
 
         return '\r\n'.join(sdp) + '\r\n'
