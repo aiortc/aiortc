@@ -135,6 +135,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -154,6 +156,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=recvonly' in pc2.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -216,6 +220,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -235,6 +241,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -310,6 +318,7 @@ class RTCPeerConnectionTest(TestCase):
         def on_message(message):
             pc1_data_messages.append(message)
 
+        # create offer
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, 'offer')
         self.assertTrue('m=application ' in offer.sdp)
@@ -321,6 +330,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -341,6 +352,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc2.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
