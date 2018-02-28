@@ -44,6 +44,7 @@ async def offer(request):
 
 pcs = []
 
+
 async def on_shutdown(app):
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
