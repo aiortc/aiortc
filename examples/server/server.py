@@ -10,6 +10,15 @@ from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 ROOT = os.path.dirname(__file__)
 
 
+class AudioFileTrack(AudioStreamTrack):
+    def __init__(self, path):
+        self.fp = open(path, 'rb')
+
+    async def recv(self):
+        await asyncio.sleep(0.02)
+        return self.fp.read(160)
+
+
 async def index(request):
     html = open(os.path.join(ROOT, 'index.html'), 'r').read()
     return web.Response(content_type='text/html', text=html)
@@ -31,7 +40,7 @@ async def offer(request):
             channel.send('pong')
 
     await pc.setRemoteDescription(offer)
-    pc.addTrack(AudioStreamTrack())
+    pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.ulaw')))
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
