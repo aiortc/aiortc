@@ -179,6 +179,10 @@ class SackChunk(Chunk):
                     len(self.gaps), len(self.duplicates))
         return body
 
+    def __repr__(self):
+        return 'SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d)' % (
+            self.flags, self.advertised_rwnd, self.cumulative_tsn)
+
 
 class ShutdownChunk(Chunk):
     def __init__(self, flags=0, body=b''):
@@ -453,6 +457,7 @@ class Endpoint:
         elif isinstance(chunk, DataChunk):
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn
+            sack.advertised_rwnd = self.advertised_rwnd
             await self._send_chunk(sack)
 
             # defragment data
@@ -463,6 +468,9 @@ class Endpoint:
             if chunk.flags & SCTP_DATA_LAST_FRAG:
                 user_data = self.stream_frags.pop(chunk.stream_id)
                 await self.recv_queue.put((chunk.stream_id, chunk.protocol, user_data))
+        elif isinstance(chunk, SackChunk):
+            # TODO
+            pass
         elif isinstance(chunk, AbortChunk):
             logger.warning('Association was aborted by remote party')
             self._set_state(self.State.CLOSED)
