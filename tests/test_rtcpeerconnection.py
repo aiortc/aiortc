@@ -7,6 +7,8 @@ from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
+from aiortc.rtcpeerconnection import MEDIA_CODECS, find_common_codecs
+from aiortc.sdp import MediaDescription
 
 from .utils import run
 
@@ -35,6 +37,38 @@ def track_states(pc):
         states['signalingState'].append(pc.signalingState)
 
     return states
+
+
+class CodecTest(TestCase):
+    def test_common_static(self):
+        local_codecs = MEDIA_CODECS[:]
+        remote_description = MediaDescription(
+            kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[8, 0])
+        remote_description.rtpmap[8] = 'PCMA/8000'
+        remote_description.rtpmap[0] = 'PCMU/8000'
+        common = find_common_codecs(local_codecs, remote_description)
+        self.assertEqual(len(common), 2)
+        self.assertEqual(common[0].clockrate, 8000)
+        self.assertEqual(common[0].name, 'PCMA')
+        self.assertEqual(common[0].pt, 8)
+        self.assertEqual(common[1].clockrate, 8000)
+        self.assertEqual(common[1].name, 'PCMU')
+        self.assertEqual(common[1].pt, 0)
+
+    def test_common_dynamic(self):
+        local_codecs = MEDIA_CODECS[:]
+        remote_description = MediaDescription(
+            kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[100, 8])
+        remote_description.rtpmap[100] = 'opus/48000'
+        remote_description.rtpmap[8] = 'PCMA/8000'
+        common = find_common_codecs(local_codecs, remote_description)
+        self.assertEqual(len(common), 2)
+        self.assertEqual(common[0].clockrate, 48000)
+        self.assertEqual(common[0].name, 'opus')
+        self.assertEqual(common[0].pt, 100)
+        self.assertEqual(common[1].clockrate, 8000)
+        self.assertEqual(common[1].name, 'PCMA')
+        self.assertEqual(common[1].pt, 8)
 
 
 class RTCPeerConnectionTest(TestCase):

@@ -30,6 +30,24 @@ MEDIA_CODECS = [
 MEDIA_KINDS = ['audio', 'video']
 
 
+def find_common_codecs(local_codecs, remote_media):
+    common = []
+    for pt in remote_media.fmt:
+        bits = remote_media.rtpmap[pt].split('/')
+        name = bits[0]
+        clockrate = int(bits[1])
+
+        for codec in local_codecs:
+            if (codec.kind == remote_media.kind and
+               codec.name == name and
+               codec.clockrate == clockrate):
+                if pt in rtp.DYNAMIC_PAYLOAD_TYPES:
+                    codec = codec.clone(pt=pt)
+                common.append(codec)
+                break
+    return common
+
+
 def get_ntp_seconds():
     return int((
         datetime.datetime.utcnow() - datetime.datetime(1900, 1, 1, 0, 0, 0)
@@ -270,20 +288,7 @@ class RTCPeerConnection(EventEmitter):
                         controlling=False)
 
                 # negotiate codecs
-                common = []
-                for pt in media.fmt:
-                    bits = media.rtpmap[pt].split('/')
-                    name = bits[0]
-                    clockrate = int(bits[1])
-
-                    for codec in MEDIA_CODECS:
-                        if (codec.kind == media.kind and
-                           codec.name == name and
-                           codec.clockrate == clockrate):
-                            if pt in rtp.DYNAMIC_PAYLOAD_TYPES:
-                                codec = codec.clone(pt=pt)
-                            common.append(codec)
-                            break
+                common = find_common_codecs(MEDIA_CODECS, media)
                 assert len(common)
                 transceiver._codecs = common
 
