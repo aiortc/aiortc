@@ -12,6 +12,8 @@ from aiortc.sdp import MediaDescription
 
 from .utils import run
 
+LONG_DATA = b'\xff' * 2000
+
 
 class BogusStreamTrack(MediaStreamTrack):
     kind = 'bogus'
@@ -344,6 +346,7 @@ class RTCPeerConnectionTest(TestCase):
         dc.send('')
         dc.send(b'\x00\x01\x02\x03')
         dc.send(b'')
+        dc.send(LONG_DATA)
         with self.assertRaises(ValueError) as cm:
             dc.send(1234)
         self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
@@ -411,14 +414,18 @@ class RTCPeerConnectionTest(TestCase):
             'hello',
             '',
             b'\x00\x01\x02\x03',
-            b''])
+            b'',
+            LONG_DATA,
+        ])
 
         # check pc1 got replies
         self.assertEqual(pc1_data_messages, [
             'string-echo: hello',
             'string-echo: ',
             b'binary-echo: \x00\x01\x02\x03',
-            b'binary-echo: '])
+            b'binary-echo: ',
+            b'binary-echo: ' + LONG_DATA,
+        ])
 
         # close data channel
         dc.close()

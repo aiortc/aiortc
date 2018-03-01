@@ -2,6 +2,7 @@ import asyncio
 import enum
 import hmac
 import logging
+import math
 import os
 import time
 from struct import pack, unpack
@@ -15,6 +16,7 @@ logger = logging.getLogger('sctp')
 
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
+USERDATA_MAX_LENGTH = 1200
 
 SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
@@ -267,6 +269,7 @@ class Endpoint:
         self.advertised_rwnd = 131072
         self.outbound_streams = 256
         self.inbound_streams = 2048
+        self.stream_frags = {}
         self.stream_seq = {}
         self.local_tsn = random32()
 
@@ -326,18 +329,29 @@ class Endpoint:
             return
 
         for stream_id, protocol, user_data in self.send_queue:
-            # FIXME : handle fragmentation!
-            chunk = DataChunk()
-            chunk.flags = SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG
-            chunk.tsn = self.local_tsn
-            chunk.stream_id = stream_id
-            chunk.stream_seq = self.stream_seq.get(stream_id, 0)
-            chunk.protocol = protocol
-            chunk.user_data = user_data
+            stream_seq = self.stream_seq.get(stream_id, 0)
 
-            self.local_tsn += 1
-            self.stream_seq[stream_id] = chunk.stream_seq + 1
-            await self._send_chunk(chunk)
+            fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
+            pos = 0
+            for fragment in range(0, fragments):
+                chunk = DataChunk()
+                chunk.flags = 0
+                if fragment == 0:
+                    chunk.flags |= SCTP_DATA_FIRST_FRAG
+                if fragment == fragments - 1:
+                    chunk.flags |= SCTP_DATA_LAST_FRAG
+                chunk.tsn = self.local_tsn
+                chunk.stream_id = stream_id
+                chunk.stream_seq = stream_seq
+                chunk.protocol = protocol
+                chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
+
+                pos += USERDATA_MAX_LENGTH
+                self.local_tsn += 1
+                await self._send_chunk(chunk)
+
+            self.stream_seq[stream_id] = stream_seq + 1
+
         self.send_queue = []
 
     def _get_timestamp(self):
@@ -404,7 +418,15 @@ class Endpoint:
             sack = SackChunk()
             sack.cumulative_tsn = chunk.tsn
             await self._send_chunk(sack)
-            await self.recv_queue.put((chunk.stream_id, chunk.protocol, chunk.user_data))
+
+            # defragment data
+            if chunk.flags & SCTP_DATA_FIRST_FRAG:
+                self.stream_frags[chunk.stream_id] = chunk.user_data
+            else:
+                self.stream_frags[chunk.stream_id] += chunk.user_data
+            if chunk.flags & SCTP_DATA_LAST_FRAG:
+                user_data = self.stream_frags.pop(chunk.stream_id)
+                await self.recv_queue.put((chunk.stream_id, chunk.protocol, user_data))
         elif isinstance(chunk, AbortChunk):
             logger.warning('Association was aborted by remote party')
             self._set_state(self.State.CLOSED)
