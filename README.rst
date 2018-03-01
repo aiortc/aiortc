@@ -68,6 +68,8 @@ On Debian/Ubuntu run:
 On OS X run:
 
     brew install srtp openssl@1.1
+    export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
+    export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 
 License
