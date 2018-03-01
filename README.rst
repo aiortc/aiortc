@@ -54,11 +54,21 @@ TODO:
 - ICE trickle
 - Video streams
 
-Note
-----
+Requirements
+------------
 
 Currently, you need a development version of ``cryptography`` to use ``aiortc``,
 but this will no longer be the case once ``cryptography`` 2.2 is released.
+
+On Debian/Ubuntu run:
+
+    apt install libsrtp2-1 libssl-dev
+    pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
+
+On OS X run:
+
+    brew install srtp openssl@1.1
+    pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 
 License
 -------
