@@ -124,6 +124,7 @@ class DataChunk(Chunk):
         return 'DataChunk(flags=%d, tsn=%d, stream_id=%d, stream_seq=%d)' % (
             self.flags, self.tsn, self.stream_id, self.stream_seq)
 
+
 class ErrorChunk(Chunk):
     pass
 
