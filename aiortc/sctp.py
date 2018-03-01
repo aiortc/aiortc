@@ -129,7 +129,7 @@ class ErrorChunk(Chunk):
     pass
 
 
-class InitChunk(Chunk):
+class BaseInitChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
@@ -153,8 +153,12 @@ class InitChunk(Chunk):
         return body
 
 
-class InitAckChunk(InitChunk):
-    type = 2
+class InitChunk(BaseInitChunk):
+    pass
+
+
+class InitAckChunk(BaseInitChunk):
+    pass
 
 
 class SackChunk(Chunk):
@@ -276,15 +280,17 @@ class Endpoint:
         self.closed = asyncio.Event()
 
         self.hmac_key = os.urandom(16)
-        self.local_initiate_tag = random32()
         self.advertised_rwnd = 131072
         self.outbound_streams = 256
         self.inbound_streams = 2048
         self.stream_frags = {}
         self.stream_seq = {}
-        self.local_tsn = random32()
 
-        self.remote_initiate_tag = 0
+        self.local_tsn = random32()
+        self.local_verification_tag = random32()
+
+        self.remote_tsn = None
+        self.remote_verification_tag = 0
 
     async def abort(self):
         chunk = AbortChunk()
@@ -314,7 +320,7 @@ class Endpoint:
     async def run(self):
         if not self.is_server:
             chunk = InitChunk()
-            chunk.initiate_tag = self.local_initiate_tag
+            chunk.initiate_tag = self.local_verification_tag
             chunk.advertised_rwnd = self.advertised_rwnd
             chunk.outbound_streams = self.outbound_streams
             chunk.inbound_streams = self.inbound_streams
@@ -331,6 +337,20 @@ class Endpoint:
                 packet = Packet.parse(data)
             except ValueError:
                 continue
+
+            # is this an init?
+            init_chunk = len([x for x in packet.chunks if isinstance(x, InitChunk)])
+            if init_chunk:
+                assert len(packet.chunks) == 1
+                expected_tag = 0
+            else:
+                expected_tag = self.local_verification_tag
+
+            # verify tag
+            if packet.verification_tag != expected_tag:
+                logger.warning('%s x Bad verification tag %d vs %d' % (
+                    self.role, packet.verification_tag, expected_tag))
+                return
 
             for chunk in packet.chunks:
                 await self._receive_chunk(chunk)
@@ -370,12 +390,14 @@ class Endpoint:
 
     async def _receive_chunk(self, chunk):
         logger.debug('%s < %s', self.role, repr(chunk))
+
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
-            self.remote_initiate_tag = chunk.initiate_tag
+            self.remote_tsn = chunk.initial_tsn
+            self.remote_verification_tag = chunk.initiate_tag
 
             ack = InitAckChunk()
-            ack.initiate_tag = self.local_initiate_tag
+            ack.initiate_tag = self.local_verification_tag
             ack.advertised_rwnd = self.advertised_rwnd
             ack.outbound_streams = self.outbound_streams
             ack.inbound_streams = self.inbound_streams
@@ -409,6 +431,9 @@ class Endpoint:
 
         # client
         if isinstance(chunk, InitAckChunk) and not self.is_server:
+            self.remote_tsn = chunk.initial_tsn
+            self.remote_verification_tag = chunk.initiate_tag
+
             echo = CookieEchoChunk()
             for k, v in chunk.params:
                 if k == STATE_COOKIE:
@@ -459,7 +484,7 @@ class Endpoint:
         packet = Packet(
             source_port=5000,
             destination_port=5000,
-            verification_tag=self.remote_initiate_tag)
+            verification_tag=self.remote_verification_tag)
         packet.chunks.append(chunk)
         await self.transport.send(bytes(packet))
 
