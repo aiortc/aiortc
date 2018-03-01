@@ -1,5 +1,25 @@
 from struct import pack, unpack
 
+# reserved to avoid confusion with RTCP
+FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
+DYNAMIC_PAYLOAD_TYPES = range(96, 128)
+
+
+class Codec:
+    def __init__(self, kind, name, clockrate, channels=None, pt=None):
+        self.kind = kind
+        self.name = name
+        self.clockrate = clockrate
+        self.channels = channels
+        self.pt = pt
+
+    def clone(self, pt):
+        return Codec(kind=self.kind, name=self.name, clockrate=self.clockrate,
+                     channels=self.channels, pt=pt)
+
+    def __str__(self):
+        return '%s/%d' % (self.name, self.clockrate)
+
 
 class Packet:
     def __init__(self, payload_type, extension=0, marker=0, sequence_number=0, timestamp=0, ssrc=0):

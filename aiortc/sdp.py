@@ -3,6 +3,7 @@ import re
 
 import aioice
 
+from . import rtp
 
 DIRECTIONS = [
     'sendrecv',
@@ -99,11 +100,20 @@ class SessionDescription:
             if line.startswith('m='):
                 m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$', line)
                 assert m
+
+                # check payload types are valid
+                kind = m.group(1)
+                fmt = [int(x) for x in m.group(4).split()]
+                if kind in ['audio', 'video']:
+                    for pt in fmt:
+                        assert pt >= 0 and pt < 256
+                        assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
+
                 current_media = MediaDescription(
-                    kind=m.group(1),
+                    kind=kind,
                     port=int(m.group(2)),
                     profile=m.group(3),
-                    fmt=[int(x) for x in m.group(4).split()])
+                    fmt=fmt)
                 current_media.dtls_fingerprint = dtls_fingerprint
                 session.media.append(current_media)
             elif line.startswith('c=') and current_media:

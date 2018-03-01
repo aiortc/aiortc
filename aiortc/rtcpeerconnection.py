@@ -4,7 +4,7 @@ import datetime
 import aioice
 from pyee import EventEmitter
 
-from . import dtls, sctp, sdp
+from . import dtls, rtp, sctp, sdp
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
 from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
@@ -19,6 +19,14 @@ DUMMY_CANDIDATE = aioice.Candidate(
     host='0.0.0.0',
     port=0,
     type='host')
+MEDIA_CODECS = [
+    rtp.Codec(kind='audio', name='opus', clockrate=48000, channels=2),
+    rtp.Codec(kind='audio', name='G722', clockrate=8000, channels=1, pt=9),
+    rtp.Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0),
+    rtp.Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8),
+    rtp.Codec(kind='video', name='VP8', clockrate=90000),
+    rtp.Codec(kind='video', name='VP9', clockrate=90000),
+]
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -183,6 +191,19 @@ class RTCPeerConnection(EventEmitter):
         if not self.__sctp and not self.__transceivers:
             raise InternalError('Cannot create an offer with no media and no data channels')
 
+        # offer codecs
+        dynamic_pt = rtp.DYNAMIC_PAYLOAD_TYPES.start
+        for transceiver in self.__transceivers:
+            codecs = []
+            for codec in MEDIA_CODECS:
+                if codec.kind == transceiver._kind:
+                    if codec.pt is None:
+                        codecs.append(codec.clone(pt=dynamic_pt))
+                        dynamic_pt += 1
+                    else:
+                        codecs.append(codec)
+            transceiver._codecs = codecs
+
         return RTCSessionDescription(
             sdp=self.__createSdp(),
             type='offer')
@@ -247,6 +268,24 @@ class RTCPeerConnection(EventEmitter):
                     transceiver = self.__createTransceiver(
                         kind=media.kind,
                         controlling=False)
+
+                # negotiate codecs
+                common = []
+                for pt in media.fmt:
+                    bits = media.rtpmap[pt].split('/')
+                    name = bits[0]
+                    clockrate = int(bits[1])
+
+                    for codec in MEDIA_CODECS:
+                        if (codec.kind == media.kind and
+                           codec.name == name and
+                           codec.clockrate == clockrate):
+                            if pt in rtp.DYNAMIC_PAYLOAD_TYPES:
+                                codec = codec.clone(pt=pt)
+                            common.append(codec)
+                            break
+                assert len(common)
+                transceiver._codecs = common
 
                 # configure transport
                 transceiver._iceConnection.remote_candidates = media.ice_candidates
@@ -325,8 +364,10 @@ class RTCPeerConnection(EventEmitter):
             if default_candidate is None:
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
-                # FIXME: negotiate codec
-                'm=%s %d UDP/TLS/RTP/SAVPF 0' % (transceiver._kind, default_candidate.port),
+                'm=%s %d UDP/TLS/RTP/SAVPF %s' % (
+                    transceiver._kind,
+                    default_candidate.port,
+                    ' '.join([str(c.pt) for c in transceiver._codecs])),
                 'c=IN IP4 %s' % default_candidate.host,
                 'a=rtcp:9 IN IP4 0.0.0.0',
                 'a=rtcp-mux',
@@ -334,8 +375,8 @@ class RTCPeerConnection(EventEmitter):
             sdp += transport_sdp(iceConnection, transceiver._dtlsSession)
             sdp += ['a=%s' % transceiver.direction]
 
-            # FIXME: negotiate codec
-            sdp += ['a=rtpmap:0 PCMU/8000']
+            for codec in transceiver._codecs:
+                sdp += ['a=rtpmap:%d %s' % (codec.pt, str(codec))]
 
         if self.__sctp:
             iceConnection = self.__sctp._iceConnection
