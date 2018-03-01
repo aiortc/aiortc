@@ -14,12 +14,16 @@ from .utils import first_completed, random32
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
+# local constants
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
 USERDATA_MAX_LENGTH = 1200
 
+# protocol constants
 SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
+SCTP_SEQ_MODULO = 2 ** 16
+SCTP_TSN_MODULO = 2 ** 32
 
 STALE_COOKIE_ERROR = 3
 
@@ -65,6 +69,9 @@ class Chunk:
         data = pack('!BBH', self.type, self.flags, len(body) + 4) + body
         data += b'\x00' * padl(len(body))
         return data
+
+    def __repr__(self):
+        return '%s(flags=%d)' % (self.__class__.__name__, self.flags)
 
     @property
     def type(self):
@@ -113,6 +120,9 @@ class DataChunk(Chunk):
         body += self.user_data
         return body
 
+    def __repr__(self):
+        return 'DataChunk(flags=%d, tsn=%d, stream_id=%d, stream_seq=%d)' % (
+            self.flags, self.tsn, self.stream_id, self.stream_seq)
 
 class ErrorChunk(Chunk):
     pass
@@ -347,10 +357,10 @@ class Endpoint:
                 chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
                 pos += USERDATA_MAX_LENGTH
-                self.local_tsn += 1
+                self.local_tsn = (self.local_tsn + 1) % SCTP_TSN_MODULO
                 await self._send_chunk(chunk)
 
-            self.stream_seq[stream_id] = stream_seq + 1
+            self.stream_seq[stream_id] = (stream_seq + 1) % SCTP_SEQ_MODULO
 
         self.send_queue = []
 
@@ -358,7 +368,7 @@ class Endpoint:
         return int(time.time())
 
     async def _receive_chunk(self, chunk):
-        logger.debug('%s < %s', self.role, chunk.__class__.__name__)
+        logger.debug('%s < %s', self.role, repr(chunk))
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
             self.remote_initiate_tag = chunk.initiate_tag
@@ -444,7 +454,7 @@ class Endpoint:
             self._set_state(self.State.CLOSED)
 
     async def _send_chunk(self, chunk):
-        logger.debug('%s > %s', self.role, chunk.__class__.__name__)
+        logger.debug('%s > %s', self.role, repr(chunk))
         packet = Packet(
             source_port=5000,
             destination_port=5000,
