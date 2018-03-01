@@ -410,6 +410,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got messages
+        run(asyncio.sleep(1))
         self.assertEqual(pc2_data_messages, [
             'hello',
             '',
