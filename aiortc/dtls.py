@@ -29,8 +29,8 @@ def certificate_digest(x509):
     if digest == ffi.NULL:
         raise ValueError("No such digest method")
 
-    result_buffer = ffi.new("unsigned char[]", lib.EVP_MAX_MD_SIZE)
-    result_length = ffi.new("unsigned int[]", 1)
+    result_buffer = ffi.new('unsigned char[]', lib.EVP_MAX_MD_SIZE)
+    result_length = ffi.new('unsigned int[]', 1)
     result_length[0] = len(result_buffer)
 
     digest_result = lib.X509_digest(x509, digest, result_buffer, result_length)
@@ -134,6 +134,7 @@ class DtlsSrtpSession:
     async def close(self):
         lib.SSL_shutdown(self.ssl)
         await self._write_ssl()
+        logger.info('DTLS shutdown complete')
 
     async def connect(self):
         while not self.encrypted:
@@ -161,7 +162,7 @@ class DtlsSrtpSession:
             raise Exception('DTLS fingerprint does not match')
 
         # generate keying material
-        buf = ffi.new("char[]", 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
+        buf = ffi.new('unsigned char[]', 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
         extractor = b'EXTRACTOR-dtls_srtp'
         if not lib.SSL_export_keying_material(self.ssl, buf, len(buf),
                                               extractor, len(extractor),
@@ -195,7 +196,7 @@ class DtlsSrtpSession:
             if first_byte > 19 and first_byte < 64:
                 # DTLS
                 lib.BIO_write(self.read_bio, data, len(data))
-                buf = ffi.new("char[]", 1500)
+                buf = ffi.new('char[]', 1500)
                 result = lib.SSL_read(self.ssl, buf, len(buf))
                 await self.data_queue.put(ffi.buffer(buf)[0:result])
             elif first_byte > 127 and first_byte < 192:
@@ -221,7 +222,7 @@ class DtlsSrtpSession:
     async def _write_ssl(self):
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
-            buf = ffi.new("char[]", pending)
+            buf = ffi.new('char[]', pending)
             lib.BIO_read(self.write_bio, buf, len(buf))
             data = b''.join(buf)
             await self.transport.send(data)
