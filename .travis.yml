@@ -1,22 +1,18 @@
 after_success: coveralls
 dist: trusty
 install:
-  - .travis/build-libsrtp
-  - |
-    if [[ "$(uname -s)" == 'Darwin' ]]; then
-      export DYLD_LIBRARY_PATH=$PWD/libsrtp:$DYLD_LIBRARY_PATH
-    else
-      export LD_LIBRARY_PATH=$PWD/libsrtp:$LD_LIBRARY_PATH
-    fi
   - |
     if [[ "$(uname -s)" == 'Darwin' ]]; then
       brew update
-      brew install python3
+      brew install python3 srtp
       brew install openssl@1.1
       export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
       export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
       python3 -m venv env
       source env/bin/activate
+    else
+      .travis/build-libsrtp
+      export LD_LIBRARY_PATH=$PWD/libsrtp:$LD_LIBRARY_PATH
     fi
   - pip install coveralls flake8
   - pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
