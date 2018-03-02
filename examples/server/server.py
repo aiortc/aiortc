@@ -2,21 +2,24 @@ import asyncio
 import json
 import logging
 import os
+import wave
 
 from aiohttp import web
-from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.mediastreams import AudioFrame, AudioStreamTrack
 
 ROOT = os.path.dirname(__file__)
 
 
 class AudioFileTrack(AudioStreamTrack):
     def __init__(self, path):
-        self.fp = open(path, 'rb')
+        self.reader = wave.Wave_read(path)
 
     async def recv(self):
         await asyncio.sleep(0.02)
-        return self.fp.read(160)
+        return AudioFrame(
+            data=self.reader.readframes(160))
 
 
 async def index(request):
@@ -40,7 +43,7 @@ async def offer(request):
             channel.send('pong')
 
     await pc.setRemoteDescription(offer)
-    pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.ulaw')))
+    pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav')))
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 

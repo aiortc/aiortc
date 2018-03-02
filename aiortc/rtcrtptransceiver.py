@@ -1,6 +1,7 @@
 import asyncio
 
 from . import rtp
+from .codecs import get_encoder
 from .utils import first_completed, random32
 
 
@@ -22,12 +23,14 @@ class RTCRtpSender:
     def track(self):
         return self._track
 
-    async def _run(self, transport):
-        packet = rtp.Packet(payload_type=0)
+    async def _run(self, transport, encoder, payload_type):
+        packet = rtp.Packet(payload_type=payload_type)
         packet.ssrc = random32()
         while True:
             if self._track:
-                packet.payload = await self._track.recv()
+                frame = await self._track.recv()
+                packet.payload = encoder.encode(frame)
+                packet.marker = 1
                 await transport.send(bytes(packet))
                 packet.sequence_number += 1
                 packet.timestamp += len(packet.payload)
@@ -77,7 +80,13 @@ class RTCRtpTransceiver:
         self.__stopped.set()
 
     async def _run(self, transport):
+        for codec in self._codecs:
+            encoder = get_encoder(codec)
+            if encoder:
+                break
+        assert encoder
+
         await first_completed(
             self.receiver._run(transport),
-            self.sender._run(transport),
+            self.sender._run(transport, encoder=encoder, payload_type=codec.pt),
             self.__stopped.wait())
