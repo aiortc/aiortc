@@ -4,7 +4,8 @@ install:
   - |
     if [[ "$(uname -s)" == 'Darwin' ]]; then
       brew update
-      brew install openssl@1.1 python3 srtp
+      brew upgrade openssl@1.1
+      brew install python3 srtp
       export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
       export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
       python3 -m venv env
