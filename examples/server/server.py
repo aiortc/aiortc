@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import wave
 
 from aiohttp import web
@@ -9,15 +10,20 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import AudioFrame, AudioStreamTrack
 
+PTIME = 0.02
 ROOT = os.path.dirname(__file__)
 
 
 class AudioFileTrack(AudioStreamTrack):
     def __init__(self, path):
+        self.last = None
         self.reader = wave.Wave_read(path)
 
     async def recv(self):
-        await asyncio.sleep(0.02)
+        if self.last:
+            now = time.time()
+            await asyncio.sleep(self.last + PTIME - now)
+        self.last = time.time()
         return AudioFrame(
             channels=self.reader.getnchannels(),
             data=self.reader.readframes(160))
