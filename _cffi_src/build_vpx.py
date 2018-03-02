@@ -121,7 +121,6 @@ typedef struct vpx_image {
 
   unsigned int w;
   unsigned int h;
-  unsigned int bit_depth;
 
   unsigned char *planes[4];
   int stride[4];
