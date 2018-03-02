@@ -62,12 +62,12 @@ but this will no longer be the case once ``cryptography`` 2.2 is released.
 
 On Debian/Ubuntu run:
 
-    apt install libsrtp2-1 libssl-dev
+    apt install libopus-dev libsrtp2-dev libssl-dev
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 
 On OS X run:
 
-    brew install srtp openssl@1.1
+    brew install opus srtp openssl@1.1
     export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
     export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
