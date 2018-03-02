@@ -134,13 +134,12 @@ class RTCPeerConnection(EventEmitter):
                 raise InvalidAccessError('Track already has a sender')
 
         for transceiver in self.__transceivers:
-            if transceiver._kind == track.kind and transceiver.sender.track is None:
-                transceiver.sender._track = track
-                return transceiver.sender
-
-        # we only support a single media track for now
-        if len(self.__transceivers):
-            raise InternalError('Only a single media track is supported for now')
+            if transceiver._kind == track.kind:
+                if transceiver.sender.track is None:
+                    transceiver.sender._track = track
+                    return transceiver.sender
+                else:
+                    raise InternalError('Only a single %s track is supported for now' % track.kind)
 
         transceiver = self.__createTransceiver(
             kind=track.kind,

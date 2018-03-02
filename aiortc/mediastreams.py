@@ -40,8 +40,13 @@ class AudioStreamTrack(MediaStreamTrack):
 
 
 class VideoStreamTrack(MediaStreamTrack):
+    """
+    The base implementation just reads a green frame.
+
+    Subclass it to provide a useful implementation.
+    """
     kind = 'video'
 
     async def recv(self):
         await asyncio.sleep(0.02)
-        raise VideoFrame(width=320, height=240, data=b'\x00' * 115200)
+        return VideoFrame(width=320, height=240, data=b'\x00' * 115200)

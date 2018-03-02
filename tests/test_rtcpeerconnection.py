@@ -92,7 +92,7 @@ class RTCPeerConnectionTest(TestCase):
         # try adding another audio track
         with self.assertRaises(InternalError) as cm:
             pc.addTrack(AudioStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
+        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
 
     def test_addTrack_bogus(self):
         pc = RTCPeerConnection()
@@ -106,21 +106,28 @@ class RTCPeerConnectionTest(TestCase):
         pc = RTCPeerConnection()
 
         # add video track
-        track = VideoStreamTrack()
-        sender = pc.addTrack(track)
-        self.assertIsNotNone(sender)
-        self.assertEqual(sender.track, track)
-        self.assertEqual(pc.getSenders(), [sender])
+        video_track = VideoStreamTrack()
+        video_sender = pc.addTrack(video_track)
+        self.assertIsNotNone(video_sender)
+        self.assertEqual(video_sender.track, video_track)
+        self.assertEqual(pc.getSenders(), [video_sender])
 
         # try to add same track again
         with self.assertRaises(InvalidAccessError) as cm:
-            pc.addTrack(track)
+            pc.addTrack(video_track)
         self.assertEqual(str(cm.exception), 'Track already has a sender')
 
-        # try adding an audio track
+        # try adding another video track
         with self.assertRaises(InternalError) as cm:
-            pc.addTrack(AudioStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single media track is supported for now')
+            pc.addTrack(VideoStreamTrack())
+        self.assertEqual(str(cm.exception), 'Only a single video track is supported for now')
+
+        # add audio track
+        audio_track = AudioStreamTrack()
+        audio_sender = pc.addTrack(audio_track)
+        self.assertIsNotNone(audio_sender)
+        self.assertEqual(audio_sender.track, audio_track)
+        self.assertEqual(pc.getSenders(), [video_sender, audio_sender])
 
     def test_addTrack_closed(self):
         pc = RTCPeerConnection()
