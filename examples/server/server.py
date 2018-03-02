@@ -8,10 +8,18 @@ import wave
 from aiohttp import web
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.mediastreams import AudioFrame, AudioStreamTrack
+from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
+                                 VideoStreamTrack)
 
 PTIME = 0.02
 ROOT = os.path.dirname(__file__)
+
+
+async def pause(last):
+    if last:
+        now = time.time()
+        await asyncio.sleep(last + PTIME - now)
+    return time.time()
 
 
 class AudioFileTrack(AudioStreamTrack):
@@ -20,13 +28,30 @@ class AudioFileTrack(AudioStreamTrack):
         self.reader = wave.Wave_read(path)
 
     async def recv(self):
-        if self.last:
-            now = time.time()
-            await asyncio.sleep(self.last + PTIME - now)
-        self.last = time.time()
+        self.last = await pause(self.last)
         return AudioFrame(
             channels=self.reader.getnchannels(),
             data=self.reader.readframes(160))
+
+
+class VideoDummyTrack(VideoStreamTrack):
+    def __init__(self):
+        width = 640
+        height = 480
+        size = int(height * width * 12 / 8)
+
+        self.counter = 0
+        self.frame_green = VideoFrame(width=width, height=height, data=b'\x00' * size)
+        self.frame_pink = VideoFrame(width=width, height=height, data=b'\xff' * size)
+        self.last = None
+
+    async def recv(self):
+        self.last = await pause(self.last)
+        self.counter += 1
+        if (self.counter % 100) < 50:
+            return self.frame_green
+        else:
+            return self.frame_pink
 
 
 async def index(request):
