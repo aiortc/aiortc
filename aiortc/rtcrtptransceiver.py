@@ -33,7 +33,7 @@ class RTCRtpSender:
                 packet.marker = 1
                 await transport.send(bytes(packet))
                 packet.sequence_number += 1
-                packet.timestamp += len(packet.payload)
+                packet.timestamp += encoder.timestamp_increment
             else:
                 await asyncio.sleep(0.02)
 

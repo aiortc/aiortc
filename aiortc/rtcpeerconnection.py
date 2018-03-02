@@ -21,7 +21,6 @@ DUMMY_CANDIDATE = aioice.Candidate(
     type='host')
 MEDIA_CODECS = [
     rtp.Codec(kind='audio', name='opus', clockrate=48000, channels=2),
-    rtp.Codec(kind='audio', name='G722', clockrate=8000, channels=1, pt=9),
     rtp.Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0),
     rtp.Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8),
     rtp.Codec(kind='video', name='VP8', clockrate=90000),

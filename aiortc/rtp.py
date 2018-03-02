@@ -18,7 +18,10 @@ class Codec:
                      channels=self.channels, pt=pt)
 
     def __str__(self):
-        return '%s/%d' % (self.name, self.clockrate)
+        s = '%s/%d' % (self.name, self.clockrate)
+        if self.channels == 2:
+            s += '/2'
+        return s
 
 
 class Packet:

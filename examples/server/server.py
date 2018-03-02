@@ -19,6 +19,7 @@ class AudioFileTrack(AudioStreamTrack):
     async def recv(self):
         await asyncio.sleep(0.02)
         return AudioFrame(
+            channels=self.reader.getnchannels(),
             data=self.reader.readframes(160))
 
 
