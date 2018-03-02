@@ -76,6 +76,7 @@ async def offer(request):
 
     await pc.setRemoteDescription(offer)
     pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav')))
+    pc.addTrack(VideoDummyTrack())
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 

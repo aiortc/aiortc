@@ -5,6 +5,9 @@
 </head>
 <body>
 
+<audio id="audio" autoplay="true"></audio>
+<video id="video" autoplay="true"></video>
+
 <h2>State</h2>
 <p>
     ICE gathering state: <span id="ice-gathering-state"></span>
@@ -27,7 +30,6 @@
 <h3>Answer</h3>
 <pre id="answer-sdp"></pre>
 
-<audio id="audio" autoplay="true"/>
 <script>
 var pc = new RTCPeerConnection();
 
@@ -53,9 +55,12 @@ pc.addEventListener('signalingstatechange', function() {
 }, false);
 signalingLog.textContent = pc.signalingState;
 
-// connect audio
-pc.addEventListener('track', function(track) {
-    document.getElementById('audio').srcObject = track.streams[0];
+// connect audio / video
+pc.addEventListener('track', function(evt) {
+    if (evt.track.kind == 'video')
+        document.getElementById('video').srcObject = evt.streams[0];
+    else
+        document.getElementById('audio').srcObject = evt.streams[0];
 });
 
 var dc = pc.createDataChannel('chat');
@@ -65,7 +70,7 @@ dc.onmessage = function(evt) {
 
 navigator.mediaDevices.getUserMedia({
     audio: true,
-    video: false
+    video: true
 }).then(function(stream) {
     stream.getTracks().forEach(function(track) {
         pc.addTrack(track, stream);
