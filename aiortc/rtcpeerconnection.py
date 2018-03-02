@@ -24,7 +24,6 @@ MEDIA_CODECS = [
     rtp.Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0),
     rtp.Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8),
     rtp.Codec(kind='video', name='VP8', clockrate=90000),
-    rtp.Codec(kind='video', name='VP9', clockrate=90000),
 ]
 MEDIA_KINDS = ['audio', 'video']
 
