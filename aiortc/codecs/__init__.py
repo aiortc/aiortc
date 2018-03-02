@@ -1,6 +1,17 @@
-from .g711 import PcmaEncoder, PcmuEncoder
-from .opus import OpusEncoder
-from .vpx import VpxEncoder
+from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+from .opus import OpusDecoder, OpusEncoder
+from .vpx import VpxDecoder, VpxEncoder
+
+
+def get_decoder(codec):
+    if codec.name == 'opus':
+        return OpusDecoder()
+    elif codec.name == 'PCMU':
+        return PcmuDecoder()
+    elif codec.name == 'PCMA':
+        return PcmaDecoder()
+    elif codec.name == 'VP8':
+        return VpxDecoder()
 
 
 def get_encoder(codec):
@@ -12,5 +23,3 @@ def get_encoder(codec):
         return PcmaEncoder()
     elif codec.name == 'VP8':
         return VpxEncoder()
-    else:
-        return None

@@ -1,18 +1,26 @@
 import asyncio
 
 from . import rtp
-from .codecs import get_encoder
+from .codecs import get_decoder, get_encoder
 from .utils import first_completed, random32
 
 
 class RTCRtpReceiver:
-    async def _run(self, transport):
-        # for now, just drain incoming data
+    async def _run(self, transport, decoder, payload_type):
         while True:
             try:
-                await transport.recv()
+                data = await transport.recv()
             except ConnectionError:
                 break
+
+            # skip RTCP for now
+            if rtp.is_rtcp(data):
+                continue
+
+            # for now, discard decoded data
+            packet = rtp.Packet.parse(data)
+            if packet.payload_type == payload_type:
+                decoder.decode(packet.payload)
 
 
 class RTCRtpSender:
@@ -80,13 +88,11 @@ class RTCRtpTransceiver:
         self.__stopped.set()
 
     async def _run(self, transport):
-        for codec in self._codecs:
-            encoder = get_encoder(codec)
-            if encoder:
-                break
-        assert encoder
+        codec = self._codecs[0]
+        decoder = get_decoder(codec)
+        encoder = get_encoder(codec)
 
         await first_completed(
-            self.receiver._run(transport),
+            self.receiver._run(transport, decoder=decoder, payload_type=codec.pt),
             self.sender._run(transport, encoder=encoder, payload_type=codec.pt),
             self.__stopped.wait())

@@ -5,6 +5,10 @@ FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
 
+def is_rtcp(msg):
+    return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
+
+
 class Codec:
     def __init__(self, kind, name, clockrate, channels=None, pt=None):
         self.kind = kind

@@ -7,6 +7,7 @@ import sys
 from cryptography.hazmat.bindings.openssl.binding import Binding
 from pylibsrtp import Policy, Session
 
+from .rtp import is_rtcp
 from .utils import first_completed
 
 binding = Binding()
@@ -48,10 +49,6 @@ def get_srtp_key_salt(src, idx):
         src[key_start:key_start + SRTP_KEY_LEN] +
         src[salt_start:salt_start + SRTP_SALT_LEN]
     )
-
-
-def is_rtcp(msg):
-    return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
 @ffi.callback('int(int, X509_STORE_CTX *)')

@@ -1,5 +1,6 @@
 import struct
 
+from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
 
@@ -70,6 +71,23 @@ def _vpx_assert(err):
     if err != lib.VPX_CODEC_OK:
         reason = ffi.string(lib.vpx_codec_err_to_string(err))
         raise Exception('Failed: ' + reason.decode('utf8'))
+
+
+class VpxDecoder:
+    def __init__(self):
+        self.codec = ffi.new('vpx_codec_ctx_t *')
+        _vpx_assert(lib.vpx_codec_dec_init(self.codec, lib.vpx_codec_vp8_dx(), ffi.NULL, 0))
+
+    def __del__(self):
+        lib.vpx_codec_destroy(self.codec)
+
+    def decode(self, data):
+        """
+        _vpx_assert(lib.vpx_codec_decode(
+            self.codec, data, len(data), ffi.NULL, lib.VPX_DL_REALTIME))
+        """
+        # TODO : actually decode data!
+        return VideoFrame(width=320, height=240, data=b'\x00' * 115200)
 
 
 class VpxEncoder:
