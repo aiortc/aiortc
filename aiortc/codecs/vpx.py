@@ -1,5 +1,7 @@
 import struct
 
+from ._vpx import ffi, lib
+
 
 class VpxPayloadDescriptor:
     props = ['partition_start', 'partition_id', 'picture_id']
@@ -62,3 +64,50 @@ class VpxPayloadDescriptor:
 
         obj = cls(partition_start=partition_start, partition_id=partition_id, picture_id=picture_id)
         return obj, data[pos:]
+
+
+def _vpx_assert(err):
+    if err != lib.VPX_CODEC_OK:
+        reason = ffi.string(lib.vpx_codec_err_to_string(err))
+        raise Exception('Failed: ' + reason.decode('utf8'))
+
+
+class VpxEncoder:
+    timestamp_increment = 1
+
+    def __init__(self):
+        self.cx = lib.vpx_codec_vp8_cx()
+
+        self.cfg = ffi.new('vpx_codec_enc_cfg_t *')
+        lib.vpx_codec_enc_config_default(self.cx, self.cfg, 0)
+
+        self.codec = None
+        self.frame_count = 0
+
+    def __del__(self):
+        if self.codec:
+            lib.vpx_codec_destroy(self.codec)
+
+    def encode(self, frame):
+        image = ffi.new('vpx_image_t *')
+
+        lib.vpx_img_wrap(image, lib.VPX_IMG_FMT_I420,
+                         frame.width, frame.height, 1, frame.data)
+
+        if not self.codec:
+            self.cfg.g_w = frame.width
+            self.cfg.g_h = frame.height
+
+            self.codec = ffi.new('vpx_codec_ctx_t *')
+            _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
+
+        _vpx_assert(lib.vpx_codec_encode(
+            self.codec, image, self.frame_count, 1,  0, lib.VPX_DL_REALTIME))
+        self.frame_count += 1
+
+        it = ffi.new('vpx_codec_iter_t *')
+        pkt = lib.vpx_codec_get_cx_data(self.codec, it)
+        assert pkt
+
+        descr = VpxPayloadDescriptor(partition_start=1, partition_id=0)
+        return bytes(descr) + ffi.buffer(pkt.data.frame.buf, pkt.data.frame.sz)

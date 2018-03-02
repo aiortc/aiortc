@@ -40,19 +40,19 @@ messages over a data channel and send audio to the browser.
 
 Working:
 
-- Basic SDP generation / parsing
+- SDP generation / parsing
 - Interactive Connectivity Establishment
 - DTLS handshake, encryption / decryption (for SCTP)
 - SRTP keying, encryption and decryption for RTP and RTCP
 - Minimal SCTP implementation
 - Data Channels
+- Sending audio (Opus / PCMU / PCMA) and video (VP8)
 
 TODO:
 
-- Actual media codec negotiation
 - Expose media reception API
+- SCTP retransmission and receiver window handling
 - ICE trickle
-- Video streams
 
 Requirements
 ------------
@@ -62,12 +62,12 @@ but this will no longer be the case once ``cryptography`` 2.2 is released.
 
 On Debian/Ubuntu run:
 
-    apt install libopus-dev libsrtp2-dev libssl-dev
+    apt install libopus-dev libsrtp2-dev libssl-dev libvpx-dev
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 
 On OS X run:
 
-    brew install opus srtp openssl@1.1
+    brew install opus srtp openssl@1.1 libvpx
     export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
     export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
