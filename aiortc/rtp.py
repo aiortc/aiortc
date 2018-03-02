@@ -36,7 +36,7 @@ class Packet:
     def __bytes__(self):
         data = pack(
             '!BBHLL',
-            (self.version << 6) | len(self.csrc),
+            (self.version << 6) | (self.extension << 4) | len(self.csrc),
             (self.marker << 7) | self.payload_type,
             self.sequence_number,
             self.timestamp,
@@ -45,18 +45,24 @@ class Packet:
             data += pack('!L', csrc)
         return data + self.payload
 
+    def __repr__(self):
+        return 'Packet(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)' % (
+            self.sequence_number, self.timestamp, self.marker, self.payload_type, len(self.payload))
+
     @classmethod
     def parse(cls, data):
         if len(data) < 12:
             raise ValueError('RTP packet length is less than 12 bytes')
 
-        v_x_cc, m_pt, sequence_number, timestamp, ssrc = unpack('!BBHLL', data[0:12])
-        version = (v_x_cc >> 6)
-        cc = (v_x_cc & 0x0f)
+        v_p_x_cc, m_pt, sequence_number, timestamp, ssrc = unpack('!BBHLL', data[0:12])
+        version = (v_p_x_cc >> 6)
+        padding = ((v_p_x_cc >> 5) & 1)
+        cc = (v_p_x_cc & 0x0f)
         if version != 2:
             raise ValueError('RTP packet has invalid version')
 
         packet = cls(
+            extension=((v_p_x_cc >> 4) & 1),
             marker=(m_pt >> 7),
             payload_type=(m_pt & 0x7f),
             sequence_number=sequence_number,
@@ -68,5 +74,12 @@ class Packet:
             packet.csrc.append(unpack('!L', data[pos:pos+4])[0])
             pos += 4
 
-        packet.payload = data[pos:]
+        if padding:
+            padding_len = data[-1]
+            if not padding_len or padding_len > len(data) - pos:
+                raise ValueError('RTP packet padding length is invalid')
+            packet.payload = data[pos:-padding_len]
+        else:
+            packet.payload = data[pos:]
+
         return packet
