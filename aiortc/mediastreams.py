@@ -16,7 +16,7 @@ class VideoFrame:
     """
     Video frame in YUV420 format.
     """
-    def __init__(self, height, width, data):
+    def __init__(self, width, height, data):
         self.height = height
         self.width = width
         self.data = data
