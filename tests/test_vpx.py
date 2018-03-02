@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiortc.vpx import VpxPayloadDescriptor
+from aiortc.codecs.vpx import VpxPayloadDescriptor
 
 
 class VpxPayloadDescriptorTest(TestCase):
