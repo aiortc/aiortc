@@ -28,7 +28,9 @@ setuptools.setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
+    cffi_modules=['_cffi_src/build_opus.py:ffibuilder'],
     packages=['aiortc'],
+    setup_requires=['cffi'],
     install_requires=['aioice>=0.4.2', 'crcmod', 'cryptography>=2.2.dev1', 'opuslib', 'pyee', 'pylibsrtp'],
     dependency_links=[
         'git+https://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography-2.2.dev1',
