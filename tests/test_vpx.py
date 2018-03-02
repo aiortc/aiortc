@@ -48,4 +48,3 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(bytes(descr), b'\x90\x80\x81\x80')
 
         self.assertEqual(rest, b'')
-
