@@ -1,15 +1,20 @@
 import audioop
 
-import opuslib
+from ._opus import ffi, lib
 
 
 class OpusEncoder:
     timestamp_increment = 960
 
     def __init__(self):
-        self.encoder = opuslib.Encoder(
-            fs=48000, channels=2, application='audio')
+        error = ffi.new('int *')
+        self.cdata = ffi.new('char []', 960)
+        self.buffer = ffi.buffer(self.cdata)
+        self.encoder = lib.opus_encoder_create(48000, 2, lib.OPUS_APPLICATION_VOIP, error)
         self.rate_state = None
+
+    def __del__(self):
+        lib.opus_encoder_destroy(self.encoder)
 
     def encode(self, frame):
         data = frame.data
@@ -28,4 +33,6 @@ class OpusEncoder:
         if frame.channels == 1:
             data = audioop.tostereo(data, frame.sample_width, 1, 1)
 
-        return self.encoder.encode(data, 960)
+        length = lib.opus_encode(self.encoder, ffi.cast('int16_t*', ffi.from_buffer(data)),
+                                 960, self.cdata, len(self.cdata))
+        return self.buffer[0:length]
