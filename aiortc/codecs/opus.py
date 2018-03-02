@@ -34,7 +34,10 @@ class OpusDecoder:
             8000,
             self.rate_state)
 
-        return AudioFrame(channels=2, data=data)
+        return AudioFrame(
+            channels=2,
+            data=data,
+            sample_rate=8000)
 
 
 class OpusEncoder:

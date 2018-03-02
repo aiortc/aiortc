@@ -7,7 +7,8 @@ class PcmaDecoder:
     def decode(self, data):
         return AudioFrame(
             channels=1,
-            data=audioop.alaw2lin(data, 2))
+            data=audioop.alaw2lin(data, 2),
+            sample_rate=8000)
 
 
 class PcmaEncoder:
@@ -27,7 +28,8 @@ class PcmuDecoder:
     def decode(self, data):
         return AudioFrame(
             channels=1,
-            data=audioop.ulaw2lin(data, 2))
+            data=audioop.ulaw2lin(data, 2),
+            sample_rate=8000)
 
 
 class PcmuEncoder:

@@ -31,7 +31,8 @@ class AudioFileTrack(AudioStreamTrack):
         self.last = await pause(self.last)
         return AudioFrame(
             channels=self.reader.getnchannels(),
-            data=self.reader.readframes(160))
+            data=self.reader.readframes(160),
+            sample_rate=self.reader.getframerate())
 
 
 class VideoDummyTrack(VideoStreamTrack):
