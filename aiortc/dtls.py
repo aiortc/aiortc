@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import enum
 import logging
 import os
 import sys
@@ -98,6 +99,8 @@ class DtlsSrtpSession:
         self.encrypted = False
         self.is_server = is_server
         self.remote_fingerprint = None
+        self.role = self.is_server and 'server' or 'client'
+        self.state = self.State.CLOSED
         self.transport = transport
 
         self.data_cdata = ffi.new('char[]', 1500)
@@ -132,9 +135,12 @@ class DtlsSrtpSession:
     async def close(self):
         lib.SSL_shutdown(self.ssl)
         await self._write_ssl()
-        logger.info('DTLS shutdown complete')
+        logger.info('%s DTLS shutdown complete', self.role)
 
     async def connect(self):
+        assert self.state == self.State.CLOSED
+
+        self._set_state(self.State.CONNECTING)
         while not self.encrypted:
             result = lib.SSL_do_handshake(self.ssl)
             await self._write_ssl()
@@ -171,13 +177,14 @@ class DtlsSrtpSession:
             srtp_tx_key = get_srtp_key_salt(view, 0)
             srtp_rx_key = get_srtp_key_salt(view, 1)
 
-        logger.info('DTLS handshake complete')
         rx_policy = Policy(key=srtp_rx_key, ssrc_type=Policy.SSRC_ANY_INBOUND)
         self._rx_srtp = Session(rx_policy)
         tx_policy = Policy(key=srtp_tx_key, ssrc_type=Policy.SSRC_ANY_OUTBOUND)
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
+        logger.info('%s DTLS handshake complete', self.role)
+        self._set_state(self.State.CONNECTED)
         asyncio.ensure_future(self.__run())
 
     async def __run(self):
@@ -187,6 +194,7 @@ class DtlsSrtpSession:
         except ConnectionError:
             pass
         finally:
+            self._set_state(self.State.CLOSED)
             self.closed.set()
 
     async def _recv_next(self):
@@ -226,6 +234,11 @@ class DtlsSrtpSession:
             data = self._tx_srtp.protect(data)
         await self.transport.send(data)
 
+    def _set_state(self, state):
+        if state != self.state:
+            logger.debug('%s state %s -> %s', self.role, self.state, state)
+            self.state = state
+
     async def _write_ssl(self):
         """
         Flush outgoing data which OpenSSL put in our BIO to the transport.
@@ -236,3 +249,8 @@ class DtlsSrtpSession:
             lib.BIO_read(self.write_bio, buf, len(buf))
             data = b''.join(buf)
             await self.transport.send(data)
+
+    class State(enum.Enum):
+        CLOSED = 0
+        CONNECTING = 1
+        CONNECTED = 2
