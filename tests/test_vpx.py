@@ -10,6 +10,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, None)
         self.assertEqual(bytes(descr), b'\x10')
+        self.assertEqual(repr(descr), 'VpxPayloadDescriptor(S=1, PID=0, pic_id=None)')
 
         self.assertEqual(rest, b'')
 
@@ -19,6 +20,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, 17)
         self.assertEqual(bytes(descr), b'\x90\x80\x11')
+        self.assertEqual(repr(descr), 'VpxPayloadDescriptor(S=1, PID=0, pic_id=17)')
 
         self.assertEqual(rest, b'')
 
