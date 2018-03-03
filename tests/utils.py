@@ -1,6 +1,8 @@
 import asyncio
 import os
 
+from aiortc.utils import first_completed
+
 
 def dummy_transport_pair():
     queue_a = asyncio.Queue()
@@ -13,11 +15,18 @@ def dummy_transport_pair():
 
 class DummyTransport:
     def __init__(self, rx_queue, tx_queue):
+        self.closed = asyncio.Event()
         self.rx_queue = rx_queue
         self.tx_queue = tx_queue
 
+    async def close(self):
+        self.closed.set()
+
     async def recv(self):
-        return await self.rx_queue.get()
+        data = await first_completed(self.rx_queue.get(), self.closed.wait())
+        if data is True:
+            raise ConnectionError
+        return data
 
     async def send(self, data):
         await self.tx_queue.put(data)
