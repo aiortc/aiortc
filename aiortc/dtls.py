@@ -103,7 +103,6 @@ class DtlsSrtpSession:
         self.state = self.State.CLOSED
         self.transport = transport
 
-        self.data_cdata = ffi.new('char[]', 1500)
         self.data_queue = asyncio.Queue()
         self.data = Channel(
             closed=self.closed,
@@ -120,7 +119,9 @@ class DtlsSrtpSession:
         self.ssl = ffi.gc(ssl, lib.SSL_free)
 
         self.read_bio = lib.BIO_new(lib.BIO_s_mem())
+        self.read_cdata = ffi.new('char[]', 1500)
         self.write_bio = lib.BIO_new(lib.BIO_s_mem())
+        self.write_cdata = ffi.new('char[]', 1500)
         lib.SSL_set_bio(self.ssl, self.read_bio, self.write_bio)
 
         if self.is_server:
@@ -212,9 +213,9 @@ class DtlsSrtpSession:
         if first_byte > 19 and first_byte < 64:
             # DTLS
             lib.BIO_write(self.read_bio, data, len(data))
-            result = lib.SSL_read(self.ssl, self.data_cdata, len(self.data_cdata))
+            result = lib.SSL_read(self.ssl, self.read_cdata, len(self.read_cdata))
             if result > 0:
-                await self.data_queue.put(ffi.buffer(self.data_cdata)[0:result])
+                await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
         elif first_byte > 127 and first_byte < 192:
             # SRTP / SRTCP
             if is_rtcp(data):
@@ -245,10 +246,8 @@ class DtlsSrtpSession:
         """
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
-            buf = ffi.new('char[]', pending)
-            lib.BIO_read(self.write_bio, buf, len(buf))
-            data = b''.join(buf)
-            await self.transport.send(data)
+            result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
+            await self.transport.send(ffi.buffer(self.write_cdata)[0:result])
 
     class State(enum.Enum):
         CLOSED = 0
