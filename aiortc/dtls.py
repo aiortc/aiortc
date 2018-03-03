@@ -135,7 +135,7 @@ class DtlsSrtpSession:
     async def close(self):
         lib.SSL_shutdown(self.ssl)
         await self._write_ssl()
-        logger.info('%s DTLS shutdown complete', self.role)
+        logger.debug('%s - DTLS shutdown complete', self.role)
 
     async def connect(self):
         assert self.state == self.State.CLOSED
@@ -183,7 +183,7 @@ class DtlsSrtpSession:
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
-        logger.info('%s DTLS handshake complete', self.role)
+        logger.debug('%s - DTLS handshake complete', self.role)
         self._set_state(self.State.CONNECTED)
         asyncio.ensure_future(self.__run())
 
@@ -236,7 +236,7 @@ class DtlsSrtpSession:
 
     def _set_state(self, state):
         if state != self.state:
-            logger.debug('%s state %s -> %s', self.role, self.state, state)
+            logger.debug('%s - %s -> %s', self.role, self.state, state)
             self.state = state
 
     async def _write_ssl(self):
