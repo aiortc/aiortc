@@ -62,10 +62,14 @@ but this will no longer be the case once ``cryptography`` 2.2 is released.
 
 On Debian/Ubuntu run:
 
+.. code:: bash
+
     apt install libopus-dev libsrtp2-dev libssl-dev libvpx-dev
     pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 
 On OS X run:
+
+.. code:: bash
 
     brew install opus srtp openssl@1.1 libvpx
     export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
