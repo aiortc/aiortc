@@ -137,21 +137,18 @@ class DtlsSrtpSession:
     async def connect(self):
         while not self.encrypted:
             result = lib.SSL_do_handshake(self.ssl)
+            await self._write_ssl()
+
             if result > 0:
                 self.encrypted = True
                 break
 
             error = lib.SSL_get_error(self.ssl, result)
-
-            await self._write_ssl()
-
             if error == lib.SSL_ERROR_WANT_READ:
                 data = await self.transport.recv()
                 lib.BIO_write(self.read_bio, data, len(data))
             else:
                 raise Exception('DTLS handshake failed (error %d)' % error)
-
-        await self._write_ssl()
 
         # check remote fingerprint
         x509 = lib.SSL_get_peer_certificate(self.ssl)
@@ -226,6 +223,9 @@ class DtlsSrtpSession:
         await self.transport.send(data)
 
     async def _write_ssl(self):
+        """
+        Flush outgoing data which OpenSSL put in our BIO to the transport.
+        """
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
             buf = ffi.new('char[]', pending)
