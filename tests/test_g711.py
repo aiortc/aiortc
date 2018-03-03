@@ -1,6 +1,7 @@
 from unittest import TestCase
 
-from aiortc.codecs.g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
+                                PcmuEncoder)
 from aiortc.mediastreams import AudioFrame
 
 
