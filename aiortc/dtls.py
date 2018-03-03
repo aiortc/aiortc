@@ -145,8 +145,7 @@ class DtlsSrtpSession:
 
             error = lib.SSL_get_error(self.ssl, result)
             if error == lib.SSL_ERROR_WANT_READ:
-                data = await self.transport.recv()
-                lib.BIO_write(self.read_bio, data, len(data))
+                await self._recv_next()
             else:
                 raise Exception('DTLS handshake failed (error %d)' % error)
 
@@ -182,34 +181,39 @@ class DtlsSrtpSession:
         asyncio.ensure_future(self.__run())
 
     async def __run(self):
-        while True:
-            try:
-                data = await first_completed(self.transport.recv(), self.closed.wait())
-            except Exception:
-                # underlying transport was closed
-                break
+        try:
+            while True:
+                await self._recv_next()
+        except ConnectionError:
+            pass
+        finally:
+            self.closed.set()
 
-            if data is True:
-                # session was closed
-                break
+    async def _recv_next(self):
+        try:
+            data = await first_completed(self.transport.recv(), self.closed.wait())
+        except Exception:
+            # underlying transport was closed
+            raise ConnectionError
 
-            first_byte = data[0]
-            if first_byte > 19 and first_byte < 64:
-                # DTLS
-                lib.BIO_write(self.read_bio, data, len(data))
-                result = lib.SSL_read(self.ssl, self.data_cdata, len(self.data_cdata))
-                if result > 0:
-                    await self.data_queue.put(ffi.buffer(self.data_cdata)[0:result])
-            elif first_byte > 127 and first_byte < 192:
-                # SRTP / SRTCP
-                if is_rtcp(data):
-                    data = self._rx_srtp.unprotect_rtcp(data)
-                else:
-                    data = self._rx_srtp.unprotect(data)
-                await self.rtp_queue.put(data)
+        if data is True:
+            # session was closed
+            raise ConnectionError
 
-        # mark session as closed
-        self.closed.set()
+        first_byte = data[0]
+        if first_byte > 19 and first_byte < 64:
+            # DTLS
+            lib.BIO_write(self.read_bio, data, len(data))
+            result = lib.SSL_read(self.ssl, self.data_cdata, len(self.data_cdata))
+            if result > 0:
+                await self.data_queue.put(ffi.buffer(self.data_cdata)[0:result])
+        elif first_byte > 127 and first_byte < 192:
+            # SRTP / SRTCP
+            if is_rtcp(data):
+                data = self._rx_srtp.unprotect_rtcp(data)
+            else:
+                data = self._rx_srtp.unprotect(data)
+            await self.rtp_queue.put(data)
 
     async def _send_data(self, data):
         lib.SSL_write(self.ssl, data, len(data))
