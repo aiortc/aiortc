@@ -134,9 +134,11 @@ class DtlsSrtpSession:
         self.local_fingerprint = certificate_digest(x509)
 
     async def close(self):
-        lib.SSL_shutdown(self.ssl)
-        await self._write_ssl()
-        logger.debug('%s - DTLS shutdown complete', self.role)
+        if self.state != self.State.CLOSED:
+            lib.SSL_shutdown(self.ssl)
+            await self._write_ssl()
+            logger.debug('%s - DTLS shutdown complete', self.role)
+            self.closed.set()
 
     async def connect(self):
         assert self.state == self.State.CLOSED
@@ -214,7 +216,10 @@ class DtlsSrtpSession:
             # DTLS
             lib.BIO_write(self.read_bio, data, len(data))
             result = lib.SSL_read(self.ssl, self.read_cdata, len(self.read_cdata))
-            if result > 0:
+            if result == 0:
+                logger.debug('%s - DTLS shutdown by remote party' % self.role)
+                raise ConnectionError
+            elif result > 0:
                 await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
         elif first_byte > 127 and first_byte < 192:
             # SRTP / SRTCP
