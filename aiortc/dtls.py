@@ -100,6 +100,7 @@ class DtlsSrtpSession:
         self.remote_fingerprint = None
         self.transport = transport
 
+        self.data_cdata = ffi.new('char[]', 1500)
         self.data_queue = asyncio.Queue()
         self.data = Channel(
             closed=self.closed,
@@ -186,16 +187,22 @@ class DtlsSrtpSession:
     async def __run(self):
         while True:
             try:
-                data = await self.transport.recv()
+                data = await first_completed(self.transport.recv(), self.closed.wait())
             except Exception:
+                # underlying transport was closed
                 break
+
+            if data is True:
+                # session was closed
+                break
+
             first_byte = data[0]
             if first_byte > 19 and first_byte < 64:
                 # DTLS
                 lib.BIO_write(self.read_bio, data, len(data))
-                buf = ffi.new('char[]', 1500)
-                result = lib.SSL_read(self.ssl, buf, len(buf))
-                await self.data_queue.put(ffi.buffer(buf)[0:result])
+                result = lib.SSL_read(self.ssl, self.data_cdata, len(self.data_cdata))
+                if result > 0:
+                    await self.data_queue.put(ffi.buffer(self.data_cdata)[0:result])
             elif first_byte > 127 and first_byte < 192:
                 # SRTP / SRTCP
                 if is_rtcp(data):
@@ -203,6 +210,8 @@ class DtlsSrtpSession:
                 else:
                     data = self._rx_srtp.unprotect(data)
                 await self.rtp_queue.put(data)
+
+        # mark session as closed
         self.closed.set()
 
     async def _send_data(self, data):
