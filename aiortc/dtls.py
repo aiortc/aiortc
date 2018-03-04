@@ -26,9 +26,13 @@ KEY_PATH = os.path.join(os.path.dirname(__file__), 'dtls.key')
 logger = logging.getLogger('dtls')
 
 
+class DtlsError(Exception):
+    pass
+
+
 def _openssl_assert(ok):
     if not ok:
-        raise Exception('OpenSSL call failed')
+        raise DtlsError('OpenSSL call failed')
 
 
 def certificate_digest(x509):
@@ -159,21 +163,19 @@ class DtlsSrtpSession:
             if error == lib.SSL_ERROR_WANT_READ:
                 await self._recv_next()
             else:
-                raise Exception('DTLS handshake failed (error %d)' % error)
+                raise DtlsError('DTLS handshake failed (error %d)' % error)
 
         # check remote fingerprint
         x509 = lib.SSL_get_peer_certificate(self.ssl)
         remote_fingerprint = certificate_digest(x509)
         if remote_fingerprint != self.remote_fingerprint.upper():
-            raise Exception('DTLS fingerprint does not match')
+            raise DtlsError('DTLS fingerprint does not match')
 
         # generate keying material
         buf = ffi.new('unsigned char[]', 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
         extractor = b'EXTRACTOR-dtls_srtp'
-        if not lib.SSL_export_keying_material(self.ssl, buf, len(buf),
-                                              extractor, len(extractor),
-                                              ffi.NULL, 0, 0):
-            raise Exception('DTLS could not extract SRTP keying material')
+        _openssl_assert(lib.SSL_export_keying_material(
+            self.ssl, buf, len(buf), extractor, len(extractor), ffi.NULL, 0, 0) == 1)
 
         view = ffi.buffer(buf)
         if self.is_server:

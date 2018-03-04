@@ -1,14 +1,21 @@
 import asyncio
 import logging
 from unittest import TestCase
+from unittest.mock import patch
 
-from aiortc.dtls import DtlsSrtpContext, DtlsSrtpSession
+from aiortc.dtls import DtlsError, DtlsSrtpContext, DtlsSrtpSession
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, run
 
 
 class DtlsSrtpTest(TestCase):
+    @patch('aiortc.dtls.lib.SSL_CTX_use_certificate_file')
+    def test_broken_ssl(self, mock_use_certificate_file):
+        mock_use_certificate_file.return_value = 0
+        with self.assertRaises(DtlsError):
+            DtlsSrtpContext()
+
     def test_connect(self):
         transport1, transport2 = dummy_transport_pair()
 
