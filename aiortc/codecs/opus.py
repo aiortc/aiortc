@@ -15,7 +15,7 @@ class OpusDecoder:
         self.decoder = lib.opus_decoder_create(SAMPLE_RATE, CHANNELS, error)
         assert error[0] == lib.OPUS_OK
 
-        self.cdata = ffi.new('char []', FRAME_SIZE * CHANNELS * SAMPLE_WIDTH)
+        self.cdata = ffi.new('unsigned char []', FRAME_SIZE * CHANNELS * SAMPLE_WIDTH)
         self.buffer = ffi.buffer(self.cdata)
 
     def __del__(self):
@@ -41,7 +41,7 @@ class OpusEncoder:
             SAMPLE_RATE, CHANNELS, lib.OPUS_APPLICATION_VOIP, error)
         assert error[0] == lib.OPUS_OK
 
-        self.cdata = ffi.new('char []', FRAME_SIZE * CHANNELS * SAMPLE_WIDTH)
+        self.cdata = ffi.new('unsigned char []', FRAME_SIZE * CHANNELS * SAMPLE_WIDTH)
         self.buffer = ffi.buffer(self.cdata)
         self.rate_state = None
 
