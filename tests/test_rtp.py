@@ -12,6 +12,10 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.packet_type, 200)
         self.assertEqual(packet.ssrc, 1831097322)
+        self.assertEqual(packet.sender_info.ntp_timestamp, 16016567581311369308)
+        self.assertEqual(packet.sender_info.rtp_timestamp, 1722342718)
+        self.assertEqual(packet.sender_info.packet_count, 269)
+        self.assertEqual(packet.sender_info.octet_count, 13557)
 
     def test_receiver_report(self):
         data = load('rtcp_rr.bin')

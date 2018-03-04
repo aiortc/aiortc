@@ -33,6 +33,23 @@ class Codec:
         return s
 
 
+class SenderInfo:
+    def __init__(self, ntp_timestamp, rtp_timestamp, packet_count, octet_count):
+        self.ntp_timestamp = ntp_timestamp
+        self.rtp_timestamp = rtp_timestamp
+        self.packet_count = packet_count
+        self.octet_count = octet_count
+
+    @classmethod
+    def parse(cls, data):
+        ntp_timestamp, rtp_timestamp, packet_count, octet_count = unpack('!QLLL', data)
+        return cls(
+            ntp_timestamp=ntp_timestamp,
+            rtp_timestamp=rtp_timestamp,
+            packet_count=packet_count,
+            octet_count=octet_count)
+
+
 class RtcpPacket:
     def __init__(self, packet_type, ssrc):
         self.version = 2
@@ -46,10 +63,18 @@ class RtcpPacket:
 
         v_p_rc, packet_type, length, ssrc = unpack('!BBHL', data[0:8])
         version = (v_p_rc >> 6)
+        # padding = ((v_p_rc >> 5) & 1)
+        # rc = (v_p_rc & 0x0f)
         if version != 2:
             raise ValueError('RTCP packet has invalid version')
+        pos = 8
 
-        return cls(packet_type=packet_type, ssrc=ssrc)
+        p = cls(packet_type=packet_type, ssrc=ssrc)
+        if packet_type == RTCP_SR:
+            p.sender_info = SenderInfo.parse(data[pos:pos + 20])
+            pos += 20
+
+        return p
 
 
 class RtpPacket:
