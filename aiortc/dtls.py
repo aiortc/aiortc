@@ -201,11 +201,7 @@ class DtlsSrtpSession:
             self.closed.set()
 
     async def _recv_next(self):
-        try:
-            data = await first_completed(self.transport.recv(), self.closed.wait())
-        except Exception:
-            # underlying transport was closed
-            raise ConnectionError
+        data = await first_completed(self.transport.recv(), self.closed.wait())
 
         if data is True:
             # session was closed
