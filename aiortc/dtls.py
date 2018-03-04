@@ -26,6 +26,11 @@ KEY_PATH = os.path.join(os.path.dirname(__file__), 'dtls.key')
 logger = logging.getLogger('dtls')
 
 
+def _openssl_assert(ok):
+    if not ok:
+        raise Exception('OpenSSL call failed')
+
+
 def certificate_digest(x509):
     digest = lib.EVP_get_digestbyname(b'SHA256')
     if digest == ffi.NULL:
@@ -64,20 +69,18 @@ class DtlsSrtpContext:
 
         lib.SSL_CTX_set_verify(self.ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
                                verify_callback)
-        if not lib.SSL_CTX_use_certificate_file(self.ctx,
-                                                CERT_PATH.encode(sys.getfilesystemencoding()),
-                                                lib.SSL_FILETYPE_PEM):
-            print("SSL could not use certificate")
-        if not lib.SSL_CTX_use_PrivateKey_file(self.ctx,
-                                               KEY_PATH.encode(sys.getfilesystemencoding()),
-                                               lib.SSL_FILETYPE_PEM):
-            print("SSL could not use private key")
-        if not lib.SSL_CTX_set_cipher_list(self.ctx, b'HIGH:!CAMELLIA:!aNULL'):
-            print("SSL could not set cipher list")
-        if lib.SSL_CTX_set_tlsext_use_srtp(self.ctx, b'SRTP_AES128_CM_SHA1_80'):
-            print("SSL could not enable SRTP extension")
-        if lib.SSL_CTX_set_read_ahead(self.ctx, 1):
-            print("SSL could not enable read ahead")
+
+        _openssl_assert(lib.SSL_CTX_use_certificate_file(
+            self.ctx,
+            CERT_PATH.encode(sys.getfilesystemencoding()),
+            lib.SSL_FILETYPE_PEM) == 1)
+        _openssl_assert(lib.SSL_CTX_use_PrivateKey_file(
+            self.ctx,
+            KEY_PATH.encode(sys.getfilesystemencoding()),
+            lib.SSL_FILETYPE_PEM) == 1)
+        _openssl_assert(lib.SSL_CTX_set_cipher_list(self.ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
+        _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(self.ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
+        _openssl_assert(lib.SSL_CTX_set_read_ahead(self.ctx, 1) == 0)
 
 
 class Channel:
@@ -202,7 +205,6 @@ class DtlsSrtpSession:
 
     async def _recv_next(self):
         data = await first_completed(self.transport.recv(), self.closed.wait())
-
         if data is True:
             # session was closed
             raise ConnectionError
