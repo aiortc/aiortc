@@ -6,12 +6,19 @@ from .utils import load
 
 
 class RtcpPacketTest(TestCase):
+    def test_sender_report(self):
+        data = load('rtcp_sr.bin')
+        packet = RtcpPacket.parse(data)
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.packet_type, 200)
+        self.assertEqual(packet.ssrc, 1831097322)
+
     def test_receiver_report(self):
         data = load('rtcp_rr.bin')
         packet = RtcpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.packet_type, 201)
-        self.assertEqual(packet.ssrc, 626611925)
+        self.assertEqual(packet.ssrc, 817267719)
 
     def test_truncated(self):
         data = load('rtcp_rr.bin')[0:7]
