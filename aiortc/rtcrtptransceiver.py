@@ -40,7 +40,10 @@ class RTCRtpSender:
                 packet.ssrc = self._ssrc
                 packet.payload = encoder.encode(frame)
                 packet.marker = 1
-                await transport.send(bytes(packet))
+                try:
+                    await transport.send(bytes(packet))
+                except ConnectionError:
+                    break
                 packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
             else:
