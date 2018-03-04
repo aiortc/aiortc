@@ -37,8 +37,7 @@ def _openssl_assert(ok):
 
 def certificate_digest(x509):
     digest = lib.EVP_get_digestbyname(b'SHA256')
-    if digest == ffi.NULL:
-        raise ValueError("No such digest method")
+    _openssl_assert(digest != ffi.NULL)
 
     result_buffer = ffi.new('unsigned char[]', lib.EVP_MAX_MD_SIZE)
     result_length = ffi.new('unsigned int[]', 1)
