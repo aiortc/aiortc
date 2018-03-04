@@ -33,12 +33,19 @@ class Codec:
         return s
 
 
-class SenderInfo:
+class RtcpSenderInfo:
     def __init__(self, ntp_timestamp, rtp_timestamp, packet_count, octet_count):
         self.ntp_timestamp = ntp_timestamp
         self.rtp_timestamp = rtp_timestamp
         self.packet_count = packet_count
         self.octet_count = octet_count
+
+    def __bytes__(self):
+        return pack('!QLLL',
+                    self.ntp_timestamp,
+                    self.rtp_timestamp,
+                    self.packet_count,
+                    self.octet_count)
 
     @classmethod
     def parse(cls, data):
@@ -55,26 +62,71 @@ class RtcpPacket:
         self.version = 2
         self.packet_type = packet_type
         self.ssrc = ssrc
+        self.reports = []
+        self.extension = b''
+
+    def __bytes__(self):
+        data = pack('!BBHL',
+                    (self.version << 6) | len(self.reports),
+                    self.packet_type,
+                    self._length,
+                    self.ssrc)
+
+        if self.packet_type == RTCP_SR:
+            data += bytes(self.sender_info)
+
+        for report in self.reports:
+            data += report
+
+        data += self.extension
+
+        return data
 
     @classmethod
     def parse(cls, data):
-        if len(data) < 8:
-            raise ValueError('RTCP packet length is less than 8 bytes')
+        pos = 0
+        packets = []
 
-        v_p_rc, packet_type, length, ssrc = unpack('!BBHL', data[0:8])
-        version = (v_p_rc >> 6)
-        # padding = ((v_p_rc >> 5) & 1)
-        # rc = (v_p_rc & 0x0f)
-        if version != 2:
-            raise ValueError('RTCP packet has invalid version')
-        pos = 8
+        while pos < len(data):
+            start = pos
 
-        p = cls(packet_type=packet_type, ssrc=ssrc)
-        if packet_type == RTCP_SR:
-            p.sender_info = SenderInfo.parse(data[pos:pos + 20])
-            pos += 20
+            if len(data) < 8:
+                raise ValueError('RTCP packet length is less than 8 bytes')
 
-        return p
+            v_p_count, packet_type, length, ssrc = unpack('!BBHL', data[pos:pos + 8])
+            version = (v_p_count >> 6)
+            # padding = ((v_p_rc >> 5) & 1)
+            count = (v_p_count & 0x1f)
+            if version != 2:
+                raise ValueError('RTCP packet has invalid version')
+            pos += 8
+
+            p = cls(packet_type=packet_type, ssrc=ssrc)
+            p._length = length
+            if packet_type == RTCP_SR:
+                p.sender_info = RtcpSenderInfo.parse(data[pos:pos + 20])
+                pos += 20
+
+            if packet_type in [RTCP_SR, RTCP_RR]:
+                for r in range(count):
+                    p.reports.append(data[pos:pos + 24])
+                    pos += 24
+            elif packet_type == RTCP_SDES:
+                for r in range(count):
+                    r_start = pos
+                    while True:
+                        d_type, d_length = unpack('!BB', data[pos:pos + 2])
+                        pos += 2 + d_length
+                        if d_type == 0:
+                            break
+                    p.reports.append(data[r_start:pos])
+
+            end = start + (length + 1) * 4
+            p.extension = data[pos:end]
+            packets.append(p)
+            pos = end
+
+        return packets
 
 
 class RtpPacket:

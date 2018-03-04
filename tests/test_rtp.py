@@ -1,28 +1,65 @@
 from unittest import TestCase
 
-from aiortc.rtp import RtcpPacket, RtpPacket
+from aiortc.rtp import RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket, RtpPacket
 
 from .utils import load
 
 
 class RtcpPacketTest(TestCase):
-    def test_sender_report(self):
-        data = load('rtcp_sr.bin')
-        packet = RtcpPacket.parse(data)
+    def test_bye(self):
+        data = load('rtcp_bye.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
         self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, 200)
+        self.assertEqual(packet.packet_type, RTCP_BYE)
+        self.assertEqual(packet.ssrc, 2924645187)
+
+    def test_rr(self):
+        data = load('rtcp_rr.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.packet_type, RTCP_RR)
+        self.assertEqual(packet.ssrc, 817267719)
+        self.assertEqual(bytes(packet), data)
+
+    def test_sdes(self):
+        data = load('rtcp_sdes.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.packet_type, RTCP_SDES)
+        self.assertEqual(packet.ssrc, 1831097322)
+        self.assertEqual(bytes(packet), data)
+
+    def test_sr(self):
+        data = load('rtcp_sr.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.packet_type, RTCP_SR)
         self.assertEqual(packet.ssrc, 1831097322)
         self.assertEqual(packet.sender_info.ntp_timestamp, 16016567581311369308)
         self.assertEqual(packet.sender_info.rtp_timestamp, 1722342718)
         self.assertEqual(packet.sender_info.packet_count, 269)
         self.assertEqual(packet.sender_info.octet_count, 13557)
+        self.assertEqual(bytes(packet), data[0:52])
 
-    def test_receiver_report(self):
-        data = load('rtcp_rr.bin')
-        packet = RtcpPacket.parse(data)
-        self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, 201)
-        self.assertEqual(packet.ssrc, 817267719)
+    def test_compound(self):
+        data = load('rtcp_sr.bin') + load('rtcp_sdes.bin')
+
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 2)
+        self.assertEqual(packets[0].packet_type, RTCP_SR)
+        self.assertEqual(packets[1].packet_type, RTCP_SDES)
 
     def test_truncated(self):
         data = load('rtcp_rr.bin')[0:7]
