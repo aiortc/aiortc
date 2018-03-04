@@ -109,7 +109,7 @@ class SctpAssociationTest(TestCase):
 
         # shutdown
         run(client.abort())
-        run(asyncio.sleep(0))
+        run(asyncio.sleep(0.5))
         self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
         self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
