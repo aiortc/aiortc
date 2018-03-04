@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import uuid
 
 import aioice
 from pyee import EventEmitter
@@ -77,6 +78,7 @@ class RTCPeerConnection(EventEmitter):
     """
     def __init__(self, loop=None):
         super().__init__(loop=loop)
+        self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
         self.__dtlsContext = dtls.DtlsSrtpContext()
         self.__sctp = None
@@ -376,6 +378,7 @@ class RTCPeerConnection(EventEmitter):
             ]
             sdp += transport_sdp(iceConnection, transceiver._dtlsSession)
             sdp += ['a=%s' % transceiver.direction]
+            sdp += ['a=ssrc:%d cname:%s' % (transceiver.sender._ssrc, self.__cname)]
 
             for codec in transceiver._codecs:
                 sdp += ['a=rtpmap:%d %s' % (codec.pt, str(codec))]

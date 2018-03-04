@@ -25,6 +25,7 @@ class RTCRtpReceiver:
 
 class RTCRtpSender:
     def __init__(self, track=None):
+        self._ssrc = random32()
         self._track = track
 
     @property
@@ -33,10 +34,10 @@ class RTCRtpSender:
 
     async def _run(self, transport, encoder, payload_type):
         packet = RtpPacket(payload_type=payload_type)
-        packet.ssrc = random32()
         while True:
             if self._track:
                 frame = await self._track.recv()
+                packet.ssrc = self._ssrc
                 packet.payload = encoder.encode(frame)
                 packet.marker = 1
                 await transport.send(bytes(packet))
