@@ -1,8 +1,29 @@
 from unittest import TestCase
 
-from aiortc.rtp import RtpPacket
+from aiortc.rtp import RtcpPacket, RtpPacket
 
 from .utils import load
+
+
+class RtcpPacketTest(TestCase):
+    def test_receiver_report(self):
+        data = load('rtcp_rr.bin')
+        packet = RtcpPacket.parse(data)
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.packet_type, 201)
+        self.assertEqual(packet.ssrc, 626611925)
+
+    def test_truncated(self):
+        data = load('rtcp_rr.bin')[0:7]
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP packet length is less than 8 bytes')
+
+    def test_bad_version(self):
+        data = b'\xc0' + load('rtcp_rr.bin')[1:]
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP packet has invalid version')
 
 
 class RtpPacketTest(TestCase):
@@ -20,7 +41,7 @@ class RtpPacketTest(TestCase):
         self.assertEqual(bytes(packet), data)
 
         self.assertEqual(repr(packet),
-                         'Packet(seq=15743, ts=3937035252, marker=0, payload=0, 160 bytes)')
+                         'RtpPacket(seq=15743, ts=3937035252, marker=0, payload=0, 160 bytes)')
 
     def test_padding_only(self):
         data = load('rtp_only_padding.bin')

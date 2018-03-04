@@ -4,6 +4,11 @@ from struct import pack, unpack
 FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
+RTCP_SR = 200
+RTCP_RR = 201
+RTCP_SDES = 202
+RTCP_BYE = 203
+
 
 def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
@@ -26,6 +31,25 @@ class Codec:
         if self.channels == 2:
             s += '/2'
         return s
+
+
+class RtcpPacket:
+    def __init__(self, packet_type, ssrc):
+        self.version = 2
+        self.packet_type = packet_type
+        self.ssrc = ssrc
+
+    @classmethod
+    def parse(cls, data):
+        if len(data) < 8:
+            raise ValueError('RTCP packet length is less than 8 bytes')
+
+        v_p_rc, packet_type, length, ssrc = unpack('!BBHL', data[0:8])
+        version = (v_p_rc >> 6)
+        if version != 2:
+            raise ValueError('RTCP packet has invalid version')
+
+        return cls(packet_type=packet_type, ssrc=ssrc)
 
 
 class RtpPacket:
@@ -53,7 +77,7 @@ class RtpPacket:
         return data + self.payload
 
     def __repr__(self):
-        return 'Packet(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)' % (
+        return 'RtpPacket(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)' % (
             self.sequence_number, self.timestamp, self.marker, self.payload_type, len(self.payload))
 
     @classmethod
