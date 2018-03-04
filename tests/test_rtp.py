@@ -1,14 +1,14 @@
 from unittest import TestCase
 
-from aiortc import rtp
+from aiortc.rtp import RtpPacket
 
 from .utils import load
 
 
-class RtpTest(TestCase):
+class RtpPacketTest(TestCase):
     def test_no_ssrc(self):
         data = load('rtp.bin')
-        packet = rtp.Packet.parse(data)
+        packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.extension, 0)
         self.assertEqual(packet.marker, 0)
@@ -24,7 +24,7 @@ class RtpTest(TestCase):
 
     def test_padding_only(self):
         data = load('rtp_only_padding.bin')
-        packet = rtp.Packet.parse(data)
+        packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.extension, 0)
         self.assertEqual(packet.marker, 0)
@@ -38,18 +38,18 @@ class RtpTest(TestCase):
     def test_padding_too_long(self):
         data = load('rtp_only_padding.bin')[0:12] + b'\x02'
         with self.assertRaises(ValueError) as cm:
-            rtp.Packet.parse(data)
+            RtpPacket.parse(data)
         self.assertEqual(str(cm.exception), 'RTP packet padding length is invalid')
 
     def test_padding_zero(self):
         data = load('rtp_only_padding.bin')[0:12] + b'\x00'
         with self.assertRaises(ValueError) as cm:
-            rtp.Packet.parse(data)
+            RtpPacket.parse(data)
         self.assertEqual(str(cm.exception), 'RTP packet padding length is invalid')
 
     def test_with_csrc(self):
         data = load('rtp_with_csrc.bin')
-        packet = rtp.Packet.parse(data)
+        packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.extension, 0)
         self.assertEqual(packet.marker, 0)
@@ -63,11 +63,11 @@ class RtpTest(TestCase):
     def test_truncated(self):
         data = load('rtp.bin')[0:11]
         with self.assertRaises(ValueError) as cm:
-            rtp.Packet.parse(data)
+            RtpPacket.parse(data)
         self.assertEqual(str(cm.exception), 'RTP packet length is less than 12 bytes')
 
     def test_bad_version(self):
         data = b'\xc0' + load('rtp.bin')[1:]
         with self.assertRaises(ValueError) as cm:
-            rtp.Packet.parse(data)
+            RtpPacket.parse(data)
         self.assertEqual(str(cm.exception), 'RTP packet has invalid version')

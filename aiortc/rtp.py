@@ -28,7 +28,7 @@ class Codec:
         return s
 
 
-class Packet:
+class RtpPacket:
     def __init__(self, payload_type, extension=0, marker=0, sequence_number=0, timestamp=0, ssrc=0):
         self.version = 2
         self.extension = extension
