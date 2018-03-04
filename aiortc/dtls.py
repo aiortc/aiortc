@@ -229,10 +229,16 @@ class DtlsSrtpSession:
             await self.rtp_queue.put(data)
 
     async def _send_data(self, data):
+        if self.state != self.State.CONNECTED:
+            raise ConnectionError('Cannot send encrypted data, not connected')
+
         lib.SSL_write(self.ssl, data, len(data))
         await self._write_ssl()
 
     async def _send_rtp(self, data):
+        if self.state != self.State.CONNECTED:
+            raise ConnectionError('Cannot send encrypted RTP, not connected')
+
         if is_rtcp(data):
             data = self._tx_srtp.protect_rtcp(data)
         else:
