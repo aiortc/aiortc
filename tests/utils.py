@@ -29,6 +29,8 @@ class DummyTransport:
         return data
 
     async def send(self, data):
+        if self.closed.is_set():
+            raise ConnectionError
         await self.tx_queue.put(data)
 
 
