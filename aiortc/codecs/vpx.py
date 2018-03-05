@@ -8,11 +8,12 @@ class VpxPayloadDescriptor:
     props = ['partition_start', 'partition_id', 'picture_id']
 
     def __init__(self, partition_start, partition_id, picture_id=None,
-                 tl0picidx=None, keyidx=None):
+                 tl0picidx=None, tid=None, keyidx=None):
         self.partition_start = partition_start
         self.partition_id = partition_id
         self.picture_id = picture_id
         self.tl0picidx = tl0picidx
+        self.tid = tid
         self.keyidx = keyidx
 
     def __bytes__(self):
@@ -23,6 +24,8 @@ class VpxPayloadDescriptor:
             ext_octet |= 1 << 7
         if self.tl0picidx is not None:
             ext_octet |= 1 << 6
+        if self.tid is not None:
+            ext_octet |= 1 << 5
         if self.keyidx is not None:
             ext_octet |= 1 << 4
 
@@ -35,8 +38,13 @@ class VpxPayloadDescriptor:
                     data += pack('!H', (1 << 15) | self.picture_id)
             if self.tl0picidx is not None:
                 data += pack('!B', self.tl0picidx)
-            if self.keyidx is not None:
-                data += pack('!B', self.keyidx)
+            if self.tid is not None or self.keyidx is not None:
+                t_k = 0
+                if self.tid is not None:
+                    t_k |= (self.tid[0] << 6) | (self.tid[1] << 5)
+                if self.keyidx is not None:
+                    t_k |= self.keyidx
+                data += pack('!B', t_k)
         else:
             data = pack('!B', octet)
 
@@ -55,6 +63,7 @@ class VpxPayloadDescriptor:
         partition_id = octet & 0xf
         picture_id = None
         tl0picidx = None
+        tid = None
         keyidx = None
         pos = 1
 
@@ -82,12 +91,17 @@ class VpxPayloadDescriptor:
                 pos += 1
             if ext_T or ext_K:
                 t_k = unpack('!B', data[pos:pos+1])[0]
+                if ext_T:
+                    tid = (
+                        (t_k >> 6) & 3,
+                        (t_k >> 5) & 1
+                    )
                 if ext_K:
                     keyidx = t_k & 0x1f
                 pos += 1
 
         obj = cls(partition_start=partition_start, partition_id=partition_id, picture_id=picture_id,
-                  tl0picidx=tl0picidx, keyidx=keyidx)
+                  tl0picidx=tl0picidx, tid=tid, keyidx=keyidx)
         return obj, data[pos:]
 
 
