@@ -53,7 +53,7 @@ class RTCRtpSender:
                     try:
                         await transport.send(bytes(packet))
                     except ConnectionError:
-                        break
+                        return
                     packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
             else:
