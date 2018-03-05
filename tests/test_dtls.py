@@ -160,5 +160,30 @@ class DtlsSrtpTest(TestCase):
         run(session1.close())
         run(session2.close())
 
+    @patch('aiortc.dtls.lib.SSL_do_handshake')
+    @patch('aiortc.dtls.lib.SSL_get_error')
+    def test_handshake_error(self, mock_get_error, mock_do_handshake):
+        mock_get_error.return_value = 1
+        mock_do_handshake.return_value = -1
+
+        transport1, transport2 = dummy_transport_pair()
+
+        context1 = DtlsSrtpContext()
+        session1 = DtlsSrtpSession(
+            context=context1, transport=transport1, is_server=True)
+
+        context2 = DtlsSrtpContext()
+        session2 = DtlsSrtpSession(
+            context=context2, transport=transport2, is_server=False)
+
+        session1.remote_fingerprint = 'bogus_fingerprint'
+        session2.remote_fingerprint = session1.local_fingerprint
+        with self.assertRaises(DtlsError) as cm:
+            run(asyncio.gather(session1.connect(), session2.connect()))
+        self.assertEqual(str(cm.exception), 'DTLS handshake failed (error 1)')
+
+        run(session1.close())
+        run(session2.close())
+
 
 logging.basicConfig(level=logging.DEBUG)
