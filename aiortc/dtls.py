@@ -1,11 +1,18 @@
 import asyncio
 import base64
+import binascii
 import enum
 import logging
 import os
-import sys
+import struct
 
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.bindings.openssl.binding import Binding
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import (Encoding,
+                                                          NoEncryption,
+                                                          PrivateFormat)
+from OpenSSL import crypto
 from pylibsrtp import Policy, Session
 
 from .rtp import is_rtcp
@@ -18,9 +25,6 @@ lib = binding.lib
 
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
-
-CERT_PATH = os.path.join(os.path.dirname(__file__), 'dtls.crt')
-KEY_PATH = os.path.join(os.path.dirname(__file__), 'dtls.key')
 
 
 logger = logging.getLogger('dtls')
@@ -51,6 +55,28 @@ def certificate_digest(x509):
         in ffi.buffer(result_buffer, result_length[0])]).decode('ascii')
 
 
+def generate_key():
+    key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    key_pem = key.private_bytes(
+        encoding=Encoding.PEM,
+        format=PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=NoEncryption())
+    return crypto.load_privatekey(crypto.FILETYPE_PEM, key_pem)
+
+
+def generate_certificate(key):
+    cert = crypto.X509()
+    cert.get_subject().CN = binascii.hexlify(os.urandom(16)).decode('ascii')
+    cert.gmtime_adj_notBefore(-86400)
+    cert.gmtime_adj_notAfter(30 * 86400)
+    cert.set_version(2)
+    cert.set_serial_number(struct.unpack('!L', os.urandom(4))[0])
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(key)
+    cert.sign(key, 'sha256')
+    return cert
+
+
 def get_srtp_key_salt(src, idx):
     key_start = idx * SRTP_KEY_LEN
     salt_start = 2 * SRTP_KEY_LEN + idx * SRTP_SALT_LEN
@@ -73,14 +99,12 @@ class DtlsSrtpContext:
         lib.SSL_CTX_set_verify(self.ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
                                verify_callback)
 
-        _openssl_assert(lib.SSL_CTX_use_certificate_file(
-            self.ctx,
-            CERT_PATH.encode(sys.getfilesystemencoding()),
-            lib.SSL_FILETYPE_PEM) == 1)
-        _openssl_assert(lib.SSL_CTX_use_PrivateKey_file(
-            self.ctx,
-            KEY_PATH.encode(sys.getfilesystemencoding()),
-            lib.SSL_FILETYPE_PEM) == 1)
+        # generate key and certificate
+        key = generate_key()
+        cert = generate_certificate(key)
+
+        _openssl_assert(lib.SSL_CTX_use_certificate(self.ctx, cert._x509) == 1)
+        _openssl_assert(lib.SSL_CTX_use_PrivateKey(self.ctx, key._pkey) == 1)
         _openssl_assert(lib.SSL_CTX_set_cipher_list(self.ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
         _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(self.ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
         _openssl_assert(lib.SSL_CTX_set_read_ahead(self.ctx, 1) == 0)

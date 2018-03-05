@@ -13,9 +13,9 @@ RTCP = load('rtcp_sr.bin')
 
 
 class DtlsSrtpTest(TestCase):
-    @patch('aiortc.dtls.lib.SSL_CTX_use_certificate_file')
-    def test_broken_ssl(self, mock_use_certificate_file):
-        mock_use_certificate_file.return_value = 0
+    @patch('aiortc.dtls.lib.SSL_CTX_use_certificate')
+    def test_broken_ssl(self, mock_use_certificate):
+        mock_use_certificate.return_value = 0
         with self.assertRaises(DtlsError):
             DtlsSrtpContext()
 
