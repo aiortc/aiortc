@@ -1,20 +1,29 @@
 from unittest import TestCase
 
+from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
                                 PcmuEncoder)
 from aiortc.mediastreams import AudioFrame
+from aiortc.rtp import Codec
+
+PCMU_CODEC = Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0)
+PCMA_CODEC = Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8)
 
 
-class PcmaTestCase(TestCase):
+class PcmaTest(TestCase):
     def test_decoder(self):
-        decoder = PcmaDecoder()
+        decoder = get_decoder(PCMA_CODEC)
+        self.assertTrue(isinstance(decoder, PcmaDecoder))
+
         frame = decoder.decode(b'\xd5' * 160)
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x08\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)
 
     def test_encoder_mono_8hz(self):
-        encoder = PcmaEncoder()
+        encoder = get_encoder(PCMA_CODEC)
+        self.assertTrue(isinstance(encoder, PcmaEncoder))
+
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
@@ -23,7 +32,9 @@ class PcmaTestCase(TestCase):
         self.assertEqual(data, b'\xd5' * 160)
 
     def test_encoder_stereo_8khz(self):
-        encoder = PcmaEncoder()
+        encoder = get_encoder(PCMA_CODEC)
+        self.assertTrue(isinstance(encoder, PcmaEncoder))
+
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
@@ -32,7 +43,9 @@ class PcmaTestCase(TestCase):
         self.assertEqual(data, b'\xd5' * 160)
 
     def test_encoder_stereo_48khz(self):
-        encoder = PcmaEncoder()
+        encoder = get_encoder(PCMA_CODEC)
+        self.assertTrue(isinstance(encoder, PcmaEncoder))
+
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,
@@ -41,16 +54,20 @@ class PcmaTestCase(TestCase):
         self.assertEqual(data, b'\xd5' * 160)
 
 
-class PcmuTestCase(TestCase):
+class PcmuTest(TestCase):
     def test_decoder(self):
-        decoder = PcmuDecoder()
+        decoder = get_decoder(PCMU_CODEC)
+        self.assertTrue(isinstance(decoder, PcmuDecoder))
+
         frame = decoder.decode(b'\xff' * 160)
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x00\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)
 
     def test_encoder_mono_8hz(self):
-        encoder = PcmuEncoder()
+        encoder = get_encoder(PCMU_CODEC)
+        self.assertTrue(isinstance(encoder, PcmuEncoder))
+
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
@@ -59,7 +76,9 @@ class PcmuTestCase(TestCase):
         self.assertEqual(data, b'\xff' * 160)
 
     def test_encoder_stereo_8khz(self):
-        encoder = PcmuEncoder()
+        encoder = get_encoder(PCMU_CODEC)
+        self.assertTrue(isinstance(encoder, PcmuEncoder))
+
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
@@ -68,7 +87,9 @@ class PcmuTestCase(TestCase):
         self.assertEqual(data, b'\xff' * 160)
 
     def test_encoder_stereo_48khz(self):
-        encoder = PcmuEncoder()
+        encoder = get_encoder(PCMU_CODEC)
+        self.assertTrue(isinstance(encoder, PcmuEncoder))
+
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,

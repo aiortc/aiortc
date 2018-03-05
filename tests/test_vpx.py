@@ -1,6 +1,10 @@
 from unittest import TestCase
 
-from aiortc.codecs.vpx import VpxPayloadDescriptor
+from aiortc.codecs import get_decoder, get_encoder
+from aiortc.codecs.vpx import VpxDecoder, VpxEncoder, VpxPayloadDescriptor
+from aiortc.rtp import Codec
+
+VP8_CODEC = Codec(kind='video', name='VP8', clockrate=90000)
 
 
 class VpxPayloadDescriptorTest(TestCase):
@@ -50,3 +54,13 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(bytes(descr), b'\x90\x80\x81\x80')
 
         self.assertEqual(rest, b'')
+
+
+class Vp8Test(TestCase):
+    def test_decoder(self):
+        decoder = get_decoder(VP8_CODEC)
+        self.assertTrue(isinstance(decoder, VpxDecoder))
+
+    def test_encoder(self):
+        encoder = get_encoder(VP8_CODEC)
+        self.assertTrue(isinstance(encoder, VpxEncoder))
