@@ -1,8 +1,11 @@
 import asyncio
+import logging
 
 from .codecs import get_decoder, get_encoder
-from .rtp import RtpPacket, is_rtcp
+from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed, random32
+
+logger = logging.getLogger('rtp')
 
 
 class RTCRtpReceiver:
@@ -15,12 +18,15 @@ class RTCRtpReceiver:
 
             # skip RTCP for now
             if is_rtcp(data):
-                continue
+                for packet in RtcpPacket.parse(data):
+                    logger.debug('receiver < %s' % packet)
 
             # for now, discard decoded data
             packet = RtpPacket.parse(data)
             if packet.payload_type == payload_type:
                 decoder.decode(packet.payload)
+
+        logger.debug('receiver - finished')
 
 
 class RTCRtpSender:

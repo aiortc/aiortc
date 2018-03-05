@@ -17,6 +17,8 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.packet_type, RTCP_BYE)
         self.assertEqual(packet.ssrc, 2924645187)
 
+        self.assertEqual(repr(packet), 'RtcpPacket(pt=203)')
+
     def test_rr(self):
         data = load('rtcp_rr.bin')
         packets = RtcpPacket.parse(data)

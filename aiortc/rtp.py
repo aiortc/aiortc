@@ -82,6 +82,9 @@ class RtcpPacket:
 
         return data
 
+    def __repr__(self):
+        return 'RtcpPacket(pt=%d)' % self.packet_type
+
     @classmethod
     def parse(cls, data):
         pos = 0
