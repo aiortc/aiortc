@@ -1,7 +1,7 @@
 import asyncio
 
 from .codecs import get_decoder, get_encoder
-from .rtp import is_rtcp, RtpPacket
+from .rtp import RtpPacket, is_rtcp
 from .utils import first_completed, random32
 
 

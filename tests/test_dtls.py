@@ -8,7 +8,6 @@ from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
 
-
 RTP = load('rtp.bin')
 RTCP = load('rtcp_sr.bin')
 

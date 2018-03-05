@@ -1,6 +1,7 @@
 from unittest import TestCase
 
-from aiortc.rtp import RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket, RtpPacket
+from aiortc.rtp import (RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket,
+                        RtpPacket)
 
 from .utils import load
 
