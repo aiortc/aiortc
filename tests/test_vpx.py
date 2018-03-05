@@ -1,7 +1,8 @@
 from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.vpx import VpxDecoder, VpxEncoder, VpxPayloadDescriptor
+from aiortc.codecs.vpx import (VpxDecoder, VpxEncoder, VpxPayloadDescriptor,
+                               _vpx_assert)
 from aiortc.rtp import Codec
 
 VP8_CODEC = Codec(kind='video', name='VP8', clockrate=90000)
@@ -114,6 +115,11 @@ class VpxPayloadDescriptorTest(TestCase):
 
 
 class Vp8Test(TestCase):
+    def test_assert(self):
+        with self.assertRaises(Exception) as cm:
+            _vpx_assert(1)
+        self.assertEqual(str(cm.exception), 'libvpx error: Unspecified internal error')
+
     def test_decoder(self):
         decoder = get_decoder(VP8_CODEC)
         self.assertTrue(isinstance(decoder, VpxDecoder))

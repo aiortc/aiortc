@@ -108,7 +108,7 @@ class VpxPayloadDescriptor:
 def _vpx_assert(err):
     if err != lib.VPX_CODEC_OK:
         reason = ffi.string(lib.vpx_codec_err_to_string(err))
-        raise Exception('Failed: ' + reason.decode('utf8'))
+        raise Exception('libvpx error: ' + reason.decode('utf8'))
 
 
 class VpxDecoder:
