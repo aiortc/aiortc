@@ -230,7 +230,7 @@ class Packet:
     def __bytes__(self):
         checksum = 0
         data = pack(
-            '!HHII',
+            '!HHLL',
             self.source_port,
             self.destination_port,
             self.verification_tag,
@@ -240,7 +240,7 @@ class Packet:
 
         # calculate checksum
         checksum = swapl(crc32c(data))
-        return data[0:8] + pack('!I', checksum) + data[12:]
+        return data[0:8] + pack('!L', checksum) + data[12:]
 
     @classmethod
     def parse(cls, data):
@@ -248,7 +248,7 @@ class Packet:
             raise ValueError('SCTP packet length is less than 12 bytes')
 
         source_port, destination_port, verification_tag, checksum = unpack(
-            '!HHII', data[0:12])
+            '!HHLL', data[0:12])
 
         # verify checksum
         check_data = data[0:8] + b'\x00\x00\x00\x00' + data[12:]
