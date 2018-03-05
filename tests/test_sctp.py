@@ -142,6 +142,35 @@ class SctpAssociationTest(TestCase):
         # shutdown
         run(server.close())
 
+    def test_bad_cookie(self):
+        client_transport, server_transport = dummy_transport_pair()
+        client = sctp.Endpoint(is_server=False, transport=client_transport)
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
+
+        # corrupt cookie
+        real_send_chunk = client._send_chunk
+
+        async def mock_send_chunk(chunk):
+            if isinstance(chunk, sctp.CookieEchoChunk):
+                chunk.body = b'garbage'
+            return await real_send_chunk(chunk)
+
+        client._send_chunk = mock_send_chunk
+
+        asyncio.ensure_future(server.run())
+        asyncio.ensure_future(client.run())
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, sctp.Endpoint.State.COOKIE_ECHOED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
+        # shutdown
+        run(client.close())
+        run(server.close())
+        self.assertEqual(client.state, sctp.Endpoint.State.CLOSED)
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
     def test_stale_cookie(self):
         def mock_timestamp():
             mock_timestamp.calls += 1
