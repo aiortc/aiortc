@@ -118,7 +118,28 @@ class SctpAssociationTest(TestCase):
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(b'garbage'))
-        run(asyncio.sleep(0))
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
+        # shutdown
+        run(server.close())
+
+    def test_bad_verification_tag(self):
+        # verification tag is 12345 instead of 0
+        data = load('sctp_init_bad_verification.bin')
+
+        client_transport, server_transport = dummy_transport_pair()
+        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        asyncio.ensure_future(server.run())
+        asyncio.ensure_future(client_transport.send(data))
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
+
+        # shutdown
         run(server.close())
 
     def test_stale_cookie(self):
