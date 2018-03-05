@@ -1,4 +1,4 @@
-import struct
+from struct import pack, unpack
 
 from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
@@ -7,23 +7,40 @@ from ._vpx import ffi, lib
 class VpxPayloadDescriptor:
     props = ['partition_start', 'partition_id', 'picture_id']
 
-    def __init__(self, partition_start, partition_id, picture_id=None):
+    def __init__(self, partition_start, partition_id, picture_id=None,
+                 tl0picidx=None, keyidx=None):
         self.partition_start = partition_start
         self.partition_id = partition_id
         self.picture_id = picture_id
+        self.tl0picidx = tl0picidx
+        self.keyidx = keyidx
 
     def __bytes__(self):
         octet = (self.partition_start << 4) | self.partition_id
+
+        ext_octet = 0
         if self.picture_id is not None:
-            ext_octet = 1 << 7
-            data = struct.pack('!BB', (1 << 7) | octet, ext_octet)
-            if self.picture_id < 128:
-                data += struct.pack('!B', self.picture_id)
-            else:
-                data += struct.pack('!H', (1 << 15) | self.picture_id)
-            return data
+            ext_octet |= 1 << 7
+        if self.tl0picidx is not None:
+            ext_octet |= 1 << 6
+        if self.keyidx is not None:
+            ext_octet |= 1 << 4
+
+        if ext_octet:
+            data = pack('!BB', (1 << 7) | octet, ext_octet)
+            if self.picture_id is not None:
+                if self.picture_id < 128:
+                    data += pack('!B', self.picture_id)
+                else:
+                    data += pack('!H', (1 << 15) | self.picture_id)
+            if self.tl0picidx is not None:
+                data += pack('!B', self.tl0picidx)
+            if self.keyidx is not None:
+                data += pack('!B', self.keyidx)
         else:
-            return struct.pack('!B', octet)
+            data = pack('!B', octet)
+
+        return data
 
     def __repr__(self):
         return 'VpxPayloadDescriptor(S=%d, PID=%d, pic_id=%s)' % (
@@ -37,6 +54,8 @@ class VpxPayloadDescriptor:
         partition_start = (octet >> 4) & 1
         partition_id = octet & 0xf
         picture_id = None
+        tl0picidx = None
+        keyidx = None
         pos = 1
 
         # extended control bits
@@ -51,7 +70,7 @@ class VpxPayloadDescriptor:
             # picture id
             if ext_I:
                 if data[pos] & 0x80:
-                    picture_id = struct.unpack('!H', data[pos:pos+2])[0] & 0x7fff
+                    picture_id = unpack('!H', data[pos:pos+2])[0] & 0x7fff
                     pos += 2
                 else:
                     picture_id = data[pos]
@@ -59,11 +78,16 @@ class VpxPayloadDescriptor:
 
             # unused
             if ext_L:
+                tl0picidx = unpack('!B', data[pos:pos+1])[0]
                 pos += 1
             if ext_T or ext_K:
+                t_k = unpack('!B', data[pos:pos+1])[0]
+                if ext_K:
+                    keyidx = t_k & 0x1f
                 pos += 1
 
-        obj = cls(partition_start=partition_start, partition_id=partition_id, picture_id=picture_id)
+        obj = cls(partition_start=partition_start, partition_id=partition_id, picture_id=picture_id,
+                  tl0picidx=tl0picidx, keyidx=keyidx)
         return obj, data[pos:]
 
 

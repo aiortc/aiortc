@@ -13,16 +13,21 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.partition_start, 1)
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, None)
+        self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(bytes(descr), b'\x10')
         self.assertEqual(repr(descr), 'VpxPayloadDescriptor(S=1, PID=0, pic_id=None)')
 
         self.assertEqual(rest, b'')
 
     def test_short_picture_id_17(self):
+        """
+        From RFC 7741 - 4.6.3
+        """
         descr, rest = VpxPayloadDescriptor.parse(b'\x90\x80\x11')
         self.assertEqual(descr.partition_start, 1)
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, 17)
+        self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(bytes(descr), b'\x90\x80\x11')
         self.assertEqual(repr(descr), 'VpxPayloadDescriptor(S=1, PID=0, pic_id=17)')
 
@@ -33,6 +38,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.partition_start, 1)
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, 127)
+        self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(bytes(descr), b'\x90\x80\x7f')
 
         self.assertEqual(rest, b'')
@@ -42,16 +48,41 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.partition_start, 1)
         self.assertEqual(descr.partition_id, 0)
         self.assertEqual(descr.picture_id, 128)
+        self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(bytes(descr), b'\x90\x80\x80\x80')
 
         self.assertEqual(rest, b'')
 
-    def test_long_picture_id_384(self):
-        descr, rest = VpxPayloadDescriptor.parse(b'\x90\x80\x81\x80')
+    def test_long_picture_id_4711(self):
+        """
+        From RFC 7741 - 4.6.5
+        """
+        descr, rest = VpxPayloadDescriptor.parse(b'\x90\x80\x92\x67')
         self.assertEqual(descr.partition_start, 1)
         self.assertEqual(descr.partition_id, 0)
-        self.assertEqual(descr.picture_id, 384)
-        self.assertEqual(bytes(descr), b'\x90\x80\x81\x80')
+        self.assertEqual(descr.picture_id, 4711)
+        self.assertEqual(descr.tl0picidx, None)
+        self.assertEqual(bytes(descr), b'\x90\x80\x92\x67')
+
+        self.assertEqual(rest, b'')
+
+    def test_tl0picidx(self):
+        descr, rest = VpxPayloadDescriptor.parse(b'\x90\xc0\x92\x67\x81')
+        self.assertEqual(descr.partition_start, 1)
+        self.assertEqual(descr.partition_id, 0)
+        self.assertEqual(descr.picture_id, 4711)
+        self.assertEqual(descr.tl0picidx, 129)
+        self.assertEqual(bytes(descr), b'\x90\xc0\x92\x67\x81')
+
+        self.assertEqual(rest, b'')
+
+    def test_keyidx(self):
+        descr, rest = VpxPayloadDescriptor.parse(b'\x90\x10\x1f')
+        self.assertEqual(descr.partition_start, 1)
+        self.assertEqual(descr.partition_id, 0)
+        self.assertEqual(descr.picture_id, None)
+        self.assertEqual(descr.tl0picidx, None)
+        self.assertEqual(bytes(descr), b'\x90\x10\x1f')
 
         self.assertEqual(rest, b'')
 
