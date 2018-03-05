@@ -1,4 +1,5 @@
 import asyncio
+import math
 
 
 class AudioFrame:
@@ -16,10 +17,13 @@ class VideoFrame:
     """
     Video frame in YUV420 format.
     """
-    def __init__(self, width, height, data):
+    def __init__(self, width, height, data=None):
         self.height = height
         self.width = width
-        self.data = data
+        if data is None:
+            self.data = b'\x00' * math.ceil(width * height * 12 / 8)
+        else:
+            self.data = data
 
 
 class MediaStreamTrack:

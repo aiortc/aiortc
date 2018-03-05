@@ -4,6 +4,9 @@ from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
 
+PACKET_MAX = 1300 - 1
+
+
 class VpxPayloadDescriptor:
     props = ['partition_start', 'partition_id', 'picture_id']
 
@@ -162,8 +165,16 @@ class VpxEncoder:
         self.frame_count += 1
 
         it = ffi.new('vpx_codec_iter_t *')
-        pkt = lib.vpx_codec_get_cx_data(self.codec, it)
-        assert pkt
-
-        descr = VpxPayloadDescriptor(partition_start=1, partition_id=0)
-        return bytes(descr) + ffi.buffer(pkt.data.frame.buf, pkt.data.frame.sz)
+        payloads = []
+        while True:
+            pkt = lib.vpx_codec_get_cx_data(self.codec, it)
+            if not pkt:
+                break
+            if pkt and pkt.kind == lib.VPX_CODEC_CX_FRAME_PKT:
+                buf = ffi.buffer(pkt.data.frame.buf, pkt.data.frame.sz)
+                descr = VpxPayloadDescriptor(partition_start=1, partition_id=0)
+                for pos in range(0, len(buf), PACKET_MAX):
+                    data = buf[pos:pos + PACKET_MAX]
+                    payloads.append(bytes(descr) + data)
+                    descr.partition_start = 0
+        return payloads

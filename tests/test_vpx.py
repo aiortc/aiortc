@@ -3,6 +3,7 @@ from unittest import TestCase
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.vpx import (VpxDecoder, VpxEncoder, VpxPayloadDescriptor,
                                _vpx_assert)
+from aiortc.mediastreams import VideoFrame
 from aiortc.rtp import Codec
 
 VP8_CODEC = Codec(kind='video', name='VP8', clockrate=90000)
@@ -127,3 +128,17 @@ class Vp8Test(TestCase):
     def test_encoder(self):
         encoder = get_encoder(VP8_CODEC)
         self.assertTrue(isinstance(encoder, VpxEncoder))
+
+        frame = VideoFrame(width=320, height=240)
+        payloads = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+
+    def test_encoder_large(self):
+        encoder = get_encoder(VP8_CODEC)
+        self.assertTrue(isinstance(encoder, VpxEncoder))
+
+        frame = VideoFrame(width=2560, height=1920)
+        payloads = encoder.encode(frame)
+        self.assertEqual(len(payloads), 7)
+        self.assertEqual(len(payloads[0]), 1300)

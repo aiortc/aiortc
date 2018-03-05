@@ -44,13 +44,17 @@ class RTCRtpSender:
             if self._track:
                 frame = await self._track.recv()
                 packet.ssrc = self._ssrc
-                packet.payload = encoder.encode(frame)
-                packet.marker = 1
-                try:
-                    await transport.send(bytes(packet))
-                except ConnectionError:
-                    break
-                packet.sequence_number += 1
+                payloads = encoder.encode(frame)
+                if not isinstance(payloads, list):
+                    payloads = [payloads]
+                for i, payload in enumerate(payloads):
+                    packet.payload = payload
+                    packet.marker = (i == len(payloads) - 1) and 1 or 0
+                    try:
+                        await transport.send(bytes(packet))
+                    except ConnectionError:
+                        break
+                    packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
             else:
                 await asyncio.sleep(0.02)
