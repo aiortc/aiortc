@@ -42,8 +42,8 @@ class VideoDummyTrack(VideoStreamTrack):
         size = int(height * width * 12 / 8)
 
         self.counter = 0
-        self.frame_green = VideoFrame(width=width, height=height, data=b'\x00' * size)
-        self.frame_pink = VideoFrame(width=width, height=height, data=b'\xff' * size)
+        self.frame_green = VideoFrame(width=width, height=height)
+        self.frame_remote = VideoFrame(width=width, height=height)
         self.last = None
 
     async def recv(self):
@@ -52,7 +52,23 @@ class VideoDummyTrack(VideoStreamTrack):
         if (self.counter % 100) < 50:
             return self.frame_green
         else:
-            return self.frame_pink
+            return self.frame_remote
+
+
+async def consume_audio(track):
+    """
+    Drain incoming audio.
+    """
+    while True:
+        await track.recv()
+
+
+async def consume_video(track, local_video):
+    """
+    Drain incoming video, and echo it back.
+    """
+    while True:
+        local_video.frame_remote = await track.recv()
 
 
 async def index(request):
@@ -69,6 +85,10 @@ async def offer(request):
     pc = RTCPeerConnection()
     pcs.append(pc)
 
+    # prepare local media
+    local_audio = AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav'))
+    local_video = VideoDummyTrack()
+
     @pc.on('datachannel')
     def on_datachannel(channel):
         @channel.on('message')
@@ -77,11 +97,14 @@ async def offer(request):
 
     @pc.on('track')
     def on_track(track):
-        print("GOT TRACK", track.kind)
+        if track.kind == 'audio':
+            asyncio.ensure_future(consume_audio(track))
+        elif track.kind == 'video':
+            asyncio.ensure_future(consume_video(track, local_video))
 
     await pc.setRemoteDescription(offer)
-    pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav')))
-    pc.addTrack(VideoDummyTrack())
+    pc.addTrack(local_audio)
+    pc.addTrack(local_video)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
