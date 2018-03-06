@@ -12,7 +12,7 @@ logger = logging.getLogger('rtp')
 class RTCRtpReceiver:
     def __init__(self, kind):
         self._kind = kind
-        self._jitter_buffer = JitterBuffer(capacity=10)
+        self._jitter_buffer = JitterBuffer(capacity=32)
 
     async def _run(self, transport, decoder, payload_type):
         while True:
@@ -27,11 +27,31 @@ class RTCRtpReceiver:
                 for packet in RtcpPacket.parse(data):
                     logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
-            # for now, discard decoded data
+            # for now, we discard decoded data
             packet = RtpPacket.parse(data)
+            logger.debug('receiver(%s) < %s' % (self._kind, packet))
             if packet.payload_type == payload_type:
                 self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
-                decoder.decode(packet.payload)
+                if self._kind == 'audio':
+                    decoder.decode(packet.payload)
+                else:
+                    payloads = []
+                    got_frame = False
+                    last_timestamp = None
+                    for count in range(self._jitter_buffer.capacity):
+                        frame = self._jitter_buffer.peek(count)
+                        if frame is None:
+                            break
+                        if last_timestamp is None:
+                            last_timestamp = frame.timestamp
+                        elif frame.timestamp != last_timestamp:
+                            got_frame = True
+                            break
+                        payloads.append(frame.payload)
+
+                    if got_frame:
+                        self._jitter_buffer.remove(count)
+                        decoder.decode(*payloads)
 
 
 class RTCRtpSender:

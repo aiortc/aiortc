@@ -122,13 +122,26 @@ class VpxDecoder:
     def __del__(self):
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, data):
-        """
-        _vpx_assert(lib.vpx_codec_decode(
-            self.codec, data, len(data), ffi.NULL, lib.VPX_DL_REALTIME))
-        """
-        # TODO : actually decode data!
-        return VideoFrame(width=320, height=240, data=b'\x00' * 115200)
+    def decode(self, *payloads):
+        data = b''
+        for payload in payloads:
+            if payload:
+                vpx_descriptor, rest = VpxPayloadDescriptor.parse(payload)
+                data += rest
+
+        frames = []
+        result = lib.vpx_codec_decode(self.codec, data, len(data), ffi.NULL, lib.VPX_DL_REALTIME)
+        if result == lib.VPX_CODEC_OK:
+            it = ffi.new('vpx_codec_iter_t *')
+            while True:
+                img = lib.vpx_codec_get_frame(self.codec, it)
+                if not img:
+                    break
+                assert img.fmt == lib.VPX_IMG_FMT_I420
+
+                # TODO : actually decode data!
+                frames.append(VideoFrame(width=320, height=240, data=b'\x00' * 115200))
+        return frames
 
 
 class VpxEncoder:
