@@ -8,6 +8,14 @@ readme_file = os.path.join(root_dir, 'README.rst')
 with open(readme_file, encoding='utf-8') as f:
     long_description = f.read()
 
+if os.environ.get('READTHEDOCS') == 'True':
+    cffi_modules=[]
+else:
+    cffi_modules=[
+        '_cffi_src/build_opus.py:ffibuilder',
+        '_cffi_src/build_vpx.py:ffibuilder',
+    ]
+
 setuptools.setup(
     name='aiortc',
     version='0.2.0',
@@ -28,10 +36,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
-    cffi_modules=[
-        '_cffi_src/build_opus.py:ffibuilder',
-        '_cffi_src/build_vpx.py:ffibuilder',
-    ],
+    cffi_modules=cffi_modules,
     packages=['aiortc'],
     setup_requires=['cffi'],
     install_requires=['aioice>=0.4.4', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp', 'pyopenssl'],

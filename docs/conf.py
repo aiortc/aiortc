@@ -34,7 +34,20 @@ class MockBinding:
     ffi = None
     _lib = MockLib()
 
+
+class MockOpus:
+    ffi = None
+    lib = None
+
+
+class MockVpx:
+    ffi = None
+    lib = None
+
+
 sys.modules.update({'pylibsrtp._binding': MockBinding()})
+sys.modules.update({'aiortc.codecs._opus': MockOpus()})
+sys.modules.update({'aiortc.codecs._vpx': MockVpx()})
 
 # -- General configuration ------------------------------------------------
 
