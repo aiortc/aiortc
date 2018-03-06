@@ -14,7 +14,8 @@ class RTCRtpReceiver:
             try:
                 data = await transport.recv()
             except ConnectionError:
-                break
+                logger.debug('receiver - finished')
+                return
 
             # skip RTCP for now
             if is_rtcp(data):
@@ -25,8 +26,6 @@ class RTCRtpReceiver:
             packet = RtpPacket.parse(data)
             if packet.payload_type == payload_type:
                 decoder.decode(packet.payload)
-
-        logger.debug('receiver - finished')
 
 
 class RTCRtpSender:
@@ -53,6 +52,7 @@ class RTCRtpSender:
                     try:
                         await transport.send(bytes(packet))
                     except ConnectionError:
+                        logger.debug('sender - finished')
                         return
                     packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
