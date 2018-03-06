@@ -3,7 +3,6 @@ from struct import pack, unpack
 from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
-
 PACKET_MAX = 1300 - 1
 
 

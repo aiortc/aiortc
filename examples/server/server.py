@@ -75,6 +75,10 @@ async def offer(request):
         def on_message(message):
             channel.send('pong')
 
+    @pc.on('track')
+    def on_track(track):
+        print("GOT TRACK", track.kind)
+
     await pc.setRemoteDescription(offer)
     pc.addTrack(AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav')))
     pc.addTrack(VideoDummyTrack())

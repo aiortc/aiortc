@@ -2,8 +2,9 @@ import asyncio
 from unittest import TestCase
 
 from aiortc.codecs.g711 import PcmuDecoder, PcmuEncoder
-from aiortc.mediastreams import AudioStreamTrack
-from aiortc.rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender
+from aiortc.mediastreams import AudioFrame, AudioStreamTrack
+from aiortc.rtcrtptransceiver import (RemoteStreamTrack, RTCRtpReceiver,
+                                      RTCRtpSender)
 
 from .utils import dummy_transport_pair, load, run
 
@@ -23,6 +24,8 @@ class RTCRtpReceiverTest(TestCase):
         decoder = PcmuDecoder()
 
         receiver = RTCRtpReceiver(kind='audio')
+        receiver._track = RemoteStreamTrack(kind='audio')
+
         task = asyncio.ensure_future(
             receiver._run(transport=transport, decoder=decoder, payload_type=0))
 
@@ -31,6 +34,10 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTCP
         run(remote.send(load('rtcp_sr.bin')))
+
+        # check remote track
+        frame = run(receiver._track.recv())
+        self.assertTrue(isinstance(frame, AudioFrame))
 
         # shutdown
         run(transport.close())

@@ -8,7 +8,8 @@ from pyee import EventEmitter
 from . import dtls, rtp, sctp, sdp
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
-from .rtcrtptransceiver import RTCRtpReceiver, RTCRtpSender, RTCRtpTransceiver
+from .rtcrtptransceiver import (RemoteStreamTrack, RTCRtpReceiver,
+                                RTCRtpSender, RTCRtpTransceiver)
 from .rtcsctptransport import RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 
@@ -296,6 +297,11 @@ class RTCPeerConnection(EventEmitter):
                 transceiver._iceConnection.remote_username = media.ice_ufrag
                 transceiver._iceConnection.remote_password = media.ice_pwd
                 transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+
+                if not transceiver.receiver._track:
+                    transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
+                    self.emit('track', transceiver.receiver._track)
+
             elif media.kind == 'application':
                 if not self.__sctp:
                     self.__createSctp(controlling=False)

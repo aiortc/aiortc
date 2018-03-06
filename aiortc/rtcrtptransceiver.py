@@ -3,16 +3,27 @@ import logging
 
 from .codecs import get_decoder, get_encoder
 from .jitterbuffer import JitterBuffer
+from .mediastreams import MediaStreamTrack
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
 
 
+class RemoteStreamTrack(MediaStreamTrack):
+    def __init__(self, kind):
+        self.kind = kind
+        self._queue = asyncio.Queue()
+
+    async def recv(self):
+        return await self._queue.get()
+
+
 class RTCRtpReceiver:
     def __init__(self, kind):
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
+        self._track = None
 
     async def _run(self, transport, decoder, payload_type):
         while True:
@@ -28,12 +39,17 @@ class RTCRtpReceiver:
                     logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
             # for now, we discard decoded data
-            packet = RtpPacket.parse(data)
+            try:
+                packet = RtpPacket.parse(data)
+            except ValueError:
+                continue
             logger.debug('receiver(%s) < %s' % (self._kind, packet))
             if packet.payload_type == payload_type:
                 self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
+
                 if self._kind == 'audio':
-                    decoder.decode(packet.payload)
+                    audio_frame = decoder.decode(packet.payload)
+                    await self._track._queue.put(audio_frame)
                 else:
                     payloads = []
                     got_frame = False
@@ -51,7 +67,8 @@ class RTCRtpReceiver:
 
                     if got_frame:
                         self._jitter_buffer.remove(count)
-                        decoder.decode(*payloads)
+                        for video_frame in decoder.decode(*payloads):
+                            await self._track._queue.put(video_frame)
 
 
 class RTCRtpSender:
