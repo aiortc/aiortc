@@ -11,6 +11,7 @@ class JitterFrame:
     def __repr__(self):
         return 'JitterFrame(seq=%d, ts=%d)' % (self.sequence_number, self.timestamp)
 
+
 class JitterBuffer:
     def __init__(self, capacity):
         self._capacity = capacity
