@@ -1,3 +1,4 @@
+import math
 from struct import pack, unpack
 
 from ..mediastreams import VideoFrame
@@ -138,8 +139,22 @@ class VpxDecoder:
                     break
                 assert img.fmt == lib.VPX_IMG_FMT_I420
 
-                # TODO : actually decode data!
-                frames.append(VideoFrame(width=320, height=240, data=b'\x00' * 115200))
+                o_buf = bytearray(math.ceil(img.d_w * img.d_h * 12 / 8))
+                o_pos = 0
+                for p in range(3):
+                    i_stride = img.stride[p]
+                    i_buf = ffi.buffer(img.planes[p], i_stride * img.d_h)
+                    i_pos = 0
+
+                    div = p and 2 or 1
+                    o_stride = img.d_w // div
+                    for r in range(0, img.d_h // div):
+                        o_buf[o_pos:o_pos + o_stride] = i_buf[i_pos:i_pos + i_stride]
+                        i_pos += i_stride
+                        o_pos += o_stride
+
+                frames.append(VideoFrame(width=img.d_w, height=img.d_h, data=bytes(o_buf)))
+
         return frames
 
 
