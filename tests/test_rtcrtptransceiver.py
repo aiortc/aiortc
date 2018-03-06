@@ -13,7 +13,7 @@ class RTCRtpReceiverTest(TestCase):
         transport, _ = dummy_transport_pair()
         decoder = PcmuDecoder()
 
-        receiver = RTCRtpReceiver()
+        receiver = RTCRtpReceiver(kind='audio')
         run(asyncio.gather(
             receiver._run(transport=transport, decoder=decoder, payload_type=0),
             transport.close()))
@@ -22,7 +22,7 @@ class RTCRtpReceiverTest(TestCase):
         transport, remote = dummy_transport_pair()
         decoder = PcmuDecoder()
 
-        receiver = RTCRtpReceiver()
+        receiver = RTCRtpReceiver(kind='audio')
         task = asyncio.ensure_future(
             receiver._run(transport=transport, decoder=decoder, payload_type=0))
 
@@ -42,7 +42,7 @@ class RTCRtpSenderTest(TestCase):
         transport, _ = dummy_transport_pair()
         encoder = PcmuEncoder()
 
-        sender = RTCRtpSender()
+        sender = RTCRtpSender(kind='audio')
         sender._track = AudioStreamTrack()
         run(asyncio.gather(
             sender._run(transport=transport, encoder=encoder, payload_type=0),

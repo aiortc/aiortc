@@ -399,9 +399,10 @@ class RTCPeerConnection(EventEmitter):
 
     def __createTransceiver(self, controlling, kind, sender_track=None):
         transceiver = RTCRtpTransceiver(
-            sender=RTCRtpSender(sender_track),
-            receiver=RTCRtpReceiver())
+            sender=RTCRtpSender(kind=kind),
+            receiver=RTCRtpReceiver(kind=kind))
         transceiver._kind = kind
+        transceiver.sender._track = sender_track
         self.__createTransport(transceiver, controlling=controlling)
         self.__transceivers.append(transceiver)
         return transceiver

@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from .codecs import get_decoder, get_encoder
+from .jitterbuffer import JitterBuffer
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed, random32
 
@@ -9,29 +10,35 @@ logger = logging.getLogger('rtp')
 
 
 class RTCRtpReceiver:
+    def __init__(self, kind):
+        self._kind = kind
+        self._jitter_buffer = JitterBuffer(capacity=10)
+
     async def _run(self, transport, decoder, payload_type):
         while True:
             try:
                 data = await transport.recv()
             except ConnectionError:
-                logger.debug('receiver - finished')
+                logger.debug('receiver(%s) - finished' % self._kind)
                 return
 
             # skip RTCP for now
             if is_rtcp(data):
                 for packet in RtcpPacket.parse(data):
-                    logger.debug('receiver < %s' % packet)
+                    logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
             # for now, discard decoded data
             packet = RtpPacket.parse(data)
             if packet.payload_type == payload_type:
+                self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
                 decoder.decode(packet.payload)
 
 
 class RTCRtpSender:
-    def __init__(self, track=None):
+    def __init__(self, kind):
+        self._kind = kind
         self._ssrc = random32()
-        self._track = track
+        self._track = None
 
     @property
     def track(self):
@@ -50,9 +57,10 @@ class RTCRtpSender:
                     packet.payload = payload
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
+                        logger.debug('sender(%s) > %s' % (self._kind, packet))
                         await transport.send(bytes(packet))
                     except ConnectionError:
-                        logger.debug('sender - finished')
+                        logger.debug('sender(%s) - finished' % self._kind)
                         return
                     packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
