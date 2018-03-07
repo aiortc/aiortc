@@ -38,7 +38,6 @@ class VideoDummyTrack(VideoStreamTrack):
     def __init__(self):
         width = 640
         height = 480
-        size = int(height * width * 12 / 8)
 
         self.counter = 0
         self.frame_green = VideoFrame(width=width, height=height)
