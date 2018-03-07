@@ -11,14 +11,13 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
                                  VideoStreamTrack)
 
-PTIME = 0.02
 ROOT = os.path.dirname(__file__)
 
 
-async def pause(last):
+async def pause(last, ptime):
     if last:
         now = time.time()
-        await asyncio.sleep(last + PTIME - now)
+        await asyncio.sleep(last + ptime - now)
     return time.time()
 
 
@@ -28,7 +27,7 @@ class AudioFileTrack(AudioStreamTrack):
         self.reader = wave.Wave_read(path)
 
     async def recv(self):
-        self.last = await pause(self.last)
+        self.last = await pause(self.last, 0.02)
         return AudioFrame(
             channels=self.reader.getnchannels(),
             data=self.reader.readframes(160),
@@ -47,7 +46,7 @@ class VideoDummyTrack(VideoStreamTrack):
         self.last = None
 
     async def recv(self):
-        self.last = await pause(self.last)
+        self.last = await pause(self.last, 0.04)
         self.counter += 1
         if (self.counter % 100) < 50:
             return self.frame_green
