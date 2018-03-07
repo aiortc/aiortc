@@ -18,7 +18,7 @@ else:
 
 setuptools.setup(
     name='aiortc',
-    version='0.2.0',
+    version='0.3.0',
     description='An implementation of WebRTC',
     long_description=long_description,
     url='https://github.com/jlaine/aiortc',
