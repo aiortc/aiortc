@@ -31,6 +31,22 @@ To learn more about ``aiortc`` please `read the documentation`_.
 
 .. _read the documentation: https://aiortc.readthedocs.io/en/latest/
 
+Why should I use ``aiortc``?
+----------------------------
+
+The main WebRTC implementations are either built into web browsers, or come in
+the form of native code. While they are extensively battle tested, their
+internals are complex and they do not provide Python bindings. Furthermore they
+are tightly coupled to a media stack, making it hard to plug in audio or video
+processing algorithms.
+
+In contrast, the ``aiortc`` implementation is fairly simple and readable. As
+such it is a good starting point for programmers wishing to understand how
+WebRTC works or tinker with its internals. It is also easy to create innovative
+products by leveraging the extensive modules available in the Python ecosystem.
+For instance you can build a full server handling both signaling and data
+channels or apply computer vision algorithms to video frames using OpenCV.
+
 Implementation status
 ---------------------
 
@@ -42,15 +58,16 @@ Working:
 
 - SDP generation / parsing
 - Interactive Connectivity Establishment
+- DTLS key and certificate generation
 - DTLS handshake, encryption / decryption (for SCTP)
 - SRTP keying, encryption and decryption for RTP and RTCP
 - Minimal SCTP implementation
 - Data Channels
-- Sending audio (Opus / PCMU / PCMA) and video (VP8)
+- Sending and receiving audio (Opus / PCMU / PCMA)
+- Sending and receiving video (VP8)
 
 TODO:
 
-- Expose media reception API
 - SCTP retransmission and receiver window handling
 - ICE trickle
 

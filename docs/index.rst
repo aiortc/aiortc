@@ -21,6 +21,22 @@ constructs:
 - promises are replaced by coroutines
 - events are emitted using ``pyee.EventEmitter``
 
+Why should I use ``aiortc``?
+----------------------------
+
+The main WebRTC implementations are either built into web browsers, or come in
+the form of native code. While they are extensively battle tested, their
+internals are complex and they do not provide Python bindings. Furthermore they
+are tightly coupled to a media stack, making it hard to plug in audio or video
+processing algorithms.
+
+In contrast, the ``aiortc`` implementation is fairly simple and readable. As
+such it is a good starting point for programmers wishing to understand how
+WebRTC works or tinker with its internals. It is also easy to create innovative
+products by leveraging the extensive modules available in the Python ecosystem.
+For instance you can build a full server handling both signaling and data
+channels or apply computer vision algorithms to video frames using OpenCV.
+
 .. toctree::
    :maxdepth: 2
 
