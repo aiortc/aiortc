@@ -20,6 +20,10 @@ class RemoteStreamTrack(MediaStreamTrack):
 
 
 class RTCRtpReceiver:
+    """
+    The RTCRtpReceiver interface manages the reception and decoding of data
+    for a MediaStreamTrack.
+    """
     def __init__(self, kind):
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
@@ -38,7 +42,7 @@ class RTCRtpReceiver:
                 for packet in RtcpPacket.parse(data):
                     logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
-            # for now, we discard decoded data
+            # handle RTP
             try:
                 packet = RtpPacket.parse(data)
             except ValueError:
@@ -48,9 +52,11 @@ class RTCRtpReceiver:
                 self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
 
                 if self._kind == 'audio':
+                    # FIXME: audio should use the jitter buffer!
                     audio_frame = decoder.decode(packet.payload)
                     await self._track._queue.put(audio_frame)
                 else:
+                    # check if we have a complete video frame
                     payloads = []
                     got_frame = False
                     last_timestamp = None
@@ -72,14 +78,33 @@ class RTCRtpReceiver:
 
 
 class RTCRtpSender:
-    def __init__(self, kind):
-        self._kind = kind
+    """
+    The RTCRtpSender interface provides the ability to control and obtain
+    details about how a particular MediaStreamTrack is encoded and sent to
+    a remote peer.
+    """
+    def __init__(self, trackOrKind):
+        if hasattr(trackOrKind, 'kind'):
+            self._kind = trackOrKind.kind
+            self._track = trackOrKind
+        else:
+            self._kind = trackOrKind
+            self._track = None
         self._ssrc = random32()
-        self._track = None
+
+    @property
+    def kind(self):
+        return self._kind
 
     @property
     def track(self):
+        """
+        The MediaStreamTrack which is being handled by the RTCRtpSender.
+        """
         return self._track
+
+    def replaceTrack(self, track):
+        self._track = track
 
     async def _run(self, transport, encoder, payload_type):
         packet = RtpPacket(payload_type=payload_type)

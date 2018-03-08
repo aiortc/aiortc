@@ -49,8 +49,7 @@ class RTCRtpSenderTest(TestCase):
         transport, _ = dummy_transport_pair()
         encoder = PcmuEncoder()
 
-        sender = RTCRtpSender(kind='audio')
-        sender._track = AudioStreamTrack()
+        sender = RTCRtpSender(AudioStreamTrack())
         run(asyncio.gather(
             sender._run(transport=transport, encoder=encoder, payload_type=0),
             transport.close()))

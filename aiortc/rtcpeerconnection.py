@@ -139,7 +139,7 @@ class RTCPeerConnection(EventEmitter):
         for transceiver in self.__transceivers:
             if transceiver._kind == track.kind:
                 if transceiver.sender.track is None:
-                    transceiver.sender._track = track
+                    transceiver.sender.replaceTrack(track)
                     return transceiver.sender
                 else:
                     raise InternalError('Only a single %s track is supported for now' % track.kind)
@@ -405,10 +405,9 @@ class RTCPeerConnection(EventEmitter):
 
     def __createTransceiver(self, controlling, kind, sender_track=None):
         transceiver = RTCRtpTransceiver(
-            sender=RTCRtpSender(kind=kind),
+            sender=RTCRtpSender(sender_track or kind),
             receiver=RTCRtpReceiver(kind=kind))
         transceiver._kind = kind
-        transceiver.sender._track = sender_track
         self.__createTransport(transceiver, controlling=controlling)
         self.__transceivers.append(transceiver)
         return transceiver
