@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from aiortc.dtls import (DtlsError, DtlsSrtpContext, RTCDtlsFingerprint,
-                         RTCDtlsTransport, RTCDtlsParameters)
+                         RTCDtlsParameters, RTCDtlsTransport)
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run

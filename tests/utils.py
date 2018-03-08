@@ -4,6 +4,13 @@ import os
 from aiortc.utils import first_completed
 
 
+def dummy_dtls_transport_pair():
+    transport_a, transport_b = dummy_transport_pair()
+    transport_a.rtp = transport_a
+    transport_b.rtp = transport_b
+    return transport_a, transport_b
+
+
 def dummy_transport_pair():
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
