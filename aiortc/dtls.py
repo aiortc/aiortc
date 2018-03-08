@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.serialization import (Encoding,
                                                           NoEncryption,
                                                           PrivateFormat)
 from OpenSSL import crypto
+from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
 from .rtp import is_rtcp
@@ -130,20 +131,21 @@ class State(enum.Enum):
     FAILED = 4
 
 
-class RTCDtlsTransport:
+class RTCDtlsTransport(EventEmitter):
     """
     The RTCDtlsTransport object includes information relating to Datagram
     Transport Layer Security (DTLS) transport.
     """
 
     def __init__(self, transport, context):
+        super().__init__()
         self.closed = asyncio.Event()
         self.encrypted = False
         self.is_server = transport.ice_controlling
         self.remote_fingerprint = None
         self.role = self.is_server and 'server' or 'client'
         self._state = State.NEW
-        self.transport = transport
+        self._transport = transport
 
         self.data_queue = asyncio.Queue()
         self.data = Channel(
@@ -250,7 +252,7 @@ class RTCDtlsTransport:
             self.closed.set()
 
     async def _recv_next(self):
-        data = await first_completed(self.transport.recv(), self.closed.wait())
+        data = await first_completed(self._transport.recv(), self.closed.wait())
         if data is True:
             # session was closed
             raise ConnectionError
@@ -288,12 +290,13 @@ class RTCDtlsTransport:
             data = self._tx_srtp.protect_rtcp(data)
         else:
             data = self._tx_srtp.protect(data)
-        await self.transport.send(data)
+        await self._transport.send(data)
 
     def _set_state(self, state):
         if state != self._state:
             logger.debug('%s - %s -> %s', self.role, self._state, state)
             self._state = state
+            self.emit('statechange')
 
     async def _write_ssl(self):
         """
@@ -302,4 +305,4 @@ class RTCDtlsTransport:
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
-            await self.transport.send(ffi.buffer(self.write_cdata)[0:result])
+            await self._transport.send(ffi.buffer(self.write_cdata)[0:result])
