@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from .exceptions import InvalidStateError
 from .rtp import RtpPacket
 from .utils import random32
 
@@ -45,9 +46,12 @@ class RTCRtpSender:
     def replaceTrack(self, track):
         self._track = track
 
-    async def _run(self, transport, encoder, payload_type):
+    def setTransport(self, transport):
+        if transport.state == 'closed':
+            raise InvalidStateError
         self._transport = transport
 
+    async def _run(self, encoder, payload_type):
         packet = RtpPacket(payload_type=payload_type)
         while True:
             if self._track:
@@ -61,7 +65,7 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
                         logger.debug('sender(%s) > %s' % (self._kind, packet))
-                        await transport.rtp.send(bytes(packet))
+                        await self.transport.rtp.send(bytes(packet))
                     except ConnectionError:
                         logger.debug('sender(%s) - finished' % self._kind)
                         return

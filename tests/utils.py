@@ -7,7 +7,9 @@ from aiortc.utils import first_completed
 def dummy_dtls_transport_pair():
     transport_a, transport_b = dummy_transport_pair()
     transport_a.rtp = transport_a
+    transport_a.state = 'connected'
     transport_b.rtp = transport_b
+    transport_b.state = 'connected'
     return transport_a, transport_b
 
 
