@@ -138,6 +138,10 @@ class RTCDtlsFingerprint:
 
 
 class RTCDtlsParameters:
+    """
+    The RTCDtlsParameters object includes information relating to DTLS
+    configuration.
+    """
     def __init__(self, fingerprints):
         self.fingerprints = fingerprints
 
@@ -147,7 +151,6 @@ class RTCDtlsTransport(EventEmitter):
     The RTCDtlsTransport object includes information relating to Datagram
     Transport Layer Security (DTLS) transport.
     """
-
     def __init__(self, transport, context):
         super().__init__()
         self.closed = asyncio.Event()
@@ -197,9 +200,20 @@ class RTCDtlsTransport(EventEmitter):
         return str(self._state)[6:].lower()
 
     def getLocalParameters(self):
+        """
+        Get the local parameters of the DTLS transport.
+
+        :rtype: :class:`RTCDtlsParameters`
+        """
         return RTCDtlsParameters(fingerprints=self._local_fingerprints)
 
     async def start(self, remoteParameters):
+        """
+        Start DTLS transport negotiation with the parameters of the remote
+        DTLS transport.
+
+        :param: remoteParameters: An :class:`RTCDtlsParameters`
+        """
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
 
@@ -256,6 +270,9 @@ class RTCDtlsTransport(EventEmitter):
         asyncio.ensure_future(self.__run())
 
     async def stop(self):
+        """
+        Stop and close the DTLS transport.
+        """
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             await self._write_ssl()
