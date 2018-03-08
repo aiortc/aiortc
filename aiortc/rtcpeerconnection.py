@@ -401,7 +401,7 @@ class RTCPeerConnection(EventEmitter):
             if default_candidate is None:
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
-                'm=application %d DTLS/SCTP 5000' % default_candidate.port,
+                'm=application %d DTLS/SCTP %d' % (default_candidate.port, self.__sctp.port),
                 'c=IN IP4 %s' % default_candidate.host,
             ]
             sdp += transport_sdp(iceConnection, self.__sctp.transport)
