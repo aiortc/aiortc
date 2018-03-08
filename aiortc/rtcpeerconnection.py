@@ -335,7 +335,7 @@ class RTCPeerConnection(EventEmitter):
                 await iceConnection.connect()
                 await dtlsSession.connect()
             for transceiver in self.__transceivers:
-                asyncio.ensure_future(transceiver._run(transceiver._dtlsSession.rtp))
+                asyncio.ensure_future(transceiver._run(transceiver._dtlsSession))
             if self.__sctp:
                 asyncio.ensure_future(self.__sctpEndpoint.run())
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctpEndpoint))

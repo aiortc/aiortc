@@ -28,11 +28,21 @@ class RTCRtpReceiver:
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
         self._track = None
+        self._transport = None
+
+    @property
+    def transport(self):
+        """
+        The :class:`RTCDtlsTransport` over which the media for the receiver's
+        track is received.
+        """
+        return self._transport
 
     async def _run(self, transport, decoder, payload_type):
+        self._transport = transport
         while True:
             try:
-                data = await transport.recv()
+                data = await transport.rtp.recv()
             except ConnectionError:
                 logger.debug('receiver(%s) - finished' % self._kind)
                 return
@@ -91,6 +101,7 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
+        self._transport = None
 
     @property
     def kind(self):
@@ -103,10 +114,20 @@ class RTCRtpSender:
         """
         return self._track
 
+    @property
+    def transport(self):
+        """
+        The :class:`RTCDtlsTransport` over which media data for the track is
+        transmitted.
+        """
+        return self._transport
+
     def replaceTrack(self, track):
         self._track = track
 
     async def _run(self, transport, encoder, payload_type):
+        self._transport = transport
+
         packet = RtpPacket(payload_type=payload_type)
         while True:
             if self._track:
@@ -120,7 +141,7 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
                         logger.debug('sender(%s) > %s' % (self._kind, packet))
-                        await transport.send(bytes(packet))
+                        await transport.rtp.send(bytes(packet))
                     except ConnectionError:
                         logger.debug('sender(%s) - finished' % self._kind)
                         return
