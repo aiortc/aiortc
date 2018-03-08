@@ -3,9 +3,9 @@ from unittest import TestCase
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.opus import OpusDecoder, OpusEncoder
 from aiortc.mediastreams import AudioFrame
-from aiortc.rtp import Codec
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
-OPUS_CODEC = Codec(kind='audio', name='opus', clockrate=48000, channels=2)
+OPUS_CODEC = RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2)
 
 
 class OpusTest(TestCase):

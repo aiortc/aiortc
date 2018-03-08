@@ -1,13 +1,9 @@
 from unittest import TestCase
 
-from aiortc.codecs import get_decoder, get_encoder
+from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
 from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
                                 PcmuEncoder)
 from aiortc.mediastreams import AudioFrame
-from aiortc.rtp import Codec
-
-PCMU_CODEC = Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0)
-PCMA_CODEC = Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8)
 
 
 class PcmaTest(TestCase):

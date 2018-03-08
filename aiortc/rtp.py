@@ -14,25 +14,6 @@ def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
-class Codec:
-    def __init__(self, kind, name, clockrate, channels=None, pt=None):
-        self.kind = kind
-        self.name = name
-        self.clockrate = clockrate
-        self.channels = channels
-        self.pt = pt
-
-    def clone(self, pt):
-        return Codec(kind=self.kind, name=self.name, clockrate=self.clockrate,
-                     channels=self.channels, pt=pt)
-
-    def __str__(self):
-        s = '%s/%d' % (self.name, self.clockrate)
-        if self.channels == 2:
-            s += '/2'
-        return s
-
-
 class RtcpSenderInfo:
     def __init__(self, ntp_timestamp, rtp_timestamp, packet_count, octet_count):
         self.ntp_timestamp = ntp_timestamp

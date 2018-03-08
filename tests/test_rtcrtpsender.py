@@ -1,7 +1,7 @@
 import asyncio
 from unittest import TestCase
 
-from aiortc.codecs.g711 import PcmuEncoder
+from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack
 from aiortc.rtcrtpsender import RTCRtpSender
@@ -16,7 +16,6 @@ class ClosedDtlsTransport:
 class RTCRtpSenderTest(TestCase):
     def test_connection_error(self):
         transport, _ = dummy_dtls_transport_pair()
-        encoder = PcmuEncoder()
 
         sender = RTCRtpSender(AudioStreamTrack())
         self.assertEqual(sender.transport, None)
@@ -25,7 +24,7 @@ class RTCRtpSenderTest(TestCase):
         self.assertEqual(sender.transport, transport)
 
         run(asyncio.gather(
-            sender._run(encoder=encoder, payload_type=0),
+            sender._run(codec=PCMU_CODEC),
             transport.close()))
 
     def test_invalid_dtls_transport_state(self):

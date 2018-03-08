@@ -9,6 +9,7 @@ from . import rtp, sctp, sdp
 from .dtls import DtlsSrtpContext, RTCDtlsTransport
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
+from .rtcrtpparameters import RTCRtpCodecParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -23,12 +24,16 @@ DUMMY_CANDIDATE = aioice.Candidate(
     host='0.0.0.0',
     port=0,
     type='host')
-MEDIA_CODECS = [
-    rtp.Codec(kind='audio', name='opus', clockrate=48000, channels=2),
-    rtp.Codec(kind='audio', name='PCMU', clockrate=8000, channels=1, pt=0),
-    rtp.Codec(kind='audio', name='PCMA', clockrate=8000, channels=1, pt=8),
-    rtp.Codec(kind='video', name='VP8', clockrate=90000),
-]
+MEDIA_CODECS = {
+    'audio': [
+        RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
+        RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
+        RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
+    ],
+    'video': [
+        RTCRtpCodecParameters(name='VP8', clockRate=90000),
+    ]
+}
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -37,14 +42,12 @@ def find_common_codecs(local_codecs, remote_media):
     for pt in remote_media.fmt:
         bits = remote_media.rtpmap[pt].split('/')
         name = bits[0]
-        clockrate = int(bits[1])
+        clockRate = int(bits[1])
 
         for codec in local_codecs:
-            if (codec.kind == remote_media.kind and
-               codec.name == name and
-               codec.clockrate == clockrate):
+            if codec.name == name and codec.clockRate == clockRate:
                 if pt in rtp.DYNAMIC_PAYLOAD_TYPES:
-                    codec = codec.clone(pt=pt)
+                    codec = codec.clone(payloadType=pt)
                 common.append(codec)
                 break
     return common
@@ -219,13 +222,12 @@ class RTCPeerConnection(EventEmitter):
         dynamic_pt = rtp.DYNAMIC_PAYLOAD_TYPES.start
         for transceiver in self.__transceivers:
             codecs = []
-            for codec in MEDIA_CODECS:
-                if codec.kind == transceiver._kind:
-                    if codec.pt is None:
-                        codecs.append(codec.clone(pt=dynamic_pt))
-                        dynamic_pt += 1
-                    else:
-                        codecs.append(codec)
+            for codec in MEDIA_CODECS[transceiver._kind]:
+                if codec.payloadType is None:
+                    codecs.append(codec.clone(payloadType=dynamic_pt))
+                    dynamic_pt += 1
+                else:
+                    codecs.append(codec)
             transceiver._codecs = codecs
 
         return RTCSessionDescription(
@@ -294,7 +296,7 @@ class RTCPeerConnection(EventEmitter):
                         controlling=False)
 
                 # negotiate codecs
-                common = find_common_codecs(MEDIA_CODECS, media)
+                common = find_common_codecs(MEDIA_CODECS[media.kind], media)
                 assert len(common)
                 transceiver._codecs = common
 
@@ -384,7 +386,7 @@ class RTCPeerConnection(EventEmitter):
                 'm=%s %d UDP/TLS/RTP/SAVPF %s' % (
                     transceiver._kind,
                     default_candidate.port,
-                    ' '.join([str(c.pt) for c in transceiver._codecs])),
+                    ' '.join([str(c.payloadType) for c in transceiver._codecs])),
                 'c=IN IP4 %s' % default_candidate.host,
                 'a=rtcp:9 IN IP4 0.0.0.0',
                 'a=rtcp-mux',
@@ -394,7 +396,7 @@ class RTCPeerConnection(EventEmitter):
             sdp += ['a=ssrc:%d cname:%s' % (transceiver.sender._ssrc, self.__cname)]
 
             for codec in transceiver._codecs:
-                sdp += ['a=rtpmap:%d %s' % (codec.pt, str(codec))]
+                sdp += ['a=rtpmap:%d %s' % (codec.payloadType, str(codec))]
 
         if self.__sctp:
             iceConnection = self.__sctp.transport._transport

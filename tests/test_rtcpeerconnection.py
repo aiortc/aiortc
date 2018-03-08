@@ -41,36 +41,36 @@ def track_states(pc):
     return states
 
 
-class CodecTest(TestCase):
+class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
-        local_codecs = MEDIA_CODECS[:]
+        local_codecs = MEDIA_CODECS['audio'][:]
         remote_description = MediaDescription(
             kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[8, 0])
         remote_description.rtpmap[8] = 'PCMA/8000'
         remote_description.rtpmap[0] = 'PCMU/8000'
         common = find_common_codecs(local_codecs, remote_description)
         self.assertEqual(len(common), 2)
-        self.assertEqual(common[0].clockrate, 8000)
+        self.assertEqual(common[0].clockRate, 8000)
         self.assertEqual(common[0].name, 'PCMA')
-        self.assertEqual(common[0].pt, 8)
-        self.assertEqual(common[1].clockrate, 8000)
+        self.assertEqual(common[0].payloadType, 8)
+        self.assertEqual(common[1].clockRate, 8000)
         self.assertEqual(common[1].name, 'PCMU')
-        self.assertEqual(common[1].pt, 0)
+        self.assertEqual(common[1].payloadType, 0)
 
     def test_common_dynamic(self):
-        local_codecs = MEDIA_CODECS[:]
+        local_codecs = MEDIA_CODECS['audio'][:]
         remote_description = MediaDescription(
             kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[100, 8])
         remote_description.rtpmap[100] = 'opus/48000'
         remote_description.rtpmap[8] = 'PCMA/8000'
         common = find_common_codecs(local_codecs, remote_description)
         self.assertEqual(len(common), 2)
-        self.assertEqual(common[0].clockrate, 48000)
+        self.assertEqual(common[0].clockRate, 48000)
         self.assertEqual(common[0].name, 'opus')
-        self.assertEqual(common[0].pt, 100)
-        self.assertEqual(common[1].clockrate, 8000)
+        self.assertEqual(common[0].payloadType, 100)
+        self.assertEqual(common[1].clockRate, 8000)
         self.assertEqual(common[1].name, 'PCMA')
-        self.assertEqual(common[1].pt, 8)
+        self.assertEqual(common[1].payloadType, 8)
 
 
 class RTCPeerConnectionTest(TestCase):

@@ -1,6 +1,10 @@
+from ..rtcrtpparameters import RTCRtpCodecParameters
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import VpxDecoder, VpxEncoder
+
+PCMU_CODEC = RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0)
+PCMA_CODEC = RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
 
 
 def get_decoder(codec):

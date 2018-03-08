@@ -4,9 +4,9 @@ from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.vpx import (VpxDecoder, VpxEncoder, VpxPayloadDescriptor,
                                _vpx_assert)
 from aiortc.mediastreams import VideoFrame
-from aiortc.rtp import Codec
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
-VP8_CODEC = Codec(kind='video', name='VP8', clockrate=90000)
+VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000)
 
 
 class VpxPayloadDescriptorTest(TestCase):

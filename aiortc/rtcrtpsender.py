@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import RtpPacket
 from .utils import random32
@@ -51,8 +52,9 @@ class RTCRtpSender:
             raise InvalidStateError
         self._transport = transport
 
-    async def _run(self, encoder, payload_type):
-        packet = RtpPacket(payload_type=payload_type)
+    async def _run(self, codec):
+        encoder = get_encoder(codec)
+        packet = RtpPacket(payload_type=codec.payloadType)
         while True:
             if self._track:
                 frame = await self._track.recv()

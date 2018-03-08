@@ -1,7 +1,6 @@
 import asyncio
 import logging
 
-from .codecs import get_decoder, get_encoder
 from .utils import first_completed
 
 logger = logging.getLogger('rtp')
@@ -50,12 +49,10 @@ class RTCRtpTransceiver:
 
     async def _run(self, transport):
         codec = self._codecs[0]
-        decoder = get_decoder(codec)
-        encoder = get_encoder(codec)
 
         self.receiver.setTransport(transport)
         self.sender.setTransport(transport)
         await first_completed(
-            self.receiver._run(decoder=decoder, payload_type=codec.pt),
-            self.sender._run(encoder=encoder, payload_type=codec.pt),
+            self.receiver._run(codec=codec),
+            self.sender._run(codec=codec),
             self.__stopped.wait())

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
@@ -42,7 +43,8 @@ class RTCRtpReceiver:
             raise InvalidStateError
         self._transport = transport
 
-    async def _run(self, decoder, payload_type):
+    async def _run(self, codec):
+        decoder = get_decoder(codec)
         while True:
             try:
                 data = await self.transport.rtp.recv()
@@ -61,7 +63,7 @@ class RTCRtpReceiver:
             except ValueError:
                 continue
             logger.debug('receiver(%s) < %s' % (self._kind, packet))
-            if packet.payload_type == payload_type:
+            if packet.payload_type == codec.payloadType:
                 self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
 
                 if self._kind == 'audio':
