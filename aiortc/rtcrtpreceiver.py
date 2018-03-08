@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
@@ -36,11 +37,15 @@ class RTCRtpReceiver:
         """
         return self._transport
 
-    async def _run(self, transport, decoder, payload_type):
+    def setTransport(self, transport):
+        if transport.state == 'closed':
+            raise InvalidStateError
         self._transport = transport
+
+    async def _run(self, decoder, payload_type):
         while True:
             try:
-                data = await transport.rtp.recv()
+                data = await self.transport.rtp.recv()
             except ConnectionError:
                 logger.debug('receiver(%s) - finished' % self._kind)
                 return

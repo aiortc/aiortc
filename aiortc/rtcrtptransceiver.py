@@ -53,8 +53,9 @@ class RTCRtpTransceiver:
         decoder = get_decoder(codec)
         encoder = get_encoder(codec)
 
+        self.receiver.setTransport(transport)
         self.sender.setTransport(transport)
         await first_completed(
-            self.receiver._run(transport, decoder=decoder, payload_type=codec.pt),
+            self.receiver._run(decoder=decoder, payload_type=codec.pt),
             self.sender._run(encoder=encoder, payload_type=codec.pt),
             self.__stopped.wait())
