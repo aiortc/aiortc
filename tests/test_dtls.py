@@ -53,8 +53,8 @@ class DtlsSrtpTest(TestCase):
         # shutdown
         run(session1.close())
         run(asyncio.sleep(0.5))
-        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
-        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session1.state, 'closed')
+        self.assertEqual(session2.state, 'closed')
 
         # try closing again
         run(session1.close())
@@ -96,8 +96,8 @@ class DtlsSrtpTest(TestCase):
         # shutdown
         run(session1.close())
         run(asyncio.sleep(0.5))
-        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
-        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session1.state, 'closed')
+        self.assertEqual(session2.state, 'closed')
 
         # try closing again
         run(session1.close())
@@ -132,7 +132,7 @@ class DtlsSrtpTest(TestCase):
             transport1.close(),
         ))
         run(asyncio.sleep(0))
-        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session1.state, 'closed')
 
         # break other connection
         run(first_completed(
@@ -140,7 +140,7 @@ class DtlsSrtpTest(TestCase):
             transport2.close(),
         ))
         run(asyncio.sleep(0))
-        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session2.state, 'closed')
 
         # try closing again
         run(session1.close())
@@ -162,6 +162,8 @@ class DtlsSrtpTest(TestCase):
         with self.assertRaises(DtlsError) as cm:
             run(asyncio.gather(session1.connect(), session2.connect()))
         self.assertEqual(str(cm.exception), 'DTLS fingerprint does not match')
+        self.assertEqual(session1.state, 'failed')
+        self.assertEqual(session2.state, 'connecting')
 
         run(session1.close())
         run(session2.close())
@@ -182,11 +184,13 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = 'bogus_fingerprint'
+        session1.remote_fingerprint = session2.local_fingerprint
         session2.remote_fingerprint = session1.local_fingerprint
         with self.assertRaises(DtlsError) as cm:
             run(asyncio.gather(session1.connect(), session2.connect()))
         self.assertEqual(str(cm.exception), 'DTLS handshake failed (error 1)')
+        self.assertEqual(session1.state, 'failed')
+        self.assertEqual(session2.state, 'failed')
 
         run(session1.close())
         run(session2.close())

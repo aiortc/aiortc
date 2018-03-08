@@ -26,7 +26,6 @@ lib = binding.lib
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
 
-
 logger = logging.getLogger('dtls')
 
 
@@ -123,6 +122,14 @@ class Channel:
         return data
 
 
+class State(enum.Enum):
+    NEW = 0
+    CONNECTING = 1
+    CONNECTED = 2
+    CLOSED = 3
+    FAILED = 4
+
+
 class RTCDtlsTransport:
     """
     The RTCDtlsTransport object includes information relating to Datagram
@@ -135,7 +142,7 @@ class RTCDtlsTransport:
         self.is_server = transport.ice_controlling
         self.remote_fingerprint = None
         self.role = self.is_server and 'server' or 'client'
-        self.state = self.State.CLOSED
+        self._state = State.NEW
         self.transport = transport
 
         self.data_queue = asyncio.Queue()
@@ -168,17 +175,24 @@ class RTCDtlsTransport:
         x509 = lib.SSL_get_certificate(self.ssl)
         self.local_fingerprint = certificate_digest(x509)
 
+    @property
+    def state(self):
+        """
+        The current state of the DTLS transport.
+        """
+        return str(self._state)[6:].lower()
+
     async def close(self):
-        if self.state != self.State.CLOSED:
+        if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             await self._write_ssl()
             logger.debug('%s - DTLS shutdown complete', self.role)
             self.closed.set()
 
     async def connect(self):
-        assert self.state == self.State.CLOSED
+        assert self._state == State.NEW
 
-        self._set_state(self.State.CONNECTING)
+        self._set_state(State.CONNECTING)
         while not self.encrypted:
             result = lib.SSL_do_handshake(self.ssl)
             await self._write_ssl()
@@ -191,12 +205,14 @@ class RTCDtlsTransport:
             if error == lib.SSL_ERROR_WANT_READ:
                 await self._recv_next()
             else:
+                self._set_state(State.FAILED)
                 raise DtlsError('DTLS handshake failed (error %d)' % error)
 
         # check remote fingerprint
         x509 = lib.SSL_get_peer_certificate(self.ssl)
         remote_fingerprint = certificate_digest(x509)
         if remote_fingerprint != self.remote_fingerprint.upper():
+            self._set_state(State.FAILED)
             raise DtlsError('DTLS fingerprint does not match')
 
         # generate keying material
@@ -220,7 +236,7 @@ class RTCDtlsTransport:
 
         # start data pump
         logger.debug('%s - DTLS handshake complete', self.role)
-        self._set_state(self.State.CONNECTED)
+        self._set_state(State.CONNECTED)
         asyncio.ensure_future(self.__run())
 
     async def __run(self):
@@ -230,7 +246,7 @@ class RTCDtlsTransport:
         except ConnectionError:
             pass
         finally:
-            self._set_state(self.State.CLOSED)
+            self._set_state(State.CLOSED)
             self.closed.set()
 
     async def _recv_next(self):
@@ -258,14 +274,14 @@ class RTCDtlsTransport:
             await self.rtp_queue.put(data)
 
     async def _send_data(self, data):
-        if self.state != self.State.CONNECTED:
+        if self._state != State.CONNECTED:
             raise ConnectionError('Cannot send encrypted data, not connected')
 
         lib.SSL_write(self.ssl, data, len(data))
         await self._write_ssl()
 
     async def _send_rtp(self, data):
-        if self.state != self.State.CONNECTED:
+        if self._state != State.CONNECTED:
             raise ConnectionError('Cannot send encrypted RTP, not connected')
 
         if is_rtcp(data):
@@ -275,9 +291,9 @@ class RTCDtlsTransport:
         await self.transport.send(data)
 
     def _set_state(self, state):
-        if state != self.state:
-            logger.debug('%s - %s -> %s', self.role, self.state, state)
-            self.state = state
+        if state != self._state:
+            logger.debug('%s - %s -> %s', self.role, self._state, state)
+            self._state = state
 
     async def _write_ssl(self):
         """
@@ -287,8 +303,3 @@ class RTCDtlsTransport:
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
             await self.transport.send(ffi.buffer(self.write_cdata)[0:result])
-
-    class State(enum.Enum):
-        CLOSED = 0
-        CONNECTING = 1
-        CONNECTED = 2
