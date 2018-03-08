@@ -184,7 +184,7 @@ class RTCDtlsTransport(EventEmitter):
         """
         return str(self._state)[6:].lower()
 
-    async def close(self):
+    async def stop(self):
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             await self._write_ssl()

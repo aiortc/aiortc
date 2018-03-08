@@ -51,14 +51,14 @@ class DtlsSrtpTest(TestCase):
         self.assertEqual(data, b'pong')
 
         # shutdown
-        run(session1.close())
+        run(session1.stop())
         run(asyncio.sleep(0.5))
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
 
         # try closing again
-        run(session1.close())
-        run(session2.close())
+        run(session1.stop())
+        run(session2.stop())
 
         # try receving after close
         with self.assertRaises(ConnectionError):
@@ -94,14 +94,14 @@ class DtlsSrtpTest(TestCase):
         self.assertEqual(data, RTCP)
 
         # shutdown
-        run(session1.close())
+        run(session1.stop())
         run(asyncio.sleep(0.5))
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
 
         # try closing again
-        run(session1.close())
-        run(session2.close())
+        run(session1.stop())
+        run(session2.stop())
 
         # try receving after close
         with self.assertRaises(ConnectionError):
@@ -143,8 +143,8 @@ class DtlsSrtpTest(TestCase):
         self.assertEqual(session2.state, 'closed')
 
         # try closing again
-        run(session1.close())
-        run(session2.close())
+        run(session1.stop())
+        run(session2.stop())
 
     def test_bad_client_fingerprint(self):
         transport1, transport2 = dummy_ice_transport_pair()
@@ -165,8 +165,8 @@ class DtlsSrtpTest(TestCase):
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'connecting')
 
-        run(session1.close())
-        run(session2.close())
+        run(session1.stop())
+        run(session2.stop())
 
     @patch('aiortc.dtls.lib.SSL_do_handshake')
     @patch('aiortc.dtls.lib.SSL_get_error')
@@ -192,8 +192,8 @@ class DtlsSrtpTest(TestCase):
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'failed')
 
-        run(session1.close())
-        run(session2.close())
+        run(session1.stop())
+        run(session2.stop())
 
 
 logging.basicConfig(level=logging.DEBUG)
