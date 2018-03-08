@@ -161,12 +161,12 @@ class RTCPeerConnection(EventEmitter):
         self.__setSignalingState('closed')
         for transceiver in self.__transceivers:
             await transceiver.stop()
-            await transceiver._dtlsSession.stop()
-            await transceiver._iceConnection.close()
+            await transceiver._transport.stop()
+            await transceiver._transport._transport.close()
         if self.__sctp:
             await self.__sctpEndpoint.close()
-            await self.__sctp._dtlsSession.stop()
-            await self.__sctp._iceConnection.close()
+            await self.__sctp.transport.stop()
+            await self.__sctp.transport._transport.close()
         self.__setIceConnectionState('closed')
 
     async def createAnswer(self):
@@ -294,10 +294,11 @@ class RTCPeerConnection(EventEmitter):
                 transceiver._codecs = common
 
                 # configure transport
-                transceiver._iceConnection.remote_candidates = media.ice_candidates
-                transceiver._iceConnection.remote_username = media.ice_ufrag
-                transceiver._iceConnection.remote_password = media.ice_pwd
-                transceiver._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+                iceConnection = transceiver._transport._transport
+                iceConnection.remote_candidates = media.ice_candidates
+                iceConnection.remote_username = media.ice_ufrag
+                iceConnection.remote_password = media.ice_pwd
+                transceiver._transport.remote_fingerprint = media.dtls_fingerprint
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -308,10 +309,11 @@ class RTCPeerConnection(EventEmitter):
                     self.__createSctp(controlling=False)
 
                 # configure transport
-                self.__sctp._iceConnection.remote_candidates = media.ice_candidates
-                self.__sctp._iceConnection.remote_username = media.ice_ufrag
-                self.__sctp._iceConnection.remote_password = media.ice_pwd
-                self.__sctp._dtlsSession.remote_fingerprint = media.dtls_fingerprint
+                iceConnection = self.__sctp.transport._transport
+                iceConnection.remote_candidates = media.ice_candidates
+                iceConnection.remote_username = media.ice_ufrag
+                iceConnection.remote_password = media.ice_pwd
+                self.__sctp.transport.remote_fingerprint = media.dtls_fingerprint
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -335,7 +337,7 @@ class RTCPeerConnection(EventEmitter):
                 await iceConnection.connect()
                 await dtlsSession.connect()
             for transceiver in self.__transceivers:
-                asyncio.ensure_future(transceiver._run(transceiver._dtlsSession))
+                asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:
                 asyncio.ensure_future(self.__sctpEndpoint.run())
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctpEndpoint))
@@ -353,11 +355,10 @@ class RTCPeerConnection(EventEmitter):
             raise InvalidStateError('RTCPeerConnection is closed')
 
     def __createSctp(self, controlling):
-        self.__sctp = RTCSctpTransport()
-        self.__createTransport(self.__sctp, controlling=controlling)
+        self.__sctp = RTCSctpTransport(self.__createTransport(controlling=controlling))
         self.__sctpEndpoint = sctp.Endpoint(
             is_server=not controlling,
-            transport=self.__sctp._dtlsSession.data)
+            transport=self.__sctp.transport.data)
         self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
 
     def __createSdp(self):
@@ -370,7 +371,7 @@ class RTCPeerConnection(EventEmitter):
         ]
 
         for transceiver in self.__transceivers:
-            iceConnection = transceiver._iceConnection
+            iceConnection = transceiver._transport._transport
             default_candidate = iceConnection.get_default_candidate(1)
             if default_candidate is None:
                 default_candidate = DUMMY_CANDIDATE
@@ -383,7 +384,7 @@ class RTCPeerConnection(EventEmitter):
                 'a=rtcp:9 IN IP4 0.0.0.0',
                 'a=rtcp-mux',
             ]
-            sdp += transport_sdp(iceConnection, transceiver._dtlsSession)
+            sdp += transport_sdp(iceConnection, transceiver._transport)
             sdp += ['a=%s' % transceiver.direction]
             sdp += ['a=ssrc:%d cname:%s' % (transceiver.sender._ssrc, self.__cname)]
 
@@ -391,7 +392,7 @@ class RTCPeerConnection(EventEmitter):
                 sdp += ['a=rtpmap:%d %s' % (codec.pt, str(codec))]
 
         if self.__sctp:
-            iceConnection = self.__sctp._iceConnection
+            iceConnection = self.__sctp.transport._transport
             default_candidate = iceConnection.get_default_candidate(1)
             if default_candidate is None:
                 default_candidate = DUMMY_CANDIDATE
@@ -399,7 +400,7 @@ class RTCPeerConnection(EventEmitter):
                 'm=application %d DTLS/SCTP 5000' % default_candidate.port,
                 'c=IN IP4 %s' % default_candidate.host,
             ]
-            sdp += transport_sdp(iceConnection, self.__sctp._dtlsSession)
+            sdp += transport_sdp(iceConnection, self.__sctp.transport)
             sdp += ['a=sctpmap:5000 webrtc-datachannel 256']
 
         return '\r\n'.join(sdp) + '\r\n'
@@ -409,15 +410,14 @@ class RTCPeerConnection(EventEmitter):
             sender=RTCRtpSender(sender_track or kind),
             receiver=RTCRtpReceiver(kind=kind))
         transceiver._kind = kind
-        self.__createTransport(transceiver, controlling=controlling)
+        transceiver._transport = self.__createTransport(controlling=controlling)
         self.__transceivers.append(transceiver)
         return transceiver
 
-    def __createTransport(self, transceiver, controlling):
-        transceiver._iceConnection = aioice.Connection(ice_controlling=controlling)
-        transceiver._dtlsSession = RTCDtlsTransport(
+    def __createTransport(self, controlling):
+        return RTCDtlsTransport(
             context=self.__dtlsContext,
-            transport=transceiver._iceConnection)
+            transport=aioice.Connection(ice_controlling=controlling))
 
     def __setIceConnectionState(self, state):
         self.__iceConnectionState = state
@@ -433,6 +433,6 @@ class RTCPeerConnection(EventEmitter):
 
     def __transports(self):
         for transceiver in self.__transceivers:
-            yield transceiver._iceConnection, transceiver._dtlsSession
+            yield transceiver._transport._transport, transceiver._transport
         if self.__sctp:
-            yield self.__sctp._iceConnection, self.__sctp._dtlsSession
+            yield self.__sctp.transport._transport, self.__sctp.transport
