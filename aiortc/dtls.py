@@ -123,11 +123,16 @@ class Channel:
         return data
 
 
-class DtlsSrtpSession:
-    def __init__(self, context, is_server, transport):
+class RTCDtlsTransport:
+    """
+    The RTCDtlsTransport object includes information relating to Datagram
+    Transport Layer Security (DTLS) transport.
+    """
+
+    def __init__(self, transport, context):
         self.closed = asyncio.Event()
         self.encrypted = False
-        self.is_server = is_server
+        self.is_server = transport.ice_controlling
         self.remote_fingerprint = None
         self.role = self.is_server and 'server' or 'client'
         self.state = self.State.CLOSED

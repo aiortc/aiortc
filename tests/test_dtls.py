@@ -3,13 +3,20 @@ import logging
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.dtls import DtlsError, DtlsSrtpContext, DtlsSrtpSession
+from aiortc.dtls import DtlsError, DtlsSrtpContext, RTCDtlsTransport
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
 
 RTP = load('rtp.bin')
 RTCP = load('rtcp_sr.bin')
+
+
+def dummy_ice_transport_pair():
+    transport1, transport2 = dummy_transport_pair()
+    transport1.ice_controlling = True
+    transport2.ice_controlling = False
+    return transport1, transport2
 
 
 class DtlsSrtpTest(TestCase):
@@ -20,15 +27,15 @@ class DtlsSrtpTest(TestCase):
             DtlsSrtpContext()
 
     def test_data(self):
-        transport1, transport2 = dummy_transport_pair()
+        transport1, transport2 = dummy_ice_transport_pair()
 
         context1 = DtlsSrtpContext()
-        session1 = DtlsSrtpSession(
-            context=context1, transport=transport1, is_server=True)
+        session1 = RTCDtlsTransport(
+            context=context1, transport=transport1)
 
         context2 = DtlsSrtpContext()
-        session2 = DtlsSrtpSession(
-            context=context2, transport=transport2, is_server=False)
+        session2 = RTCDtlsTransport(
+            context=context2, transport=transport2)
 
         session1.remote_fingerprint = session2.local_fingerprint
         session2.remote_fingerprint = session1.local_fingerprint
@@ -46,8 +53,8 @@ class DtlsSrtpTest(TestCase):
         # shutdown
         run(session1.close())
         run(asyncio.sleep(0.5))
-        self.assertEqual(session1.state, DtlsSrtpSession.State.CLOSED)
-        self.assertEqual(session2.state, DtlsSrtpSession.State.CLOSED)
+        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
 
         # try closing again
         run(session1.close())
@@ -62,15 +69,15 @@ class DtlsSrtpTest(TestCase):
             run(session1.data.send(b'foo'))
 
     def test_rtp(self):
-        transport1, transport2 = dummy_transport_pair()
+        transport1, transport2 = dummy_ice_transport_pair()
 
         context1 = DtlsSrtpContext()
-        session1 = DtlsSrtpSession(
-            context=context1, transport=transport1, is_server=True)
+        session1 = RTCDtlsTransport(
+            context=context1, transport=transport1)
 
         context2 = DtlsSrtpContext()
-        session2 = DtlsSrtpSession(
-            context=context2, transport=transport2, is_server=False)
+        session2 = RTCDtlsTransport(
+            context=context2, transport=transport2)
 
         session1.remote_fingerprint = session2.local_fingerprint
         session2.remote_fingerprint = session1.local_fingerprint
@@ -89,8 +96,8 @@ class DtlsSrtpTest(TestCase):
         # shutdown
         run(session1.close())
         run(asyncio.sleep(0.5))
-        self.assertEqual(session1.state, DtlsSrtpSession.State.CLOSED)
-        self.assertEqual(session2.state, DtlsSrtpSession.State.CLOSED)
+        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
+        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
 
         # try closing again
         run(session1.close())
@@ -105,15 +112,15 @@ class DtlsSrtpTest(TestCase):
             run(session1.rtp.send(RTP))
 
     def test_abrupt_disconnect(self):
-        transport1, transport2 = dummy_transport_pair()
+        transport1, transport2 = dummy_ice_transport_pair()
 
         context1 = DtlsSrtpContext()
-        session1 = DtlsSrtpSession(
-            context=context1, transport=transport1, is_server=True)
+        session1 = RTCDtlsTransport(
+            context=context1, transport=transport1)
 
         context2 = DtlsSrtpContext()
-        session2 = DtlsSrtpSession(
-            context=context2, transport=transport2, is_server=False)
+        session2 = RTCDtlsTransport(
+            context=context2, transport=transport2)
 
         session1.remote_fingerprint = session2.local_fingerprint
         session2.remote_fingerprint = session1.local_fingerprint
@@ -125,7 +132,7 @@ class DtlsSrtpTest(TestCase):
             transport1.close(),
         ))
         run(asyncio.sleep(0))
-        self.assertEqual(session1.state, DtlsSrtpSession.State.CLOSED)
+        self.assertEqual(session1.state, RTCDtlsTransport.State.CLOSED)
 
         # break other connection
         run(first_completed(
@@ -133,22 +140,22 @@ class DtlsSrtpTest(TestCase):
             transport2.close(),
         ))
         run(asyncio.sleep(0))
-        self.assertEqual(session2.state, DtlsSrtpSession.State.CLOSED)
+        self.assertEqual(session2.state, RTCDtlsTransport.State.CLOSED)
 
         # try closing again
         run(session1.close())
         run(session2.close())
 
     def test_bad_client_fingerprint(self):
-        transport1, transport2 = dummy_transport_pair()
+        transport1, transport2 = dummy_ice_transport_pair()
 
         context1 = DtlsSrtpContext()
-        session1 = DtlsSrtpSession(
-            context=context1, transport=transport1, is_server=True)
+        session1 = RTCDtlsTransport(
+            context=context1, transport=transport1)
 
         context2 = DtlsSrtpContext()
-        session2 = DtlsSrtpSession(
-            context=context2, transport=transport2, is_server=False)
+        session2 = RTCDtlsTransport(
+            context=context2, transport=transport2)
 
         session1.remote_fingerprint = 'bogus_fingerprint'
         session2.remote_fingerprint = session1.local_fingerprint
@@ -165,15 +172,15 @@ class DtlsSrtpTest(TestCase):
         mock_get_error.return_value = 1
         mock_do_handshake.return_value = -1
 
-        transport1, transport2 = dummy_transport_pair()
+        transport1, transport2 = dummy_ice_transport_pair()
 
         context1 = DtlsSrtpContext()
-        session1 = DtlsSrtpSession(
-            context=context1, transport=transport1, is_server=True)
+        session1 = RTCDtlsTransport(
+            context=context1, transport=transport1)
 
         context2 = DtlsSrtpContext()
-        session2 = DtlsSrtpSession(
-            context=context2, transport=transport2, is_server=False)
+        session2 = RTCDtlsTransport(
+            context=context2, transport=transport2)
 
         session1.remote_fingerprint = 'bogus_fingerprint'
         session2.remote_fingerprint = session1.local_fingerprint

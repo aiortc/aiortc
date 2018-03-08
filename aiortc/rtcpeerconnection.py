@@ -5,7 +5,8 @@ import uuid
 import aioice
 from pyee import EventEmitter
 
-from . import dtls, rtp, sctp, sdp
+from . import rtp, sctp, sdp
+from .dtls import DtlsSrtpContext, RTCDtlsTransport
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
 from .rtcrtptransceiver import (RemoteStreamTrack, RTCRtpReceiver,
@@ -81,7 +82,7 @@ class RTCPeerConnection(EventEmitter):
         super().__init__(loop=loop)
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
-        self.__dtlsContext = dtls.DtlsSrtpContext()
+        self.__dtlsContext = DtlsSrtpContext()
         self.__sctp = None
         self.__transceivers = []
 
@@ -414,9 +415,8 @@ class RTCPeerConnection(EventEmitter):
 
     def __createTransport(self, transceiver, controlling):
         transceiver._iceConnection = aioice.Connection(ice_controlling=controlling)
-        transceiver._dtlsSession = dtls.DtlsSrtpSession(
-            self.__dtlsContext,
-            is_server=controlling,
+        transceiver._dtlsSession = RTCDtlsTransport(
+            context=self.__dtlsContext,
             transport=transceiver._iceConnection)
 
     def __setIceConnectionState(self, state):
