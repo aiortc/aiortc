@@ -131,6 +131,17 @@ class State(enum.Enum):
     FAILED = 4
 
 
+class RTCDtlsFingerprint:
+    def __init__(self, algorithm, value):
+        self.algorithm = algorithm
+        self.value = value
+
+
+class RTCDtlsParameters:
+    def __init__(self, fingerprints):
+        self.fingerprints = fingerprints
+
+
 class RTCDtlsTransport(EventEmitter):
     """
     The RTCDtlsTransport object includes information relating to Datagram
@@ -142,7 +153,6 @@ class RTCDtlsTransport(EventEmitter):
         self.closed = asyncio.Event()
         self.encrypted = False
         self.is_server = transport.ice_controlling
-        self.remote_fingerprint = None
         self.role = self.is_server and 'server' or 'client'
         self._state = State.NEW
         self._transport = transport
@@ -175,7 +185,9 @@ class RTCDtlsTransport(EventEmitter):
 
         # local fingerprint
         x509 = lib.SSL_get_certificate(self.ssl)
-        self.local_fingerprint = certificate_digest(x509)
+        self._local_fingerprints = [
+            RTCDtlsFingerprint(algorithm='sha-256', value=certificate_digest(x509))
+        ]
 
     @property
     def state(self):
@@ -184,15 +196,12 @@ class RTCDtlsTransport(EventEmitter):
         """
         return str(self._state)[6:].lower()
 
-    async def stop(self):
-        if self._state in [State.CONNECTING, State.CONNECTED]:
-            lib.SSL_shutdown(self.ssl)
-            await self._write_ssl()
-            logger.debug('%s - DTLS shutdown complete', self.role)
-            self.closed.set()
+    def getLocalParameters(self):
+        return RTCDtlsParameters(fingerprints=self._local_fingerprints)
 
-    async def connect(self):
+    async def start(self, remoteParameters):
         assert self._state == State.NEW
+        assert len(remoteParameters.fingerprints)
 
         self._set_state(State.CONNECTING)
         while not self.encrypted:
@@ -213,7 +222,12 @@ class RTCDtlsTransport(EventEmitter):
         # check remote fingerprint
         x509 = lib.SSL_get_peer_certificate(self.ssl)
         remote_fingerprint = certificate_digest(x509)
-        if remote_fingerprint != self.remote_fingerprint.upper():
+        fingerprint_is_valid = False
+        for f in remoteParameters.fingerprints:
+            if f.algorithm == 'sha-256' and f.value.lower() == remote_fingerprint.lower():
+                fingerprint_is_valid = True
+                break
+        if not fingerprint_is_valid:
             self._set_state(State.FAILED)
             raise DtlsError('DTLS fingerprint does not match')
 
@@ -240,6 +254,13 @@ class RTCDtlsTransport(EventEmitter):
         logger.debug('%s - DTLS handshake complete', self.role)
         self._set_state(State.CONNECTED)
         asyncio.ensure_future(self.__run())
+
+    async def stop(self):
+        if self._state in [State.CONNECTING, State.CONNECTED]:
+            lib.SSL_shutdown(self.ssl)
+            await self._write_ssl()
+            logger.debug('%s - DTLS shutdown complete', self.role)
+            self.closed.set()
 
     async def __run(self):
         try:

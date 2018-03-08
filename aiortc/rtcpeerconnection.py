@@ -64,7 +64,10 @@ def transport_sdp(iceConnection, dtlsSession):
         'a=ice-ufrag:%s' % iceConnection.local_username,
     ]
 
-    sdp += ['a=fingerprint:sha-256 %s' % dtlsSession.local_fingerprint]
+    dtls_parameters = dtlsSession.getLocalParameters()
+    for fingerprint in dtls_parameters.fingerprints:
+        sdp += ['a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value)]
+
     if dtlsSession.is_server:
         sdp += ['a=setup:actpass']
     else:
@@ -83,6 +86,7 @@ class RTCPeerConnection(EventEmitter):
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
         self.__dtlsContext = DtlsSrtpContext()
+        self.__remoteDtls = {}
         self.__sctp = None
         self.__transceivers = []
 
@@ -298,7 +302,7 @@ class RTCPeerConnection(EventEmitter):
                 iceConnection.remote_candidates = media.ice_candidates
                 iceConnection.remote_username = media.ice_ufrag
                 iceConnection.remote_password = media.ice_pwd
-                transceiver._transport.remote_fingerprint = media.dtls_fingerprint
+                self.__remoteDtls[transceiver._transport] = media.dtls
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -313,7 +317,7 @@ class RTCPeerConnection(EventEmitter):
                 iceConnection.remote_candidates = media.ice_candidates
                 iceConnection.remote_username = media.ice_ufrag
                 iceConnection.remote_password = media.ice_pwd
-                self.__sctp.transport.remote_fingerprint = media.dtls_fingerprint
+                self.__remoteDtls[self.__sctp.transport] = media.dtls
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -335,7 +339,7 @@ class RTCPeerConnection(EventEmitter):
             self.__setIceConnectionState('checking')
             for iceConnection, dtlsSession in self.__transports():
                 await iceConnection.connect()
-                await dtlsSession.connect()
+                await dtlsSession.start(self.__remoteDtls[dtlsSession])
             for transceiver in self.__transceivers:
                 asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:

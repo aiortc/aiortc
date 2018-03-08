@@ -86,8 +86,10 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].ice_pwd, 'uK8IlylxzDMUhrkVzdmj0M+v')
 
         # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
         self.assertEqual(
-            d.media[0].dtls_fingerprint,
+            d.media[0].dtls.fingerprints[0].value,
             '6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC')  # noqa
         self.assertEqual(d.media[0].dtls_setup, 'actpass')
 
@@ -174,8 +176,10 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].ice_pwd, 'f9b83487285016f7492197a5790ceee5')
 
         # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
         self.assertEqual(
-            d.media[0].dtls_fingerprint,
+            d.media[0].dtls.fingerprints[0].value,
             'EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17')  # noqa
         self.assertEqual(d.media[0].dtls_setup, 'actpass')
 
@@ -221,7 +225,9 @@ a=max-message-size:1073741823
         self.assertEqual(d.media[0].ice_pwd, 'd30a5aec4dd81f07d4ff3344209400ab')
 
         # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
         self.assertEqual(
-            d.media[0].dtls_fingerprint,
+            d.media[0].dtls.fingerprints[0].value,
             '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa
         self.assertEqual(d.media[0].dtls_setup, 'actpass')

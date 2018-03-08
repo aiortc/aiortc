@@ -4,6 +4,7 @@ import re
 import aioice
 
 from . import rtp
+from .dtls import RTCDtlsFingerprint, RTCDtlsParameters
 
 DIRECTIONS = [
     'sendrecv',
@@ -44,7 +45,7 @@ class MediaDescription:
         self.sctpmap = {}
 
         # DTLS
-        self.dtls_fingerprint = None
+        self.dtls = RTCDtlsParameters(fingerprints=[])
         self.dtls_setup = None
 
         # ICE
@@ -78,8 +79,8 @@ class MediaDescription:
             lines.append('a=ice-pwd:' + self.ice_pwd)
 
         # dtls
-        if self.dtls_fingerprint:
-            lines.append('a=fingerprint:sha-256 ' + self.dtls_fingerprint)
+        for fingerprint in self.dtls.fingerprints:
+            lines.append('a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value))
         if self.dtls_setup:
             lines.append('a=setup:' + self.dtls_setup)
 
@@ -93,7 +94,7 @@ class SessionDescription:
     @classmethod
     def parse(cls, sdp):
         current_media = None
-        dtls_fingerprint = None
+        dtls_fingerprints = []
         session = cls()
 
         for line in sdp.splitlines():
@@ -114,7 +115,7 @@ class SessionDescription:
                     port=int(m.group(2)),
                     profile=m.group(3),
                     fmt=fmt)
-                current_media.dtls_fingerprint = dtls_fingerprint
+                current_media.dtls.fingerprints = dtls_fingerprints
                 session.media.append(current_media)
             elif line.startswith('c=') and current_media:
                 current_media.host = ipaddress_from_sdp(line[2:])
@@ -127,9 +128,10 @@ class SessionDescription:
                     if attr == 'candidate':
                         current_media.ice_candidates.append(aioice.Candidate.from_sdp(value))
                     elif attr == 'fingerprint':
-                        algo, fingerprint = value.split()
-                        assert algo == 'sha-256'
-                        current_media.dtls_fingerprint = fingerprint
+                        algorithm, fingerprint = value.split()
+                        current_media.dtls.fingerprints.append(RTCDtlsFingerprint(
+                            algorithm=algorithm,
+                            value=fingerprint))
                     elif attr == 'ice-ufrag':
                         current_media.ice_ufrag = value
                     elif attr == 'ice-pwd':
@@ -150,8 +152,9 @@ class SessionDescription:
                 else:
                     # session-level attributes
                     if attr == 'fingerprint':
-                        algo, fingerprint = value.split()
-                        assert algo == 'sha-256'
-                        dtls_fingerprint = fingerprint
+                        algorithm, fingerprint = value.split()
+                        dtls_fingerprints.append(RTCDtlsFingerprint(
+                            algorithm=algorithm,
+                            value=fingerprint))
 
         return session

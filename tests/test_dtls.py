@@ -3,7 +3,8 @@ import logging
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.dtls import DtlsError, DtlsSrtpContext, RTCDtlsTransport
+from aiortc.dtls import (DtlsError, DtlsSrtpContext, RTCDtlsFingerprint,
+                         RTCDtlsTransport, RTCDtlsParameters)
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
@@ -37,9 +38,9 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = session2.local_fingerprint
-        session2.remote_fingerprint = session1.local_fingerprint
-        run(asyncio.gather(session1.connect(), session2.connect()))
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
 
         # send encypted data
         run(session1.data.send(b'ping'))
@@ -79,9 +80,9 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = session2.local_fingerprint
-        session2.remote_fingerprint = session1.local_fingerprint
-        run(asyncio.gather(session1.connect(), session2.connect()))
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
 
         # send RTP
         run(session1.rtp.send(RTP))
@@ -122,9 +123,9 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = session2.local_fingerprint
-        session2.remote_fingerprint = session1.local_fingerprint
-        run(asyncio.gather(session1.connect(), session2.connect()))
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
 
         # break one connection
         run(first_completed(
@@ -157,10 +158,12 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = 'bogus_fingerprint'
-        session2.remote_fingerprint = session1.local_fingerprint
+        bogus_parameters = RTCDtlsParameters(
+            fingerprints=[RTCDtlsFingerprint(algorithm='sha-256', value='bogus_fingerprint')])
         with self.assertRaises(DtlsError) as cm:
-            run(asyncio.gather(session1.connect(), session2.connect()))
+            run(asyncio.gather(
+                session1.start(bogus_parameters),
+                session2.start(session1.getLocalParameters())))
         self.assertEqual(str(cm.exception), 'DTLS fingerprint does not match')
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'connecting')
@@ -184,10 +187,10 @@ class DtlsSrtpTest(TestCase):
         session2 = RTCDtlsTransport(
             context=context2, transport=transport2)
 
-        session1.remote_fingerprint = session2.local_fingerprint
-        session2.remote_fingerprint = session1.local_fingerprint
         with self.assertRaises(DtlsError) as cm:
-            run(asyncio.gather(session1.connect(), session2.connect()))
+            run(asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters())))
         self.assertEqual(str(cm.exception), 'DTLS handshake failed (error 1)')
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'failed')
