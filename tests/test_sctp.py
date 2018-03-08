@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from aiortc import sctp
 
-from .utils import dummy_transport_pair, load, run
+from .utils import dummy_dtls_transport_pair, load, run
 
 
 class SctpPacketTest(TestCase):
@@ -71,7 +71,7 @@ class SctpPacketTest(TestCase):
 
 class SctpAssociationTest(TestCase):
     def test_ok(self):
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
@@ -96,7 +96,7 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
     def test_abort(self):
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
@@ -114,7 +114,7 @@ class SctpAssociationTest(TestCase):
         self.assertEqual(server.state, sctp.Endpoint.State.CLOSED)
 
     def test_garbage(self):
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(b'garbage'))
@@ -130,7 +130,7 @@ class SctpAssociationTest(TestCase):
         # verification tag is 12345 instead of 0
         data = load('sctp_init_bad_verification.bin')
 
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(data))
@@ -143,7 +143,7 @@ class SctpAssociationTest(TestCase):
         run(server.close())
 
     def test_bad_cookie(self):
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
 
@@ -181,7 +181,7 @@ class SctpAssociationTest(TestCase):
 
         mock_timestamp.calls = 0
 
-        client_transport, server_transport = dummy_transport_pair()
+        client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
         server._get_timestamp = mock_timestamp
