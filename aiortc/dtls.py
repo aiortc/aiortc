@@ -155,8 +155,6 @@ class RTCDtlsTransport(EventEmitter):
         super().__init__()
         self.closed = asyncio.Event()
         self.encrypted = False
-        self.is_server = transport.ice_controlling
-        self.role = self.is_server and 'server' or 'client'
         self._state = State.NEW
         self._transport = transport
 
@@ -180,11 +178,6 @@ class RTCDtlsTransport(EventEmitter):
         self.write_bio = lib.BIO_new(lib.BIO_s_mem())
         self.write_cdata = ffi.new('char[]', 1500)
         lib.SSL_set_bio(self.ssl, self.read_bio, self.write_bio)
-
-        if self.is_server:
-            lib.SSL_set_accept_state(self.ssl)
-        else:
-            lib.SSL_set_connect_state(self.ssl)
 
         # local fingerprint
         x509 = lib.SSL_get_certificate(self.ssl)
@@ -216,6 +209,13 @@ class RTCDtlsTransport(EventEmitter):
         """
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
+
+        if self._transport.ice_controlling:
+            self._role = 'server'
+            lib.SSL_set_accept_state(self.ssl)
+        else:
+            self._role = 'client'
+            lib.SSL_set_connect_state(self.ssl)
 
         self._set_state(State.CONNECTING)
         while not self.encrypted:
@@ -252,7 +252,7 @@ class RTCDtlsTransport(EventEmitter):
             self.ssl, buf, len(buf), extractor, len(extractor), ffi.NULL, 0, 0) == 1)
 
         view = ffi.buffer(buf)
-        if self.is_server:
+        if self._role == 'server':
             srtp_tx_key = get_srtp_key_salt(view, 1)
             srtp_rx_key = get_srtp_key_salt(view, 0)
         else:
@@ -265,7 +265,7 @@ class RTCDtlsTransport(EventEmitter):
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
-        logger.debug('%s - DTLS handshake complete', self.role)
+        logger.debug('%s - DTLS handshake complete', self._role)
         self._set_state(State.CONNECTED)
         asyncio.ensure_future(self.__run())
 
@@ -276,7 +276,7 @@ class RTCDtlsTransport(EventEmitter):
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             await self._write_ssl()
-            logger.debug('%s - DTLS shutdown complete', self.role)
+            logger.debug('%s - DTLS shutdown complete', self._role)
             self.closed.set()
 
     async def __run(self):
@@ -301,7 +301,7 @@ class RTCDtlsTransport(EventEmitter):
             lib.BIO_write(self.read_bio, data, len(data))
             result = lib.SSL_read(self.ssl, self.read_cdata, len(self.read_cdata))
             if result == 0:
-                logger.debug('%s - DTLS shutdown by remote party' % self.role)
+                logger.debug('%s - DTLS shutdown by remote party' % self._role)
                 raise ConnectionError
             elif result > 0:
                 await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
@@ -332,7 +332,7 @@ class RTCDtlsTransport(EventEmitter):
 
     def _set_state(self, state):
         if state != self._state:
-            logger.debug('%s - %s -> %s', self.role, self._state, state)
+            logger.debug('%s - %s -> %s', self._role, self._state, state)
             self._state = state
             self.emit('statechange')
 

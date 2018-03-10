@@ -72,7 +72,7 @@ def transport_sdp(iceConnection, dtlsSession):
     for fingerprint in dtls_parameters.fingerprints:
         sdp += ['a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value)]
 
-    if dtlsSession.is_server:
+    if iceConnection.ice_controlling:
         sdp += ['a=setup:actpass']
     else:
         sdp += ['a=setup:active']
