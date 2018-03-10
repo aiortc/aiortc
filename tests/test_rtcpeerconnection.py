@@ -458,7 +458,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc1.localDescription.sdp)
+        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
@@ -480,7 +480,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 256' in pc2.localDescription.sdp)
+        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
