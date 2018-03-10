@@ -5,9 +5,14 @@
 </head>
 <body>
 
-<p>You should see a video alternating between green and your camera</p>
-<audio id="audio" autoplay="true"></audio>
-<video id="video" autoplay="true"></video>
+<label for="use-audio">Use audio</label>
+<input id="use-audio" checked="checked" type="checkbox"/>
+
+<label for="use-video">Use video</label>
+<input id="use-video" type="checkbox"/>
+
+<button id="start" onclick="start()">Start</button>
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
 
 <h2>State</h2>
 <p>
@@ -19,6 +24,14 @@
 <p>
     Signaling state: <span id="signaling-state"></span>
 </p>
+
+<div id="media" style="display: none">
+    <h2>Media</h2>
+
+    <p>You should see a video alternating between green and your camera</p>
+    <audio id="audio" autoplay="true"></audio>
+    <video id="video" autoplay="true"></video>
+</div>
 
 <h2>Data channel</h2>
 <pre id="data-channel" style="height: 200px; overflow-y: scroll"></pre>
@@ -64,58 +77,89 @@ pc.addEventListener('track', function(evt) {
         document.getElementById('audio').srcObject = evt.streams[0];
 });
 
-var dc = pc.createDataChannel('chat');
-dc.onmessage = function(evt) {
-    dataChannelLog.textContent += '< ' + evt.data + '\n';
-};
+// data channel
+var dc = null, dcInterval;
 
-navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: true
-}).then(function(stream) {
-    stream.getTracks().forEach(function(track) {
-        pc.addTrack(track, stream);
-    });
-    return pc.createOffer();
-}).then(function(offer) {
-    return pc.setLocalDescription(offer);
-}).then(function() {
-    // wait for ICE gathering to complete
-    return new Promise(function(resolve) {
-        if (pc.iceGatheringState === 'complete') {
-            resolve();
-        } else {
-            function checkState() {
-                if (pc.iceGatheringState === 'complete') {
-                    pc.removeEventListener('icegatheringstatechange', checkState);
-                    resolve();
+function negotiate() {
+    return pc.createOffer().then(function(offer) {
+        return pc.setLocalDescription(offer);
+    }).then(function() {
+        // wait for ICE gathering to complete
+        return new Promise(function(resolve) {
+            if (pc.iceGatheringState === 'complete') {
+                resolve();
+            } else {
+                function checkState() {
+                    if (pc.iceGatheringState === 'complete') {
+                        pc.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }
                 }
+                pc.addEventListener('icegatheringstatechange', checkState);
             }
-            pc.addEventListener('icegatheringstatechange', checkState);
+        });
+    }).then(function() {
+        var offer = pc.localDescription;
+        document.getElementById('offer-sdp').textContent = offer.sdp;
+        return fetch('/offer', {
+            body: JSON.stringify(offer),
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            method: 'POST'
+        });
+    }).then(function(response) {
+        return response.json();
+    }).then(function(answer) {
+        document.getElementById('answer-sdp').textContent = answer.sdp;
+        return pc.setRemoteDescription(answer);
+    });
+}
+
+function start() {
+    document.getElementById('start').style.display = 'none';
+
+    dc = pc.createDataChannel('chat');
+    dc.onmessage = function(evt) {
+        dataChannelLog.textContent += '< ' + evt.data + '\n';
+    };
+
+    var constraints = {
+        audio: document.getElementById('use-audio').checked,
+        video: document.getElementById('use-video').checked
+    };
+
+    var promise;
+    if (constraints.audio || constraints.video) {
+        if (constraints.video) {
+            document.getElementById('media').style.display = 'block';
         }
+        promise = navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+            stream.getTracks().forEach(function(track) {
+                pc.addTrack(track, stream);
+            });
+            return negotiate();
+        });
+    } else {
+        promise = negotiate();
+    }
+
+    promise.then(function() {
+        dcInterval = setInterval(function() {
+            var message = 'ping';
+            dataChannelLog.textContent += '> ' + message + '\n';
+            dc.send(message);
+        }, 1000);
     });
-}).then(function() {
-    var offer = pc.localDescription;
-    document.getElementById('offer-sdp').textContent = offer.sdp;
-    return fetch('/offer', {
-        body: JSON.stringify(offer),
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        method: 'POST'
-    });
-}).then(function(response) {
-    return response.json();
-}).then(function(answer) {
-    document.getElementById('answer-sdp').textContent = answer.sdp;
-    return pc.setRemoteDescription(answer);
-}).then(function() {
-    setInterval(function() {
-        var message = 'ping';
-        dataChannelLog.textContent += '> ' + message + '\n';
-        dc.send(message);
-    }, 1000);
-});
+
+    document.getElementById('stop').style.display = 'inline-block';
+}
+
+function stop() {
+    clearInterval(dcInterval);
+    pc.close();
+    getElementById('stop').style.display = 'none';
+}
 
 </script>
 </body>

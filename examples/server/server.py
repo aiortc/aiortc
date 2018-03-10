@@ -96,13 +96,13 @@ async def offer(request):
     @pc.on('track')
     def on_track(track):
         if track.kind == 'audio':
+            pc.addTrack(local_audio)
             asyncio.ensure_future(consume_audio(track))
         elif track.kind == 'video':
+            pc.addTrack(local_video)
             asyncio.ensure_future(consume_video(track, local_video))
 
     await pc.setRemoteDescription(offer)
-    pc.addTrack(local_audio)
-    pc.addTrack(local_video)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
