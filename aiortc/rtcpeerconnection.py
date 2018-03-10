@@ -63,6 +63,7 @@ def transport_sdp(iceConnection, dtlsSession):
     sdp = []
     for candidate in iceConnection.local_candidates:
         sdp += ['a=candidate:%s' % candidate.to_sdp()]
+    sdp += ['a=end-of-candidates']
     sdp += [
         'a=ice-pwd:%s' % iceConnection.local_password,
         'a=ice-ufrag:%s' % iceConnection.local_username,
