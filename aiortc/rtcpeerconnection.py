@@ -316,6 +316,9 @@ class RTCPeerConnection(EventEmitter):
                 if not self.__sctp:
                     self.__createSctp(controlling=False)
 
+                # configure sctp
+                self.__sctpEndpoint.remote_port = media.fmt[0]
+
                 # configure transport
                 iceConnection = self.__sctp.transport._transport
                 iceConnection.remote_candidates = media.ice_candidates

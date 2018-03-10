@@ -290,9 +290,11 @@ class Endpoint:
         self.stream_frags = {}
         self.stream_seq = {}
 
+        self.local_port = 5000
         self.local_tsn = random32()
         self.local_verification_tag = random32()
 
+        self.remote_port = None
         self.remote_tsn = None
         self.remote_verification_tag = 0
 
@@ -490,8 +492,8 @@ class Endpoint:
     async def _send_chunk(self, chunk):
         logger.debug('%s > %s', self.role, repr(chunk))
         packet = Packet(
-            source_port=5000,
-            destination_port=5000,
+            source_port=self.local_port,
+            destination_port=self.remote_port,
             verification_tag=self.remote_verification_tag)
         packet.chunks.append(chunk)
         await self.transport.send(bytes(packet))

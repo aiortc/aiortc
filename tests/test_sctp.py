@@ -74,6 +74,11 @@ class SctpAssociationTest(TestCase):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+
+        client.remote_port = server.local_port
+        server.remote_port = client.local_port
+
+        # connect
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
 
@@ -99,6 +104,11 @@ class SctpAssociationTest(TestCase):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+
+        client.remote_port = server.local_port
+        server.remote_port = client.local_port
+
+        # connect
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
 
@@ -116,6 +126,7 @@ class SctpAssociationTest(TestCase):
     def test_garbage(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+        server.remote_port = 5000
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(b'garbage'))
 
@@ -132,6 +143,7 @@ class SctpAssociationTest(TestCase):
 
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+        server.remote_port = 5000
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(data))
 
@@ -146,6 +158,9 @@ class SctpAssociationTest(TestCase):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+
+        client.remote_port = server.local_port
+        server.remote_port = client.local_port
 
         # corrupt cookie
         real_send_chunk = client._send_chunk
@@ -184,6 +199,10 @@ class SctpAssociationTest(TestCase):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = sctp.Endpoint(is_server=False, transport=client_transport)
         server = sctp.Endpoint(is_server=True, transport=server_transport)
+
+        client.remote_port = server.local_port
+        server.remote_port = client.local_port
+
         server._get_timestamp = mock_timestamp
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client.run())
