@@ -425,7 +425,8 @@ class RTCPeerConnection(EventEmitter):
     def __createTransport(self, controlling):
         return RTCDtlsTransport(
             context=self.__dtlsContext,
-            transport=aioice.Connection(ice_controlling=controlling))
+            transport=aioice.Connection(ice_controlling=controlling,
+                                        stun_server=('stun.l.google.com', 19302)))
 
     def __setIceConnectionState(self, state):
         self.__iceConnectionState = state
