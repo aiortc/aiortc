@@ -285,8 +285,8 @@ class Endpoint:
 
         self.hmac_key = os.urandom(16)
         self.advertised_rwnd = 131072
-        self.outbound_streams = 256
-        self.inbound_streams = 2048
+        self.outbound_streams = 65535
+        self.inbound_streams = 65535
         self.stream_frags = {}
         self.stream_seq = {}
 
