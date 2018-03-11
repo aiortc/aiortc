@@ -1,3 +1,4 @@
+from aioice import Candidate as RTCIceCandidate  # noqa
 from aioice import Connection
 
 
@@ -34,13 +35,25 @@ class RTCIceTransport:
 
     @property
     def role(self):
-        if self._iceGatherer._connection.ice_controlling:
+        if self._connection.ice_controlling:
             return 'controlling'
         else:
             return 'controlled'
 
+    @property
+    def _connection(self):
+        return self._iceGatherer._connection
+
     def getRemoteCandidates(self):
-        return self._iceGatherer._connection.remote_candidates
+        return self._connection.remote_candidates
 
     def setRemoteCandidates(self, remoteCandidates):
-        self._iceGatherer._connection.remote_candidates = remoteCandidates
+        self._connection.remote_candidates = remoteCandidates
+
+    async def start(self, remoteParameters):
+        self._connection.remote_username = remoteParameters.usernameFragment
+        self._connection.remote_password = remoteParameters.password
+        await self._connection.connect()
+
+    async def stop(self):
+        await self._connection.close()

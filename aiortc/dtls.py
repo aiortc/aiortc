@@ -194,6 +194,10 @@ class RTCDtlsTransport(EventEmitter):
         """
         return str(self._state)[6:].lower()
 
+    @property
+    def transport(self):
+        return self._transport
+
     def getLocalParameters(self):
         """
         Get the local parameters of the DTLS transport.
@@ -212,7 +216,7 @@ class RTCDtlsTransport(EventEmitter):
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
 
-        if self._transport.ice_controlling:
+        if self.transport.role == 'controlling':
             self._role = 'server'
             lib.SSL_set_accept_state(self.ssl)
         else:
@@ -292,7 +296,7 @@ class RTCDtlsTransport(EventEmitter):
             self.closed.set()
 
     async def _recv_next(self):
-        data = await first_completed(self._transport.recv(), self.closed.wait())
+        data = await first_completed(self.transport._connection.recv(), self.closed.wait())
         if data is True:
             # session was closed
             raise ConnectionError
@@ -330,7 +334,7 @@ class RTCDtlsTransport(EventEmitter):
             data = self._tx_srtp.protect_rtcp(data)
         else:
             data = self._tx_srtp.protect(data)
-        await self._transport.send(data)
+        await self.transport._connection.send(data)
 
     def _set_state(self, state):
         if state != self._state:
@@ -345,4 +349,4 @@ class RTCDtlsTransport(EventEmitter):
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
-            await self._transport.send(ffi.buffer(self.write_cdata)[0:result])
+            await self.transport._connection.send(ffi.buffer(self.write_cdata)[0:result])

@@ -4,9 +4,9 @@ import os
 from aiortc.utils import first_completed
 
 
-class DummyIceConnection:
-    def __init__(self, ice_controlling):
-        self.ice_controlling = ice_controlling
+class DummyIceTransport:
+    def __init__(self, role):
+        self.role = role
 
 
 def dummy_dtls_transport_pair():
@@ -15,12 +15,12 @@ def dummy_dtls_transport_pair():
     transport_a.data = transport_a
     transport_a.rtp = transport_a
     transport_a.state = 'connected'
-    transport_a._transport = DummyIceConnection(ice_controlling=True)
+    transport_a.transport = DummyIceTransport(role='controlling')
 
     transport_b.data = transport_b
     transport_b.rtp = transport_b
     transport_b.state = 'connected'
-    transport_b._transport = DummyIceConnection(ice_controlling=False)
+    transport_b.transport = DummyIceTransport(role='controlled')
 
     return transport_a, transport_b
 

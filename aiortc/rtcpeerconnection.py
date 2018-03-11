@@ -2,13 +2,13 @@ import asyncio
 import datetime
 import uuid
 
-import aioice
 from pyee import EventEmitter
 
 from . import rtp, sctp, sdp
 from .dtls import DtlsSrtpContext, RTCDtlsTransport
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
+from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import RTCRtpCodecParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
@@ -16,7 +16,7 @@ from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 
-DUMMY_CANDIDATE = aioice.Candidate(
+DUMMY_CANDIDATE = RTCIceCandidate(
     foundation='',
     component=1,
     transport='udp',
@@ -59,21 +59,22 @@ def get_ntp_seconds():
     ).total_seconds())
 
 
-def transport_sdp(iceConnection, dtlsSession):
+def transport_sdp(iceTransport, dtlsTransport):
     sdp = []
-    for candidate in iceConnection.local_candidates:
+    iceGatherer = iceTransport.iceGatherer
+    for candidate in iceGatherer.getLocalCandidates():
         sdp += ['a=candidate:%s' % candidate.to_sdp()]
     sdp += ['a=end-of-candidates']
     sdp += [
-        'a=ice-pwd:%s' % iceConnection.local_password,
-        'a=ice-ufrag:%s' % iceConnection.local_username,
+        'a=ice-pwd:%s' % iceGatherer.getLocalParameters().password,
+        'a=ice-ufrag:%s' % iceGatherer.getLocalParameters().usernameFragment,
     ]
 
-    dtls_parameters = dtlsSession.getLocalParameters()
+    dtls_parameters = dtlsTransport.getLocalParameters()
     for fingerprint in dtls_parameters.fingerprints:
         sdp += ['a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value)]
 
-    if iceConnection.ice_controlling:
+    if iceTransport.role == 'controlling':
         sdp += ['a=setup:actpass']
     else:
         sdp += ['a=setup:active']
@@ -170,11 +171,11 @@ class RTCPeerConnection(EventEmitter):
         for transceiver in self.__transceivers:
             await transceiver.stop()
             await transceiver._transport.stop()
-            await transceiver._transport._transport.close()
+            await transceiver._transport.transport.stop()
         if self.__sctp:
             await self.__sctpEndpoint.close()
             await self.__sctp.transport.stop()
-            await self.__sctp.transport._transport.close()
+            await self.__sctp.transport.transport.stop()
         self.__setIceConnectionState('closed')
 
     async def createAnswer(self):
@@ -255,8 +256,8 @@ class RTCPeerConnection(EventEmitter):
         # set ICE role
         if self.__initialOfferer is None:
             self.__initialOfferer = (sessionDescription.type == 'offer')
-            for iceConnection, _ in self.__transports():
-                iceConnection.ice_controlling = self.__initialOfferer
+            for iceTransport, _ in self.__transports():
+                iceTransport._connection.ice_controlling = self.__initialOfferer
 
         # gather
         await self.__gather()
@@ -305,10 +306,11 @@ class RTCPeerConnection(EventEmitter):
                 transceiver._codecs = common
 
                 # configure transport
-                iceConnection = transceiver._transport._transport
-                iceConnection.remote_candidates = media.ice_candidates
-                self.__remoteDtls[transceiver._transport] = media.dtls
-                self.__remoteIce[iceConnection] = media.ice
+                dtlsTransport = transceiver._transport
+                iceTransport = dtlsTransport.transport
+                iceTransport.setRemoteCandidates(media.ice_candidates)
+                self.__remoteDtls[dtlsTransport] = media.dtls
+                self.__remoteIce[iceTransport] = media.ice
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -322,10 +324,11 @@ class RTCPeerConnection(EventEmitter):
                 self.__sctpEndpoint.remote_port = media.fmt[0]
 
                 # configure transport
-                iceConnection = self.__sctp.transport._transport
-                iceConnection.remote_candidates = media.ice_candidates
-                self.__remoteDtls[self.__sctp.transport] = media.dtls
-                self.__remoteIce[iceConnection] = media.ice
+                dtlsTransport = self.__sctp.transport
+                iceTransport = dtlsTransport.transport
+                iceTransport.setRemoteCandidates(media.ice_candidates)
+                self.__remoteDtls[dtlsTransport] = media.dtls
+                self.__remoteIce[iceTransport] = media.ice
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -339,17 +342,16 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        for iceConnection, dtlsSession in self.__transports():
-            if (not iceConnection.local_candidates or not iceConnection.remote_candidates):
+        for iceTransport, dtlsTransport in self.__transports():
+            if (not iceTransport.iceGatherer.getLocalCandidates() or
+               not iceTransport.getRemoteCandidates()):
                 return
 
         if self.iceConnectionState == 'new':
             self.__setIceConnectionState('checking')
-            for iceConnection, dtlsSession in self.__transports():
-                iceConnection.remote_username = self.__remoteIce[iceConnection].usernameFragment
-                iceConnection.remote_password = self.__remoteIce[iceConnection].password
-                await iceConnection.connect()
-                await dtlsSession.start(self.__remoteDtls[dtlsSession])
+            for iceTransport, dtlsTransport in self.__transports():
+                await iceTransport.start(self.__remoteIce[iceTransport])
+                await dtlsTransport.start(self.__remoteDtls[dtlsTransport])
             for transceiver in self.__transceivers:
                 asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:
@@ -360,8 +362,8 @@ class RTCPeerConnection(EventEmitter):
     async def __gather(self):
         if self.__iceGatheringState == 'new':
             self.__setIceGatheringState('gathering')
-            for iceConnection, dtlsSession in self.__transports():
-                await iceConnection.gather_candidates()
+            for iceTransport, dtlsTransport in self.__transports():
+                await iceTransport.iceGatherer.gather()
             self.__setIceGatheringState('complete')
 
     def __assertNotClosed(self):
@@ -383,9 +385,11 @@ class RTCPeerConnection(EventEmitter):
         ]
 
         for transceiver in self.__transceivers:
-            iceConnection = transceiver._transport._transport
-            default_candidate = iceConnection.get_default_candidate(1)
-            if default_candidate is None:
+            iceTransport = transceiver._transport.transport
+            candidates = iceTransport.iceGatherer.getLocalCandidates()
+            if candidates:
+                default_candidate = candidates[0]
+            else:
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
                 'm=%s %d UDP/TLS/RTP/SAVPF %s' % (
@@ -396,7 +400,7 @@ class RTCPeerConnection(EventEmitter):
                 'a=rtcp:9 IN IP4 0.0.0.0',
                 'a=rtcp-mux',
             ]
-            sdp += transport_sdp(iceConnection, transceiver._transport)
+            sdp += transport_sdp(iceTransport, transceiver._transport)
             sdp += ['a=%s' % transceiver.direction]
             sdp += ['a=ssrc:%d cname:%s' % (transceiver.sender._ssrc, self.__cname)]
 
@@ -404,15 +408,17 @@ class RTCPeerConnection(EventEmitter):
                 sdp += ['a=rtpmap:%d %s' % (codec.payloadType, str(codec))]
 
         if self.__sctp:
-            iceConnection = self.__sctp.transport._transport
-            default_candidate = iceConnection.get_default_candidate(1)
-            if default_candidate is None:
+            iceTransport = self.__sctp.transport.transport
+            candidates = iceTransport.iceGatherer.getLocalCandidates()
+            if candidates:
+                default_candidate = candidates[0]
+            else:
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
                 'm=application %d DTLS/SCTP %d' % (default_candidate.port, self.__sctp.port),
                 'c=IN IP4 %s' % default_candidate.host,
             ]
-            sdp += transport_sdp(iceConnection, self.__sctp.transport)
+            sdp += transport_sdp(iceTransport, self.__sctp.transport)
             sdp += ['a=sctpmap:%s webrtc-datachannel %d' % (
                 self.__sctp.port, self.__sctpEndpoint.outbound_streams)]
 
@@ -430,8 +436,7 @@ class RTCPeerConnection(EventEmitter):
     def __createTransport(self):
         return RTCDtlsTransport(
             context=self.__dtlsContext,
-            transport=aioice.Connection(ice_controlling=(self.__initialOfferer is True),
-                                        stun_server=('stun.l.google.com', 19302)))
+            transport=RTCIceTransport(RTCIceGatherer()))
 
     def __setIceConnectionState(self, state):
         self.__iceConnectionState = state
@@ -447,6 +452,6 @@ class RTCPeerConnection(EventEmitter):
 
     def __transports(self):
         for transceiver in self.__transceivers:
-            yield transceiver._transport._transport, transceiver._transport
+            yield transceiver._transport.transport, transceiver._transport
         if self.__sctp:
-            yield self.__sctp.transport._transport, self.__sctp.transport
+            yield self.__sctp.transport.transport, self.__sctp.transport

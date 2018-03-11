@@ -1,12 +1,9 @@
 import ipaddress
 import re
 
-import aioice
-
 from . import rtp
 from .dtls import RTCDtlsFingerprint, RTCDtlsParameters
-from .rtcicetransport import RTCIceParameters
-
+from .rtcicetransport import RTCIceCandidate, RTCIceParameters
 
 DIRECTIONS = [
     'sendrecv',
@@ -132,7 +129,7 @@ class SessionDescription:
                     attr = line[2:]
                 if current_media:
                     if attr == 'candidate':
-                        current_media.ice_candidates.append(aioice.Candidate.from_sdp(value))
+                        current_media.ice_candidates.append(RTCIceCandidate.from_sdp(value))
                     elif attr == 'fingerprint':
                         algorithm, fingerprint = value.split()
                         current_media.dtls.fingerprints.append(RTCDtlsFingerprint(

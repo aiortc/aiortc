@@ -298,7 +298,7 @@ class Endpoint:
 
     @property
     def is_server(self):
-        return not self.transport._transport.ice_controlling
+        return self.transport.transport.role != 'controlling'
 
     @property
     def role(self):

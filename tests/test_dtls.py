@@ -13,11 +13,21 @@ RTP = load('rtp.bin')
 RTCP = load('rtcp_sr.bin')
 
 
+class DummyIceTransport:
+    def __init__(self, connection, role):
+        self._connection = connection
+        self.role = role
+
+    async def stop(self):
+        await self._connection.close()
+
+
 def dummy_ice_transport_pair():
     transport1, transport2 = dummy_transport_pair()
-    transport1.ice_controlling = True
-    transport2.ice_controlling = False
-    return transport1, transport2
+    return (
+        DummyIceTransport(transport1, 'controlling'),
+        DummyIceTransport(transport2, 'controlled')
+    )
 
 
 class DtlsSrtpTest(TestCase):
@@ -130,7 +140,7 @@ class DtlsSrtpTest(TestCase):
         # break one connection
         run(first_completed(
             session1.data.recv(),
-            transport1.close(),
+            transport1.stop(),
         ))
         run(asyncio.sleep(0))
         self.assertEqual(session1.state, 'closed')
@@ -138,7 +148,7 @@ class DtlsSrtpTest(TestCase):
         # break other connection
         run(first_completed(
             session2.data.recv(),
-            transport2.close(),
+            transport2.stop(),
         ))
         run(asyncio.sleep(0))
         self.assertEqual(session2.state, 'closed')
