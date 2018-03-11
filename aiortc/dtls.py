@@ -142,8 +142,9 @@ class RTCDtlsParameters:
     The RTCDtlsParameters object includes information relating to DTLS
     configuration.
     """
-    def __init__(self, fingerprints):
+    def __init__(self, fingerprints=[], role='auto'):
         self.fingerprints = fingerprints
+        self.role = role
 
 
 class RTCDtlsTransport(EventEmitter):
@@ -155,6 +156,7 @@ class RTCDtlsTransport(EventEmitter):
         super().__init__()
         self.closed = asyncio.Event()
         self.encrypted = False
+        self._role = 'auto'
         self._state = State.NEW
         self._transport = transport
 

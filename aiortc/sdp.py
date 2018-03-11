@@ -13,6 +13,13 @@ DIRECTIONS = [
     'inactive'
 ]
 
+DTLS_ROLE_SETUP = {
+    'auto': 'actpass',
+    'client': 'active',
+    'server': 'passive'
+}
+DTLS_SETUP_ROLE = dict([(v, k) for (k, v) in DTLS_ROLE_SETUP.items()])
+
 
 def ipaddress_from_sdp(sdp):
     m = re.match('^IN (IP4|IP6) ([^ ]+)$', sdp)
@@ -45,8 +52,7 @@ class MediaDescription:
         self.sctpmap = {}
 
         # DTLS
-        self.dtls = RTCDtlsParameters(fingerprints=[])
-        self.dtls_setup = None
+        self.dtls = RTCDtlsParameters()
 
         # ICE
         self.ice_candidates = []
@@ -81,8 +87,7 @@ class MediaDescription:
         # dtls
         for fingerprint in self.dtls.fingerprints:
             lines.append('a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value))
-        if self.dtls_setup:
-            lines.append('a=setup:' + self.dtls_setup)
+        lines.append('a=setup:' + DTLS_ROLE_SETUP[self.dtls.role])
 
         return '\r\n'.join(lines) + '\r\n'
 
@@ -143,7 +148,7 @@ class SessionDescription:
                     elif attr == 'rtcp-mux':
                         current_media.rtcp_mux = True
                     elif attr == 'setup':
-                        current_media.dtls_setup = value
+                        current_media.dtls.role = DTLS_SETUP_ROLE[value]
                     elif attr in DIRECTIONS:
                         current_media.direction = attr
                     elif attr in ['rtpmap', 'sctpmap']:
