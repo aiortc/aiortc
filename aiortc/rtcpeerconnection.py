@@ -92,6 +92,7 @@ class RTCPeerConnection(EventEmitter):
         self.__datachannelManager = None
         self.__dtlsContext = DtlsSrtpContext()
         self.__remoteDtls = {}
+        self.__remoteIce = {}
         self.__sctp = None
         self.__transceivers = []
 
@@ -304,9 +305,8 @@ class RTCPeerConnection(EventEmitter):
                 # configure transport
                 iceConnection = transceiver._transport._transport
                 iceConnection.remote_candidates = media.ice_candidates
-                iceConnection.remote_username = media.ice.usernameFragment
-                iceConnection.remote_password = media.ice.password
                 self.__remoteDtls[transceiver._transport] = media.dtls
+                self.__remoteIce[iceConnection] = media.ice
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -322,9 +322,8 @@ class RTCPeerConnection(EventEmitter):
                 # configure transport
                 iceConnection = self.__sctp.transport._transport
                 iceConnection.remote_candidates = media.ice_candidates
-                iceConnection.remote_username = media.ice.usernameFragment
-                iceConnection.remote_password = media.ice.password
                 self.__remoteDtls[self.__sctp.transport] = media.dtls
+                self.__remoteIce[iceConnection] = media.ice
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -345,6 +344,8 @@ class RTCPeerConnection(EventEmitter):
         if self.iceConnectionState == 'new':
             self.__setIceConnectionState('checking')
             for iceConnection, dtlsSession in self.__transports():
+                iceConnection.remote_username = self.__remoteIce[iceConnection].usernameFragment
+                iceConnection.remote_password = self.__remoteIce[iceConnection].password
                 await iceConnection.connect()
                 await dtlsSession.start(self.__remoteDtls[dtlsSession])
             for transceiver in self.__transceivers:
