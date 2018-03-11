@@ -2,10 +2,9 @@ import ipaddress
 import re
 
 from . import rtp
-from .dtls import RTCDtlsFingerprint, RTCDtlsParameters
+from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
 from .rtcsctptransport import RTCSctpCapabilities
-
 
 DIRECTIONS = [
     'sendrecv',

@@ -5,9 +5,9 @@ import uuid
 from pyee import EventEmitter
 
 from . import rtp, sdp
-from .dtls import DtlsSrtpContext, RTCDtlsTransport
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
+from .rtcdtlstransport import DtlsSrtpContext, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import RTCRtpCodecParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver

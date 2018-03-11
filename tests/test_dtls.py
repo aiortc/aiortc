@@ -3,8 +3,9 @@ import logging
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.dtls import (DtlsError, DtlsSrtpContext, RTCDtlsFingerprint,
-                         RTCDtlsParameters, RTCDtlsTransport)
+from aiortc.rtcdtlstransport import (DtlsError, DtlsSrtpContext,
+                                     RTCDtlsFingerprint, RTCDtlsParameters,
+                                     RTCDtlsTransport)
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
@@ -31,7 +32,7 @@ def dummy_ice_transport_pair():
 
 
 class DtlsSrtpTest(TestCase):
-    @patch('aiortc.dtls.lib.SSL_CTX_use_certificate')
+    @patch('aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate')
     def test_broken_ssl(self, mock_use_certificate):
         mock_use_certificate.return_value = 0
         with self.assertRaises(DtlsError):
@@ -181,8 +182,8 @@ class DtlsSrtpTest(TestCase):
         run(session1.stop())
         run(session2.stop())
 
-    @patch('aiortc.dtls.lib.SSL_do_handshake')
-    @patch('aiortc.dtls.lib.SSL_get_error')
+    @patch('aiortc.rtcdtlstransport.lib.SSL_do_handshake')
+    @patch('aiortc.rtcdtlstransport.lib.SSL_get_error')
     def test_handshake_error(self, mock_get_error, mock_do_handshake):
         mock_get_error.return_value = 1
         mock_do_handshake.return_value = -1

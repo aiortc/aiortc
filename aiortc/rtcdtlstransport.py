@@ -6,6 +6,7 @@ import logging
 import os
 import struct
 
+import attr
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.bindings.openssl.binding import Binding
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -131,26 +132,33 @@ class State(enum.Enum):
     FAILED = 4
 
 
+@attr.s
 class RTCDtlsFingerprint:
-    def __init__(self, algorithm, value):
-        self.algorithm = algorithm
-        self.value = value
+    """
+    The :class:`RTCDtlsFingerprint` dictionary includes the hash function
+    algorithm and certificate fingerprint.
+    """
+    algorithm = attr.ib()
+    value = attr.ib()
 
 
+@attr.s
 class RTCDtlsParameters:
     """
-    The RTCDtlsParameters object includes information relating to DTLS
-    configuration.
+    The :class:`RTCDtlsParameters` dictionary includes information relating to
+    DTLS configuration.
     """
-    def __init__(self, fingerprints=[], role='auto'):
-        self.fingerprints = fingerprints
-        self.role = role
+    fingerprints = attr.ib(default=[])
+    "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
+
+    role = attr.ib(default='auto')
+    "The DTLS role, with a default of auto."
 
 
 class RTCDtlsTransport(EventEmitter):
     """
-    The RTCDtlsTransport object includes information relating to Datagram
-    Transport Layer Security (DTLS) transport.
+    The :class:`RTCDtlsTransport` object includes information relating to
+    Datagram Transport Layer Security (DTLS) transport.
     """
     def __init__(self, transport, context):
         super().__init__()
@@ -196,6 +204,9 @@ class RTCDtlsTransport(EventEmitter):
 
     @property
     def transport(self):
+        """
+        The associated :class:`RTCIceTransport` instance.
+        """
         return self._transport
 
     def getLocalParameters(self):
