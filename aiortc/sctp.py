@@ -274,11 +274,9 @@ class Packet:
 
 
 class Endpoint:
-    def __init__(self, is_server, transport):
-        self.is_server = is_server
+    def __init__(self, transport):
         self.recv_queue = asyncio.Queue()
         self.send_queue = []
-        self.role = is_server and 'server' or 'client'
         self.state = self.State.CLOSED
         self.transport = transport
         self.closed = asyncio.Event()
@@ -297,6 +295,14 @@ class Endpoint:
         self.remote_port = None
         self.remote_tsn = None
         self.remote_verification_tag = 0
+
+    @property
+    def is_server(self):
+        return not self.transport._transport.ice_controlling
+
+    @property
+    def role(self):
+        return self.is_server and 'server' or 'client'
 
     async def abort(self):
         chunk = AbortChunk()
@@ -335,7 +341,7 @@ class Endpoint:
             self._set_state(self.State.COOKIE_WAIT)
 
         while True:
-            data = await first_completed(self.transport.recv(), self.closed.wait())
+            data = await first_completed(self.transport.data.recv(), self.closed.wait())
             if data is True:
                 break
 
@@ -496,7 +502,7 @@ class Endpoint:
             destination_port=self.remote_port,
             verification_tag=self.remote_verification_tag)
         packet.chunks.append(chunk)
-        await self.transport.send(bytes(packet))
+        await self.transport.data.send(bytes(packet))
 
     def _set_state(self, state):
         if state != self.state:

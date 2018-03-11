@@ -72,8 +72,10 @@ class SctpPacketTest(TestCase):
 class SctpAssociationTest(TestCase):
     def test_ok(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
-        client = sctp.Endpoint(is_server=False, transport=client_transport)
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        client = sctp.Endpoint(client_transport)
+        self.assertFalse(client.is_server)
+        server = sctp.Endpoint(server_transport)
+        self.assertTrue(server.is_server)
 
         client.remote_port = server.local_port
         server.remote_port = client.local_port
@@ -102,8 +104,8 @@ class SctpAssociationTest(TestCase):
 
     def test_abort(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
-        client = sctp.Endpoint(is_server=False, transport=client_transport)
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        client = sctp.Endpoint(client_transport)
+        server = sctp.Endpoint(server_transport)
 
         client.remote_port = server.local_port
         server.remote_port = client.local_port
@@ -125,7 +127,7 @@ class SctpAssociationTest(TestCase):
 
     def test_garbage(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        server = sctp.Endpoint(server_transport)
         server.remote_port = 5000
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(b'garbage'))
@@ -142,7 +144,7 @@ class SctpAssociationTest(TestCase):
         data = load('sctp_init_bad_verification.bin')
 
         client_transport, server_transport = dummy_dtls_transport_pair()
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        server = sctp.Endpoint(server_transport)
         server.remote_port = 5000
         asyncio.ensure_future(server.run())
         asyncio.ensure_future(client_transport.send(data))
@@ -156,8 +158,8 @@ class SctpAssociationTest(TestCase):
 
     def test_bad_cookie(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
-        client = sctp.Endpoint(is_server=False, transport=client_transport)
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        client = sctp.Endpoint(client_transport)
+        server = sctp.Endpoint(server_transport)
 
         client.remote_port = server.local_port
         server.remote_port = client.local_port
@@ -197,8 +199,8 @@ class SctpAssociationTest(TestCase):
         mock_timestamp.calls = 0
 
         client_transport, server_transport = dummy_dtls_transport_pair()
-        client = sctp.Endpoint(is_server=False, transport=client_transport)
-        server = sctp.Endpoint(is_server=True, transport=server_transport)
+        client = sctp.Endpoint(client_transport)
+        server = sctp.Endpoint(server_transport)
 
         client.remote_port = server.local_port
         server.remote_port = client.local_port

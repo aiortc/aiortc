@@ -91,6 +91,7 @@ class RTCPeerConnection(EventEmitter):
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
         self.__dtlsContext = DtlsSrtpContext()
+        self.__initialOfferer = None
         self.__remoteDtls = {}
         self.__remoteIce = {}
         self.__sctp = None
@@ -155,10 +156,7 @@ class RTCPeerConnection(EventEmitter):
                 else:
                     raise InternalError('Only a single %s track is supported for now' % track.kind)
 
-        transceiver = self.__createTransceiver(
-            kind=track.kind,
-            controlling=True,
-            sender_track=track)
+        transceiver = self.__createTransceiver(kind=track.kind, sender_track=track)
         return transceiver.sender
 
     async def close(self):
@@ -203,7 +201,7 @@ class RTCPeerConnection(EventEmitter):
         :rtype: :class:`RTCDataChannel`
         """
         if not self.__sctp:
-            self.__createSctp(controlling=True)
+            self.__createSctp()
 
         return self.__datachannelManager.create_channel(label=label, protocol=protocol)
 
@@ -254,6 +252,12 @@ class RTCPeerConnection(EventEmitter):
         elif sessionDescription.type == 'answer':
             self.__setSignalingState('stable')
 
+        # set ICE role
+        if self.__initialOfferer is None:
+            self.__initialOfferer = (sessionDescription.type == 'offer')
+            for iceConnection, _ in self.__transports():
+                iceConnection.ice_controlling = self.__initialOfferer
+
         # gather
         await self.__gather()
 
@@ -293,9 +297,7 @@ class RTCPeerConnection(EventEmitter):
                     if t._kind == media.kind:
                         transceiver = t
                 if transceiver is None:
-                    transceiver = self.__createTransceiver(
-                        kind=media.kind,
-                        controlling=False)
+                    transceiver = self.__createTransceiver(kind=media.kind)
 
                 # negotiate codecs
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media)
@@ -314,7 +316,7 @@ class RTCPeerConnection(EventEmitter):
 
             elif media.kind == 'application':
                 if not self.__sctp:
-                    self.__createSctp(controlling=False)
+                    self.__createSctp()
 
                 # configure sctp
                 self.__sctpEndpoint.remote_port = media.fmt[0]
@@ -366,11 +368,9 @@ class RTCPeerConnection(EventEmitter):
         if self.__isClosed:
             raise InvalidStateError('RTCPeerConnection is closed')
 
-    def __createSctp(self, controlling):
-        self.__sctp = RTCSctpTransport(self.__createTransport(controlling=controlling))
-        self.__sctpEndpoint = sctp.Endpoint(
-            is_server=not controlling,
-            transport=self.__sctp.transport.data)
+    def __createSctp(self):
+        self.__sctp = RTCSctpTransport(self.__createTransport())
+        self.__sctpEndpoint = sctp.Endpoint(self.__sctp.transport)
         self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
 
     def __createSdp(self):
@@ -418,19 +418,19 @@ class RTCPeerConnection(EventEmitter):
 
         return '\r\n'.join(sdp) + '\r\n'
 
-    def __createTransceiver(self, controlling, kind, sender_track=None):
+    def __createTransceiver(self, kind, sender_track=None):
         transceiver = RTCRtpTransceiver(
             sender=RTCRtpSender(sender_track or kind),
             receiver=RTCRtpReceiver(kind=kind))
         transceiver._kind = kind
-        transceiver._transport = self.__createTransport(controlling=controlling)
+        transceiver._transport = self.__createTransport()
         self.__transceivers.append(transceiver)
         return transceiver
 
-    def __createTransport(self, controlling):
+    def __createTransport(self):
         return RTCDtlsTransport(
             context=self.__dtlsContext,
-            transport=aioice.Connection(ice_controlling=controlling,
+            transport=aioice.Connection(ice_controlling=(self.__initialOfferer is True),
                                         stun_server=('stun.l.google.com', 19302)))
 
     def __setIceConnectionState(self, state):

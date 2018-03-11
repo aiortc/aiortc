@@ -66,8 +66,8 @@ class DataChannelManager:
             if pp_id == WEBRTC_DCEP and len(data):
                 msg_type = unpack('!B', data[0:1])[0]
                 if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
-                    # one side should be using even IDs, the other odd IDs
-                    assert (stream_id % 2) != (self.stream_id % 2)
+                    # FIXME : one side should be using even IDs, the other odd IDs
+                    # assert (stream_id % 2) != (self.stream_id % 2)
                     assert stream_id not in self.channels
 
                     (msg_type, channel_type, priority, reliability,
