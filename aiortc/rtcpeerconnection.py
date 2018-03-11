@@ -92,6 +92,7 @@ class RTCPeerConnection(EventEmitter):
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
         self.__dtlsContext = DtlsSrtpContext()
+        self.__iceTransports = set()
         self.__initialOfferer = None
         self.__remoteDtls = {}
         self.__remoteIce = {}
@@ -170,6 +171,7 @@ class RTCPeerConnection(EventEmitter):
             return
         self.__isClosed = True
         self.__setSignalingState('closed')
+        self.__updateIceConnectionState()
         for transceiver in self.__transceivers:
             await transceiver.stop()
             await transceiver._transport.stop()
@@ -178,7 +180,6 @@ class RTCPeerConnection(EventEmitter):
             await self.__sctp.stop()
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
-        self.__setIceConnectionState('closed')
 
     async def createAnswer(self):
         """
@@ -204,7 +205,7 @@ class RTCPeerConnection(EventEmitter):
         :rtype: :class:`RTCDataChannel`
         """
         if not self.__sctp:
-            self.__createSctp()
+            self.__createSctpTransport()
 
         return self.__datachannelManager.create_channel(label=label, protocol=protocol)
 
@@ -320,7 +321,7 @@ class RTCPeerConnection(EventEmitter):
 
             elif media.kind == 'application':
                 if not self.__sctp:
-                    self.__createSctp()
+                    self.__createSctpTransport()
 
                 # configure sctp
                 self.__sctpRemotePort = media.fmt[0]
@@ -345,13 +346,12 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        for iceTransport, dtlsTransport in self.__transports():
+        for iceTransport, _ in self.__transports():
             if (not iceTransport.iceGatherer.getLocalCandidates() or
                not iceTransport.getRemoteCandidates()):
                 return
 
         if self.iceConnectionState == 'new':
-            self.__setIceConnectionState('checking')
             for iceTransport, dtlsTransport in self.__transports():
                 await iceTransport.start(self.__remoteIce[iceTransport])
                 await dtlsTransport.start(self.__remoteDtls[dtlsTransport])
@@ -360,21 +360,32 @@ class RTCPeerConnection(EventEmitter):
             if self.__sctp:
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctp))
-            self.__setIceConnectionState('completed')
 
     async def __gather(self):
         if self.__iceGatheringState == 'new':
-            self.__setIceGatheringState('gathering')
-            for iceTransport, dtlsTransport in self.__transports():
+            for iceTransport, _ in self.__transports():
                 await iceTransport.iceGatherer.gather()
-            self.__setIceGatheringState('complete')
 
     def __assertNotClosed(self):
         if self.__isClosed:
             raise InvalidStateError('RTCPeerConnection is closed')
 
-    def __createSctp(self):
-        self.__sctp = RTCSctpTransport(self.__createTransport())
+    def __createDtlsTransport(self):
+        # create ICE transport
+        iceGatherer = RTCIceGatherer()
+        iceGatherer.on('statechange', self.__updateIceGatheringState)
+        iceTransport = RTCIceTransport(iceGatherer)
+        iceTransport.on('statechange', self.__updateIceConnectionState)
+        self.__iceTransports.add(iceTransport)
+
+        # update states
+        self.__updateIceGatheringState()
+        self.__updateIceConnectionState()
+
+        return RTCDtlsTransport(context=self.__dtlsContext, transport=iceTransport)
+
+    def __createSctpTransport(self):
+        self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
         self.__datachannelManager = DataChannelManager(self, self.__sctp)
 
     def __createSdp(self):
@@ -432,22 +443,9 @@ class RTCPeerConnection(EventEmitter):
             sender=RTCRtpSender(sender_track or kind),
             receiver=RTCRtpReceiver(kind=kind))
         transceiver._kind = kind
-        transceiver._transport = self.__createTransport()
+        transceiver._transport = self.__createDtlsTransport()
         self.__transceivers.append(transceiver)
         return transceiver
-
-    def __createTransport(self):
-        return RTCDtlsTransport(
-            context=self.__dtlsContext,
-            transport=RTCIceTransport(RTCIceGatherer()))
-
-    def __setIceConnectionState(self, state):
-        self.__iceConnectionState = state
-        self.emit('iceconnectionstatechange')
-
-    def __setIceGatheringState(self, state):
-        self.__iceGatheringState = state
-        self.emit('icegatheringstatechange')
 
     def __setSignalingState(self, state):
         self.__signalingState = state
@@ -458,3 +456,35 @@ class RTCPeerConnection(EventEmitter):
             yield transceiver._transport.transport, transceiver._transport
         if self.__sctp:
             yield self.__sctp.transport.transport, self.__sctp.transport
+
+    def __updateIceConnectionState(self):
+        # compute new state
+        states = set(map(lambda x: x.state, self.__iceTransports))
+        if self.__isClosed:
+            state = 'closed'
+        elif states == set(['completed']):
+            state = 'completed'
+        elif 'checking' in states:
+            state = 'checking'
+        else:
+            state = 'new'
+
+        # update state
+        if state != self.__iceConnectionState:
+            self.__iceConnectionState = state
+            self.emit('iceconnectionstatechange')
+
+    def __updateIceGatheringState(self):
+        # compute new state
+        states = set(map(lambda x: x.iceGatherer.state, self.__iceTransports))
+        if states == set(['completed']):
+            state = 'complete'
+        elif 'gathering' in states:
+            state = 'gathering'
+        else:
+            state = 'new'
+
+        # update state
+        if state != self.__iceGatheringState:
+            self.__iceGatheringState = state
+            self.emit('icegatheringstatechange')
