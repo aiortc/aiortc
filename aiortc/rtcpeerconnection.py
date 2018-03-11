@@ -259,7 +259,7 @@ class RTCPeerConnection(EventEmitter):
         # set ICE role
         if self.__initialOfferer is None:
             self.__initialOfferer = (sessionDescription.type == 'offer')
-            for iceTransport, _ in self.__transports():
+            for iceTransport in self.__iceTransports:
                 iceTransport._connection.ice_controlling = self.__initialOfferer
 
         # gather
@@ -309,11 +309,10 @@ class RTCPeerConnection(EventEmitter):
                 transceiver._codecs = common
 
                 # configure transport
-                dtlsTransport = transceiver._transport
-                iceTransport = dtlsTransport.transport
+                iceTransport = transceiver._transport.transport
                 iceTransport.setRemoteCandidates(media.ice_candidates)
-                self.__remoteDtls[dtlsTransport] = media.dtls
-                self.__remoteIce[iceTransport] = media.ice
+                self.__remoteDtls[transceiver] = media.dtls
+                self.__remoteIce[transceiver] = media.ice
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -328,11 +327,10 @@ class RTCPeerConnection(EventEmitter):
                 self.__sctpRemoteCaps = media.sctpCapabilities
 
                 # configure transport
-                dtlsTransport = self.__sctp.transport
-                iceTransport = dtlsTransport.transport
+                iceTransport = self.__sctp.transport.transport
                 iceTransport.setRemoteCandidates(media.ice_candidates)
-                self.__remoteDtls[dtlsTransport] = media.dtls
-                self.__remoteIce[iceTransport] = media.ice
+                self.__remoteDtls[self.__sctp] = media.dtls
+                self.__remoteIce[self.__sctp] = media.ice
 
         # connect
         asyncio.ensure_future(self.__connect())
@@ -346,25 +344,25 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        for iceTransport, _ in self.__transports():
+        for iceTransport in self.__iceTransports:
             if (not iceTransport.iceGatherer.getLocalCandidates() or
                not iceTransport.getRemoteCandidates()):
                 return
 
         if self.iceConnectionState == 'new':
-            for iceTransport, dtlsTransport in self.__transports():
-                await iceTransport.start(self.__remoteIce[iceTransport])
-                await dtlsTransport.start(self.__remoteDtls[dtlsTransport])
             for transceiver in self.__transceivers:
+                await transceiver._transport.transport.start(self.__remoteIce[transceiver])
+                await transceiver._transport.start(self.__remoteDtls[transceiver])
                 asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:
+                await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
+                await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctp))
 
     async def __gather(self):
-        if self.__iceGatheringState == 'new':
-            for iceTransport, _ in self.__transports():
-                await iceTransport.iceGatherer.gather()
+        for iceTransport in self.__iceTransports:
+            await iceTransport.iceGatherer.gather()
 
     def __assertNotClosed(self):
         if self.__isClosed:
@@ -450,12 +448,6 @@ class RTCPeerConnection(EventEmitter):
     def __setSignalingState(self, state):
         self.__signalingState = state
         self.emit('signalingstatechange')
-
-    def __transports(self):
-        for transceiver in self.__transceivers:
-            yield transceiver._transport.transport, transceiver._transport
-        if self.__sctp:
-            yield self.__sctp.transport.transport, self.__sctp.transport
 
     def __updateIceConnectionState(self):
         # compute new state

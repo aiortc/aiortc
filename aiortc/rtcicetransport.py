@@ -28,9 +28,10 @@ class RTCIceGatherer(EventEmitter):
         """
         Gather ICE candidates.
         """
-        self.__setState('gathering')
-        await self._connection.gather_candidates()
-        self.__setState('completed')
+        if self.__state == 'new':
+            self.__setState('gathering')
+            await self._connection.gather_candidates()
+            self.__setState('completed')
 
     def getLocalCandidates(self):
         """
