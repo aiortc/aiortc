@@ -4,7 +4,7 @@ import uuid
 
 from pyee import EventEmitter
 
-from . import rtp, sctp, sdp
+from . import rtp, sdp
 from .dtls import DtlsSrtpContext, RTCDtlsTransport
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
@@ -96,6 +96,7 @@ class RTCPeerConnection(EventEmitter):
         self.__remoteDtls = {}
         self.__remoteIce = {}
         self.__sctp = None
+        self.__sctpRemotePort = None
         self.__transceivers = []
 
         self.__iceConnectionState = 'new'
@@ -173,7 +174,7 @@ class RTCPeerConnection(EventEmitter):
             await transceiver._transport.stop()
             await transceiver._transport.transport.stop()
         if self.__sctp:
-            await self.__sctpEndpoint.close()
+            await self.__sctp.close()
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
         self.__setIceConnectionState('closed')
@@ -321,7 +322,7 @@ class RTCPeerConnection(EventEmitter):
                     self.__createSctp()
 
                 # configure sctp
-                self.__sctpEndpoint.remote_port = media.fmt[0]
+                self.__sctpRemotePort = media.fmt[0]
 
                 # configure transport
                 dtlsTransport = self.__sctp.transport
@@ -355,8 +356,8 @@ class RTCPeerConnection(EventEmitter):
             for transceiver in self.__transceivers:
                 asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:
-                asyncio.ensure_future(self.__sctpEndpoint.run())
-                asyncio.ensure_future(self.__datachannelManager.run(self.__sctpEndpoint))
+                self.__sctp.start(self.__sctpRemotePort)
+                asyncio.ensure_future(self.__datachannelManager.run(self.__sctp))
             self.__setIceConnectionState('completed')
 
     async def __gather(self):
@@ -372,8 +373,7 @@ class RTCPeerConnection(EventEmitter):
 
     def __createSctp(self):
         self.__sctp = RTCSctpTransport(self.__createTransport())
-        self.__sctpEndpoint = sctp.Endpoint(self.__sctp.transport)
-        self.__datachannelManager = DataChannelManager(self, self.__sctpEndpoint)
+        self.__datachannelManager = DataChannelManager(self, self.__sctp)
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
@@ -420,7 +420,7 @@ class RTCPeerConnection(EventEmitter):
             ]
             sdp += transport_sdp(iceTransport, self.__sctp.transport)
             sdp += ['a=sctpmap:%s webrtc-datachannel %d' % (
-                self.__sctp.port, self.__sctpEndpoint.outbound_streams)]
+                self.__sctp.port, self.__sctp.outbound_streams)]
 
         return '\r\n'.join(sdp) + '\r\n'
 
