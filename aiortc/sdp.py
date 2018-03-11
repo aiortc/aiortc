@@ -5,6 +5,8 @@ import aioice
 
 from . import rtp
 from .dtls import RTCDtlsFingerprint, RTCDtlsParameters
+from .rtcicetransport import RTCIceParameters
+
 
 DIRECTIONS = [
     'sendrecv',
@@ -55,9 +57,8 @@ class MediaDescription:
         self.dtls = RTCDtlsParameters()
 
         # ICE
+        self.ice = RTCIceParameters()
         self.ice_candidates = []
-        self.ice_ufrag = None
-        self.ice_pwd = None
 
     def __str__(self):
         lines = []
@@ -79,10 +80,10 @@ class MediaDescription:
         # ice
         for candidate in self.ice_candidates:
             lines.append('a=candidate:' + candidate.to_sdp())
-        if self.ice_ufrag is not None:
-            lines.append('a=ice-ufrag:' + self.ice_ufrag)
-        if self.ice_pwd is not None:
-            lines.append('a=ice-pwd:' + self.ice_pwd)
+        if self.ice.usernameFragment is not None:
+            lines.append('a=ice-ufrag:' + self.ice.usernameFragment)
+        if self.ice.password is not None:
+            lines.append('a=ice-pwd:' + self.ice.password)
 
         # dtls
         for fingerprint in self.dtls.fingerprints:
@@ -138,9 +139,9 @@ class SessionDescription:
                             algorithm=algorithm,
                             value=fingerprint))
                     elif attr == 'ice-ufrag':
-                        current_media.ice_ufrag = value
+                        current_media.ice.usernameFragment = value
                     elif attr == 'ice-pwd':
-                        current_media.ice_pwd = value
+                        current_media.ice.password = value
                     elif attr == 'rtcp':
                         port, rest = value.split(' ', 1)
                         current_media.rtcp_port = int(port)

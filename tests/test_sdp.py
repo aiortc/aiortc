@@ -82,8 +82,8 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
-        self.assertEqual(d.media[0].ice_ufrag, '5+Ix')
-        self.assertEqual(d.media[0].ice_pwd, 'uK8IlylxzDMUhrkVzdmj0M+v')
+        self.assertEqual(d.media[0].ice.usernameFragment, '5+Ix')
+        self.assertEqual(d.media[0].ice.password, 'uK8IlylxzDMUhrkVzdmj0M+v')
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
@@ -172,8 +172,8 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 8)
-        self.assertEqual(d.media[0].ice_ufrag, '403a81e1')
-        self.assertEqual(d.media[0].ice_pwd, 'f9b83487285016f7492197a5790ceee5')
+        self.assertEqual(d.media[0].ice.usernameFragment, '403a81e1')
+        self.assertEqual(d.media[0].ice.password, 'f9b83487285016f7492197a5790ceee5')
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
@@ -221,8 +221,8 @@ a=max-message-size:1073741823
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
-        self.assertEqual(d.media[0].ice_ufrag, '9889e0c4')
-        self.assertEqual(d.media[0].ice_pwd, 'd30a5aec4dd81f07d4ff3344209400ab')
+        self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
+        self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)

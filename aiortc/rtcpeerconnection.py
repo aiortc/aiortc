@@ -304,8 +304,8 @@ class RTCPeerConnection(EventEmitter):
                 # configure transport
                 iceConnection = transceiver._transport._transport
                 iceConnection.remote_candidates = media.ice_candidates
-                iceConnection.remote_username = media.ice_ufrag
-                iceConnection.remote_password = media.ice_pwd
+                iceConnection.remote_username = media.ice.usernameFragment
+                iceConnection.remote_password = media.ice.password
                 self.__remoteDtls[transceiver._transport] = media.dtls
 
                 if not transceiver.receiver._track:
@@ -322,8 +322,8 @@ class RTCPeerConnection(EventEmitter):
                 # configure transport
                 iceConnection = self.__sctp.transport._transport
                 iceConnection.remote_candidates = media.ice_candidates
-                iceConnection.remote_username = media.ice_ufrag
-                iceConnection.remote_password = media.ice_pwd
+                iceConnection.remote_username = media.ice.usernameFragment
+                iceConnection.remote_password = media.ice.password
                 self.__remoteDtls[self.__sctp.transport] = media.dtls
 
         # connect
