@@ -1,14 +1,23 @@
 from aioice import Candidate as RTCIceCandidate  # noqa
 from aioice import Connection
+from pyee import EventEmitter
 
 
-class RTCIceGatherer:
+class RTCIceGatherer(EventEmitter):
     def __init__(self):
+        super().__init__()
         self._connection = Connection(ice_controlling=False,
                                       stun_server=('stun.l.google.com', 19302))
+        self.__state = 'new'
+
+    @property
+    def state(self):
+        return self.__state
 
     async def gather(self):
+        self.__setState('gathering')
         await self._connection.gather_candidates()
+        self.__setState('complete')
 
     def getLocalCandidates(self):
         return self._connection.local_candidates
@@ -17,6 +26,10 @@ class RTCIceGatherer:
         return RTCIceParameters(
             usernameFragment=self._connection.local_username,
             password=self._connection.local_password)
+
+    def __setState(self, state):
+        self.__state = state
+        self.emit('statechange')
 
 
 class RTCIceParameters:
