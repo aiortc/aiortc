@@ -12,6 +12,20 @@ API Reference
    .. autoclass:: RTCDataChannel
       :members:
 
+ICE
+---
+
+.. automodule:: aiortc.rtcicetransport
+
+   .. autoclass:: RTCIceGatherer
+      :members:
+
+   .. autoclass:: RTCIceTransport
+      :members:
+
+   .. autoclass:: RTCIceParameters
+      :members:
+
 SCTP
 ----
 
