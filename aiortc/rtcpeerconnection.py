@@ -175,7 +175,7 @@ class RTCPeerConnection(EventEmitter):
             await transceiver._transport.stop()
             await transceiver._transport.transport.stop()
         if self.__sctp:
-            await self.__sctp.close()
+            await self.__sctp.stop()
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
         self.__setIceConnectionState('closed')

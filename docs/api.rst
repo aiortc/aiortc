@@ -11,3 +11,14 @@ API Reference
 
    .. autoclass:: RTCDataChannel
       :members:
+
+SCTP
+----
+
+.. automodule:: aiortc.rtcsctptransport
+
+   .. autoclass:: RTCSctpTransport
+      :members:
+
+   .. autoclass:: RTCSctpCapabilities
+      :members:

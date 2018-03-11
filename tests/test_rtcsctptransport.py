@@ -113,8 +113,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
 
         # shutdown
-        run(client.close())
-        run(server.close())
+        run(client.stop())
+        run(server.stop())
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
@@ -149,7 +149,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
-        run(server.close())
+        run(server.stop())
 
     def test_bad_verification_tag(self):
         # verification tag is 12345 instead of 0
@@ -165,7 +165,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
-        run(server.close())
+        run(server.stop())
 
     def test_bad_cookie(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
@@ -191,8 +191,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
-        run(client.close())
-        run(server.close())
+        run(client.stop())
+        run(server.stop())
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
@@ -220,8 +220,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
-        run(client.close())
-        run(server.close())
+        run(client.stop())
+        run(server.stop())
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 

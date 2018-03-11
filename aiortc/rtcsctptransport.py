@@ -7,6 +7,7 @@ import os
 import time
 from struct import pack, unpack
 
+import attr
 import crcmod.predefined
 
 from .exceptions import InvalidStateError
@@ -274,12 +275,24 @@ class Packet:
         return packet
 
 
+@attr.s
 class RTCSctpCapabilities:
-    def __init__(self, maxMessageSize):
-        self.maxMessageSize = maxMessageSize
+    """
+    The `RTCSctpCapabilities` dictionary provides information about the
+    capabilities of the :class:`RTCSctpTransport`.
+    """
+    maxMessageSize = attr.ib()
+    """
+    The maximum size of data that the implementation can send or
+    0 if the implementation can handle messages of any size.
+    """
 
 
 class RTCSctpTransport:
+    """
+    The `RTCSctpTransport` interface includes information relating to Stream
+    Control Transmission Protocol (SCTP) transport.
+    """
     def __init__(self, transport, port=5000):
         if transport.state == 'closed':
             raise InvalidStateError
@@ -324,15 +337,30 @@ class RTCSctpTransport:
     def getCapabilities(self):
         """
         Retrieve the capabilities of the transport.
+
+        :rtype: RTCSctpCapabilities
         """
         return RTCSctpCapabilities(maxMessageSize=65536)
+
+    def start(self, remoteCaps, remotePort):
+        """
+        Starts the transport.
+        """
+        self.__remote_port = remotePort
+        asyncio.ensure_future(self.__run())
+
+    async def stop(self):
+        """
+        Stops the transport.
+        """
+        await self.shutdown()
 
     async def abort(self):
         chunk = AbortChunk()
         await self._send_chunk(chunk)
         self._set_state(self.State.CLOSED)
 
-    async def close(self):
+    async def shutdown(self):
         if self.state == self.State.CLOSED:
             self.closed.set()
             return
@@ -351,10 +379,6 @@ class RTCSctpTransport:
     async def send(self, stream_id, protocol, user_data):
         self.send_queue.append((stream_id, protocol, user_data))
         await self._flush()
-
-    def start(self, remoteCaps, remotePort):
-        self.__remote_port = remotePort
-        asyncio.ensure_future(self.__run())
 
     async def __run(self):
         if not self.is_server:
