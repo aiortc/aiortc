@@ -97,6 +97,7 @@ class RTCPeerConnection(EventEmitter):
         self.__remoteIce = {}
         self.__sctp = None
         self.__sctpRemotePort = None
+        self.__sctpRemoteCaps = None
         self.__transceivers = []
 
         self.__iceConnectionState = 'new'
@@ -323,6 +324,7 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure sctp
                 self.__sctpRemotePort = media.fmt[0]
+                self.__sctpRemoteCaps = media.sctpCapabilities
 
                 # configure transport
                 dtlsTransport = self.__sctp.transport
@@ -356,7 +358,7 @@ class RTCPeerConnection(EventEmitter):
             for transceiver in self.__transceivers:
                 asyncio.ensure_future(transceiver._run(transceiver._transport))
             if self.__sctp:
-                self.__sctp.start(self.__sctpRemotePort)
+                self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
                 asyncio.ensure_future(self.__datachannelManager.run(self.__sctp))
             self.__setIceConnectionState('completed')
 

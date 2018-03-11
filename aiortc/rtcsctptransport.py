@@ -352,7 +352,7 @@ class RTCSctpTransport:
         self.send_queue.append((stream_id, protocol, user_data))
         await self._flush()
 
-    def start(self, remotePort):
+    def start(self, remoteCaps, remotePort):
         self.__remote_port = remotePort
         asyncio.ensure_future(self.__run())
 
