@@ -30,7 +30,7 @@ class RTCIceGatherer(EventEmitter):
         """
         self.__setState('gathering')
         await self._connection.gather_candidates()
-        self.__setState('complete')
+        self.__setState('completed')
 
     def getLocalCandidates(self):
         """
@@ -67,21 +67,23 @@ class RTCIceParameters:
     "ICE password."
 
 
-class RTCIceTransport:
+class RTCIceTransport(EventEmitter):
     """
     The :class:`RTCIceTransport` interface allows an application access to
     information about the Interactive Connectivity Establishment (ICE)
     transport over which packets are sent and received.
     """
     def __init__(self, gatherer):
-        self._iceGatherer = gatherer
+        super().__init__()
+        self.__iceGatherer = gatherer
+        self.__state = 'new'
 
     @property
     def iceGatherer(self):
         """
         The ICE gatherer passed in the constructor.
         """
-        return self._iceGatherer
+        return self.__iceGatherer
 
     @property
     def role(self):
@@ -92,6 +94,13 @@ class RTCIceTransport:
             return 'controlling'
         else:
             return 'controlled'
+
+    @property
+    def state(self):
+        """
+        The current state of the ICE transport.
+        """
+        return self.__state
 
     def getRemoteCandidates(self):
         """
@@ -111,16 +120,24 @@ class RTCIceTransport:
         """
         Initiate connectivity checks.
         """
+        self.__setState('checking')
         self._connection.remote_username = remoteParameters.usernameFragment
         self._connection.remote_password = remoteParameters.password
         await self._connection.connect()
+        self.__setState('completed')
 
     async def stop(self):
         """
         Irreversibly stop the :class:`RTCIceTransport`.
         """
-        await self._connection.close()
+        if self.state != 'closed':
+            self.__setState('closed')
+            await self._connection.close()
 
     @property
     def _connection(self):
-        return self._iceGatherer._connection
+        return self.iceGatherer._connection
+
+    def __setState(self, state):
+        self.__state = state
+        self.emit('statechange')
