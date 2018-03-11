@@ -274,6 +274,11 @@ class Packet:
         return packet
 
 
+class RTCSctpCapabilities:
+    def __init__(self, maxMessageSize):
+        self.maxMessageSize = maxMessageSize
+
+
 class RTCSctpTransport:
     def __init__(self, transport, port=5000):
         if transport.state == 'closed':
@@ -315,6 +320,12 @@ class RTCSctpTransport:
     @property
     def transport(self):
         return self.__transport
+
+    def getCapabilities(self):
+        """
+        Retrieve the capabilities of the transport.
+        """
+        return RTCSctpCapabilities(maxMessageSize=65536)
 
     async def abort(self):
         chunk = AbortChunk()

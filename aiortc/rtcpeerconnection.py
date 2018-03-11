@@ -421,6 +421,7 @@ class RTCPeerConnection(EventEmitter):
             sdp += transport_sdp(iceTransport, self.__sctp.transport)
             sdp += ['a=sctpmap:%s webrtc-datachannel %d' % (
                 self.__sctp.port, self.__sctp.outbound_streams)]
+            sdp += ['a=max-message-size:%d' % self.__sctp.getCapabilities().maxMessageSize]
 
         return '\r\n'.join(sdp) + '\r\n'
 

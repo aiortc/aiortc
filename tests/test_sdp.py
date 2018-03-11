@@ -218,6 +218,8 @@ a=max-message-size:1073741823
         self.assertEqual(d.media[0].sctpmap, {
             5000: 'webrtc-datachannel 256',
         })
+        self.assertIsNotNone(d.media[0].sctpCapabilities)
+        self.assertEqual(d.media[0].sctpCapabilities.maxMessageSize, 1073741823)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
@@ -231,3 +233,18 @@ a=max-message-size:1073741823
             d.media[0].dtls.fingerprints[0].value,
             '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa
         self.assertEqual(d.media[0].dtls.role, 'auto')
+
+        self.assertEqual(str(d.media[0]), lf2crlf("""m=application 45791 DTLS/SCTP 5000
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=sctpmap:5000 webrtc-datachannel 256
+a=max-message-size:1073741823
+a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
+a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
+a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=ice-ufrag:9889e0c4
+a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
+a=setup:actpass
+"""))  # noqa

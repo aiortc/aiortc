@@ -4,6 +4,8 @@ import re
 from . import rtp
 from .dtls import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
+from .rtcsctptransport import RTCSctpCapabilities
+
 
 DIRECTIONS = [
     'sendrecv',
@@ -50,6 +52,9 @@ class MediaDescription:
         self.rtpmap = {}
         self.sctpmap = {}
 
+        # SCTP
+        self.sctpCapabilities = None
+
         # DTLS
         self.dtls = RTCDtlsParameters()
 
@@ -73,6 +78,11 @@ class MediaDescription:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
         if self.rtcp_mux:
             lines.append('a=rtcp-mux')
+
+        for k, v in self.sctpmap.items():
+            lines.append('a=sctpmap:%d %s' % (k, v))
+        if self.sctpCapabilities is not None:
+            lines.append('a=max-message-size:%d' % self.sctpCapabilities.maxMessageSize)
 
         # ice
         for candidate in self.ice_candidates:
@@ -139,6 +149,9 @@ class SessionDescription:
                         current_media.ice.usernameFragment = value
                     elif attr == 'ice-pwd':
                         current_media.ice.password = value
+                    elif attr == 'max-message-size':
+                        current_media.sctpCapabilities = RTCSctpCapabilities(
+                            maxMessageSize=int(value))
                     elif attr == 'rtcp':
                         port, rest = value.split(' ', 1)
                         current_media.rtcp_port = int(port)
