@@ -4,7 +4,7 @@ import logging
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import RtpPacket
-from .utils import random32
+from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
 
@@ -30,7 +30,8 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
-        self._transport = transport
+        self.__stopped = asyncio.Event()
+        self.__transport = transport
 
     @property
     def kind(self):
@@ -49,7 +50,7 @@ class RTCRtpSender:
         The :class:`RTCDtlsTransport` over which media data for the track is
         transmitted.
         """
-        return self._transport
+        return self.__transport
 
     def replaceTrack(self, track):
         self._track = track
@@ -64,14 +65,16 @@ class RTCRtpSender:
         """
         Irreversibly stop the sender.
         """
-        pass
+        self.__stopped.set()
 
     async def _run(self, codec):
         encoder = get_encoder(codec)
         packet = RtpPacket(payload_type=codec.payloadType)
-        while True:
+        while not self.__stopped.is_set():
             if self._track:
-                frame = await self._track.recv()
+                frame = await first_completed(self._track.recv(), self.__stopped.wait())
+                if frame is True:
+                    break
                 packet.ssrc = self._ssrc
                 payloads = encoder.encode(frame)
                 if not isinstance(payloads, list):
@@ -83,9 +86,11 @@ class RTCRtpSender:
                         logger.debug('sender(%s) > %s' % (self._kind, packet))
                         await self.transport.rtp.send(bytes(packet))
                     except ConnectionError:
-                        logger.debug('sender(%s) - finished' % self._kind)
-                        return
+                        self.__stopped.set()
+                        break
                     packet.sequence_number += 1
                 packet.timestamp += encoder.timestamp_increment
             else:
                 await asyncio.sleep(0.02)
+
+        logger.debug('sender(%s) - finished' % self._kind)
