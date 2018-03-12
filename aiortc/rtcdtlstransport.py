@@ -189,7 +189,7 @@ class RTCDtlsParameters:
     The :class:`RTCDtlsParameters` dictionary includes information relating to
     DTLS configuration.
     """
-    fingerprints = attr.ib(default=[])
+    fingerprints = attr.ib(default=attr.Factory(list))
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
     role = attr.ib(default='auto')
