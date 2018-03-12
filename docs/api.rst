@@ -3,6 +3,9 @@ API Reference
 
 .. automodule:: aiortc
 
+WebRTC
+------
+
    .. autoclass:: RTCPeerConnection
       :members:
 
@@ -14,8 +17,6 @@ API Reference
 
 ICE
 ---
-
-.. automodule:: aiortc.rtcicetransport
 
    .. autoclass:: RTCIceGatherer
       :members:
@@ -29,8 +30,6 @@ ICE
 DTLS
 ----
 
-.. automodule:: aiortc.rtcdtlstransport
-
    .. autoclass:: RTCCertificate()
       :members:
 
@@ -43,10 +42,17 @@ DTLS
    .. autoclass:: RTCDtlsFingerprint()
       :members:
 
+RTP
+---
+
+  .. autoclass:: RTCRtpReceiver
+     :members:
+
+  .. autoclass:: RTCRtpSender
+     :members:
+
 SCTP
 ----
-
-.. automodule:: aiortc.rtcsctptransport
 
    .. autoclass:: RTCSctpTransport
       :members:

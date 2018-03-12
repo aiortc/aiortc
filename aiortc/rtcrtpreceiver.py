@@ -21,8 +21,11 @@ class RemoteStreamTrack(MediaStreamTrack):
 
 class RTCRtpReceiver:
     """
-    The RTCRtpReceiver interface manages the reception and decoding of data
-    for a MediaStreamTrack.
+    The :class:`RTCRtpReceiver` interface manages the reception and decoding
+    of data for a :class:`MediaStreamTrack`.
+
+    :param: kind: The kind of media (`'audio'` or `'video'`).
+    :param: transport: An :class:`RTCDtlsTransport`
     """
     def __init__(self, kind, transport):
         if transport.state == 'closed':

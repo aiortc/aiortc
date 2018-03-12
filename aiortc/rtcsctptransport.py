@@ -292,6 +292,8 @@ class RTCSctpTransport:
     """
     The `RTCSctpTransport` interface includes information relating to Stream
     Control Transmission Protocol (SCTP) transport.
+
+    :param: transport: An :class:`RTCDtlstransport`
     """
     def __init__(self, transport, port=5000):
         if transport.state == 'closed':
@@ -324,6 +326,9 @@ class RTCSctpTransport:
 
     @property
     def port(self):
+        """
+        The local SCTP port number used for data channels.
+        """
         return self.__local_port
 
     @property
@@ -332,6 +337,9 @@ class RTCSctpTransport:
 
     @property
     def transport(self):
+        """
+        The :class:`RTCDtlsTransport` over which SCTP data is transmitted.
+        """
         return self.__transport
 
     def getCapabilities(self):

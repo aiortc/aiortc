@@ -11,9 +11,13 @@ logger = logging.getLogger('rtp')
 
 class RTCRtpSender:
     """
-    The RTCRtpSender interface provides the ability to control and obtain
-    details about how a particular MediaStreamTrack is encoded and sent to
-    a remote peer.
+    The :class:`RTCRtpSender` interface provides the ability to control and
+    obtain details about how a particular :class:`MediaStreamTrack` is encoded
+    and sent to a remote peer.
+
+    :param: trackOrKind: Either a :class:`MediaStreamTrack` instance or a
+                         media kind (`'audio'` or `'video'`).
+    :param: transport: An :class:`RTCDtlsTransport`.
     """
     def __init__(self, trackOrKind, transport):
         if transport.state == 'closed':
@@ -35,7 +39,7 @@ class RTCRtpSender:
     @property
     def track(self):
         """
-        The MediaStreamTrack which is being handled by the RTCRtpSender.
+        The :class:`MediaStreamTrack` which is being handled by the sender.
         """
         return self._track
 
