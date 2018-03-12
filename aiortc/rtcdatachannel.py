@@ -1,123 +1,27 @@
 import asyncio
-from struct import pack, unpack
 
+import attr
 from pyee import EventEmitter
-
-# message types
-DATA_CHANNEL_ACK = 2
-DATA_CHANNEL_OPEN = 3
-
-# channel types
-DATA_CHANNEL_RELIABLE = 0
-
-WEBRTC_DCEP = 50
-WEBRTC_STRING = 51
-WEBRTC_BINARY = 53
-WEBRTC_STRING_EMPTY = 56
-WEBRTC_BINARY_EMPTY = 57
-
-
-class DataChannelManager:
-    def __init__(self, pc, endpoint):
-        self.channels = {}
-        self.endpoint = endpoint
-        self.pc = pc
-        if endpoint.is_server:
-            self.stream_id = 0
-        else:
-            self.stream_id = 1
-
-    def create_channel(self, label, protocol):
-        # register channel
-        channel = RTCDataChannel(id=self.stream_id, label=label, protocol=protocol,
-                                 manager=self, readyState='connecting')
-        self.channels[channel.id] = channel
-        self.stream_id += 2
-
-        # open channel
-        data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
-                    0, 0, len(label), len(protocol))
-        data += label.encode('utf8')
-        data += protocol.encode('utf8')
-        asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_DCEP, data))
-
-        return channel
-
-    def send(self, channel, data):
-        if data == '':
-            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING_EMPTY, b'\x00'))
-        elif isinstance(data, str):
-            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_STRING,
-                                                     data.encode('utf8')))
-        elif data == b'':
-            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_BINARY_EMPTY, b'\x00'))
-        elif isinstance(data, bytes):
-            asyncio.ensure_future(self.endpoint.send(channel.id, WEBRTC_BINARY, data))
-        else:
-            raise ValueError('Cannot send unsupported data type: %s' % type(data))
-
-    async def run(self, endpoint):
-        self.endpoint = endpoint
-        while True:
-            try:
-                stream_id, pp_id, data = await self.endpoint.recv()
-            except ConnectionError:
-                return
-            if pp_id == WEBRTC_DCEP and len(data):
-                msg_type = unpack('!B', data[0:1])[0]
-                if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
-                    # FIXME : one side should be using even IDs, the other odd IDs
-                    # assert (stream_id % 2) != (self.stream_id % 2)
-                    assert stream_id not in self.channels
-
-                    (msg_type, channel_type, priority, reliability,
-                     label_length, protocol_length) = unpack('!BBHLHH', data[0:12])
-                    pos = 12
-                    label = data[pos:pos + label_length].decode('utf8')
-                    pos += label_length
-                    protocol = data[pos:pos + protocol_length].decode('utf8')
-
-                    # register channel
-                    channel = RTCDataChannel(id=stream_id, label=label, protocol=protocol,
-                                             manager=self, readyState='open')
-                    self.channels[stream_id] = channel
-
-                    # send ack
-                    await self.endpoint.send(channel.id, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
-
-                    # emit channel
-                    self.pc.emit('datachannel', channel)
-                elif msg_type == DATA_CHANNEL_ACK:
-                    assert stream_id in self.channels
-                    channel = self.channels[stream_id]
-                    channel._setReadyState('open')
-            elif pp_id == WEBRTC_STRING and stream_id in self.channels:
-                # emit message
-                self.channels[stream_id].emit('message', data.decode('utf8'))
-            elif pp_id == WEBRTC_STRING_EMPTY and stream_id in self.channels:
-                # emit message
-                self.channels[stream_id].emit('message', '')
-            elif pp_id == WEBRTC_BINARY and stream_id in self.channels:
-                # emit message
-                self.channels[stream_id].emit('message', data)
-            elif pp_id == WEBRTC_BINARY_EMPTY and stream_id in self.channels:
-                # emit message
-                self.channels[stream_id].emit('message', b'')
 
 
 class RTCDataChannel(EventEmitter):
     """
     The :class:`RTCDataChannel` interface represents a network channel which
     can be used for bidirectional peer-to-peer transfers of arbitrary data.
+
+    :param: transport: An :class:`RTCSctptransport`.
+    :param: parameters: An :class:`RTCDataChannelParameters`.
     """
 
-    def __init__(self, id, label, protocol, manager, readyState):
+    def __init__(self, transport, parameters, id=None):
         super().__init__()
         self.__id = id
-        self.__label = label
-        self.__manager = manager
-        self.__protocol = protocol
-        self.__readyState = readyState
+        self.__parameters = parameters
+        self.__readyState = 'connecting'
+        self.__transport = transport
+
+        if self.__id is None:
+            self.__transport.data_channel_open(self)
 
     @property
     def id(self):
@@ -133,14 +37,14 @@ class RTCDataChannel(EventEmitter):
 
         These labels are not required to be unique.
         """
-        return self.__label
+        return self.__parameters.label
 
     @property
     def protocol(self):
         """
         The name of the subprotocol in use.
         """
-        return self.__protocol
+        return self.__parameters.protocol
 
     @property
     def readyState(self):
@@ -148,6 +52,14 @@ class RTCDataChannel(EventEmitter):
         A string indicating the current state of the underlying data transport.
         """
         return self.__readyState
+
+    @property
+    def transport(self):
+        """
+        The :class:`RTCSctpTransport` over which data is transmitted.
+        transmitted.
+        """
+        return self.__transport
 
     def close(self):
         """
@@ -159,8 +71,27 @@ class RTCDataChannel(EventEmitter):
         """
         Send `data` across the data channel to the remote peer.
         """
-        self.__manager.send(self, data)
+        if not isinstance(data, (str, bytes)):
+            raise ValueError('Cannot send unsupported data type: %s' % type(data))
+
+        asyncio.ensure_future(self.transport.data_channel_send(self, data))
+
+    def _setId(self, id):
+        self.__id = id
 
     def _setReadyState(self, state):
         if state != self.__readyState:
             self.__readyState = state
+
+
+@attr.s
+class RTCDataChannelParameters:
+    """
+    The :class:`RTCDataChannelParameters` dictionary describes the
+    configuration of an :class:`RTCDataChannel`.
+    """
+    label = attr.ib(default='')
+    "A name describing the data channel."
+
+    protocol = attr.ib(default='')
+    "The name of the subprotocol in use."

@@ -2,6 +2,7 @@ import asyncio
 from unittest import TestCase
 
 from aiortc.exceptions import InvalidStateError
+from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (AbortChunk, CookieEchoChunk, InitChunk,
                                      Packet, RTCSctpCapabilities,
                                      RTCSctpTransport)
@@ -78,7 +79,7 @@ class SctpPacketTest(TestCase):
 
 class RTCSctpTransportTest(TestCase):
     def test_construct(self):
-        dtlsTransport = DummyDtlsTransport()
+        dtlsTransport, _ = dummy_dtls_transport_pair()
         sctpTransport = RTCSctpTransport(dtlsTransport)
         self.assertEqual(sctpTransport.transport, dtlsTransport)
         self.assertEqual(sctpTransport.port, 5000)
@@ -95,6 +96,12 @@ class RTCSctpTransportTest(TestCase):
         server = RTCSctpTransport(server_transport)
         self.assertTrue(server.is_server)
 
+        server_channels = []
+
+        @server.on('datachannel')
+        def on_datachannel(channel):
+            server_channels.append(channel)
+
         # connect
         server.start(client.getCapabilities(), client.port)
         client.start(server.getCapabilities(), server.port)
@@ -105,11 +112,10 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
         # DATA_CHANNEL_OPEN
-        run(client.send(1, 50, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat'))
-        stream_id, protocol, data = run(server.recv())
-        self.assertEqual(stream_id, 1)
-        self.assertEqual(protocol, 50)
-        self.assertEqual(data, b'\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00chat')
+        RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
+        run(asyncio.sleep(0.5))
+        self.assertEqual(len(server_channels), 1)
+        self.assertEqual(server_channels[0].label, 'chat')
 
         # shutdown
         run(client.stop())

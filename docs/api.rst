@@ -60,5 +60,8 @@ Stream Control Transmission Protocol (SCTP)
 Data channels
 -------------
 
-   .. autoclass:: RTCDataChannel()
+   .. autoclass:: RTCDataChannel(transport, parameters)
+      :members:
+
+   .. autoclass:: RTCDataChannelParameters()
       :members:

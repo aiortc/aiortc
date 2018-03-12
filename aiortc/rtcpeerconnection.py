@@ -7,7 +7,7 @@ from pyee import EventEmitter
 from . import rtp, sdp
 from .codecs import MEDIA_CODECS
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
-from .rtcdatachannel import DataChannelManager
+from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import RTCRtpParameters
@@ -78,7 +78,6 @@ class RTCPeerConnection(EventEmitter):
         super().__init__()
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = '{%s}' % uuid.uuid4()
-        self.__datachannelManager = None
         self.__iceTransports = set()
         self.__initialOfferer = None
         self.__remoteDtls = {}
@@ -194,7 +193,8 @@ class RTCPeerConnection(EventEmitter):
         if not self.__sctp:
             self.__createSctpTransport()
 
-        return self.__datachannelManager.create_channel(label=label, protocol=protocol)
+        parameters = RTCDataChannelParameters(label=label, protocol=protocol)
+        return RTCDataChannel(self.__sctp, parameters)
 
     async def createOffer(self):
         """
@@ -346,7 +346,6 @@ class RTCPeerConnection(EventEmitter):
                 await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
                 await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
-                asyncio.ensure_future(self.__datachannelManager.run(self.__sctp))
 
     async def __gather(self):
         for iceTransport in self.__iceTransports:
@@ -372,7 +371,10 @@ class RTCPeerConnection(EventEmitter):
 
     def __createSctpTransport(self):
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
-        self.__datachannelManager = DataChannelManager(self, self.__sctp)
+
+        @self.__sctp.on('datachannel')
+        def on_datachannel(channel):
+            self.emit('datachannel', channel)
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
