@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import logging
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -215,6 +214,3 @@ class RTCDtlsTransportTest(TestCase):
 
         run(session1.stop())
         run(session2.stop())
-
-
-logging.basicConfig(level=logging.DEBUG)

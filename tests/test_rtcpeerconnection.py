@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from unittest import TestCase
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -589,6 +588,3 @@ class RTCPeerConnectionTest(TestCase):
             run(pc.setRemoteDescription(RTCSessionDescription(sdp='', type='offer')))
         self.assertEqual(str(cm.exception),
                          'Cannot handle offer in signaling state "have-local-offer"')
-
-
-logging.basicConfig(level=logging.DEBUG)

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from aiortc.utils import first_completed
@@ -63,3 +64,6 @@ def load(name):
 
 def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
+
+
+logging.basicConfig(level=logging.DEBUG)

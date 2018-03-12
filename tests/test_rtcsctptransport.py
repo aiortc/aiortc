@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from unittest import TestCase
 
 from aiortc.exceptions import InvalidStateError
@@ -224,6 +223,3 @@ class RTCSctpTransportTest(TestCase):
         run(server.stop())
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
-
-
-logging.basicConfig(level=logging.DEBUG)
