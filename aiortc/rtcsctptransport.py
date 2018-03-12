@@ -588,7 +588,7 @@ class RTCSctpTransport(EventEmitter):
                 self.closed.set()
 
     def data_channel_open(self, channel):
-        # register chanel
+        # register channel
         channel_id = self._data_channel_id
         self._data_channels[channel_id] = channel
         self._data_channel_id += 2
