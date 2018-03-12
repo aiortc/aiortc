@@ -107,8 +107,8 @@ class DataChannelManager:
 
 class RTCDataChannel(EventEmitter):
     """
-    The RTCDataChannel interface represents a network channel which can be used
-    for bidirectional peer-to-peer transfers of arbitrary data.
+    The :class:`RTCDataChannel` interface represents a network channel which
+    can be used for bidirectional peer-to-peer transfers of arbitrary data.
     """
 
     def __init__(self, id, label, protocol, manager, readyState):

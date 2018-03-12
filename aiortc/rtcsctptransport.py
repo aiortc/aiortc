@@ -278,7 +278,7 @@ class Packet:
 @attr.s
 class RTCSctpCapabilities:
     """
-    The `RTCSctpCapabilities` dictionary provides information about the
+    The :class:`RTCSctpCapabilities` dictionary provides information about the
     capabilities of the :class:`RTCSctpTransport`.
     """
     maxMessageSize = attr.ib()
@@ -290,10 +290,10 @@ class RTCSctpCapabilities:
 
 class RTCSctpTransport:
     """
-    The `RTCSctpTransport` interface includes information relating to Stream
-    Control Transmission Protocol (SCTP) transport.
+    The :class:`RTCSctpTransport` interface includes information relating to
+    Stream Control Transmission Protocol (SCTP) transport.
 
-    :param: transport: An :class:`RTCDtlstransport`
+    :param: transport: An :class:`RTCDtlstransport`.
     """
     def __init__(self, transport, port=5000):
         if transport.state == 'closed':

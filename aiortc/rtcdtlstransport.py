@@ -131,7 +131,7 @@ class State(enum.Enum):
 
 class RTCCertificate:
     """
-    The RTCCertificate interface enables the certificates used by an
+    The :class:`RTCCertificate` interface enables the certificates used by an
     :class:`RTCDtlsTransport`.
 
     To generate a certificate and the corresponding private key use :func:`generateCertificate`.

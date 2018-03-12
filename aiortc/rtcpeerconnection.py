@@ -71,8 +71,8 @@ def transport_sdp(iceTransport, dtlsTransport):
 
 class RTCPeerConnection(EventEmitter):
     """
-    The RTCPeerConnection interface represents a WebRTC connection between
-    the local computer and a remote peer.
+    The :class:`RTCPeerConnection` interface represents a WebRTC connection
+    between the local computer and a remote peer.
     """
     def __init__(self):
         super().__init__()

@@ -12,11 +12,8 @@ WebRTC
    .. autoclass:: RTCSessionDescription
       :members:
 
-   .. autoclass:: RTCDataChannel
-      :members:
-
-ICE
----
+Interactive Connectivity Establishment (ICE)
+--------------------------------------------
 
    .. autoclass:: RTCIceGatherer
       :members:
@@ -27,8 +24,8 @@ ICE
    .. autoclass:: RTCIceParameters
       :members:
 
-DTLS
-----
+Datagram Transport Layer Security (DTLS)
+----------------------------------------
 
    .. autoclass:: RTCCertificate()
       :members:
@@ -42,8 +39,8 @@ DTLS
    .. autoclass:: RTCDtlsFingerprint()
       :members:
 
-RTP
----
+Real-time Transport Protocol (RTP)
+----------------------------------
 
   .. autoclass:: RTCRtpReceiver
      :members:
@@ -51,11 +48,17 @@ RTP
   .. autoclass:: RTCRtpSender
      :members:
 
-SCTP
-----
+Stream Control Transmission Protocol (SCTP)
+-------------------------------------------
 
    .. autoclass:: RTCSctpTransport
       :members:
 
    .. autoclass:: RTCSctpCapabilities
+      :members:
+
+Data channels
+-------------
+
+   .. autoclass:: RTCDataChannel()
       :members:

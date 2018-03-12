@@ -4,8 +4,8 @@ import attr
 @attr.s
 class RTCSessionDescription:
     """
-    The RTCSessionDescription interface describes one end of a connection
-    and how it's configured.
+    The :class:`RTCSessionDescription` dictionary describes one end of a
+    connection and how it's configured.
     """
     sdp = attr.ib()
     "A string containing the session description's SDP."
