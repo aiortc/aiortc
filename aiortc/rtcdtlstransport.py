@@ -133,6 +133,8 @@ class RTCCertificate:
     """
     The RTCCertificate interface enables the certificates used by an
     :class:`RTCDtlsTransport`.
+
+    To generate a certificate and the corresponding private key use :func:`generateCertificate`.
     """
     def __init__(self, key, cert):
         self._key = key

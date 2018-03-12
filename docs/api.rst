@@ -31,16 +31,16 @@ DTLS
 
 .. automodule:: aiortc.rtcdtlstransport
 
-   .. autoclass:: RTCCertificate
+   .. autoclass:: RTCCertificate()
       :members:
 
    .. autoclass:: RTCDtlsTransport
       :members:
 
-   .. autoclass:: RTCDtlsParameters
+   .. autoclass:: RTCDtlsParameters()
       :members:
 
-   .. autoclass:: RTCDtlsFingerprint
+   .. autoclass:: RTCDtlsFingerprint()
       :members:
 
 SCTP
