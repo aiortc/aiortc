@@ -77,7 +77,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
             RTCRtpCodecParameters(name='telephone-event', clockRate=48000, payloadType=110),
             RTCRtpCodecParameters(name='telephone-event', clockRate=32000, payloadType=112),
             RTCRtpCodecParameters(name='telephone-event', clockRate=16000, payloadType=113),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126)    ,
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126),
         ])
         self.assertEqual(d.media[0].sctpmap, {})
 

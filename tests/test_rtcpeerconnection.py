@@ -9,7 +9,6 @@ from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
 from aiortc.rtcpeerconnection import MEDIA_CODECS, find_common_codecs
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
-from aiortc.sdp import MediaDescription
 
 from .utils import run
 
