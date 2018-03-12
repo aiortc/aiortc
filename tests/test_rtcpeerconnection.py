@@ -8,6 +8,7 @@ from aiortc.exceptions import (InternalError, InvalidAccessError,
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
 from aiortc.rtcpeerconnection import MEDIA_CODECS, find_common_codecs
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 from aiortc.sdp import MediaDescription
 
 from .utils import run
@@ -44,11 +45,11 @@ def track_states(pc):
 class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
         local_codecs = MEDIA_CODECS['audio'][:]
-        remote_description = MediaDescription(
-            kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[8, 0])
-        remote_description.rtpmap[8] = 'PCMA/8000'
-        remote_description.rtpmap[0] = 'PCMU/8000'
-        common = find_common_codecs(local_codecs, remote_description)
+        remote_codecs = [
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
+        ]
+        common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(len(common), 2)
         self.assertEqual(common[0].clockRate, 8000)
         self.assertEqual(common[0].name, 'PCMA')
@@ -59,11 +60,11 @@ class RTCRtpCodecParametersTest(TestCase):
 
     def test_common_dynamic(self):
         local_codecs = MEDIA_CODECS['audio'][:]
-        remote_description = MediaDescription(
-            kind='audio', port=1234, profile='UDP/TLS/RTP/SAVPF', fmt=[100, 8])
-        remote_description.rtpmap[100] = 'opus/48000'
-        remote_description.rtpmap[8] = 'PCMA/8000'
-        common = find_common_codecs(local_codecs, remote_description)
+        remote_codecs = [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, payloadType=100),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+        ]
+        common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(len(common), 2)
         self.assertEqual(common[0].clockRate, 48000)
         self.assertEqual(common[0].name, 'opus')

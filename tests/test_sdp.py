@@ -1,5 +1,6 @@
 from unittest import TestCase
 
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 from aiortc.sdp import SessionDescription
 
 
@@ -63,21 +64,21 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         # formats
         self.assertEqual(d.media[0].fmt, [
             111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
-        self.assertEqual(d.media[0].rtpmap, {
-            0: 'PCMU/8000',
-            8: 'PCMA/8000',
-            9: 'G722/8000',
-            13: 'CN/8000',
-            103: 'ISAC/16000',
-            104: 'ISAC/32000',
-            105: 'CN/16000',
-            106: 'CN/32000',
-            110: 'telephone-event/48000',
-            111: 'opus/48000/2',
-            112: 'telephone-event/32000',
-            113: 'telephone-event/16000',
-            126: 'telephone-event/8000',
-        })
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111),
+            RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
+            RTCRtpCodecParameters(name='ISAC', clockRate=32000, payloadType=104),
+            RTCRtpCodecParameters(name='G722', clockRate=8000, payloadType=9),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(name='CN', clockRate=32000, payloadType=106),
+            RTCRtpCodecParameters(name='CN', clockRate=16000, payloadType=105),
+            RTCRtpCodecParameters(name='CN', clockRate=8000, payloadType=13),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=48000, payloadType=110),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=32000, payloadType=112),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=16000, payloadType=113),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126)    ,
+        ])
         self.assertEqual(d.media[0].sctpmap, {})
 
         # ice
@@ -98,6 +99,19 @@ c=IN IP4 192.168.99.58
 a=sendrecv
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
+a=rtpmap:111 opus/48000/2
+a=rtpmap:103 ISAC/16000
+a=rtpmap:104 ISAC/32000
+a=rtpmap:9 G722/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:106 CN/32000
+a=rtpmap:105 CN/16000
+a=rtpmap:13 CN/8000
+a=rtpmap:110 telephone-event/48000
+a=rtpmap:112 telephone-event/32000
+a=rtpmap:113 telephone-event/16000
+a=rtpmap:126 telephone-event/8000
 a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host generation 0
 a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host generation 0
 a=candidate:3496416974 1 tcp 1518283007 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active generation 0
@@ -161,13 +175,13 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         # formats
         self.assertEqual(d.media[0].fmt, [
             109, 9, 0, 8, 101])
-        self.assertEqual(d.media[0].rtpmap, {
-            0: 'PCMU/8000',
-            8: 'PCMA/8000',
-            9: 'G722/8000/1',
-            101: 'telephone-event/8000',
-            109: 'opus/48000/2',
-        })
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=109),
+            RTCRtpCodecParameters(name='G722', clockRate=8000, channels=1, payloadType=9),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+        ])
         self.assertEqual(d.media[0].sctpmap, {})
 
         # ice
@@ -214,7 +228,6 @@ a=max-message-size:1073741823
         self.assertEqual(d.media[0].port, 45791)
         self.assertEqual(d.media[0].profile, 'DTLS/SCTP')
         self.assertEqual(d.media[0].fmt, [5000])
-        self.assertEqual(d.media[0].rtpmap, {})
         self.assertEqual(d.media[0].sctpmap, {
             5000: 'webrtc-datachannel 256',
         })

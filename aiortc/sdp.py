@@ -4,6 +4,7 @@ import re
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
+from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from .rtcsctptransport import RTCSctpCapabilities
 
 DIRECTIONS = [
@@ -48,7 +49,7 @@ class MediaDescription:
 
         # formats
         self.fmt = fmt
-        self.rtpmap = {}
+        self.rtp = RTCRtpParameters()
         self.sctpmap = {}
 
         # SCTP
@@ -77,6 +78,9 @@ class MediaDescription:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
         if self.rtcp_mux:
             lines.append('a=rtcp-mux')
+
+        for codec in self.rtp.codecs:
+            lines.append('a=rtpmap:%d %s' % (codec.payloadType, codec))
 
         for k, v in self.sctpmap.items():
             lines.append('a=sctpmap:%d %s' % (k, v))
@@ -161,7 +165,17 @@ class SessionDescription:
                         current_media.dtls.role = DTLS_SETUP_ROLE[value]
                     elif attr in DIRECTIONS:
                         current_media.direction = attr
-                    elif attr in ['rtpmap', 'sctpmap']:
+                    elif attr == 'rtpmap':
+                        format_id, format_desc = value.split(' ', 1)
+                        format_id = int(format_id)
+                        bits = format_desc.split('/')
+                        codec = RTCRtpCodecParameters(
+                            name=bits[0],
+                            channels=int(bits[2]) if len(bits) > 2 else None,
+                            clockRate=int(bits[1]),
+                            payloadType=int(format_id))
+                        current_media.rtp.codecs.append(codec)
+                    elif attr == 'sctpmap':
                         format_id, format_desc = value.split(' ', 1)
                         getattr(current_media, attr)[int(format_id)] = format_desc
                 else:

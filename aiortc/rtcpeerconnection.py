@@ -37,17 +37,13 @@ MEDIA_CODECS = {
 MEDIA_KINDS = ['audio', 'video']
 
 
-def find_common_codecs(local_codecs, remote_media):
+def find_common_codecs(local_codecs, remote_codecs):
     common = []
-    for pt in remote_media.fmt:
-        bits = remote_media.rtpmap[pt].split('/')
-        name = bits[0]
-        clockRate = int(bits[1])
-
+    for c in remote_codecs:
         for codec in local_codecs:
-            if codec.name == name and codec.clockRate == clockRate:
-                if pt in rtp.DYNAMIC_PAYLOAD_TYPES:
-                    codec = codec.clone(payloadType=pt)
+            if codec.name == c.name and codec.clockRate == c.clockRate:
+                if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
+                    codec = codec.clone(payloadType=c.payloadType)
                 common.append(codec)
                 break
     return common
@@ -304,7 +300,7 @@ class RTCPeerConnection(EventEmitter):
                     transceiver = self.__createTransceiver(kind=media.kind)
 
                 # negotiate codecs
-                common = find_common_codecs(MEDIA_CODECS[media.kind], media)
+                common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
                 assert len(common)
                 transceiver._codecs = common
 
