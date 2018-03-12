@@ -419,7 +419,7 @@ class RTCSctpTransport:
 
             # verify tag
             if packet.verification_tag != expected_tag:
-                logger.warning('%s x Bad verification tag %d vs %d' % (
+                logger.debug('%s x Bad verification tag %d vs %d' % (
                     self.role, packet.verification_tag, expected_tag))
                 return
 
@@ -490,7 +490,7 @@ class RTCSctpTransport:
             now = self._get_timestamp()
             stamp = unpack('!L', cookie[0:4])[0]
             if stamp < now - COOKIE_LIFETIME or stamp > now:
-                logger.warning('State cookie has expired')
+                logger.debug('%s x State cookie has expired' % self.role)
                 error = ErrorChunk()
                 error.body = pack('!HHL', STALE_COOKIE_ERROR, 8, 0)
                 await self._send_chunk(error)
@@ -517,7 +517,7 @@ class RTCSctpTransport:
         elif (isinstance(chunk, ErrorChunk) and not self.is_server and
               self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
             self._set_state(self.State.CLOSED)
-            logger.warning('Could not establish association')
+            logger.debug('%s x Could not establish association' % self.role)
             return
 
         # common
@@ -539,7 +539,7 @@ class RTCSctpTransport:
             # TODO
             pass
         elif isinstance(chunk, AbortChunk):
-            logger.warning('Association was aborted by remote party')
+            logger.debug('%s x Association was aborted by remote party' % self.role)
             self._set_state(self.State.CLOSED)
             return
         elif isinstance(chunk, ShutdownChunk):
