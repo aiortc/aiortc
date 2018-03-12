@@ -7,7 +7,7 @@ from pyee import EventEmitter
 from . import rtp, sdp
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
-from .rtcdtlstransport import DtlsSrtpContext, RTCDtlsTransport
+from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import RTCRtpCodecParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
@@ -89,9 +89,9 @@ class RTCPeerConnection(EventEmitter):
     """
     def __init__(self, loop=None):
         super().__init__(loop=loop)
+        self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
-        self.__dtlsContext = DtlsSrtpContext()
         self.__iceTransports = set()
         self.__initialOfferer = None
         self.__remoteDtls = {}
@@ -380,7 +380,7 @@ class RTCPeerConnection(EventEmitter):
         self.__updateIceGatheringState()
         self.__updateIceConnectionState()
 
-        return RTCDtlsTransport(context=self.__dtlsContext, transport=iceTransport)
+        return RTCDtlsTransport(iceTransport, self.__certificates)
 
     def __createSctpTransport(self):
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())

@@ -26,6 +26,23 @@ ICE
    .. autoclass:: RTCIceParameters
       :members:
 
+DTLS
+----
+
+.. automodule:: aiortc.rtcdtlstransport
+
+   .. autoclass:: RTCCertificate
+      :members:
+
+   .. autoclass:: RTCDtlsTransport
+      :members:
+
+   .. autoclass:: RTCDtlsParameters
+      :members:
+
+   .. autoclass:: RTCDtlsFingerprint
+      :members:
+
 SCTP
 ----
 

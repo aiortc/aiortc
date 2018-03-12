@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import datetime
 import enum
 import logging
 import os
@@ -92,23 +93,19 @@ def verify_callback(x, y):
     return 1
 
 
-class DtlsSrtpContext:
-    def __init__(self):
-        ctx = lib.SSL_CTX_new(lib.DTLSv1_method())
-        self.ctx = ffi.gc(ctx, lib.SSL_CTX_free)
+def create_ssl_context(certificate):
+    ctx = lib.SSL_CTX_new(lib.DTLSv1_method())
+    ctx = ffi.gc(ctx, lib.SSL_CTX_free)
 
-        lib.SSL_CTX_set_verify(self.ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
-                               verify_callback)
+    lib.SSL_CTX_set_verify(ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+                           verify_callback)
 
-        # generate key and certificate
-        key = generate_key()
-        cert = generate_certificate(key)
-
-        _openssl_assert(lib.SSL_CTX_use_certificate(self.ctx, cert._x509) == 1)
-        _openssl_assert(lib.SSL_CTX_use_PrivateKey(self.ctx, key._pkey) == 1)
-        _openssl_assert(lib.SSL_CTX_set_cipher_list(self.ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
-        _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(self.ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
-        _openssl_assert(lib.SSL_CTX_set_read_ahead(self.ctx, 1) == 0)
+    _openssl_assert(lib.SSL_CTX_use_certificate(ctx, certificate._cert._x509) == 1)
+    _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, certificate._key._pkey) == 1)
+    _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
+    _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
+    _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
+    return ctx
 
 
 class Channel:
@@ -130,6 +127,45 @@ class State(enum.Enum):
     CONNECTED = 2
     CLOSED = 3
     FAILED = 4
+
+
+class RTCCertificate:
+    """
+    The RTCCertificate interface enables the certificates used by an
+    :class:`RTCDtlsTransport`.
+    """
+    def __init__(self, key, cert):
+        self._key = key
+        self._cert = cert
+
+    @property
+    def expires(self):
+        """
+        The date and time after which the certificate will be considered invalid.
+        """
+        not_after = self._cert.get_notAfter().decode('ascii')
+        return datetime.datetime.strptime(not_after, '%Y%m%d%H%M%SZ').replace(
+            tzinfo=datetime.timezone.utc)
+
+    def getFingerprints(self):
+        """
+        Returns the list of certificate fingerprints, one of which is computed
+        with the digest algorithm used in the certificate signature.
+        """
+        return [
+            RTCDtlsFingerprint(algorithm='sha-256', value=certificate_digest(self._cert._x509))
+        ]
+
+    @classmethod
+    def generateCertificate(cls):
+        """
+        Create and return an X.509 certificate and corresponding private key.
+
+        :rtype: RTCCertificate
+        """
+        key = generate_key()
+        cert = generate_certificate(key)
+        return cls(key=key, cert=cert)
 
 
 @attr.s
@@ -159,8 +195,14 @@ class RTCDtlsTransport(EventEmitter):
     """
     The :class:`RTCDtlsTransport` object includes information relating to
     Datagram Transport Layer Security (DTLS) transport.
+
+    :param: transport: An :class:`RTCIceTransport`
+    :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently)
     """
-    def __init__(self, transport, context):
+    def __init__(self, transport, certificates):
+        assert len(certificates) == 1
+        certificate = certificates[0]
+
         super().__init__()
         self.closed = asyncio.Event()
         self.encrypted = False
@@ -180,7 +222,10 @@ class RTCDtlsTransport(EventEmitter):
             queue=self.rtp_queue,
             send=self._send_rtp)
 
-        ssl = lib.SSL_new(context.ctx)
+        # SSL init
+        self.__ctx = create_ssl_context(certificate)
+
+        ssl = lib.SSL_new(self.__ctx)
         self.ssl = ffi.gc(ssl, lib.SSL_free)
 
         self.read_bio = lib.BIO_new(lib.BIO_s_mem())
@@ -189,11 +234,7 @@ class RTCDtlsTransport(EventEmitter):
         self.write_cdata = ffi.new('char[]', 1500)
         lib.SSL_set_bio(self.ssl, self.read_bio, self.write_bio)
 
-        # local fingerprint
-        x509 = lib.SSL_get_certificate(self.ssl)
-        self._local_fingerprints = [
-            RTCDtlsFingerprint(algorithm='sha-256', value=certificate_digest(x509))
-        ]
+        self.__local_parameters = RTCDtlsParameters(fingerprints=certificate.getFingerprints())
 
     @property
     def state(self):
@@ -215,7 +256,7 @@ class RTCDtlsTransport(EventEmitter):
 
         :rtype: :class:`RTCDtlsParameters`
         """
-        return RTCDtlsParameters(fingerprints=self._local_fingerprints)
+        return self.__local_parameters
 
     async def start(self, remoteParameters):
         """

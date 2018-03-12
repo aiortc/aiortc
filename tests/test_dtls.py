@@ -1,9 +1,10 @@
 import asyncio
+import datetime
 import logging
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.rtcdtlstransport import (DtlsError, DtlsSrtpContext,
+from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsFingerprint, RTCDtlsParameters,
                                      RTCDtlsTransport)
 from aiortc.utils import first_completed
@@ -31,23 +32,37 @@ def dummy_ice_transport_pair():
     )
 
 
-class DtlsSrtpTest(TestCase):
+class RTCCertificateTest(TestCase):
+    def test_generate(self):
+        certificate = RTCCertificate.generateCertificate()
+        self.assertIsNotNone(certificate)
+
+        expires = certificate.expires
+        self.assertIsNotNone(expires)
+        self.assertTrue(isinstance(expires, datetime.datetime))
+
+        fingerprints = certificate.getFingerprints()
+        self.assertEqual(len(fingerprints), 1)
+        self.assertEqual(fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(len(fingerprints[0].value), 95)
+
+
+class RTCDtlsTransportTest(TestCase):
     @patch('aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate')
     def test_broken_ssl(self, mock_use_certificate):
         mock_use_certificate.return_value = 0
+        certificate = RTCCertificate.generateCertificate()
         with self.assertRaises(DtlsError):
-            DtlsSrtpContext()
+            RTCDtlsTransport(None, [certificate])
 
     def test_data(self):
         transport1, transport2 = dummy_ice_transport_pair()
 
-        context1 = DtlsSrtpContext()
-        session1 = RTCDtlsTransport(
-            context=context1, transport=transport1)
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
 
-        context2 = DtlsSrtpContext()
-        session2 = RTCDtlsTransport(
-            context=context2, transport=transport2)
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
@@ -83,13 +98,11 @@ class DtlsSrtpTest(TestCase):
     def test_rtp(self):
         transport1, transport2 = dummy_ice_transport_pair()
 
-        context1 = DtlsSrtpContext()
-        session1 = RTCDtlsTransport(
-            context=context1, transport=transport1)
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
 
-        context2 = DtlsSrtpContext()
-        session2 = RTCDtlsTransport(
-            context=context2, transport=transport2)
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
@@ -126,13 +139,11 @@ class DtlsSrtpTest(TestCase):
     def test_abrupt_disconnect(self):
         transport1, transport2 = dummy_ice_transport_pair()
 
-        context1 = DtlsSrtpContext()
-        session1 = RTCDtlsTransport(
-            context=context1, transport=transport1)
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
 
-        context2 = DtlsSrtpContext()
-        session2 = RTCDtlsTransport(
-            context=context2, transport=transport2)
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
@@ -161,13 +172,11 @@ class DtlsSrtpTest(TestCase):
     def test_bad_client_fingerprint(self):
         transport1, transport2 = dummy_ice_transport_pair()
 
-        context1 = DtlsSrtpContext()
-        session1 = RTCDtlsTransport(
-            context=context1, transport=transport1)
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
 
-        context2 = DtlsSrtpContext()
-        session2 = RTCDtlsTransport(
-            context=context2, transport=transport2)
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
 
         bogus_parameters = RTCDtlsParameters(
             fingerprints=[RTCDtlsFingerprint(algorithm='sha-256', value='bogus_fingerprint')])
@@ -190,13 +199,11 @@ class DtlsSrtpTest(TestCase):
 
         transport1, transport2 = dummy_ice_transport_pair()
 
-        context1 = DtlsSrtpContext()
-        session1 = RTCDtlsTransport(
-            context=context1, transport=transport1)
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
 
-        context2 = DtlsSrtpContext()
-        session2 = RTCDtlsTransport(
-            context=context2, transport=transport2)
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
 
         with self.assertRaises(DtlsError) as cm:
             run(asyncio.gather(
