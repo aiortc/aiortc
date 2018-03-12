@@ -1,25 +1,14 @@
+import attr
+
+
+@attr.s
 class RTCSessionDescription:
     """
     The RTCSessionDescription interface describes one end of a connection
     and how it's configured.
     """
+    sdp = attr.ib()
+    "A string containing the session description's SDP."
 
-    def __init__(self, sdp, type):
-        if type not in ['offer', 'pranswer', 'answer', 'rollback']:
-            raise ValueError('Unexpected SDP type "%s"' % type)
-        self.__sdp = sdp
-        self.__type = type
-
-    @property
-    def sdp(self):
-        """
-        A string containing the session description's SDP.
-        """
-        return self.__sdp
-
-    @property
-    def type(self):
-        """
-        A string describing the session description's type.
-        """
-        return self.__type
+    type = attr.ib(validator=attr.validators.in_(['offer', 'pranswer', 'answer', 'rollback']))
+    "A string describing the session description's type."
