@@ -87,8 +87,8 @@ class RTCPeerConnection(EventEmitter):
     The RTCPeerConnection interface represents a WebRTC connection between
     the local computer and a remote peer.
     """
-    def __init__(self, loop=None):
-        super().__init__(loop=loop)
+    def __init__(self):
+        super().__init__()
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = '{%s}' % uuid.uuid4()
         self.__datachannelManager = None
