@@ -175,7 +175,10 @@ class RTCDtlsFingerprint:
     algorithm and certificate fingerprint.
     """
     algorithm = attr.ib()
+    "The hash function name, for instance `'sha-256'`."
+
     value = attr.ib()
+    "The fingerprint value."
 
 
 @attr.s
