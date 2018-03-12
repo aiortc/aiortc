@@ -118,6 +118,7 @@ html_theme = 'alabaster'
 # documentation.
 #
 html_theme_options = {
+    'description': 'A library for building WebRTC and ORTC applications in Python.',
     'github_button': True,
     'github_user': 'jlaine',
     'github_repo': 'aiortc',
@@ -135,7 +136,9 @@ html_static_path = ['_static']
 # refs: http://alabaster.readthedocs.io/en/latest/installation.html#sidebars
 html_sidebars = {
     '**': [
-        'relations.html',  # needs 'show_related': True theme option to display
+        'about.html',
+        'navigation.html',
+        'relations.html',
         'searchbox.html',
     ]
 }
