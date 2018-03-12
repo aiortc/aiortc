@@ -6,6 +6,17 @@ from .vpx import VpxDecoder, VpxEncoder
 PCMU_CODEC = RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0)
 PCMA_CODEC = RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
 
+MEDIA_CODECS = {
+    'audio': [
+        RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
+        PCMU_CODEC,
+        PCMA_CODEC,
+    ],
+    'video': [
+        RTCRtpCodecParameters(name='VP8', clockRate=90000),
+    ]
+}
+
 
 def get_decoder(codec):
     if codec.name == 'opus':

@@ -50,6 +50,18 @@ class RTCRtpSender:
     def replaceTrack(self, track):
         self._track = track
 
+    async def send(self, parameters):
+        """
+        Attempts to set the parameters controlling the sending of media.
+        """
+        asyncio.ensure_future(self._run(parameters.codecs[0]))
+
+    def stop(self):
+        """
+        Irreversibly stop the sender.
+        """
+        pass
+
     async def _run(self, codec):
         encoder = get_encoder(codec)
         packet = RtpPacket(payload_type=codec.payloadType)

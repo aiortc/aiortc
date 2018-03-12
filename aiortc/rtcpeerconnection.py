@@ -5,11 +5,12 @@ import uuid
 from pyee import EventEmitter
 
 from . import rtp, sdp
+from .codecs import MEDIA_CODECS
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcdatachannel import DataChannelManager
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
-from .rtcrtpparameters import RTCRtpCodecParameters
+from .rtcrtpparameters import RTCRtpParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -24,16 +25,6 @@ DUMMY_CANDIDATE = RTCIceCandidate(
     host='0.0.0.0',
     port=0,
     type='host')
-MEDIA_CODECS = {
-    'audio': [
-        RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
-        RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
-        RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
-    ],
-    'video': [
-        RTCRtpCodecParameters(name='VP8', clockRate=90000),
-    ]
-}
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -149,7 +140,7 @@ class RTCPeerConnection(EventEmitter):
                 raise InvalidAccessError('Track already has a sender')
 
         for transceiver in self.__transceivers:
-            if transceiver._kind == track.kind:
+            if transceiver.kind == track.kind:
                 if transceiver.sender.track is None:
                     transceiver.sender.replaceTrack(track)
                     return transceiver.sender
@@ -169,7 +160,7 @@ class RTCPeerConnection(EventEmitter):
         self.__setSignalingState('closed')
         self.__updateIceConnectionState()
         for transceiver in self.__transceivers:
-            await transceiver.stop()
+            transceiver.stop()
             await transceiver._transport.stop()
             await transceiver._transport.transport.stop()
         if self.__sctp:
@@ -222,7 +213,7 @@ class RTCPeerConnection(EventEmitter):
         dynamic_pt = rtp.DYNAMIC_PAYLOAD_TYPES.start
         for transceiver in self.__transceivers:
             codecs = []
-            for codec in MEDIA_CODECS[transceiver._kind]:
+            for codec in MEDIA_CODECS[transceiver.kind]:
                 if codec.payloadType is None:
                     codecs.append(codec.clone(payloadType=dynamic_pt))
                     dynamic_pt += 1
@@ -294,7 +285,7 @@ class RTCPeerConnection(EventEmitter):
                 # find transceiver
                 transceiver = None
                 for t in self.__transceivers:
-                    if t._kind == media.kind:
+                    if t.kind == media.kind:
                         transceiver = t
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
@@ -349,7 +340,8 @@ class RTCPeerConnection(EventEmitter):
             for transceiver in self.__transceivers:
                 await transceiver._transport.transport.start(self.__remoteIce[transceiver])
                 await transceiver._transport.start(self.__remoteDtls[transceiver])
-                asyncio.ensure_future(transceiver._run())
+                await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
+                await transceiver.receiver.receive(RTCRtpParameters(codecs=transceiver._codecs))
             if self.__sctp:
                 await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
                 await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
@@ -400,7 +392,7 @@ class RTCPeerConnection(EventEmitter):
                 default_candidate = DUMMY_CANDIDATE
             sdp += [
                 'm=%s %d UDP/TLS/RTP/SAVPF %s' % (
-                    transceiver._kind,
+                    transceiver.kind,
                     default_candidate.port,
                     ' '.join([str(c.payloadType) for c in transceiver._codecs])),
                 'c=IN IP4 %s' % default_candidate.host,
@@ -435,9 +427,9 @@ class RTCPeerConnection(EventEmitter):
     def __createTransceiver(self, kind, sender_track=None):
         dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
+            kind=kind,
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))
-        transceiver._kind = kind
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver

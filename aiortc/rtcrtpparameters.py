@@ -21,5 +21,10 @@ class RTCRtpCodecParameters:
 
 
 @attr.s
+class RTCRtpCapabilities:
+    codecs = attr.ib(default=attr.Factory(list))
+
+
+@attr.s
 class RTCRtpParameters:
     codecs = attr.ib(default=attr.Factory(list))

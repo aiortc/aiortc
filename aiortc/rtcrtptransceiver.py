@@ -1,7 +1,4 @@
-import asyncio
 import logging
-
-from .utils import first_completed
 
 logger = logging.getLogger('rtp')
 
@@ -13,10 +10,10 @@ class RTCRtpTransceiver:
     shared state.
     """
 
-    def __init__(self, receiver, sender):
+    def __init__(self, kind, receiver, sender):
+        self.__kind = kind
         self.__receiver = receiver
         self.__sender = sender
-        self.__stopped = asyncio.Event()
 
     @property
     def direction(self):
@@ -24,6 +21,10 @@ class RTCRtpTransceiver:
             return 'sendrecv'
         else:
             return 'recvonly'
+
+    @property
+    def kind(self):
+        return self.__kind
 
     @property
     def receiver(self):
@@ -41,16 +42,9 @@ class RTCRtpTransceiver:
         """
         return self.__sender
 
-    async def stop(self):
+    def stop(self):
         """
         Permanently stops the :class:`RTCRtpTransceiver`.
         """
-        self.__stopped.set()
-
-    async def _run(self):
-        codec = self._codecs[0]
-
-        await first_completed(
-            self.receiver._run(codec=codec),
-            self.sender._run(codec=codec),
-            self.__stopped.wait())
+        self.__receiver.stop()
+        self.__sender.stop()

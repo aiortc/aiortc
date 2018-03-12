@@ -41,6 +41,18 @@ class RTCRtpReceiver:
         """
         return self._transport
 
+    async def receive(self, parameters):
+        """
+        Attempts to set the parameters controlling the receiving of media.
+        """
+        asyncio.ensure_future(self._run(parameters.codecs[0]))
+
+    def stop(self):
+        """
+        Irreversibly stop the receiver.
+        """
+        pass
+
     async def _run(self, codec):
         decoder = get_decoder(codec)
         while True:
