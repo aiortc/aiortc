@@ -47,11 +47,9 @@ class RTCRtpTransceiver:
         """
         self.__stopped.set()
 
-    async def _run(self, transport):
+    async def _run(self):
         codec = self._codecs[0]
 
-        self.receiver.setTransport(transport)
-        self.sender.setTransport(transport)
         await first_completed(
             self.receiver._run(codec=codec),
             self.sender._run(codec=codec),

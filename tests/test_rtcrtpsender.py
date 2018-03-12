@@ -17,10 +17,7 @@ class RTCRtpSenderTest(TestCase):
     def test_connection_error(self):
         transport, _ = dummy_dtls_transport_pair()
 
-        sender = RTCRtpSender(AudioStreamTrack())
-        self.assertEqual(sender.transport, None)
-
-        sender.setTransport(transport)
+        sender = RTCRtpSender(AudioStreamTrack(), transport)
         self.assertEqual(sender.transport, transport)
 
         run(asyncio.gather(
@@ -29,6 +26,5 @@ class RTCRtpSenderTest(TestCase):
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
-        sender = RTCRtpSender('audio')
         with self.assertRaises(InvalidStateError):
-            sender.setTransport(dtlsTransport)
+            RTCRtpSender('audio', dtlsTransport)

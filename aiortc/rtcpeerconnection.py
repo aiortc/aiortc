@@ -353,7 +353,7 @@ class RTCPeerConnection(EventEmitter):
             for transceiver in self.__transceivers:
                 await transceiver._transport.transport.start(self.__remoteIce[transceiver])
                 await transceiver._transport.start(self.__remoteDtls[transceiver])
-                asyncio.ensure_future(transceiver._run(transceiver._transport))
+                asyncio.ensure_future(transceiver._run())
             if self.__sctp:
                 await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
                 await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
@@ -437,11 +437,12 @@ class RTCPeerConnection(EventEmitter):
         return '\r\n'.join(sdp) + '\r\n'
 
     def __createTransceiver(self, kind, sender_track=None):
+        dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
-            sender=RTCRtpSender(sender_track or kind),
-            receiver=RTCRtpReceiver(kind=kind))
+            sender=RTCRtpSender(sender_track or kind, dtlsTransport),
+            receiver=RTCRtpReceiver(kind, dtlsTransport))
         transceiver._kind = kind
-        transceiver._transport = self.__createDtlsTransport()
+        transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver
 

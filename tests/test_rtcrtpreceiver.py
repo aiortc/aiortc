@@ -17,10 +17,7 @@ class RTCRtpReceiverTest(TestCase):
     def test_connection_error(self):
         transport, _ = dummy_dtls_transport_pair()
 
-        receiver = RTCRtpReceiver('audio')
-        self.assertEqual(receiver.transport, None)
-
-        receiver.setTransport(transport)
+        receiver = RTCRtpReceiver('audio', transport)
         self.assertEqual(receiver.transport, transport)
 
         run(asyncio.gather(
@@ -30,9 +27,10 @@ class RTCRtpReceiverTest(TestCase):
     def test_rtp_and_rtcp(self):
         transport, remote = dummy_dtls_transport_pair()
 
-        receiver = RTCRtpReceiver('audio')
+        receiver = RTCRtpReceiver('audio', transport)
+        self.assertEqual(receiver.transport, transport)
+
         receiver._track = RemoteStreamTrack(kind='audio')
-        receiver.setTransport(transport)
 
         task = asyncio.ensure_future(
             receiver._run(codec=PCMU_CODEC))
@@ -42,9 +40,6 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTCP
         run(remote.send(load('rtcp_sr.bin')))
-
-        # check transport
-        self.assertEqual(receiver.transport, transport)
 
         # check remote track
         frame = run(receiver._track.recv())
@@ -56,6 +51,5 @@ class RTCRtpReceiverTest(TestCase):
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
-        receiver = RTCRtpReceiver('audio')
         with self.assertRaises(InvalidStateError):
-            receiver.setTransport(dtlsTransport)
+            RTCRtpReceiver('audio', dtlsTransport)

@@ -24,11 +24,14 @@ class RTCRtpReceiver:
     The RTCRtpReceiver interface manages the reception and decoding of data
     for a MediaStreamTrack.
     """
-    def __init__(self, kind):
+    def __init__(self, kind, transport):
+        if transport.state == 'closed':
+            raise InvalidStateError
+
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
         self._track = None
-        self._transport = None
+        self._transport = transport
 
     @property
     def transport(self):
@@ -37,11 +40,6 @@ class RTCRtpReceiver:
         track is received.
         """
         return self._transport
-
-    def setTransport(self, transport):
-        if transport.state == 'closed':
-            raise InvalidStateError
-        self._transport = transport
 
     async def _run(self, codec):
         decoder = get_decoder(codec)

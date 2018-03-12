@@ -15,7 +15,10 @@ class RTCRtpSender:
     details about how a particular MediaStreamTrack is encoded and sent to
     a remote peer.
     """
-    def __init__(self, trackOrKind):
+    def __init__(self, trackOrKind, transport):
+        if transport.state == 'closed':
+            raise InvalidStateError
+
         if hasattr(trackOrKind, 'kind'):
             self._kind = trackOrKind.kind
             self._track = trackOrKind
@@ -23,7 +26,7 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
-        self._transport = None
+        self._transport = transport
 
     @property
     def kind(self):
@@ -46,11 +49,6 @@ class RTCRtpSender:
 
     def replaceTrack(self, track):
         self._track = track
-
-    def setTransport(self, transport):
-        if transport.state == 'closed':
-            raise InvalidStateError
-        self._transport = transport
 
     async def _run(self, codec):
         encoder = get_encoder(codec)
