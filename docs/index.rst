@@ -12,7 +12,7 @@ aiortc
 .. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiortc.svg
     :target: https://coveralls.io/github/jlaine/aiortc
 
- ``aiortc`` is a library for `Web Real-Time Communication (WebRTC)`_ and
+``aiortc`` is a library for `Web Real-Time Communication (WebRTC)`_ and
 `Object Real-Time Communication (ORTC)`_ in Python. It is built on top of
 ``asyncio``, Python's standard asynchronous I/O framework.
 
