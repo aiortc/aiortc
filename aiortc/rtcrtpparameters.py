@@ -1,9 +1,12 @@
+import attr
+
+
+@attr.s
 class RTCRtpCodecParameters:
-    def __init__(self, name, clockRate, channels=None, payloadType=None):
-        self.name = name
-        self.clockRate = clockRate
-        self.channels = channels
-        self.payloadType = payloadType
+    name = attr.ib(type=str)
+    clockRate = attr.ib(type=int)
+    channels = attr.ib(default=None)
+    payloadType = attr.ib(default=None)
 
     def clone(self, payloadType):
         return RTCRtpCodecParameters(
@@ -17,6 +20,6 @@ class RTCRtpCodecParameters:
         return s
 
 
+@attr.s
 class RTCRtpParameters:
-    def __init__(self, codecs=[]):
-        self.codecs = codecs
+    codecs = attr.ib(default=attr.Factory(list))
