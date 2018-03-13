@@ -5,7 +5,7 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (AbortChunk, CookieEchoChunk, InitChunk,
                                      Packet, RTCSctpCapabilities,
-                                     RTCSctpTransport)
+                                     RTCSctpTransport, ShutdownChunk)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -41,6 +41,19 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
+    def test_parse_init_invalid_checksum(self):
+        data = load('sctp_init.bin')
+        data = data[0:8] + b'\x01\x02\x03\x04' + data[12:]
+        with self.assertRaises(ValueError) as cm:
+            Packet.parse(data)
+        self.assertEqual(str(cm.exception), 'SCTP packet has invalid checksum')
+
+    def test_parse_init_truncated_packet_header(self):
+        data = load('sctp_init.bin')[0:10]
+        with self.assertRaises(ValueError) as cm:
+            Packet.parse(data)
+        self.assertEqual(str(cm.exception), 'SCTP packet length is less than 12 bytes')
+
     def test_parse_cookie_echo(self):
         data = load('sctp_cookie_echo.bin')
         packet = Packet.parse(data)
@@ -73,18 +86,22 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
-    def test_invalid_checksum(self):
-        data = load('sctp_init.bin')
-        data = data[0:8] + b'\x01\x02\x03\x04' + data[12:]
-        with self.assertRaises(ValueError) as cm:
-            Packet.parse(data)
-        self.assertEqual(str(cm.exception), 'SCTP packet has invalid checksum')
+    def test_parse_shutdown(self):
+        data = load('sctp_shutdown.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 4019984498)
 
-    def test_truncated_packet_header(self):
-        data = load('sctp_init.bin')[0:10]
-        with self.assertRaises(ValueError) as cm:
-            Packet.parse(data)
-        self.assertEqual(str(cm.exception), 'SCTP packet length is less than 12 bytes')
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ShutdownChunk))
+        self.assertEqual(repr(packet.chunks[0]),
+                         'ShutdownChunk(flags=0, cumulative_tsn=2696426712)')
+        self.assertEqual(packet.chunks[0].type, 7)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].cumulative_tsn, 2696426712)
+
+        self.assertEqual(bytes(packet), data)
 
 
 class RTCSctpTransportTest(TestCase):

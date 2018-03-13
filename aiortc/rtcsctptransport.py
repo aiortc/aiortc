@@ -212,6 +212,10 @@ class ShutdownChunk(Chunk):
     def body(self):
         return pack('!L', self.cumulative_tsn)
 
+    def __repr__(self):
+        return 'ShutdownChunk(flags=%d, cumulative_tsn=%d)' % (
+            self.flags, self.cumulative_tsn)
+
 
 class ShutdownAckChunk(Chunk):
     pass
@@ -331,7 +335,7 @@ class RTCSctpTransport(EventEmitter):
         self.local_verification_tag = random32()
 
         self.__remote_port = None
-        self.remote_tsn = None
+        self._last_received_tsn = None
         self.remote_verification_tag = 0
 
         # data channels
@@ -392,6 +396,7 @@ class RTCSctpTransport(EventEmitter):
             return
 
         chunk = ShutdownChunk()
+        chunk.cumulative_tsn = self._last_received_tsn
         await self._send_chunk(chunk)
         self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
@@ -491,7 +496,7 @@ class RTCSctpTransport(EventEmitter):
 
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
-            self.remote_tsn = chunk.initial_tsn
+            self._last_received_tsn = (chunk.initial_tsn - 1) % SCTP_TSN_MODULO
             self.remote_verification_tag = chunk.initiate_tag
 
             ack = InitAckChunk()
@@ -529,7 +534,7 @@ class RTCSctpTransport(EventEmitter):
 
         # client
         if isinstance(chunk, InitAckChunk) and not self.is_server:
-            self.remote_tsn = chunk.initial_tsn
+            self._last_received_tsn = (chunk.initial_tsn - 1) % SCTP_TSN_MODULO
             self.remote_verification_tag = chunk.initiate_tag
 
             echo = CookieEchoChunk()
@@ -549,8 +554,10 @@ class RTCSctpTransport(EventEmitter):
 
         # common
         elif isinstance(chunk, DataChunk):
+            self._last_received_tsn = chunk.tsn
+
             sack = SackChunk()
-            sack.cumulative_tsn = chunk.tsn
+            sack.cumulative_tsn = self._last_received_tsn
             sack.advertised_rwnd = self.advertised_rwnd
             await self._send_chunk(sack)
 
