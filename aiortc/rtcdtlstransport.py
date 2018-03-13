@@ -94,7 +94,13 @@ def verify_callback(x, y):
 
 
 def create_ssl_context(certificate):
-    ctx = lib.SSL_CTX_new(lib.DTLSv1_method())
+    if hasattr(lib, 'DTLS_method'):
+        # openssl >= 1.0.2
+        method = lib.DTLS_method
+    else:
+        # openssl < 1.0.2
+        method = lib.DTLSv1_method
+    ctx = lib.SSL_CTX_new(method())
     ctx = ffi.gc(ctx, lib.SSL_CTX_free)
 
     lib.SSL_CTX_set_verify(ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
