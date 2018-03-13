@@ -347,6 +347,10 @@ class RTCPeerConnection(EventEmitter):
                 await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
+                # crash firefox after 2 seconds
+                loop = asyncio.get_event_loop()
+                loop.call_later(2, lambda: asyncio.ensure_future(self.__sctp.stop()))
+
     async def __gather(self):
         for iceTransport in self.__iceTransports:
             await iceTransport.iceGatherer.gather()
