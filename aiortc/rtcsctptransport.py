@@ -406,6 +406,12 @@ class RTCSctpTransport(EventEmitter):
         await self._flush()
 
     async def __run(self):
+        # initialise local channel ID counter
+        if self.is_server:
+            self._data_channel_id = 0
+        else:
+            self._data_channel_id = 1
+
         if not self.is_server:
             chunk = InitChunk()
             chunk.initiate_tag = self.local_verification_tag
@@ -446,13 +452,6 @@ class RTCSctpTransport(EventEmitter):
     async def _flush(self):
         if self.state != self.State.ESTABLISHED:
             return
-
-        # initialise local channel ID counter
-        if self._data_channel_id is None:
-            if self.is_server:
-                self._data_channel_id = 0
-            else:
-                self._data_channel_id = 1
 
         for channel, protocol, user_data in self.send_queue:
             # register channel if necessary
