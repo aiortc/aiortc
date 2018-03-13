@@ -5,19 +5,37 @@ import json
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
 
-async def run_answer():
-    done = asyncio.Event()
+def channel_log(channel, t, message):
+    print('channel(%s) %s %s' % (channel.label, t, message))
+
+
+def channel_watch(channel):
+    @channel.on('message')
+    def on_message(message):
+        channel_log(channel, '<', message)
+
+
+def create_pc():
     pc = RTCPeerConnection()
+
+    @pc.on('datachannel')
+    def on_datachannel(channel):
+        channel_log(channel, '-', 'created by remote party')
+        channel_watch(channel)
+
+    return pc
+
+
+async def run_answer(pc):
+    done = asyncio.Event()
 
     @pc.on('datachannel')
     def on_datachannel(channel):
         @channel.on('message')
         def on_message(message):
-            print('channel < %s' % message)
-
             # reply
             message = 'pong'
-            print('channel > %s' % message)
+            channel_log(channel, '>', message)
             channel.send(message)
 
             # quit
@@ -42,19 +60,17 @@ async def run_answer():
     print()
 
     await done.wait()
-    await pc.close()
 
 
-async def run_offer():
+async def run_offer(pc):
     done = asyncio.Event()
-    pc = RTCPeerConnection()
 
     channel = pc.createDataChannel('chat')
+    channel_log(channel, '-', 'created by local party')
+    channel_watch(channel)
 
     @channel.on('message')
     def on_message(message):
-        print('channel < %s' % message)
-
         # quit
         done.set()
 
@@ -78,19 +94,28 @@ async def run_offer():
 
     # send message
     message = 'ping'
-    print('channel > %s' % message)
-    channel.send('ping')
+    channel_log(channel, '>', message)
+    channel.send(message)
 
     await done.wait()
-    await pc.close()
 
 
-parser = argparse.ArgumentParser(description='Data channels with copy-and-paste signaling')
-parser.add_argument('role', choices=['offer', 'answer'])
-args = parser.parse_args()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Data channels with copy-and-paste signaling')
+    parser.add_argument('role', choices=['offer', 'answer'])
+    args = parser.parse_args()
 
-loop = asyncio.get_event_loop()
-if args.role == 'offer':
-    loop.run_until_complete(run_offer())
-else:
-    loop.run_until_complete(run_answer())
+    pc = create_pc()
+    if args.role == 'offer':
+        coro = run_offer(pc)
+    else:
+        coro = run_answer(pc)
+
+    # run event loop
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(coro)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(pc.close())
