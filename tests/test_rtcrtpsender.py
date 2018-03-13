@@ -14,17 +14,26 @@ class ClosedDtlsTransport:
 
 
 class RTCRtpSenderTest(TestCase):
+    def test_construct(self):
+        transport, _ = dummy_dtls_transport_pair()
+
+        sender = RTCRtpSender('audio', transport)
+        self.assertEqual(sender.kind, 'audio')
+        self.assertEqual(sender.transport, transport)
+
+    def test_construct_invalid_dtls_transport_state(self):
+        transport = ClosedDtlsTransport()
+
+        with self.assertRaises(InvalidStateError):
+            RTCRtpSender('audio', transport)
+
     def test_connection_error(self):
         transport, _ = dummy_dtls_transport_pair()
 
         sender = RTCRtpSender(AudioStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'audio')
         self.assertEqual(sender.transport, transport)
 
         run(asyncio.gather(
             sender._run(codec=PCMU_CODEC),
             transport.close()))
-
-    def test_invalid_dtls_transport_state(self):
-        dtlsTransport = ClosedDtlsTransport()
-        with self.assertRaises(InvalidStateError):
-            RTCRtpSender('audio', dtlsTransport)
