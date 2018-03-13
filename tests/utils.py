@@ -66,4 +66,5 @@ def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
-logging.basicConfig(level=logging.DEBUG)
+if os.environ.get('AIORTC_DEBUG'):
+    logging.basicConfig(level=logging.DEBUG)
