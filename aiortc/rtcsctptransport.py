@@ -335,11 +335,8 @@ class RTCSctpTransport(EventEmitter):
         self.remote_verification_tag = 0
 
         # data channels
+        self._data_channel_id = None
         self._data_channels = {}
-        if self.is_server:
-            self._data_channel_id = 0
-        else:
-            self._data_channel_id = 1
 
     @property
     def is_server(self):
@@ -399,8 +396,8 @@ class RTCSctpTransport(EventEmitter):
         self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
 
-    async def send(self, stream_id, protocol, user_data):
-        self.send_queue.append((stream_id, protocol, user_data))
+    async def send(self, channel, protocol, user_data):
+        self.send_queue.append((channel, protocol, user_data))
         await self._flush()
 
     async def __run(self):
@@ -445,7 +442,22 @@ class RTCSctpTransport(EventEmitter):
         if self.state != self.State.ESTABLISHED:
             return
 
-        for stream_id, protocol, user_data in self.send_queue:
+        # initialise local channel ID counter
+        if self._data_channel_id is None:
+            if self.is_server:
+                self._data_channel_id = 0
+            else:
+                self._data_channel_id = 1
+
+        for channel, protocol, user_data in self.send_queue:
+            # register channel if necessary
+            stream_id = channel.id
+            if stream_id is None:
+                stream_id = self._data_channel_id
+                self._data_channels[stream_id] = channel
+                self._data_channel_id += 2
+                channel._setId(stream_id)
+
             stream_seq = self.stream_seq.get(stream_id, 0)
 
             fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
@@ -588,26 +600,21 @@ class RTCSctpTransport(EventEmitter):
                 self.closed.set()
 
     def data_channel_open(self, channel):
-        # register channel
-        channel_id = self._data_channel_id
-        self._data_channels[channel_id] = channel
-        self._data_channel_id += 2
-        channel._setId(channel_id)
-
-        # open channel
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
                     0, 0, len(channel.label), len(channel.protocol))
         data += channel.label.encode('utf8')
         data += channel.protocol.encode('utf8')
-        asyncio.ensure_future(self.send(channel.id, WEBRTC_DCEP, data))
+        asyncio.ensure_future(self.send(channel, WEBRTC_DCEP, data))
 
     async def data_channel_handle(self, stream_id, pp_id, data):
         if pp_id == WEBRTC_DCEP and len(data):
             msg_type = unpack('!B', data[0:1])[0]
             if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
-                # FIXME : one side should be using even IDs, the other odd IDs
-                # assert (stream_id % 2) != (self.stream_id % 2)
+                # we should not receive an open for an existing channel
                 assert stream_id not in self._data_channels
+
+                # one side should be using even IDs, the other odd IDs
+                assert (stream_id % 2) != (self._data_channel_id % 2)
 
                 (msg_type, channel_type, priority, reliability,
                  label_length, protocol_length) = unpack('!BBHLHH', data[0:12])
@@ -623,7 +630,7 @@ class RTCSctpTransport(EventEmitter):
                 self._data_channels[stream_id] = channel
 
                 # send ack
-                await self.send(channel.id, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
+                await self.send(channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
 
                 # emit channel
                 self.emit('datachannel', channel)
@@ -646,13 +653,13 @@ class RTCSctpTransport(EventEmitter):
 
     async def data_channel_send(self, channel, data):
         if data == '':
-            await self.send(channel.id, WEBRTC_STRING_EMPTY, b'\x00')
+            await self.send(channel, WEBRTC_STRING_EMPTY, b'\x00')
         elif isinstance(data, str):
-            await self.send(channel.id, WEBRTC_STRING, data.encode('utf8'))
+            await self.send(channel, WEBRTC_STRING, data.encode('utf8'))
         elif data == b'':
-            await self.send(channel.id, WEBRTC_BINARY_EMPTY, b'\x00')
+            await self.send(channel, WEBRTC_BINARY_EMPTY, b'\x00')
         else:
-            await self.send(channel.id, WEBRTC_BINARY, data)
+            await self.send(channel, WEBRTC_BINARY, data)
 
     class State(enum.Enum):
         CLOSED = 1

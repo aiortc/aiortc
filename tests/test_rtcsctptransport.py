@@ -10,6 +10,16 @@ from aiortc.rtcsctptransport import (AbortChunk, CookieEchoChunk, InitChunk,
 from .utils import dummy_dtls_transport_pair, load, run
 
 
+def track_channels(transport):
+        channels = []
+
+        @transport.on('datachannel')
+        def on_datachannel(channel):
+            channels.append(channel)
+
+        return channels
+
+
 class DummyDtlsTransport:
     def __init__(self, state='new'):
         self.state = state
@@ -89,18 +99,15 @@ class RTCSctpTransportTest(TestCase):
         with self.assertRaises(InvalidStateError):
             RTCSctpTransport(dtlsTransport)
 
-    def test_ok(self):
+    def test_connect_then_client_creates_data_channel(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = RTCSctpTransport(client_transport)
         self.assertFalse(client.is_server)
         server = RTCSctpTransport(server_transport)
         self.assertTrue(server.is_server)
 
-        server_channels = []
-
-        @server.on('datachannel')
-        def on_datachannel(channel):
-            server_channels.append(channel)
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
 
         # connect
         server.start(client.getCapabilities(), client.port)
@@ -111,11 +118,54 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
-        # DATA_CHANNEL_OPEN
-        RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
+        # create data channel
+        channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
+        self.assertEqual(channel.id, None)
+        self.assertEqual(channel.label, 'chat')
+
         run(asyncio.sleep(0.5))
+        self.assertEqual(channel.id, 1)
+        self.assertEqual(channel.label, 'chat')
+        self.assertEqual(len(client_channels), 0)
         self.assertEqual(len(server_channels), 1)
+        self.assertEqual(server_channels[0].id, 1)
         self.assertEqual(server_channels[0].label, 'chat')
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_server_creates_data_channel(self):
+        client_transport, server_transport = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+
+        # create data channel
+        channel = RTCDataChannel(server, RTCDataChannelParameters(label='chat'))
+        self.assertEqual(channel.id, None)
+        self.assertEqual(channel.label, 'chat')
+
+        run(asyncio.sleep(0.5))
+        self.assertEqual(len(client_channels), 1)
+        self.assertEqual(client_channels[0].id, 0)
+        self.assertEqual(client_channels[0].label, 'chat')
+        self.assertEqual(len(server_channels), 0)
 
         # shutdown
         run(client.stop())
