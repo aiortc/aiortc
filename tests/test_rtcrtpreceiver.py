@@ -15,6 +15,9 @@ class ClosedDtlsTransport:
 
 class RTCRtpReceiverTest(TestCase):
     def test_connection_error(self):
+        """
+        Close the underlying transport before the receiver.
+        """
         transport, _ = dummy_dtls_transport_pair()
 
         receiver = RTCRtpReceiver('audio', transport)
@@ -40,6 +43,9 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTCP
         run(remote.send(load('rtcp_sr.bin')))
+
+        # receive garbage
+        run(remote.send(b'garbage'))
 
         # check remote track
         frame = run(receiver._track.recv())

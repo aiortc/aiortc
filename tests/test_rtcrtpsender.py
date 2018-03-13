@@ -28,6 +28,9 @@ class RTCRtpSenderTest(TestCase):
             RTCRtpSender('audio', transport)
 
     def test_connection_error(self):
+        """
+        Close the underlying transport before the sender.
+        """
         transport, _ = dummy_dtls_transport_pair()
 
         sender = RTCRtpSender(AudioStreamTrack(), transport)
