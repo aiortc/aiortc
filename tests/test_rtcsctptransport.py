@@ -3,9 +3,11 @@ from unittest import TestCase
 
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from aiortc.rtcsctptransport import (AbortChunk, CookieEchoChunk, InitChunk,
-                                     Packet, RTCSctpCapabilities,
-                                     RTCSctpTransport, ShutdownChunk)
+from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
+                                     AbortChunk, CookieEchoChunk, DataChunk,
+                                     InitChunk, Packet, RTCSctpCapabilities,
+                                     RTCSctpTransport, SackChunk,
+                                     ShutdownChunk, tsn_gt, tsn_gte)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -86,6 +88,23 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
+    def test_parse_sack(self):
+        data = load('sctp_sack.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 4146048843)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], SackChunk))
+        self.assertEqual(packet.chunks[0].type, 3)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].cumulative_tsn, 2222939037)
+        self.assertEqual(packet.chunks[0].gaps, [(2, 2), (4, 4)])
+        self.assertEqual(packet.chunks[0].duplicates, [2222939041])
+
+        self.assertEqual(bytes(packet), data)
+
     def test_parse_shutdown(self):
         data = load('sctp_shutdown.bin')
         packet = Packet.parse(data)
@@ -102,6 +121,24 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].cumulative_tsn, 2696426712)
 
         self.assertEqual(bytes(packet), data)
+
+
+class SctpUtilTest(TestCase):
+    def test_tsn_gt(self):
+        self.assertFalse(tsn_gt(0, 1))
+        self.assertFalse(tsn_gt(1, 1))
+        self.assertTrue(tsn_gt(2, 1))
+        self.assertTrue(tsn_gt(2147483648, 1))
+        self.assertFalse(tsn_gt(2147483649, 1))
+        self.assertFalse(tsn_gt(4294967296, 1))
+
+    def test_tsn_gte(self):
+        self.assertFalse(tsn_gte(0, 1))
+        self.assertTrue(tsn_gte(1, 1))
+        self.assertTrue(tsn_gte(2, 1))
+        self.assertTrue(tsn_gte(2147483648, 1))
+        self.assertFalse(tsn_gte(2147483649, 1))
+        self.assertFalse(tsn_gte(4294967296, 1))
 
 
 class RTCSctpTransportTest(TestCase):
@@ -296,3 +333,25 @@ class RTCSctpTransportTest(TestCase):
         run(server.stop())
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
+    def test_receive_data(self):
+        client_transport, _ = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+
+        # receive chunk
+        chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
+        chunk.user_data = b'foo'
+        chunk.tsn = 1
+        run(client._receive_chunk(chunk))
+
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._last_received_tsn, 1)
+        client._sack_needed = False
+
+        # receive chunk again
+        run(client._receive_chunk(chunk))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [1])
+        self.assertEqual(client._last_received_tsn, 1)

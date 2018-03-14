@@ -75,6 +75,22 @@ def swapl(i):
     return unpack("<I", pack(">I", i))[0]
 
 
+def tsn_gt(a, b):
+    """
+    Return True if tsn a is greater than b.
+    """
+    half_mod = (1 << 31)
+    return (((a < b) and ((b - a) > half_mod)) or
+            ((a > b) and ((a - b) < half_mod)))
+
+
+def tsn_gte(a, b):
+    """
+    Return True if tsn a is greater than or equal to b.
+    """
+    return (a == b) or tsn_gt(a, b)
+
+
 class Chunk:
     def __init__(self, flags=0, body=b''):
         self.flags = flags
@@ -185,6 +201,13 @@ class SackChunk(Chunk):
         if body:
             self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack(
                 '!LLHH', body[0:12])
+            pos = 12
+            for i in range(nb_gaps):
+                self.gaps.append(unpack('!HH', body[pos:pos + 4]))
+                pos += 4
+            for i in range(nb_duplicates):
+                self.duplicates.append(unpack('!L', body[pos:pos + 4])[0])
+                pos += 4
         else:
             self.cumulative_tsn = 0
             self.advertised_rwnd = 0
@@ -193,6 +216,10 @@ class SackChunk(Chunk):
     def body(self):
         body = pack('!LLHH', self.cumulative_tsn, self.advertised_rwnd,
                     len(self.gaps), len(self.duplicates))
+        for gap in self.gaps:
+            body += pack('!HH', *gap)
+        for tsn in self.duplicates:
+            body += pack('!L', tsn)
         return body
 
     def __repr__(self):
@@ -330,6 +357,9 @@ class RTCSctpTransport(EventEmitter):
         self.stream_frags = {}
         self.stream_seq = {}
 
+        self._sack_duplicates = []
+        self._sack_needed = False
+
         self.__local_port = port
         self.local_tsn = random32()
         self.local_verification_tag = random32()
@@ -449,6 +479,17 @@ class RTCSctpTransport(EventEmitter):
             for chunk in packet.chunks:
                 await self._receive_chunk(chunk)
 
+            # send SACK if needed
+            if self._sack_needed:
+                sack = SackChunk()
+                sack.cumulative_tsn = self._last_received_tsn
+                sack.advertised_rwnd = self.advertised_rwnd
+                sack.duplicates = self._sack_duplicates
+                await self._send_chunk(sack)
+
+                self._sack_duplicates = []
+                self._sack_needed = False
+
     async def _flush(self):
         if self.state != self.State.ESTABLISHED:
             return
@@ -553,12 +594,14 @@ class RTCSctpTransport(EventEmitter):
 
         # common
         elif isinstance(chunk, DataChunk):
-            self._last_received_tsn = chunk.tsn
+            # check whether it's a duplicate
+            if tsn_gte(self._last_received_tsn, chunk.tsn):
+                self._sack_duplicates.append(chunk.tsn)
+                self._sack_needed = True
+                return
 
-            sack = SackChunk()
-            sack.cumulative_tsn = self._last_received_tsn
-            sack.advertised_rwnd = self.advertised_rwnd
-            await self._send_chunk(sack)
+            self._last_received_tsn = chunk.tsn
+            self._sack_needed = True
 
             # defragment data
             if chunk.flags & SCTP_DATA_FIRST_FRAG:
