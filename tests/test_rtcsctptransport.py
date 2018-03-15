@@ -263,6 +263,35 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
+    def test_abrupt_disconnect(self):
+        client_transport, server_transport = dummy_dtls_transport_pair()
+
+        client = RTCSctpTransport(client_transport)
+        server = RTCSctpTransport(server_transport)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+
+        # break one connection
+        run(client_transport.close())
+        run(asyncio.sleep(0.1))
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+
+        # break other connection
+        run(server_transport.close())
+        run(asyncio.sleep(0.1))
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
+        # try closing again
+        run(client.stop())
+        run(server.stop())
+
     def test_abort(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = RTCSctpTransport(client_transport)

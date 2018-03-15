@@ -468,7 +468,12 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.COOKIE_WAIT)
 
         while True:
-            data = await first_completed(self.transport.data.recv(), self.closed.wait())
+            try:
+                data = await first_completed(self.transport.data.recv(), self.closed.wait())
+            except ConnectionError:
+                self.__log_debug('x Underlying connection closed while reading')
+                self._set_state(self.State.CLOSED)
+                break
             if data is True:
                 break
 
@@ -487,8 +492,8 @@ class RTCSctpTransport(EventEmitter):
 
             # verify tag
             if packet.verification_tag != expected_tag:
-                logger.debug('%s x Bad verification tag %d vs %d' % (
-                    self.role, packet.verification_tag, expected_tag))
+                self.__log_debug('Bad verification tag %d vs %d',
+                    packet.verification_tag, expected_tag)
                 continue
 
             # handle chunks
@@ -554,7 +559,7 @@ class RTCSctpTransport(EventEmitter):
         await self.data_channel_handle(stream_id, pp_id, data)
 
     async def _receive_chunk(self, chunk):
-        logger.debug('%s < %s', self.role, repr(chunk))
+        self.__log_debug('< %s', repr(chunk))
 
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
@@ -578,14 +583,14 @@ class RTCSctpTransport(EventEmitter):
             cookie = chunk.body
             if (len(cookie) != COOKIE_LENGTH or
                hmac.new(self.hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
-                logger.debug('%s x State cookie is invalid' % self.role)
+                self.__log_debug('x State cookie is invalid')
                 return
 
             # check state cookie lifetime
             now = self._get_timestamp()
             stamp = unpack('!L', cookie[0:4])[0]
             if stamp < now - COOKIE_LIFETIME or stamp > now:
-                logger.debug('%s x State cookie has expired' % self.role)
+                self.__log_debug('x State cookie has expired')
                 error = ErrorChunk()
                 error.params.append((SCTP_CAUSE_STALE_COOKIE, b'\x00' * 8))
                 await self._send_chunk(error)
@@ -612,7 +617,7 @@ class RTCSctpTransport(EventEmitter):
         elif (isinstance(chunk, ErrorChunk) and not self.is_server and
               self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
             self._set_state(self.State.CLOSED)
-            logger.debug('%s x Could not establish association' % self.role)
+            self.__log_debug('x Could not establish association')
             return
 
         # common
@@ -646,7 +651,7 @@ class RTCSctpTransport(EventEmitter):
             ack.params = chunk.params
             await self._send_chunk(ack)
         elif isinstance(chunk, AbortChunk):
-            logger.debug('%s x Association was aborted by remote party' % self.role)
+            self.__log_debug('x Association was aborted by remote party')
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
             self._set_state(self.State.SHUTDOWN_RECEIVED)
@@ -671,7 +676,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit a chunk (no bundling for now).
         """
-        logger.debug('%s > %s', self.role, repr(chunk))
+        self.__log_debug('> %s', repr(chunk))
         packet = Packet(
             source_port=self.__local_port,
             destination_port=self._remote_port,
@@ -681,7 +686,7 @@ class RTCSctpTransport(EventEmitter):
 
     def _set_state(self, state):
         if state != self.state:
-            logger.debug('%s - %s -> %s' % (self.role, self.state, state))
+            self.__log_debug('- %s -> %s', self.state, state)
             self.state = state
             if state == self.State.ESTABLISHED:
                 asyncio.ensure_future(self._flush())
@@ -763,6 +768,9 @@ class RTCSctpTransport(EventEmitter):
             await self._send(channel, WEBRTC_BINARY_EMPTY, b'\x00')
         else:
             await self._send(channel, WEBRTC_BINARY, data)
+
+    def __log_debug(self, msg, *args):
+        logger.debug(self.role + ' ' + msg, *args)
 
     class State(enum.Enum):
         CLOSED = 1
