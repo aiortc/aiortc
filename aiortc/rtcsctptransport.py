@@ -24,13 +24,15 @@ COOKIE_LIFETIME = 60
 USERDATA_MAX_LENGTH = 1200
 
 # protocol constants
+SCTP_CAUSE_INVALID_STREAM = 0x0001
+SCTP_CAUSE_STALE_COOKIE = 0x0003
+
 SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
 SCTP_DATA_UNORDERED = 0x04
+
 SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
-
-STALE_COOKIE_ERROR = 3
 
 STATE_COOKIE = 0x0007
 
@@ -167,7 +169,16 @@ class DataChunk(Chunk):
 
 
 class ErrorChunk(Chunk):
-    pass
+    def __init__(self, flags=0, body=b''):
+        self.flags = flags
+        if body:
+            self.params = decode_params(body)
+        else:
+            self.params = []
+
+    @property
+    def body(self):
+        return encode_params(self.params)
 
 
 class BaseInitChunk(Chunk):
@@ -571,7 +582,7 @@ class RTCSctpTransport(EventEmitter):
             if stamp < now - COOKIE_LIFETIME or stamp > now:
                 logger.debug('%s x State cookie has expired' % self.role)
                 error = ErrorChunk()
-                error.body = pack('!HHL', STALE_COOKIE_ERROR, 8, 0)
+                error.params.append((SCTP_CAUSE_STALE_COOKIE, b'\x00' * 8))
                 await self._send_chunk(error)
                 return
 
@@ -628,7 +639,6 @@ class RTCSctpTransport(EventEmitter):
         elif isinstance(chunk, AbortChunk):
             logger.debug('%s x Association was aborted by remote party' % self.role)
             self._set_state(self.State.CLOSED)
-            return
         elif isinstance(chunk, ShutdownChunk):
             self._set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()

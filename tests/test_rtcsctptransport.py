@@ -5,9 +5,9 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      AbortChunk, CookieEchoChunk, DataChunk,
-                                     InitChunk, Packet, RTCSctpCapabilities,
-                                     RTCSctpTransport, SackChunk,
-                                     ShutdownChunk, tsn_gt, tsn_gte)
+                                     ErrorChunk, InitChunk, Packet,
+                                     RTCSctpCapabilities, RTCSctpTransport,
+                                     SackChunk, ShutdownChunk, tsn_gt, tsn_gte)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -84,6 +84,23 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(packet.chunks[0].params, [
             (13, b'Expected B-bit for TSN=4ce1f17f, SID=0001, SSN=0000'),
+        ])
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_error(self):
+        data = load('sctp_error.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 3763951554)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ErrorChunk))
+        self.assertEqual(packet.chunks[0].type, 9)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].params, [
+            (1, b'\x30\x39\x00\x00'),
         ])
 
         self.assertEqual(bytes(packet), data)
