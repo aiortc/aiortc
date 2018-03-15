@@ -473,7 +473,7 @@ class RTCSctpTransport(EventEmitter):
             if packet.verification_tag != expected_tag:
                 logger.debug('%s x Bad verification tag %d vs %d' % (
                     self.role, packet.verification_tag, expected_tag))
-                return
+                continue
 
             # handle chunks
             for chunk in packet.chunks:
