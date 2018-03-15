@@ -242,7 +242,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
         # shutdown
-        run(client.abort())
+        run(client._abort())
         run(asyncio.sleep(0.5))
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)

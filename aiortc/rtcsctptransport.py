@@ -26,6 +26,7 @@ USERDATA_MAX_LENGTH = 1200
 # protocol constants
 SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
+SCTP_DATA_UNORDERED = 0x04
 SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
@@ -89,6 +90,14 @@ def tsn_gte(a, b):
     Return True if tsn a is greater than or equal to b.
     """
     return (a == b) or tsn_gt(a, b)
+
+
+def tsn_minus_one(a):
+    return (a - 1) % SCTP_TSN_MODULO
+
+
+def tsn_plus_one(a):
+    return (a + 1) % SCTP_TSN_MODULO
 
 
 class Chunk:
@@ -404,36 +413,24 @@ class RTCSctpTransport(EventEmitter):
 
     def start(self, remoteCaps, remotePort):
         """
-        Starts the transport.
+        Start the transport.
         """
         self.__remote_port = remotePort
         asyncio.ensure_future(self.__run())
 
     async def stop(self):
         """
-        Stops the transport.
+        Stop the transport.
         """
-        await self.shutdown()
+        await self._shutdown()
 
-    async def abort(self):
+    async def _abort(self):
+        """
+        Abort the association.
+        """
         chunk = AbortChunk()
         await self._send_chunk(chunk)
         self._set_state(self.State.CLOSED)
-
-    async def shutdown(self):
-        if self.state == self.State.CLOSED:
-            self.closed.set()
-            return
-
-        chunk = ShutdownChunk()
-        chunk.cumulative_tsn = self._last_received_tsn
-        await self._send_chunk(chunk)
-        self._set_state(self.State.SHUTDOWN_SENT)
-        await self.closed.wait()
-
-    async def send(self, channel, protocol, user_data):
-        self.send_queue.append((channel, protocol, user_data))
-        await self._flush()
 
     async def __run(self):
         # initialise local channel ID counter
@@ -476,6 +473,7 @@ class RTCSctpTransport(EventEmitter):
                     self.role, packet.verification_tag, expected_tag))
                 return
 
+            # handle chunks
             for chunk in packet.chunks:
                 await self._receive_chunk(chunk)
 
@@ -521,7 +519,7 @@ class RTCSctpTransport(EventEmitter):
                 chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
                 pos += USERDATA_MAX_LENGTH
-                self.local_tsn = (self.local_tsn + 1) % SCTP_TSN_MODULO
+                self.local_tsn = tsn_plus_one(self.local_tsn)
                 await self._send_chunk(chunk)
 
             self.stream_seq[stream_id] = (stream_seq + 1) % SCTP_SEQ_MODULO
@@ -531,12 +529,18 @@ class RTCSctpTransport(EventEmitter):
     def _get_timestamp(self):
         return int(time.time())
 
+    async def _receive(self, stream_id, pp_id, data):
+        """
+        Receive data stream -> ULP.
+        """
+        await self.data_channel_handle(stream_id, pp_id, data)
+
     async def _receive_chunk(self, chunk):
         logger.debug('%s < %s', self.role, repr(chunk))
 
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
-            self._last_received_tsn = (chunk.initial_tsn - 1) % SCTP_TSN_MODULO
+            self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self.remote_verification_tag = chunk.initiate_tag
 
             ack = InitAckChunk()
@@ -556,6 +560,7 @@ class RTCSctpTransport(EventEmitter):
             cookie = chunk.body
             if (len(cookie) != COOKIE_LENGTH or
                hmac.new(self.hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
+                logger.debug('%s x State cookie is invalid' % self.role)
                 return
 
             # check state cookie lifetime
@@ -574,7 +579,7 @@ class RTCSctpTransport(EventEmitter):
 
         # client
         if isinstance(chunk, InitAckChunk) and not self.is_server:
-            self._last_received_tsn = (chunk.initial_tsn - 1) % SCTP_TSN_MODULO
+            self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self.remote_verification_tag = chunk.initiate_tag
 
             echo = CookieEchoChunk()
@@ -599,7 +604,7 @@ class RTCSctpTransport(EventEmitter):
                 self._sack_duplicates.append(chunk.tsn)
                 self._sack_needed = True
                 return
-            elif chunk.tsn != (self._last_received_tsn + 1) % SCTP_TSN_MODULO:
+            elif chunk.tsn != tsn_plus_one(self._last_received_tsn):
                 # it's out of order
                 self._sack_needed = True
                 return
@@ -614,7 +619,7 @@ class RTCSctpTransport(EventEmitter):
                 self.stream_frags[chunk.stream_id] += chunk.user_data
             if chunk.flags & SCTP_DATA_LAST_FRAG:
                 user_data = self.stream_frags.pop(chunk.stream_id)
-                await self.data_channel_handle(chunk.stream_id, chunk.protocol, user_data)
+                await self._receive(chunk.stream_id, chunk.protocol, user_data)
         elif isinstance(chunk, SackChunk):
             # TODO
             pass
@@ -634,7 +639,17 @@ class RTCSctpTransport(EventEmitter):
         elif isinstance(chunk, ShutdownCompleteChunk):
             self._set_state(self.State.CLOSED)
 
+    async def _send(self, channel, protocol, user_data):
+        """
+        Send data ULP -> stream.
+        """
+        self.send_queue.append((channel, protocol, user_data))
+        await self._flush()
+
     async def _send_chunk(self, chunk):
+        """
+        Transmit a chunk (no bundling for now).
+        """
         logger.debug('%s > %s', self.role, repr(chunk))
         packet = Packet(
             source_port=self.__local_port,
@@ -652,12 +667,26 @@ class RTCSctpTransport(EventEmitter):
             elif state == self.State.CLOSED:
                 self.closed.set()
 
+    async def _shutdown(self):
+        """
+        Shutdown the association gracefully.
+        """
+        if self.state == self.State.CLOSED:
+            self.closed.set()
+            return
+
+        chunk = ShutdownChunk()
+        chunk.cumulative_tsn = self._last_received_tsn
+        await self._send_chunk(chunk)
+        self._set_state(self.State.SHUTDOWN_SENT)
+        await self.closed.wait()
+
     def data_channel_open(self, channel):
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
                     0, 0, len(channel.label), len(channel.protocol))
         data += channel.label.encode('utf8')
         data += channel.protocol.encode('utf8')
-        asyncio.ensure_future(self.send(channel, WEBRTC_DCEP, data))
+        asyncio.ensure_future(self._send(channel, WEBRTC_DCEP, data))
 
     async def data_channel_handle(self, stream_id, pp_id, data):
         if pp_id == WEBRTC_DCEP and len(data):
@@ -683,7 +712,7 @@ class RTCSctpTransport(EventEmitter):
                 self._data_channels[stream_id] = channel
 
                 # send ack
-                await self.send(channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
+                await self._send(channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
 
                 # emit channel
                 self.emit('datachannel', channel)
@@ -706,13 +735,13 @@ class RTCSctpTransport(EventEmitter):
 
     async def data_channel_send(self, channel, data):
         if data == '':
-            await self.send(channel, WEBRTC_STRING_EMPTY, b'\x00')
+            await self._send(channel, WEBRTC_STRING_EMPTY, b'\x00')
         elif isinstance(data, str):
-            await self.send(channel, WEBRTC_STRING, data.encode('utf8'))
+            await self._send(channel, WEBRTC_STRING, data.encode('utf8'))
         elif data == b'':
-            await self.send(channel, WEBRTC_BINARY_EMPTY, b'\x00')
+            await self._send(channel, WEBRTC_BINARY_EMPTY, b'\x00')
         else:
-            await self.send(channel, WEBRTC_BINARY, data)
+            await self._send(channel, WEBRTC_BINARY, data)
 
     class State(enum.Enum):
         CLOSED = 1
