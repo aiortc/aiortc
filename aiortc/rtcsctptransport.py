@@ -123,7 +123,7 @@ class Chunk:
                 return k
 
 
-class AbortChunk(Chunk):
+class BaseParamsChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
@@ -134,6 +134,10 @@ class AbortChunk(Chunk):
     @property
     def body(self):
         return encode_params(self.params)
+
+
+class AbortChunk(BaseParamsChunk):
+    pass
 
 
 class CookieAckChunk(Chunk):
@@ -168,17 +172,16 @@ class DataChunk(Chunk):
             self.flags, self.tsn, self.stream_id, self.stream_seq)
 
 
-class ErrorChunk(Chunk):
-    def __init__(self, flags=0, body=b''):
-        self.flags = flags
-        if body:
-            self.params = decode_params(body)
-        else:
-            self.params = []
+class ErrorChunk(BaseParamsChunk):
+    pass
 
-    @property
-    def body(self):
-        return encode_params(self.params)
+
+class HeartbeatChunk(BaseParamsChunk):
+    pass
+
+
+class HeartbeatAckChunk(BaseParamsChunk):
+    pass
 
 
 class BaseInitChunk(Chunk):
@@ -277,6 +280,8 @@ CHUNK_TYPES = {
     1: InitChunk,
     2: InitAckChunk,
     3: SackChunk,
+    4: HeartbeatChunk,
+    5: HeartbeatAckChunk,
     6: AbortChunk,
     7: ShutdownChunk,
     8: ShutdownAckChunk,
@@ -386,9 +391,9 @@ class RTCSctpTransport(EventEmitter):
         self.local_tsn = random32()
         self.local_verification_tag = random32()
 
-        self.__remote_port = None
         self._last_received_tsn = None
-        self.remote_verification_tag = 0
+        self._remote_port = None
+        self._remote_verification_tag = 0
 
         # data channels
         self._data_channel_id = None
@@ -428,7 +433,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Start the transport.
         """
-        self.__remote_port = remotePort
+        self._remote_port = remotePort
         asyncio.ensure_future(self.__run())
 
     async def stop(self):
@@ -554,7 +559,7 @@ class RTCSctpTransport(EventEmitter):
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
-            self.remote_verification_tag = chunk.initiate_tag
+            self._remote_verification_tag = chunk.initiate_tag
 
             ack = InitAckChunk()
             ack.initiate_tag = self.local_verification_tag
@@ -593,7 +598,7 @@ class RTCSctpTransport(EventEmitter):
         # client
         if isinstance(chunk, InitAckChunk) and not self.is_server:
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
-            self.remote_verification_tag = chunk.initiate_tag
+            self._remote_verification_tag = chunk.initiate_tag
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
@@ -636,6 +641,10 @@ class RTCSctpTransport(EventEmitter):
         elif isinstance(chunk, SackChunk):
             # TODO
             pass
+        elif isinstance(chunk, HeartbeatChunk):
+            ack = HeartbeatAckChunk()
+            ack.params = chunk.params
+            await self._send_chunk(ack)
         elif isinstance(chunk, AbortChunk):
             logger.debug('%s x Association was aborted by remote party' % self.role)
             self._set_state(self.State.CLOSED)
@@ -665,8 +674,8 @@ class RTCSctpTransport(EventEmitter):
         logger.debug('%s > %s', self.role, repr(chunk))
         packet = Packet(
             source_port=self.__local_port,
-            destination_port=self.__remote_port,
-            verification_tag=self.remote_verification_tag)
+            destination_port=self._remote_port,
+            verification_tag=self._remote_verification_tag)
         packet.chunks.append(chunk)
         await self.transport.data.send(bytes(packet))
 

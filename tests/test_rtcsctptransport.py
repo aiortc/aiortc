@@ -5,7 +5,8 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      AbortChunk, CookieEchoChunk, DataChunk,
-                                     ErrorChunk, InitChunk, Packet,
+                                     ErrorChunk, HeartbeatAckChunk,
+                                     HeartbeatChunk, InitChunk, Packet,
                                      RTCSctpCapabilities, RTCSctpTransport,
                                      SackChunk, ShutdownChunk, tsn_gt, tsn_gte)
 
@@ -101,6 +102,24 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(packet.chunks[0].params, [
             (1, b'\x30\x39\x00\x00'),
+        ])
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_heartbeat(self):
+        data = load('sctp_heartbeat.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 3100082021)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], HeartbeatChunk))
+        self.assertEqual(packet.chunks[0].type, 4)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].params, [
+            (1, b'\xb5o\xaaZvZ\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00{\x10\x00\x00'
+                b'\x004\xeb\x07F\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
         ])
 
         self.assertEqual(bytes(packet), data)
@@ -423,3 +442,22 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._sack_duplicates, [])
         self.assertEqual(client._last_received_tsn, 3)
         client._sack_needed = False
+
+    def test_receive_heartbeat(self):
+        client_transport, server_transport = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+        client._remote_port = 5000
+
+        # receive heartbeat
+        chunk = HeartbeatChunk()
+        chunk.params.append((1, b'\x01\x02\x03\x04'))
+        chunk.tsn = 1
+        run(client._receive_chunk(chunk))
+
+        # check response
+        data = run(server_transport.recv())
+        packet = Packet.parse(data)
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], HeartbeatAckChunk))
+        self.assertEqual(packet.chunks[0].params, [(1, b'\x01\x02\x03\x04')])
