@@ -355,3 +355,54 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [1])
         self.assertEqual(client._last_received_tsn, 1)
+
+    def test_receive_data_out_of_order(self):
+        client_transport, _ = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+
+        # build chunks
+        chunks = []
+
+        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
+        chunk.user_data = b'foo'
+        chunk.tsn = 1
+        chunks.append(chunk)
+
+        chunk = DataChunk()
+        chunk.user_data = b'bar'
+        chunk.tsn = 2
+        chunks.append(chunk)
+
+        chunk = DataChunk(flags=SCTP_DATA_LAST_FRAG)
+        chunk.user_data = b'baz'
+        chunk.tsn = 3
+        chunks.append(chunk)
+
+        # receive first chunk
+        run(client._receive_chunk(chunks[0]))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._last_received_tsn, 1)
+        client._sack_needed = False
+
+        # receive last chunk
+        run(client._receive_chunk(chunks[2]))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._last_received_tsn, 1)
+        client._sack_needed = False
+
+        # receive middle chunk
+        run(client._receive_chunk(chunks[1]))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._last_received_tsn, 2)
+        client._sack_needed = False
+
+        # receive last chunk again
+        run(client._receive_chunk(chunks[2]))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._last_received_tsn, 3)
+        client._sack_needed = False

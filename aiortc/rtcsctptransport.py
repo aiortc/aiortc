@@ -594,9 +594,13 @@ class RTCSctpTransport(EventEmitter):
 
         # common
         elif isinstance(chunk, DataChunk):
-            # check whether it's a duplicate
             if tsn_gte(self._last_received_tsn, chunk.tsn):
+                # it's a duplicate
                 self._sack_duplicates.append(chunk.tsn)
+                self._sack_needed = True
+                return
+            elif chunk.tsn != (self._last_received_tsn + 1) % SCTP_TSN_MODULO:
+                # it's out of order
                 self._sack_needed = True
                 return
 
