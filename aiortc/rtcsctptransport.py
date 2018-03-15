@@ -361,10 +361,12 @@ class RTCSctpTransport(EventEmitter):
 
         self.hmac_key = os.urandom(16)
         self.advertised_rwnd = 131072
-        self.outbound_streams = 65535
+
         self.inbound_streams = 65535
-        self.stream_frags = {}
-        self.stream_seq = {}
+        self._inbound_stream_frags = {}
+
+        self.outbound_streams = 65535
+        self._outbound_stream_seq = {}
 
         self._sack_duplicates = []
         self._sack_needed = False
@@ -501,7 +503,7 @@ class RTCSctpTransport(EventEmitter):
                 self._data_channel_id += 2
                 channel._setId(stream_id)
 
-            stream_seq = self.stream_seq.get(stream_id, 0)
+            stream_seq = self._outbound_stream_seq.get(stream_id, 0)
 
             fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
             pos = 0
@@ -522,7 +524,7 @@ class RTCSctpTransport(EventEmitter):
                 self.local_tsn = tsn_plus_one(self.local_tsn)
                 await self._send_chunk(chunk)
 
-            self.stream_seq[stream_id] = (stream_seq + 1) % SCTP_SEQ_MODULO
+            self._outbound_stream_seq[stream_id] = (stream_seq + 1) % SCTP_SEQ_MODULO
 
         self.send_queue = []
 
@@ -614,11 +616,11 @@ class RTCSctpTransport(EventEmitter):
 
             # defragment data
             if chunk.flags & SCTP_DATA_FIRST_FRAG:
-                self.stream_frags[chunk.stream_id] = chunk.user_data
+                self._inbound_stream_frags[chunk.stream_id] = chunk.user_data
             else:
-                self.stream_frags[chunk.stream_id] += chunk.user_data
+                self._inbound_stream_frags[chunk.stream_id] += chunk.user_data
             if chunk.flags & SCTP_DATA_LAST_FRAG:
-                user_data = self.stream_frags.pop(chunk.stream_id)
+                user_data = self._inbound_stream_frags.pop(chunk.stream_id)
                 await self._receive(chunk.stream_id, chunk.protocol, user_data)
         elif isinstance(chunk, SackChunk):
             # TODO
