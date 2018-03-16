@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import logging
@@ -121,9 +122,16 @@ async def on_shutdown(app):
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
 
-logging.basicConfig(level=logging.DEBUG)
-app = web.Application()
-app.on_shutdown.append(on_shutdown)
-app.router.add_get('/', index)
-app.router.add_post('/offer', offer)
-web.run_app(app, host='127.0.0.1', port=8080)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='WebRTC audio / video / data-channels demo')
+    parser.add_argument('--port', type=int, default=8080,
+                        help='Port for HTTP server (default: 8080)')
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.DEBUG)
+    app = web.Application()
+    app.on_shutdown.append(on_shutdown)
+    app.router.add_get('/', index)
+    app.router.add_post('/offer', offer)
+    web.run_app(app, port=args.port)
