@@ -6,7 +6,8 @@ from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      AbortChunk, CookieEchoChunk, DataChunk,
                                      ErrorChunk, HeartbeatAckChunk,
-                                     HeartbeatChunk, InitChunk, Packet,
+                                     HeartbeatChunk, InboundStream, InitChunk,
+                                     NoMessageAvailable, Packet,
                                      RTCSctpCapabilities, RTCSctpTransport,
                                      SackChunk, ShutdownChunk, tsn_gt, tsn_gte)
 
@@ -157,6 +158,80 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].cumulative_tsn, 2696426712)
 
         self.assertEqual(bytes(packet), data)
+
+
+class SctpStreamTest(TestCase):
+    def setUp(self):
+        self.chunks = []
+
+        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
+        chunk.tsn = 1
+        chunk.protocol = 123
+        chunk.stream_id = 456
+        chunk.user_data = b'foo'
+        self.chunks.append(chunk)
+
+        chunk = DataChunk()
+        chunk.protocol = 123
+        chunk.stream_id = 456
+        chunk.tsn = 2
+        chunk.user_data = b'bar'
+        self.chunks.append(chunk)
+
+        chunk = DataChunk(flags=SCTP_DATA_LAST_FRAG)
+        chunk.protocol = 123
+        chunk.stream_id = 456
+        chunk.tsn = 3
+        chunk.user_data = b'baz'
+        self.chunks.append(chunk)
+
+    def test_in_order(self):
+        stream = InboundStream()
+
+        # feed first chunk
+        stream.add_chunk(self.chunks[0])
+        self.assertEqual(stream.reassembly, [self.chunks[0]])
+        with self.assertRaises(NoMessageAvailable):
+            stream.pop_message()
+
+        # feed second chunk
+        stream.add_chunk(self.chunks[1])
+        self.assertEqual(stream.reassembly, [self.chunks[0], self.chunks[1]])
+        with self.assertRaises(NoMessageAvailable):
+            stream.pop_message()
+
+        # feed third chunk
+        stream.add_chunk(self.chunks[2])
+        self.assertEqual(stream.reassembly, [self.chunks[0], self.chunks[1], self.chunks[2]])
+        stream_id, pp_id, user_data = stream.pop_message()
+        self.assertEqual(stream_id, 456)
+        self.assertEqual(pp_id, 123)
+        self.assertEqual(user_data, b'foobarbaz')
+        self.assertEqual(stream.reassembly, [])
+
+    def test_out_of_order(self):
+        stream = InboundStream()
+
+        # feed third chunk
+        stream.add_chunk(self.chunks[2])
+        self.assertEqual(stream.reassembly, [self.chunks[2]])
+        with self.assertRaises(NoMessageAvailable):
+            stream.pop_message()
+
+        # feed first chunk
+        stream.add_chunk(self.chunks[0])
+        self.assertEqual(stream.reassembly, [self.chunks[0], self.chunks[2]])
+        with self.assertRaises(NoMessageAvailable):
+            stream.pop_message()
+
+        # feed second chunk
+        stream.add_chunk(self.chunks[1])
+        self.assertEqual(stream.reassembly, [self.chunks[0], self.chunks[1], self.chunks[2]])
+        stream_id, pp_id, user_data = stream.pop_message()
+        self.assertEqual(stream_id, 456)
+        self.assertEqual(pp_id, 123)
+        self.assertEqual(user_data, b'foobarbaz')
+        self.assertEqual(stream.reassembly, [])
 
 
 class SctpUtilTest(TestCase):

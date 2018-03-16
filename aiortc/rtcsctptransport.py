@@ -345,6 +345,42 @@ class Packet:
         return packet
 
 
+class NoMessageAvailable(Exception):
+    pass
+
+
+class InboundStream:
+    def __init__(self):
+        self.reassembly = []
+
+    def add_chunk(self, chunk):
+        pos = None
+        for i, rchunk in enumerate(self.reassembly):
+            if tsn_gt(rchunk.tsn, chunk.tsn):
+                pos = i
+                break
+        if pos is None:
+            pos = len(self.reassembly)
+
+        self.reassembly.insert(pos, chunk)
+
+    def pop_message(self):
+        if len(self.reassembly) and (self.reassembly[0].flags & SCTP_DATA_FIRST_FRAG):
+            user_data = b''
+            expected_tsn = self.reassembly[0].tsn
+            for pos, chunk in enumerate(self.reassembly):
+                if chunk.tsn != expected_tsn:
+                    break
+
+                user_data += chunk.user_data
+                if (chunk.flags & SCTP_DATA_LAST_FRAG):
+                    self.reassembly = self.reassembly[pos + 1:]
+                    return (chunk.stream_id, chunk.protocol, user_data)
+
+                expected_tsn = tsn_plus_one(expected_tsn)
+        raise NoMessageAvailable
+
+
 @attr.s
 class RTCSctpCapabilities:
     """
@@ -379,7 +415,7 @@ class RTCSctpTransport(EventEmitter):
         self.advertised_rwnd = 131072
 
         self.inbound_streams = 65535
-        self._inbound_stream_frags = {}
+        self._inbound_streams = {}
 
         self.outbound_streams = 65535
         self._outbound_stream_seq = {}
@@ -635,14 +671,19 @@ class RTCSctpTransport(EventEmitter):
             self._last_received_tsn = chunk.tsn
             self._sack_needed = True
 
+            # FIXME: wrong place for initialization
+            if chunk.stream_id not in self._inbound_streams:
+                self._inbound_streams[chunk.stream_id] = InboundStream()
+            inbound_stream = self._inbound_streams[chunk.stream_id]
+
             # defragment data
-            if chunk.flags & SCTP_DATA_FIRST_FRAG:
-                self._inbound_stream_frags[chunk.stream_id] = chunk.user_data
-            else:
-                self._inbound_stream_frags[chunk.stream_id] += chunk.user_data
-            if chunk.flags & SCTP_DATA_LAST_FRAG:
-                user_data = self._inbound_stream_frags.pop(chunk.stream_id)
-                await self._receive(chunk.stream_id, chunk.protocol, user_data)
+            inbound_stream.add_chunk(chunk)
+            try:
+                message = inbound_stream.pop_message()
+            except NoMessageAvailable:
+                return
+            await self._receive(*message)
+
         elif isinstance(chunk, SackChunk):
             # TODO
             pass
