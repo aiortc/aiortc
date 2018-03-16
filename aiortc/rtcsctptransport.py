@@ -368,6 +368,7 @@ class InboundStream:
         for i, rchunk in enumerate(self.reassembly):
             if rchunk.tsn == chunk.tsn:
                 return
+            assert rchunk.tsn != chunk.tsn
             if tsn_gt(rchunk.tsn, chunk.tsn):
                 pos = i
                 break
@@ -433,26 +434,28 @@ class RTCSctpTransport(EventEmitter):
         self.__transport = transport
         self.closed = asyncio.Event()
 
-        self.hmac_key = os.urandom(16)
-        self.advertised_rwnd = 131072
+        self._hmac_key = os.urandom(16)
 
         self.inbound_streams = 65535
-        self._inbound_streams = {}
-
         self.outbound_streams = 65535
-        self._outbound_stream_seq = {}
 
+        self._local_port = port
+        self._local_verification_tag = random32()
+
+        self._remote_port = None
+        self._remote_verification_tag = 0
+
+        # inbound
+        self._advertised_rwnd = 131072
+        self._inbound_streams = {}
+        self._last_received_tsn = None
         self._sack_duplicates = []
         self._sack_misordered = set()
         self._sack_needed = False
 
-        self.__local_port = port
-        self.local_tsn = random32()
-        self.local_verification_tag = random32()
-
-        self._last_received_tsn = None
-        self._remote_port = None
-        self._remote_verification_tag = 0
+        # outbound
+        self._local_tsn = random32()
+        self._outbound_stream_seq = {}
 
         # data channels
         self._data_channel_id = None
@@ -468,7 +471,7 @@ class RTCSctpTransport(EventEmitter):
         """
         The local SCTP port number used for data channels.
         """
-        return self.__local_port
+        return self._local_port
 
     @property
     def role(self):
@@ -519,11 +522,11 @@ class RTCSctpTransport(EventEmitter):
 
         if not self.is_server:
             chunk = InitChunk()
-            chunk.initiate_tag = self.local_verification_tag
-            chunk.advertised_rwnd = self.advertised_rwnd
+            chunk.initiate_tag = self._local_verification_tag
+            chunk.advertised_rwnd = self._advertised_rwnd
             chunk.outbound_streams = self.outbound_streams
             chunk.inbound_streams = self.inbound_streams
-            chunk.initial_tsn = self.local_tsn
+            chunk.initial_tsn = self._local_tsn
             await self._send_chunk(chunk)
             self._set_state(self.State.COOKIE_WAIT)
 
@@ -548,7 +551,7 @@ class RTCSctpTransport(EventEmitter):
                 assert len(packet.chunks) == 1
                 expected_tag = 0
             else:
-                expected_tag = self.local_verification_tag
+                expected_tag = self._local_verification_tag
 
             # verify tag
             if packet.verification_tag != expected_tag:
@@ -605,22 +608,22 @@ class RTCSctpTransport(EventEmitter):
             self._remote_verification_tag = chunk.initiate_tag
 
             ack = InitAckChunk()
-            ack.initiate_tag = self.local_verification_tag
-            ack.advertised_rwnd = self.advertised_rwnd
+            ack.initiate_tag = self._local_verification_tag
+            ack.advertised_rwnd = self._advertised_rwnd
             ack.outbound_streams = self.outbound_streams
             ack.inbound_streams = self.inbound_streams
-            ack.initial_tsn = self.local_tsn
+            ack.initial_tsn = self._local_tsn
 
             # generate state cookie
             cookie = pack('!L', self._get_timestamp())
-            cookie += hmac.new(self.hmac_key, cookie, 'sha1').digest()
+            cookie += hmac.new(self._hmac_key, cookie, 'sha1').digest()
             ack.params.append((STATE_COOKIE, cookie))
             await self._send_chunk(ack)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             # check state cookie MAC
             cookie = chunk.body
             if (len(cookie) != COOKIE_LENGTH or
-               hmac.new(self.hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
+               hmac.new(self._hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
                 self.__log_debug('x State cookie is invalid')
                 return
 
@@ -673,7 +676,9 @@ class RTCSctpTransport(EventEmitter):
 
             # defragment data
             inbound_stream.add_chunk(chunk)
+            self._advertised_rwnd -= len(chunk.user_data)
             for message in inbound_stream.pop_messages():
+                self._advertised_rwnd += len(message[2])
                 await self._receive(*message)
 
         elif isinstance(chunk, SackChunk):
@@ -713,14 +718,14 @@ class RTCSctpTransport(EventEmitter):
                 chunk.flags |= SCTP_DATA_FIRST_FRAG
             if fragment == fragments - 1:
                 chunk.flags |= SCTP_DATA_LAST_FRAG
-            chunk.tsn = self.local_tsn
+            chunk.tsn = self._local_tsn
             chunk.stream_id = stream_id
             chunk.stream_seq = stream_seq
             chunk.protocol = pp_id
             chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
             pos += USERDATA_MAX_LENGTH
-            self.local_tsn = tsn_plus_one(self.local_tsn)
+            self._local_tsn = tsn_plus_one(self._local_tsn)
             await self._send_chunk(chunk)
 
         self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
@@ -731,7 +736,7 @@ class RTCSctpTransport(EventEmitter):
         """
         self.__log_debug('> %s', repr(chunk))
         packet = Packet(
-            source_port=self.__local_port,
+            source_port=self._local_port,
             destination_port=self._remote_port,
             verification_tag=self._remote_verification_tag)
         packet.chunks.append(chunk)
@@ -750,7 +755,7 @@ class RTCSctpTransport(EventEmitter):
 
         sack = SackChunk()
         sack.cumulative_tsn = self._last_received_tsn
-        sack.advertised_rwnd = self.advertised_rwnd
+        sack.advertised_rwnd = self._advertised_rwnd
         sack.duplicates = self._sack_duplicates[:]
         sack.gaps = [tuple(x) for x in gaps]
 
