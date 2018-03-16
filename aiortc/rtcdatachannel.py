@@ -21,7 +21,7 @@ class RTCDataChannel(EventEmitter):
         self.__transport = transport
 
         if self.__id is None:
-            self.__transport.data_channel_open(self)
+            self.__transport._data_channel_open(self)
 
     @property
     def id(self):
@@ -74,7 +74,7 @@ class RTCDataChannel(EventEmitter):
         if not isinstance(data, (str, bytes)):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
-        asyncio.ensure_future(self.transport.data_channel_send(self, data))
+        asyncio.ensure_future(self.transport._data_channel_send(self, data))
 
     def _setId(self, id):
         self.__id = id

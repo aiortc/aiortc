@@ -9,8 +9,8 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      HeartbeatChunk, InboundStream, InitChunk,
                                      Packet, RTCSctpCapabilities,
                                      RTCSctpTransport, SackChunk,
-                                     ShutdownChunk, seq_plus_one, tsn_gt,
-                                     tsn_gte)
+                                     ShutdownChunk, seq_gt, seq_plus_one,
+                                     tsn_gt, tsn_gte)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -204,6 +204,23 @@ class SctpStreamTest(TestCase):
         chunk.user_data = b'bar'
         self.whole.append(chunk)
 
+    def test_duplicate(self):
+        stream = InboundStream()
+
+        # feed first chunk
+        stream.add_chunk(self.fragmented[0])
+        self.assertEqual(stream.reassembly, [self.fragmented[0]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+
+        # feed first chunk again
+        stream.add_chunk(self.fragmented[0])
+        self.assertEqual(stream.reassembly, [self.fragmented[0]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+
     def test_whole_in_order(self):
         stream = InboundStream()
 
@@ -311,6 +328,14 @@ class SctpStreamTest(TestCase):
 
 
 class SctpUtilTest(TestCase):
+    def test_seq_gt(self):
+        self.assertFalse(seq_gt(0, 1))
+        self.assertFalse(seq_gt(1, 1))
+        self.assertTrue(seq_gt(2, 1))
+        self.assertTrue(seq_gt(32768, 1))
+        self.assertFalse(seq_gt(32769, 1))
+        self.assertFalse(seq_gt(65535, 1))
+
     def test_seq_plus_one(self):
         self.assertEqual(seq_plus_one(0), 1)
         self.assertEqual(seq_plus_one(1), 2)
@@ -322,7 +347,7 @@ class SctpUtilTest(TestCase):
         self.assertTrue(tsn_gt(2, 1))
         self.assertTrue(tsn_gt(2147483648, 1))
         self.assertFalse(tsn_gt(2147483649, 1))
-        self.assertFalse(tsn_gt(4294967296, 1))
+        self.assertFalse(tsn_gt(4294967295, 1))
 
     def test_tsn_gte(self):
         self.assertFalse(tsn_gte(0, 1))
@@ -330,7 +355,7 @@ class SctpUtilTest(TestCase):
         self.assertTrue(tsn_gte(2, 1))
         self.assertTrue(tsn_gte(2147483648, 1))
         self.assertFalse(tsn_gte(2147483649, 1))
-        self.assertFalse(tsn_gte(4294967296, 1))
+        self.assertFalse(tsn_gte(4294967295, 1))
 
 
 class RTCSctpTransportTest(TestCase):

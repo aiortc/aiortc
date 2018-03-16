@@ -78,6 +78,15 @@ def swapl(i):
     return unpack("<I", pack(">I", i))[0]
 
 
+def seq_gt(a, b):
+    """
+    Return True if seq a is greater than b.
+    """
+    half_mod = (1 << 15)
+    return (((a < b) and ((b - a) > half_mod)) or
+            ((a > b) and ((a - b) < half_mod)))
+
+
 def seq_plus_one(a):
     return (a + 1) % SCTP_SEQ_MODULO
 
@@ -357,6 +366,8 @@ class InboundStream:
     def add_chunk(self, chunk):
         pos = None
         for i, rchunk in enumerate(self.reassembly):
+            if rchunk.tsn == chunk.tsn:
+                return
             if tsn_gt(rchunk.tsn, chunk.tsn):
                 pos = i
                 break
@@ -416,7 +427,6 @@ class RTCSctpTransport(EventEmitter):
             raise InvalidStateError
 
         super().__init__()
-        self.send_queue = []
         self.state = self.State.CLOSED
         self.__transport = transport
         self.closed = asyncio.Event()
@@ -443,6 +453,7 @@ class RTCSctpTransport(EventEmitter):
 
         # data channels
         self._data_channel_id = None
+        self._data_channel_queue = []
         self._data_channels = {}
 
     @property
@@ -557,44 +568,6 @@ class RTCSctpTransport(EventEmitter):
                 self._sack_duplicates = []
                 self._sack_needed = False
 
-    async def _flush(self):
-        if self.state != self.State.ESTABLISHED:
-            return
-
-        for channel, protocol, user_data in self.send_queue:
-            # register channel if necessary
-            stream_id = channel.id
-            if stream_id is None:
-                stream_id = self._data_channel_id
-                self._data_channels[stream_id] = channel
-                self._data_channel_id += 2
-                channel._setId(stream_id)
-
-            stream_seq = self._outbound_stream_seq.get(stream_id, 0)
-
-            fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
-            pos = 0
-            for fragment in range(0, fragments):
-                chunk = DataChunk()
-                chunk.flags = 0
-                if fragment == 0:
-                    chunk.flags |= SCTP_DATA_FIRST_FRAG
-                if fragment == fragments - 1:
-                    chunk.flags |= SCTP_DATA_LAST_FRAG
-                chunk.tsn = self.local_tsn
-                chunk.stream_id = stream_id
-                chunk.stream_seq = stream_seq
-                chunk.protocol = protocol
-                chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
-
-                pos += USERDATA_MAX_LENGTH
-                self.local_tsn = tsn_plus_one(self.local_tsn)
-                await self._send_chunk(chunk)
-
-            self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
-
-        self.send_queue = []
-
     def _get_timestamp(self):
         return int(time.time())
 
@@ -602,7 +575,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Receive data stream -> ULP.
         """
-        await self.data_channel_handle(stream_id, pp_id, data)
+        await self._data_channel_receive(stream_id, pp_id, data)
 
     async def _receive_chunk(self, chunk):
         self.__log_debug('< %s', repr(chunk))
@@ -713,12 +686,32 @@ class RTCSctpTransport(EventEmitter):
         elif isinstance(chunk, ShutdownCompleteChunk):
             self._set_state(self.State.CLOSED)
 
-    async def _send(self, channel, protocol, user_data):
+    async def _send(self, stream_id, pp_id, user_data):
         """
         Send data ULP -> stream.
         """
-        self.send_queue.append((channel, protocol, user_data))
-        await self._flush()
+        stream_seq = self._outbound_stream_seq.get(stream_id, 0)
+
+        fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
+        pos = 0
+        for fragment in range(0, fragments):
+            chunk = DataChunk()
+            chunk.flags = 0
+            if fragment == 0:
+                chunk.flags |= SCTP_DATA_FIRST_FRAG
+            if fragment == fragments - 1:
+                chunk.flags |= SCTP_DATA_LAST_FRAG
+            chunk.tsn = self.local_tsn
+            chunk.stream_id = stream_id
+            chunk.stream_seq = stream_seq
+            chunk.protocol = pp_id
+            chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
+
+            pos += USERDATA_MAX_LENGTH
+            self.local_tsn = tsn_plus_one(self.local_tsn)
+            await self._send_chunk(chunk)
+
+        self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
 
     async def _send_chunk(self, chunk):
         """
@@ -737,7 +730,7 @@ class RTCSctpTransport(EventEmitter):
             self.__log_debug('- %s -> %s', self.state, state)
             self.state = state
             if state == self.State.ESTABLISHED:
-                asyncio.ensure_future(self._flush())
+                asyncio.ensure_future(self._data_channel_flush())
             elif state == self.State.CLOSED:
                 self.closed.set()
 
@@ -755,14 +748,33 @@ class RTCSctpTransport(EventEmitter):
         self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
 
-    def data_channel_open(self, channel):
+    async def _data_channel_flush(self):
+        if self.state != self.State.ESTABLISHED:
+            return
+
+        for channel, protocol, user_data in self._data_channel_queue:
+            # register channel if necessary
+            stream_id = channel.id
+            if stream_id is None:
+                stream_id = self._data_channel_id
+                self._data_channels[stream_id] = channel
+                self._data_channel_id += 2
+                channel._setId(stream_id)
+
+            # send data
+            await self._send(stream_id, protocol, user_data)
+
+        self._data_channel_queue = []
+
+    def _data_channel_open(self, channel):
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
                     0, 0, len(channel.label), len(channel.protocol))
         data += channel.label.encode('utf8')
         data += channel.protocol.encode('utf8')
-        asyncio.ensure_future(self._send(channel, WEBRTC_DCEP, data))
+        self._data_channel_queue.append((channel, WEBRTC_DCEP, data))
+        asyncio.ensure_future(self._data_channel_flush())
 
-    async def data_channel_handle(self, stream_id, pp_id, data):
+    async def _data_channel_receive(self, stream_id, pp_id, data):
         if pp_id == WEBRTC_DCEP and len(data):
             msg_type = unpack('!B', data[0:1])[0]
             if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
@@ -786,7 +798,9 @@ class RTCSctpTransport(EventEmitter):
                 self._data_channels[stream_id] = channel
 
                 # send ack
-                await self._send(channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK))
+                self._data_channel_queue.append(
+                    (channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK)))
+                await self._data_channel_flush()
 
                 # emit channel
                 self.emit('datachannel', channel)
@@ -807,15 +821,18 @@ class RTCSctpTransport(EventEmitter):
             # emit message
             self._data_channels[stream_id].emit('message', b'')
 
-    async def data_channel_send(self, channel, data):
+    async def _data_channel_send(self, channel, data):
         if data == '':
-            await self._send(channel, WEBRTC_STRING_EMPTY, b'\x00')
+            pp_id, user_data = WEBRTC_STRING_EMPTY, b'\x00'
         elif isinstance(data, str):
-            await self._send(channel, WEBRTC_STRING, data.encode('utf8'))
+            pp_id, user_data = WEBRTC_STRING, data.encode('utf8')
         elif data == b'':
-            await self._send(channel, WEBRTC_BINARY_EMPTY, b'\x00')
+            pp_id, user_data = WEBRTC_BINARY_EMPTY, b'\x00'
         else:
-            await self._send(channel, WEBRTC_BINARY, data)
+            pp_id, user_data = WEBRTC_BINARY, data
+
+        self._data_channel_queue.append((channel, pp_id, user_data))
+        await self._data_channel_flush()
 
     def __log_debug(self, msg, *args):
         logger.debug(self.role + ' ' + msg, *args)
