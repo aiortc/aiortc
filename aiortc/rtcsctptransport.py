@@ -377,16 +377,16 @@ class InboundStream:
         self.reassembly.insert(pos, chunk)
 
     def pop_messages(self):
-        first_frag = True
-        for pos, chunk in enumerate(self.reassembly[:]):
+        pos = 0
+        while pos < len(self.reassembly):
+            chunk = self.reassembly[pos]
             if chunk.stream_seq != self.sequence_number:
                 break
 
-            if first_frag:
+            if not pos:
                 if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
                     break
                 expected_tsn = chunk.tsn
-                first_frag = False
                 user_data = chunk.user_data
             else:
                 if chunk.tsn != expected_tsn:
@@ -396,8 +396,10 @@ class InboundStream:
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
                 self.reassembly = self.reassembly[pos + 1:]
                 self.sequence_number = seq_plus_one(self.sequence_number)
-                first_frag = True
+                pos = 0
                 yield (chunk.stream_id, chunk.protocol, user_data)
+            else:
+                pos += 1
 
             expected_tsn = tsn_plus_one(expected_tsn)
 

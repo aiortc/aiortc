@@ -193,6 +193,7 @@ class SctpStreamTest(TestCase):
         chunk.tsn = 1
         chunk.protocol = 123
         chunk.stream_id = 456
+        chunk.stream_seq = 0
         chunk.user_data = b'foo'
         self.whole.append(chunk)
 
@@ -202,6 +203,14 @@ class SctpStreamTest(TestCase):
         chunk.stream_id = 456
         chunk.stream_seq = 1
         chunk.user_data = b'bar'
+        self.whole.append(chunk)
+
+        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
+        chunk.tsn = 3
+        chunk.protocol = 123
+        chunk.stream_id = 456
+        chunk.stream_seq = 2
+        chunk.user_data = b'baz'
         self.whole.append(chunk)
 
     def test_duplicate(self):
@@ -256,16 +265,23 @@ class SctpStreamTest(TestCase):
 
         self.assertEqual(list(stream.pop_messages()), [])
 
+        # feed third partial
+        stream.add_chunk(self.whole[2])
+        self.assertEqual(stream.reassembly, [self.whole[1], self.whole[2]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+
         # feed first unfragmented
         stream.add_chunk(self.whole[0])
-        self.assertEqual(stream.reassembly, [self.whole[0], self.whole[1]])
+        self.assertEqual(stream.reassembly, [self.whole[0], self.whole[1], self.whole[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [
             (456, 123, b'foo'),
             (456, 123, b'bar'),
         ])
-        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.reassembly, [self.whole[2]])
         self.assertEqual(stream.sequence_number, 2)
 
     def test_fragments_in_order(self):
