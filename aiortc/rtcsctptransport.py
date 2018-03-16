@@ -78,6 +78,10 @@ def swapl(i):
     return unpack("<I", pack(">I", i))[0]
 
 
+def seq_plus_one(a):
+    return (a + 1) % SCTP_SEQ_MODULO
+
+
 def tsn_gt(a, b):
     """
     Return True if tsn a is greater than b.
@@ -345,13 +349,10 @@ class Packet:
         return packet
 
 
-class NoMessageAvailable(Exception):
-    pass
-
-
 class InboundStream:
     def __init__(self):
         self.reassembly = []
+        self.sequence_number = 0
 
     def add_chunk(self, chunk):
         pos = None
@@ -364,21 +365,30 @@ class InboundStream:
 
         self.reassembly.insert(pos, chunk)
 
-    def pop_message(self):
-        if len(self.reassembly) and (self.reassembly[0].flags & SCTP_DATA_FIRST_FRAG):
-            user_data = b''
-            expected_tsn = self.reassembly[0].tsn
-            for pos, chunk in enumerate(self.reassembly):
+    def pop_messages(self):
+        first_frag = True
+        for pos, chunk in enumerate(self.reassembly[:]):
+            if chunk.stream_seq != self.sequence_number:
+                break
+
+            if first_frag:
+                if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
+                    break
+                expected_tsn = chunk.tsn
+                first_frag = False
+                user_data = chunk.user_data
+            else:
                 if chunk.tsn != expected_tsn:
                     break
-
                 user_data += chunk.user_data
-                if (chunk.flags & SCTP_DATA_LAST_FRAG):
-                    self.reassembly = self.reassembly[pos + 1:]
-                    return (chunk.stream_id, chunk.protocol, user_data)
 
-                expected_tsn = tsn_plus_one(expected_tsn)
-        raise NoMessageAvailable
+            if (chunk.flags & SCTP_DATA_LAST_FRAG):
+                self.reassembly = self.reassembly[pos + 1:]
+                self.sequence_number = seq_plus_one(self.sequence_number)
+                first_frag = True
+                yield (chunk.stream_id, chunk.protocol, user_data)
+
+            expected_tsn = tsn_plus_one(expected_tsn)
 
 
 @attr.s
@@ -581,7 +591,7 @@ class RTCSctpTransport(EventEmitter):
                 self.local_tsn = tsn_plus_one(self.local_tsn)
                 await self._send_chunk(chunk)
 
-            self._outbound_stream_seq[stream_id] = (stream_seq + 1) % SCTP_SEQ_MODULO
+            self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
 
         self.send_queue = []
 
@@ -678,11 +688,8 @@ class RTCSctpTransport(EventEmitter):
 
             # defragment data
             inbound_stream.add_chunk(chunk)
-            try:
-                message = inbound_stream.pop_message()
-            except NoMessageAvailable:
-                return
-            await self._receive(*message)
+            for message in inbound_stream.pop_messages():
+                await self._receive(*message)
 
         elif isinstance(chunk, SackChunk):
             # TODO
