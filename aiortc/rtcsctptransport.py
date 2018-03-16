@@ -259,8 +259,8 @@ class SackChunk(Chunk):
         return body
 
     def __repr__(self):
-        return 'SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d)' % (
-            self.flags, self.advertised_rwnd, self.cumulative_tsn)
+        return 'SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d, gaps=%s)' % (
+            self.flags, self.advertised_rwnd, self.cumulative_tsn, self.gaps)
 
 
 class ShutdownChunk(Chunk):
@@ -441,6 +441,7 @@ class RTCSctpTransport(EventEmitter):
         self._outbound_stream_seq = {}
 
         self._sack_duplicates = []
+        self._sack_misordered = set()
         self._sack_needed = False
 
         self.__local_port = port
@@ -559,17 +560,33 @@ class RTCSctpTransport(EventEmitter):
 
             # send SACK if needed
             if self._sack_needed:
-                sack = SackChunk()
-                sack.cumulative_tsn = self._last_received_tsn
-                sack.advertised_rwnd = self.advertised_rwnd
-                sack.duplicates = self._sack_duplicates
-                await self._send_chunk(sack)
-
-                self._sack_duplicates = []
-                self._sack_needed = False
+                await self._send_sack()
 
     def _get_timestamp(self):
         return int(time.time())
+
+    def _mark_received(self, tsn):
+        """
+        Mark a data TSN as received.
+        """
+        # it's a duplicate
+        if tsn_gte(self._last_received_tsn, tsn) or tsn in self._sack_misordered:
+            self._sack_duplicates.append(tsn)
+            return True
+
+        # consolidate misordered entries
+        self._sack_misordered.add(tsn)
+        for tsn in sorted(self._sack_misordered):
+            if tsn == tsn_plus_one(self._last_received_tsn):
+                self._last_received_tsn = tsn
+            else:
+                break
+
+        # filter out obsolete entries
+        def is_obsolete(x):
+            return tsn_gt(x, self._last_received_tsn)
+        self._sack_duplicates = list(filter(is_obsolete, self._sack_duplicates))
+        self._sack_misordered = set(filter(is_obsolete, self._sack_misordered))
 
     async def _receive(self, stream_id, pp_id, data):
         """
@@ -641,20 +658,13 @@ class RTCSctpTransport(EventEmitter):
 
         # common
         elif isinstance(chunk, DataChunk):
-            if tsn_gte(self._last_received_tsn, chunk.tsn):
-                # it's a duplicate
-                self._sack_duplicates.append(chunk.tsn)
-                self._sack_needed = True
-                return
-            elif chunk.tsn != tsn_plus_one(self._last_received_tsn):
-                # it's out of order
-                self._sack_needed = True
-                return
-
-            self._last_received_tsn = chunk.tsn
             self._sack_needed = True
 
-            # FIXME: wrong place for initialization
+            # mark as received
+            if self._mark_received(chunk.tsn):
+                return
+
+            # find stream
             if chunk.stream_id not in self._inbound_streams:
                 self._inbound_streams[chunk.stream_id] = InboundStream()
             inbound_stream = self._inbound_streams[chunk.stream_id]
@@ -724,6 +734,28 @@ class RTCSctpTransport(EventEmitter):
             verification_tag=self._remote_verification_tag)
         packet.chunks.append(chunk)
         await self.transport.data.send(bytes(packet))
+
+    async def _send_sack(self):
+        gaps = []
+        gap_next = None
+        for tsn in sorted(self._sack_misordered):
+            pos = (tsn - self._last_received_tsn) % SCTP_TSN_MODULO
+            if tsn == gap_next:
+                gaps[-1][1] = pos
+            else:
+                gaps.append([pos, pos])
+            gap_next = tsn_plus_one(tsn)
+
+        sack = SackChunk()
+        sack.cumulative_tsn = self._last_received_tsn
+        sack.advertised_rwnd = self.advertised_rwnd
+        sack.duplicates = self._sack_duplicates[:]
+        sack.gaps = [tuple(x) for x in gaps]
+
+        await self._send_chunk(sack)
+
+        self._sack_duplicates.clear()
+        self._sack_needed = False
 
     def _set_state(self, state):
         if state != self.state:

@@ -629,6 +629,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(chunks[0]))
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set())
         self.assertEqual(client._last_received_tsn, 1)
         client._sack_needed = False
 
@@ -636,6 +637,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(chunks[2]))
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set([3]))
         self.assertEqual(client._last_received_tsn, 1)
         client._sack_needed = False
 
@@ -643,13 +645,15 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(chunks[1]))
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._last_received_tsn, 2)
+        self.assertEqual(client._sack_misordered, set([]))
+        self.assertEqual(client._last_received_tsn, 3)
         client._sack_needed = False
 
         # receive last chunk again
         run(client._receive_chunk(chunks[2]))
         self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_duplicates, [3])
+        self.assertEqual(client._sack_misordered, set([]))
         self.assertEqual(client._last_received_tsn, 3)
         client._sack_needed = False
 
@@ -671,3 +675,89 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(len(packet.chunks), 1)
         self.assertTrue(isinstance(packet.chunks[0], HeartbeatAckChunk))
         self.assertEqual(packet.chunks[0].params, [(1, b'\x01\x02\x03\x04')])
+
+    def test_mark_received(self):
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+
+        # receive 1
+        self.assertFalse(client._mark_received(1))
+        self.assertEqual(client._last_received_tsn, 1)
+        self.assertEqual(client._sack_misordered, set())
+
+        # receive 3
+        self.assertFalse(client._mark_received(3))
+        self.assertEqual(client._last_received_tsn, 1)
+        self.assertEqual(client._sack_misordered, set([3]))
+
+        # receive 4
+        self.assertFalse(client._mark_received(4))
+        self.assertEqual(client._last_received_tsn, 1)
+        self.assertEqual(client._sack_misordered, set([3, 4]))
+
+        # receive 6
+        self.assertFalse(client._mark_received(6))
+        self.assertEqual(client._last_received_tsn, 1)
+        self.assertEqual(client._sack_misordered, set([3, 4, 6]))
+
+        # receive 2
+        self.assertFalse(client._mark_received(2))
+        self.assertEqual(client._last_received_tsn, 4)
+        self.assertEqual(client._sack_misordered, set([6]))
+
+    def test_send_sack(self):
+        sack = None
+
+        async def mock_send_chunk(c):
+            nonlocal sack
+            sack = c
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 123
+        client._send_chunk = mock_send_chunk
+
+        run(client._send_sack())
+        self.assertIsNotNone(sack)
+        self.assertEqual(sack.duplicates, [])
+        self.assertEqual(sack.gaps, [])
+        self.assertEqual(sack.cumulative_tsn, 123)
+
+    def test_send_sack_with_duplicates(self):
+        sack = None
+
+        async def mock_send_chunk(c):
+            nonlocal sack
+            sack = c
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 123
+        client._sack_duplicates = [125, 127]
+        client._send_chunk = mock_send_chunk
+
+        run(client._send_sack())
+        self.assertIsNotNone(sack)
+        self.assertEqual(sack.duplicates, [125, 127])
+        self.assertEqual(sack.gaps, [])
+        self.assertEqual(sack.cumulative_tsn, 123)
+
+    def test_send_sack_with_gaps(self):
+        sack = None
+
+        async def mock_send_chunk(c):
+            nonlocal sack
+            sack = c
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 12
+        client._sack_misordered = [14, 15, 17]
+        client._send_chunk = mock_send_chunk
+
+        run(client._send_sack())
+        self.assertIsNotNone(sack)
+        self.assertEqual(sack.duplicates, [])
+        self.assertEqual(sack.gaps, [(2, 3), (5, 5)])
+        self.assertEqual(sack.cumulative_tsn, 12)
