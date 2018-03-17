@@ -31,6 +31,9 @@ SCTP_DATA_LAST_FRAG = 0x01
 SCTP_DATA_FIRST_FRAG = 0x02
 SCTP_DATA_UNORDERED = 0x04
 
+SCTP_MAX_ASSOCIATION_RETRANS = 10
+SCTP_MAX_INIT_RETRANS = 8
+SCTP_RTO_INITIAL = 3
 SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
@@ -434,6 +437,7 @@ class RTCSctpTransport(EventEmitter):
         self.__transport = transport
         self.closed = asyncio.Event()
 
+        self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
 
         self.inbound_streams = 65535
@@ -456,6 +460,11 @@ class RTCSctpTransport(EventEmitter):
         # outbound
         self._local_tsn = random32()
         self._outbound_stream_seq = {}
+
+        # timers
+        self._rto = SCTP_RTO_INITIAL
+        self._t1_handle = None
+        self._t2_handle = None
 
         # data channels
         self._data_channel_id = None
@@ -528,6 +537,9 @@ class RTCSctpTransport(EventEmitter):
             chunk.inbound_streams = self.inbound_streams
             chunk.initial_tsn = self._local_tsn
             await self._send_chunk(chunk)
+
+            # start T1 timer and enter COOKIE-WAIT state
+            self._t1_start(chunk)
             self._set_state(self.State.COOKIE_WAIT)
 
         while True:
@@ -643,6 +655,8 @@ class RTCSctpTransport(EventEmitter):
 
         # client
         if isinstance(chunk, InitAckChunk) and not self.is_server:
+            # cancel T1 timer and process chunk
+            self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
 
@@ -652,8 +666,13 @@ class RTCSctpTransport(EventEmitter):
                     echo.body = v
                     break
             await self._send_chunk(echo)
+
+            # start T1 timer and enter COOKIE-ECHOED state
+            self._t1_start(echo)
             self._set_state(self.State.COOKIE_ECHOED)
         elif isinstance(chunk, CookieAckChunk) and not self.is_server:
+            # cancel T1 timer and enter ESTABLISHED state
+            self._t1_cancel()
             self._set_state(self.State.ESTABLISHED)
         elif (isinstance(chunk, ErrorChunk) and not self.is_server and
               self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
@@ -701,6 +720,7 @@ class RTCSctpTransport(EventEmitter):
             await self._send_chunk(complete)
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownCompleteChunk):
+            self._t2_cancel()
             self._set_state(self.State.CLOSED)
 
     async def _send(self, stream_id, pp_id, user_data):
@@ -784,8 +804,54 @@ class RTCSctpTransport(EventEmitter):
         chunk = ShutdownChunk()
         chunk.cumulative_tsn = self._last_received_tsn
         await self._send_chunk(chunk)
+        self._t2_start()
         self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
+
+    def _t1_cancel(self):
+        self.__log_debug('- T1(%s) cancel', self._t1_chunk.__class__.__name__)
+        self._t1_handle.cancel()
+        self._t1_handle = None
+        self._t1_chunk = None
+
+    def _t1_expired(self):
+        self._t1_failures += 1
+        self._t1_handle = None
+        self.__log_debug('x T1(%s) expired %d', self._t1_chunk.__class__.__name__,
+                         self._t1_failures)
+        if self._t1_failures > SCTP_MAX_INIT_RETRANS:
+            self._set_state(self.State.CLOSED)
+        else:
+            asyncio.ensure_future(self._send_chunk(self._t1_chunk))
+            self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
+
+    def _t1_start(self, chunk):
+        self._t1_chunk = chunk
+        self._t1_failures = 0
+        self.__log_debug('- T1(%s) start', self._t1_chunk.__class__.__name__)
+        self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
+
+    def _t2_cancel(self):
+        self.__log_debug('- T2 cancel')
+        self._t2_handle.cancel()
+        self._t2_handle = None
+
+    def _t2_expired(self):
+        self._t2_failures += 1
+        self._t2_handle = None
+        self.__log_debug('x T2 expired %d', self._t2_failures)
+        if self._t2_failures > SCTP_MAX_ASSOCIATION_RETRANS:
+            self._set_state(self.State.CLOSED)
+        else:
+            chunk = ShutdownChunk()
+            chunk.cumulative_tsn = self._last_received_tsn
+            asyncio.ensure_future(self._send_chunk(chunk))
+            self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
+
+    def _t2_start(self):
+        self._t2_failures = 0
+        self.__log_debug('- T2 start')
+        self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
     async def _data_channel_flush(self):
         if self.state != self.State.ESTABLISHED:

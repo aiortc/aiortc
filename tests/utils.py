@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import random
 
 from aiortc.utils import first_completed
 
@@ -10,8 +11,8 @@ class DummyIceTransport:
         self.role = role
 
 
-def dummy_dtls_transport_pair():
-    transport_a, transport_b = dummy_transport_pair()
+def dummy_dtls_transport_pair(loss=0):
+    transport_a, transport_b = dummy_transport_pair(loss=loss)
 
     transport_a.data = transport_a
     transport_a.rtp = transport_a
@@ -26,18 +27,19 @@ def dummy_dtls_transport_pair():
     return transport_a, transport_b
 
 
-def dummy_transport_pair():
+def dummy_transport_pair(loss=0):
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
     return (
-        DummyTransport(rx_queue=queue_a, tx_queue=queue_b),
-        DummyTransport(rx_queue=queue_b, tx_queue=queue_a),
+        DummyTransport(rx_queue=queue_a, tx_queue=queue_b, loss=loss),
+        DummyTransport(rx_queue=queue_b, tx_queue=queue_a, loss=loss),
     )
 
 
 class DummyTransport:
-    def __init__(self, rx_queue, tx_queue):
+    def __init__(self, rx_queue, tx_queue, loss):
         self.closed = asyncio.Event()
+        self.loss = loss
         self.rx_queue = rx_queue
         self.tx_queue = tx_queue
 
@@ -53,7 +55,8 @@ class DummyTransport:
     async def send(self, data):
         if self.closed.is_set():
             raise ConnectionError
-        await self.tx_queue.put(data)
+        if random.random() > self.loss:
+            await self.tx_queue.put(data)
 
 
 def load(name):

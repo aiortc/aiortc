@@ -25,6 +25,17 @@ def track_channels(transport):
         return channels
 
 
+async def wait_for_outcome(client, server):
+    final = [
+        RTCSctpTransport.State.ESTABLISHED,
+        RTCSctpTransport.State.CLOSED,
+    ]
+    for i in range(100):
+        if client.state in final and server.state in final:
+            break
+        await asyncio.sleep(0.1)
+
+
 class DummyDtlsTransport:
     def __init__(self, state='new'):
         self.state = state
@@ -386,6 +397,30 @@ class RTCSctpTransportTest(TestCase):
         with self.assertRaises(InvalidStateError):
             RTCSctpTransport(dtlsTransport)
 
+    def test_connect_lossy_transport(self):
+        client_transport, server_transport = dummy_dtls_transport_pair(loss=0.4)
+        client = RTCSctpTransport(client_transport)
+        client._rto = 0.1
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(server_transport)
+        server._rto = 0.1
+        self.assertTrue(server.is_server)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
     def test_connect_then_client_creates_data_channel(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = RTCSctpTransport(client_transport)
@@ -401,7 +436,7 @@ class RTCSctpTransportTest(TestCase):
         client.start(server.getCapabilities(), server.port)
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
@@ -439,7 +474,7 @@ class RTCSctpTransportTest(TestCase):
         client.start(server.getCapabilities(), server.port)
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
@@ -471,7 +506,7 @@ class RTCSctpTransportTest(TestCase):
         client.start(server.getCapabilities(), server.port)
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
@@ -499,7 +534,7 @@ class RTCSctpTransportTest(TestCase):
         client.start(server.getCapabilities(), server.port)
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
