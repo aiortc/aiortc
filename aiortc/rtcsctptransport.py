@@ -654,7 +654,7 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.ESTABLISHED)
 
         # client
-        if isinstance(chunk, InitAckChunk) and not self.is_server:
+        if isinstance(chunk, InitAckChunk) and self.state == self.State.COOKIE_WAIT:
             # cancel T1 timer and process chunk
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
@@ -670,12 +670,13 @@ class RTCSctpTransport(EventEmitter):
             # start T1 timer and enter COOKIE-ECHOED state
             self._t1_start(echo)
             self._set_state(self.State.COOKIE_ECHOED)
-        elif isinstance(chunk, CookieAckChunk) and not self.is_server:
+        elif isinstance(chunk, CookieAckChunk) and self.state == self.State.COOKIE_ECHOED:
             # cancel T1 timer and enter ESTABLISHED state
             self._t1_cancel()
             self._set_state(self.State.ESTABLISHED)
-        elif (isinstance(chunk, ErrorChunk) and not self.is_server and
+        elif (isinstance(chunk, ErrorChunk) and
               self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
+            self._t1_cancel()
             self._set_state(self.State.CLOSED)
             self.__log_debug('x Could not establish association')
             return
