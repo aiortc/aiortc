@@ -82,6 +82,7 @@ async def offer(request):
         type=offer['type'])
 
     pc = RTCPeerConnection()
+    pc._consumers = []
     pcs.append(pc)
 
     # prepare local media
@@ -98,10 +99,10 @@ async def offer(request):
     def on_track(track):
         if track.kind == 'audio':
             pc.addTrack(local_audio)
-            asyncio.ensure_future(consume_audio(track))
+            pc._consumers.append(asyncio.ensure_future(consume_audio(track)))
         elif track.kind == 'video':
             pc.addTrack(local_video)
-            asyncio.ensure_future(consume_video(track, local_video))
+            pc._consumers.append(asyncio.ensure_future(consume_video(track, local_video)))
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
@@ -119,6 +120,12 @@ pcs = []
 
 
 async def on_shutdown(app):
+    # stop audio / video consumers
+    for pc in pcs:
+        for c in pc._consumers:
+            c.cancel()
+
+    # close peer connections
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
 
