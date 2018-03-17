@@ -10,7 +10,7 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      Packet, RTCSctpCapabilities,
                                      RTCSctpTransport, SackChunk,
                                      ShutdownChunk, seq_gt, seq_plus_one,
-                                     tsn_gt, tsn_gte)
+                                     tsn_gt, tsn_gte, tsn_minus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -445,6 +445,20 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
 
+        # transmit data
+        server_queue = asyncio.Queue()
+
+        async def server_fake_receive(*args):
+            await server_queue.put(args)
+
+        server._receive = server_fake_receive
+
+        for i in range(20):
+            message = (123, i, b'ping')
+            run(client._send(*message))
+            received = run(server_queue.get())
+            self.assertEqual(received, message)
+
         # shutdown
         run(client.stop())
         run(server.stop())
@@ -756,6 +770,20 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(len(packet.chunks), 1)
         self.assertTrue(isinstance(packet.chunks[0], HeartbeatAckChunk))
         self.assertEqual(packet.chunks[0].params, [(1, b'\x01\x02\x03\x04')])
+
+    def test_receive_sack_discard(self):
+        client_transport, _ = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+
+        # receive sack
+        sack_point = client._last_sacked_tsn
+        chunk = SackChunk()
+        chunk.cumulative_tsn = tsn_minus_one(sack_point)
+        run(client._receive_chunk(chunk))
+
+        # sack point must not changed
+        self.assertEqual(client._last_sacked_tsn, sack_point)
 
     def test_mark_received(self):
         client_transport = DummyDtlsTransport()
