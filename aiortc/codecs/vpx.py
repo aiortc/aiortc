@@ -181,11 +181,14 @@ class VpxEncoder:
                          frame.width, frame.height, 1, frame.data)
 
         if not self.codec:
+            self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
-
-            self.codec = ffi.new('vpx_codec_ctx_t *')
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
+        elif frame.width != self.cfg.g_w or frame.height != self.cfg.g_h:
+            self.cfg.g_w = frame.width
+            self.cfg.g_h = frame.height
+            _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
 
         _vpx_assert(lib.vpx_codec_encode(
             self.codec, image, self.frame_count, 1,  0, lib.VPX_DL_REALTIME))
