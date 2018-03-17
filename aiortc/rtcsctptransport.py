@@ -715,12 +715,16 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
             await self._send_chunk(ack)
+            self._t2_start()
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
-        elif isinstance(chunk, ShutdownAckChunk):
+        elif (isinstance(chunk, ShutdownAckChunk) and
+              self.state in [self.State.SHUTDOWN_SENT, self.State.SHUTDOWN_ACK_SENT]):
+            self._t2_cancel()
             complete = ShutdownCompleteChunk()
             await self._send_chunk(complete)
             self._set_state(self.State.CLOSED)
-        elif isinstance(chunk, ShutdownCompleteChunk):
+        elif (isinstance(chunk, ShutdownCompleteChunk) and
+              self.state == self.State.SHUTDOWN_ACK_SENT):
             self._t2_cancel()
             self._set_state(self.State.CLOSED)
 
@@ -792,6 +796,8 @@ class RTCSctpTransport(EventEmitter):
             if state == self.State.ESTABLISHED:
                 asyncio.ensure_future(self._data_channel_flush())
             elif state == self.State.CLOSED:
+                self._t1_cancel()
+                self._t2_cancel()
                 self.closed.set()
 
     async def _shutdown(self):
@@ -800,20 +806,22 @@ class RTCSctpTransport(EventEmitter):
         """
         if self.state == self.State.CLOSED:
             self.closed.set()
-            return
-
-        chunk = ShutdownChunk()
-        chunk.cumulative_tsn = self._last_received_tsn
-        await self._send_chunk(chunk)
-        self._t2_start()
-        self._set_state(self.State.SHUTDOWN_SENT)
+        elif self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]:
+            self._set_state(self.State.CLOSED)
+        elif self.state == self.State.ESTABLISHED:
+            chunk = ShutdownChunk()
+            chunk.cumulative_tsn = self._last_received_tsn
+            await self._send_chunk(chunk)
+            self._t2_start()
+            self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
 
     def _t1_cancel(self):
-        self.__log_debug('- T1(%s) cancel', self._t1_chunk.__class__.__name__)
-        self._t1_handle.cancel()
-        self._t1_handle = None
-        self._t1_chunk = None
+        if self._t1_handle is not None:
+            self.__log_debug('- T1(%s) cancel', self._t1_chunk.__class__.__name__)
+            self._t1_handle.cancel()
+            self._t1_handle = None
+            self._t1_chunk = None
 
     def _t1_expired(self):
         self._t1_failures += 1
@@ -833,9 +841,10 @@ class RTCSctpTransport(EventEmitter):
         self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
 
     def _t2_cancel(self):
-        self.__log_debug('- T2 cancel')
-        self._t2_handle.cancel()
-        self._t2_handle = None
+        if self._t2_handle is not None:
+            self.__log_debug('- T2 cancel')
+            self._t2_handle.cancel()
+            self._t2_handle = None
 
     def _t2_expired(self):
         self._t2_failures += 1
