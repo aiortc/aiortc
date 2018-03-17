@@ -39,7 +39,7 @@ setuptools.setup(
     cffi_modules=cffi_modules,
     packages=['aiortc'],
     setup_requires=['cffi'],
-    install_requires=['aioice>=0.4.4', 'attrs', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp', 'pyopenssl'],
+    install_requires=['aioice>=0.5.0', 'attrs', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp', 'pyopenssl'],
     dependency_links=[
         'git+https://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography-2.2.dev1',
     ]
