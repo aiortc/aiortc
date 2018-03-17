@@ -4,6 +4,7 @@ addons:
     - libopus-dev
     - libvpx-dev
 after_success: coveralls
+cache: pip
 dist: trusty
 install:
   - |
