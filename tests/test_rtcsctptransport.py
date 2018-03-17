@@ -397,7 +397,37 @@ class RTCSctpTransportTest(TestCase):
         with self.assertRaises(InvalidStateError):
             RTCSctpTransport(dtlsTransport)
 
+    def test_connect_broken_transport(self):
+        """
+        Transport with 100% loss never connects.
+        """
+        client_transport, server_transport = dummy_dtls_transport_pair(loss=1)
+        client = RTCSctpTransport(client_transport)
+        client._rto = 0.1
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(server_transport)
+        server._rto = 0.1
+        self.assertTrue(server.is_server)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
     def test_connect_lossy_transport(self):
+        """
+        Transport with 40% loss eventually connects.
+        """
         client_transport, server_transport = dummy_dtls_transport_pair(loss=0.4)
         client = RTCSctpTransport(client_transport)
         client._rto = 0.1
