@@ -127,9 +127,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='WebRTC audio / video / data-channels demo')
     parser.add_argument('--port', type=int, default=8080,
                         help='Port for HTTP server (default: 8080)')
+    parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
     app.router.add_get('/', index)

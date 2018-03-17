@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import logging
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
@@ -103,7 +104,11 @@ async def run_offer(pc):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data channels with copy-and-paste signaling')
     parser.add_argument('role', choices=['offer', 'answer'])
+    parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
 
     pc = create_pc()
     if args.role == 'offer':
