@@ -216,7 +216,7 @@ class RTCDtlsTransportTest(TestCase):
         run(session2.stop())
 
     def test_lossy_channel(self):
-        transport1, transport2 = dummy_ice_transport_pair(loss=0.2)
+        transport1, transport2 = dummy_ice_transport_pair(loss=0.3)
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
@@ -224,13 +224,9 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        try:
-            run(asyncio.gather(
-                session1.start(session2.getLocalParameters()),
-                session2.start(session1.getLocalParameters())))
-        except ConnectionError:
-            # flaky
-            pass
-        finally:
-            run(session1.stop())
-            run(session2.stop())
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
+
+        run(session1.stop())
+        run(session2.stop())

@@ -334,7 +334,7 @@ class RTCDtlsTransport(EventEmitter):
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
-        logger.debug('%s - DTLS handshake complete', self._role)
+        self.__log_debug('- DTLS handshake complete')
         self._set_state(State.CONNECTED)
         asyncio.ensure_future(self.__run())
 
@@ -345,7 +345,7 @@ class RTCDtlsTransport(EventEmitter):
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             await self._write_ssl()
-            logger.debug('%s - DTLS shutdown complete', self._role)
+            self.__log_debug('- DTLS shutdown complete')
             self.closed.set()
 
     async def __run(self):
@@ -364,9 +364,6 @@ class RTCDtlsTransport(EventEmitter):
         ptv_usec = ffi.new('long *')
         if lib.Cryptography_DTLSv1_get_timeout(self.ssl, ptv_sec, ptv_usec):
             timeout = ptv_sec[0] + (ptv_usec[0] / 1000000)
-            if timeout > 30:
-                logger.debug('%s x DTLS timeout is too high', self._role)
-                raise ConnectionError
         else:
             timeout = None
 
@@ -374,7 +371,7 @@ class RTCDtlsTransport(EventEmitter):
             data = await first_completed(self.transport._connection.recv(), self.closed.wait(),
                                          timeout=timeout)
         except TimeoutError:
-            logger.debug('%s x DTLS handling timeout', self._role)
+            self.__log_debug('x DTLS handling timeout')
             lib.DTLSv1_handle_timeout(self.ssl)
             await self._write_ssl()
             return
@@ -388,8 +385,9 @@ class RTCDtlsTransport(EventEmitter):
             # DTLS
             lib.BIO_write(self.read_bio, data, len(data))
             result = lib.SSL_read(self.ssl, self.read_cdata, len(self.read_cdata))
+            await self._write_ssl()
             if result == 0:
-                logger.debug('%s - DTLS shutdown by remote party' % self._role)
+                self.__log_debug('- DTLS shutdown by remote party')
                 raise ConnectionError
             elif result > 0:
                 await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
@@ -420,7 +418,7 @@ class RTCDtlsTransport(EventEmitter):
 
     def _set_state(self, state):
         if state != self._state:
-            logger.debug('%s - %s -> %s', self._role, self._state, state)
+            self.__log_debug('- %s -> %s', self._state, state)
             self._state = state
             self.emit('statechange')
 
@@ -432,3 +430,6 @@ class RTCDtlsTransport(EventEmitter):
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
             await self.transport._connection.send(ffi.buffer(self.write_cdata)[0:result])
+
+    def __log_debug(self, msg, *args):
+        logger.debug(self._role + ' ' + msg, *args)
