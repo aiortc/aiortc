@@ -364,6 +364,9 @@ class RTCDtlsTransport(EventEmitter):
         ptv_usec = ffi.new('long *')
         if lib.Cryptography_DTLSv1_get_timeout(self.ssl, ptv_sec, ptv_usec):
             timeout = ptv_sec[0] + (ptv_usec[0] / 1000000)
+            if timeout > 30:
+                logger.debug('%s x DTLS timeout is too high', self._role)
+                raise ConnectionError
         else:
             timeout = None
 
@@ -371,7 +374,7 @@ class RTCDtlsTransport(EventEmitter):
             data = await first_completed(self.transport._connection.recv(), self.closed.wait(),
                                          timeout=timeout)
         except TimeoutError:
-            logger.debug('%s - DTLS handling timeout', self._role)
+            logger.debug('%s x DTLS handling timeout', self._role)
             lib.DTLSv1_handle_timeout(self.ssl)
             await self._write_ssl()
             return
