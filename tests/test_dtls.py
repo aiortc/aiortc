@@ -23,8 +23,8 @@ class DummyIceTransport:
         await self._connection.close()
 
 
-def dummy_ice_transport_pair():
-    transport1, transport2 = dummy_transport_pair()
+def dummy_ice_transport_pair(loss=0):
+    transport1, transport2 = dummy_transport_pair(loss=loss)
     return (
         DummyIceTransport(transport1, 'controlling'),
         DummyIceTransport(transport2, 'controlled')
@@ -211,6 +211,22 @@ class RTCDtlsTransportTest(TestCase):
         self.assertEqual(str(cm.exception), 'DTLS handshake failed (error 1)')
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'failed')
+
+        run(session1.stop())
+        run(session2.stop())
+
+    def test_lossy_channel(self):
+        transport1, transport2 = dummy_ice_transport_pair(loss=0.2)
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
 
         run(session1.stop())
         run(session2.stop())
