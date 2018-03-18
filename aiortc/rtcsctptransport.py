@@ -487,10 +487,6 @@ class RTCSctpTransport(EventEmitter):
         return self._local_port
 
     @property
-    def role(self):
-        return self.is_server and 'server' or 'client'
-
-    @property
     def transport(self):
         """
         The :class:`RTCDtlsTransport` over which SCTP data is transmitted.
@@ -527,6 +523,11 @@ class RTCSctpTransport(EventEmitter):
         self._set_state(self.State.CLOSED)
 
     async def __run(self):
+        """
+        The main reception loop.
+
+        It runs until the association reaches the CLOSED state.
+        """
         # initialise local channel ID counter
         if self.is_server:
             self._data_channel_id = 0
@@ -616,6 +617,9 @@ class RTCSctpTransport(EventEmitter):
         await self._data_channel_receive(stream_id, pp_id, data)
 
     async def _receive_chunk(self, chunk):
+        """
+        Handle an incoming chunk.
+        """
         self.__log_debug('< %s', repr(chunk))
 
         # server
@@ -795,6 +799,9 @@ class RTCSctpTransport(EventEmitter):
         await self.transport.data.send(bytes(packet))
 
     async def _send_sack(self):
+        """
+        Build and send a selective acknowledgement (SACK) chunk.
+        """
         gaps = []
         gap_next = None
         for tsn in sorted(self._sack_misordered):
@@ -817,6 +824,9 @@ class RTCSctpTransport(EventEmitter):
         self._sack_needed = False
 
     def _set_state(self, state):
+        """
+        Transition the SCTP association to a new state.
+        """
         if state != self.state:
             self.__log_debug('- %s -> %s', self.state, state)
             self.state = state
@@ -912,6 +922,13 @@ class RTCSctpTransport(EventEmitter):
             self._t3_handle = None
 
     async def _data_channel_flush(self):
+        """
+        Try to flush buffered data to the SCTP layer.
+
+        We wait until the association is established, as we need to know
+        whether we are a client or a server to correctly assign an odd/even ID
+        to the data channels.
+        """
         if self.state != self.State.ESTABLISHED:
             return
 
@@ -998,7 +1015,8 @@ class RTCSctpTransport(EventEmitter):
         await self._data_channel_flush()
 
     def __log_debug(self, msg, *args):
-        logger.debug(self.role + ' ' + msg, *args)
+        role = self.is_server and 'server' or 'client'
+        logger.debug(role + ' ' + msg, *args)
 
     class State(enum.Enum):
         CLOSED = 1
