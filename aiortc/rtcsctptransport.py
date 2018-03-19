@@ -924,6 +924,9 @@ class RTCSctpTransport(EventEmitter):
             self._t3_handle = None
 
     async def _transmit(self):
+        """
+        Transmit outbound data.
+        """
         flightsize = 0
         for pos in range(self._outbound_queue_pos):
             flightsize += len(self._outbound_queue[pos].user_data)

@@ -15,6 +15,16 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
 from .utils import dummy_dtls_transport_pair, load, run
 
 
+def make_data_chunks(count):
+    chunks = []
+    for i in range(count):
+        chunk = DataChunk()
+        chunk.user_data = b'M' * 1200
+        chunk.tsn = i
+        chunks.append(chunk)
+    return chunks
+
+
 def track_channels(transport):
         channels = []
 
@@ -36,9 +46,14 @@ async def wait_for_outcome(client, server):
         await asyncio.sleep(0.1)
 
 
+class DummyIceTransport:
+    role = 'controlling'
+
+
 class DummyDtlsTransport:
     def __init__(self, state='new'):
         self.state = state
+        self.transport = DummyIceTransport()
 
 
 class SctpPacketTest(TestCase):
@@ -870,3 +885,36 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(sack.duplicates, [])
         self.assertEqual(sack.gaps, [(2, 3), (5, 5)])
         self.assertEqual(sack.cumulative_tsn, 12)
+
+    def test_transmit(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._send_chunk = mock_send_chunk
+
+        # no data
+        run(client._transmit())
+        self.assertIsNone(client._t3_handle)
+        self.assertEqual(client._outbound_queue_pos, 0)
+
+        # 1 chunk
+        client._outbound_queue += make_data_chunks(1)
+        run(client._transmit())
+        self.assertIsNotNone(client._t3_handle)
+        self.assertEqual(client._outbound_queue_pos, 1)
+
+    def test_transmit_over_cwnd(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._send_chunk = mock_send_chunk
+
+        # 4 chunks, but cwnd only allows 3
+        client._outbound_queue += make_data_chunks(4)
+        run(client._transmit())
+        self.assertIsNotNone(client._t3_handle)
+        self.assertEqual(client._outbound_queue_pos, 3)
