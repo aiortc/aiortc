@@ -55,7 +55,7 @@ Implementation status
 
 ``aiortc`` is a work in progress, but it is already possible to set up a
 connection with an actual browser (tested with Chrome and Firefox), exchange
-messages over a data channel and send audio to the browser.
+messages over a data channel and audio / video with the browser.
 
 Working:
 
@@ -64,7 +64,7 @@ Working:
 - DTLS key and certificate generation
 - DTLS handshake, encryption / decryption (for SCTP)
 - SRTP keying, encryption and decryption for RTP and RTCP
-- Minimal SCTP implementation
+- Simple SCTP implementation
 - Data Channels
 - Sending and receiving audio (Opus / PCMU / PCMA)
 - Sending and receiving video (VP8)
