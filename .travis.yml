@@ -21,7 +21,6 @@ install:
       export LD_LIBRARY_PATH=$PWD/libsrtp:$LD_LIBRARY_PATH
     fi
   - pip install coveralls flake8
-  - pip install -e git://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography
 language: python
 matrix:
   include:

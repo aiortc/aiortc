@@ -26,7 +26,7 @@ setuptools.setup(
     author_email='jeremy.laine@m4x.org',
     license='BSD',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
@@ -39,8 +39,5 @@ setuptools.setup(
     cffi_modules=cffi_modules,
     packages=['aiortc'],
     setup_requires=['cffi'],
-    install_requires=['aioice>=0.5.0', 'attrs', 'crcmod', 'cryptography>=2.2.dev1', 'pyee', 'pylibsrtp', 'pyopenssl'],
-    dependency_links=[
-        'git+https://github.com/pyca/cryptography.git@a36579b6e4086ded4c20578bbfbfae083d5e6bce#egg=cryptography-2.2.dev1',
-    ]
+    install_requires=['aioice>=0.5.1', 'attrs', 'crcmod', 'cryptography>=2.2', 'pyee', 'pylibsrtp', 'pyopenssl'],
 )
