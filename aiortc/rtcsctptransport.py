@@ -458,6 +458,7 @@ class RTCSctpTransport(EventEmitter):
         self._sack_needed = False
 
         # outbound
+        self._cwnd = 3 * USERDATA_MAX_LENGTH
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
         self._outbound_queue = []
@@ -626,6 +627,7 @@ class RTCSctpTransport(EventEmitter):
         if isinstance(chunk, InitChunk) and self.is_server:
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
+            self._ssthresh = chunk.advertised_rwnd
 
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
@@ -667,6 +669,7 @@ class RTCSctpTransport(EventEmitter):
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
+            self._ssthresh = chunk.advertised_rwnd
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
@@ -722,6 +725,7 @@ class RTCSctpTransport(EventEmitter):
                 if tsn_gt(schunk.tsn, self._last_sacked_tsn):
                     break
                 done += 1
+                self._cwnd = min(self._cwnd + len(schunk.user_data), self._ssthresh)
             if done:
                 self._outbound_queue = self._outbound_queue[done:]
                 self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
@@ -729,6 +733,8 @@ class RTCSctpTransport(EventEmitter):
             # if there is no outstanding data, stop T3
             if not len(self._outbound_queue):
                 self._t3_cancel()
+            else:
+                await self._transmit()
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
             ack.params = chunk.params
@@ -780,11 +786,7 @@ class RTCSctpTransport(EventEmitter):
         self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
 
         # transmit outbound data
-        while self._outbound_queue_pos < len(self._outbound_queue):
-            await self._send_chunk(self._outbound_queue[self._outbound_queue_pos])
-            self._outbound_queue_pos += 1
-            if not self._t3_handle:
-                self._t3_start()
+        await self._transmit()
 
     async def _send_chunk(self, chunk):
         """
@@ -906,12 +908,12 @@ class RTCSctpTransport(EventEmitter):
         self.__log_debug('x T3 expired')
 
         # retransmit
-        if len(self._outbound_queue):
-            asyncio.ensure_future(self._send_chunk(self._outbound_queue[0]))
-            self._outbound_queue_pos = 0
-            self._t3_start()
+        self._cwnd = USERDATA_MAX_LENGTH
+        self._outbound_queue_pos = 0
+        asyncio.ensure_future(self._transmit())
 
     def _t3_start(self):
+        assert self._t3_handle is None
         self.__log_debug('- T3 start')
         self._t3_handle = self._loop.call_later(self._rto, self._t3_expired)
 
@@ -920,6 +922,24 @@ class RTCSctpTransport(EventEmitter):
             self.__log_debug('- T3 cancel')
             self._t3_handle.cancel()
             self._t3_handle = None
+
+    async def _transmit(self):
+        flightsize = 0
+        for pos in range(self._outbound_queue_pos):
+            flightsize += len(self._outbound_queue[pos].user_data)
+
+        while self._outbound_queue_pos < len(self._outbound_queue):
+            chunk = self._outbound_queue[self._outbound_queue_pos]
+            flightsize += len(chunk.user_data)
+            if flightsize > self._cwnd:
+                break
+            await self._send_chunk(chunk)
+            if not self._t3_handle:
+                self._t3_start()
+            elif self._outbound_queue_pos == 0:
+                self._t3_handle.cancel()
+                self._t3_start()
+            self._outbound_queue_pos += 1
 
     async def _data_channel_flush(self):
         """
