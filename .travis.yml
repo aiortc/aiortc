@@ -10,15 +10,8 @@ install:
   - |
     if [[ "$(uname -s)" == 'Darwin' ]]; then
       brew update
-      brew upgrade openssl@1.1 python3
-      brew install opus srtp libvpx
-      export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
-      export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
-      python3 -m venv env
-      source env/bin/activate
-    else
-      .travis/build-libsrtp
-      export LD_LIBRARY_PATH=$PWD/libsrtp:$LD_LIBRARY_PATH
+      brew upgrade python3
+      brew install opus libvpx
     fi
   - pip install coveralls flake8
 language: python
@@ -28,7 +21,6 @@ matrix:
     os: osx
   - python: "3.5"
   - python: "3.6"
-  - python: "pypy3"
 script:
   - flake8 aiortc examples tests
   - coverage run setup.py test

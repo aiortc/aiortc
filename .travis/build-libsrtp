@@ -1,8 +1,0 @@
-#!/bin/sh
-
-set -e
-
-git clone https://github.com/cisco/libsrtp/
-cd libsrtp
-./configure
-make shared_library
