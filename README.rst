@@ -78,21 +78,19 @@ Requirements
 ------------
 
 In addition to aiortc's Python dependencies you need a couple of libraries
-installed on your system for media codecs and encryption.
+installed on your system for media codecs.
 
 On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libopus-dev libsrtp2-dev libssl-dev libvpx-dev
+    apt install libopus-dev libvpx-dev
 
 On OS X run:
 
 .. code:: bash
 
-    brew install opus srtp openssl@1.1 libvpx
-    export LDFLAGS="-L$(brew --prefix openssl@1.1)/lib"
-    export CFLAGS="-I$(brew --prefix openssl@1.1)/include"
+    brew install opus libvpx
 
 License
 -------
