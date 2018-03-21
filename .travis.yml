@@ -13,7 +13,7 @@ install:
       brew upgrade python3
       brew install opus libvpx
     fi
-  - pip install coveralls flake8
+  - pip3 install coveralls flake8
 language: python
 matrix:
   include:
