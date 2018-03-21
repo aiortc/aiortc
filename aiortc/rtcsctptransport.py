@@ -744,6 +744,7 @@ class RTCSctpTransport(EventEmitter):
                 self._t3_start()
 
             await self._transmit()
+            await self._send_shutdown_maybe()
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
             ack.params = chunk.params
@@ -835,6 +836,17 @@ class RTCSctpTransport(EventEmitter):
         self._sack_duplicates.clear()
         self._sack_needed = False
 
+    async def _send_shutdown_maybe(self):
+        """
+        Send a shutdown chunk if shutdown is pending and all data has been acknowledged.
+        """
+        if self.state == self.State.SHUTDOWN_PENDING and not len(self._outbound_queue):
+            chunk = ShutdownChunk()
+            chunk.cumulative_tsn = self._last_received_tsn
+            await self._send_chunk(chunk)
+            self._t2_start(chunk)
+            self._set_state(self.State.SHUTDOWN_SENT)
+
     def _set_state(self, state):
         """
         Transition the SCTP association to a new state.
@@ -859,11 +871,8 @@ class RTCSctpTransport(EventEmitter):
         elif self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]:
             self._set_state(self.State.CLOSED)
         elif self.state == self.State.ESTABLISHED:
-            chunk = ShutdownChunk()
-            chunk.cumulative_tsn = self._last_received_tsn
-            await self._send_chunk(chunk)
-            self._t2_start(chunk)
-            self._set_state(self.State.SHUTDOWN_SENT)
+            self._set_state(self.State.SHUTDOWN_PENDING)
+            await self._send_shutdown_maybe()
         await self.closed.wait()
 
     def _t1_cancel(self):
