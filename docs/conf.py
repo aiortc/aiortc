@@ -32,7 +32,7 @@ class MockLib:
 
 class MockBinding:
     ffi = None
-    _lib = MockLib()
+    lib = MockLib()
 
 
 class MockOpus:
