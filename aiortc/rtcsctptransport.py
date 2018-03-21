@@ -52,6 +52,10 @@ WEBRTC_STRING_EMPTY = 56
 WEBRTC_BINARY_EMPTY = 57
 
 
+def chunk_type(chunk):
+    return chunk.__class__.__name__
+
+
 def decode_params(body):
     params = []
     pos = 0
@@ -130,7 +134,7 @@ class Chunk:
         return data
 
     def __repr__(self):
-        return '%s(flags=%d)' % (self.__class__.__name__, self.flags)
+        return '%s(flags=%d)' % (chunk_type(self), self.flags)
 
     @property
     def type(self):
@@ -748,10 +752,11 @@ class RTCSctpTransport(EventEmitter):
             self.__log_debug('x Association was aborted by remote party')
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
+            self._t2_cancel()
             self._set_state(self.State.SHUTDOWN_RECEIVED)
             ack = ShutdownAckChunk()
             await self._send_chunk(ack)
-            self._t2_start()
+            self._t2_start(ack)
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
         elif (isinstance(chunk, ShutdownAckChunk) and
               self.state in [self.State.SHUTDOWN_SENT, self.State.SHUTDOWN_ACK_SENT]):
@@ -857,13 +862,13 @@ class RTCSctpTransport(EventEmitter):
             chunk = ShutdownChunk()
             chunk.cumulative_tsn = self._last_received_tsn
             await self._send_chunk(chunk)
-            self._t2_start()
+            self._t2_start(chunk)
             self._set_state(self.State.SHUTDOWN_SENT)
         await self.closed.wait()
 
     def _t1_cancel(self):
         if self._t1_handle is not None:
-            self.__log_debug('- T1(%s) cancel', self._t1_chunk.__class__.__name__)
+            self.__log_debug('- T1(%s) cancel', chunk_type(self._t1_chunk))
             self._t1_handle.cancel()
             self._t1_handle = None
             self._t1_chunk = None
@@ -871,8 +876,7 @@ class RTCSctpTransport(EventEmitter):
     def _t1_expired(self):
         self._t1_failures += 1
         self._t1_handle = None
-        self.__log_debug('x T1(%s) expired %d', self._t1_chunk.__class__.__name__,
-                         self._t1_failures)
+        self.__log_debug('x T1(%s) expired %d', chunk_type(self._t1_chunk), self._t1_failures)
         if self._t1_failures > SCTP_MAX_INIT_RETRANS:
             self._set_state(self.State.CLOSED)
         else:
@@ -880,32 +884,36 @@ class RTCSctpTransport(EventEmitter):
             self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
 
     def _t1_start(self, chunk):
+        assert self._t1_handle is None
         self._t1_chunk = chunk
         self._t1_failures = 0
-        self.__log_debug('- T1(%s) start', self._t1_chunk.__class__.__name__)
+        self.__log_debug('- T1(%s) start', chunk_type(self._t1_chunk))
         self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
 
     def _t2_cancel(self):
         if self._t2_handle is not None:
-            self.__log_debug('- T2 cancel')
+            self.__log_debug('- T2(%s) cancel', chunk_type(self._t2_chunk))
             self._t2_handle.cancel()
             self._t2_handle = None
+            self._t2_chunk = None
 
     def _t2_expired(self):
         self._t2_failures += 1
         self._t2_handle = None
-        self.__log_debug('x T2 expired %d', self._t2_failures)
+        self.__log_debug('x T2(%s) expired %d', chunk_type(self._t2_chunk), self._t2_failures)
         if self._t2_failures > SCTP_MAX_ASSOCIATION_RETRANS:
             self._set_state(self.State.CLOSED)
         else:
-            chunk = ShutdownChunk()
-            chunk.cumulative_tsn = self._last_received_tsn
-            asyncio.ensure_future(self._send_chunk(chunk))
+            if isinstance(self._t2_chunk, ShutdownChunk):
+                self._t2_chunk.cumulative_tsn = self._last_received_tsn
+            asyncio.ensure_future(self._send_chunk(self._t2_chunk))
             self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
-    def _t2_start(self):
+    def _t2_start(self, chunk):
+        assert self._t2_handle is None
+        self._t2_chunk = chunk
         self._t2_failures = 0
-        self.__log_debug('- T2 start')
+        self.__log_debug('- T2(%s) start', chunk_type(self._t2_chunk))
         self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
     def _t3_expired(self):

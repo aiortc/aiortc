@@ -9,9 +9,10 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      HeartbeatAckChunk, HeartbeatChunk,
                                      InboundStream, InitChunk, Packet,
                                      RTCSctpCapabilities, RTCSctpTransport,
-                                     SackChunk, ShutdownChunk, seq_gt,
-                                     seq_plus_one, tsn_gt, tsn_gte,
-                                     tsn_minus_one, tsn_plus_one)
+                                     SackChunk, ShutdownAckChunk,
+                                     ShutdownChunk, seq_gt, seq_plus_one,
+                                     tsn_gt, tsn_gte, tsn_minus_one,
+                                     tsn_plus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -949,3 +950,67 @@ class RTCSctpTransportTest(TestCase):
 
         self.assertEqual(len(client._outbound_queue), 0)
         self.assertEqual(client._outbound_queue_pos, 0)
+
+    def test_t2_expired_when_shutdown_ack_sent(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+        client._send_chunk = mock_send_chunk
+
+        chunk = ShutdownAckChunk()
+
+        # fails once
+        client.state = RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+        client._t2_start(chunk)
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 1)
+        self.assertIsNotNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+
+        # fails 10 times
+        client._t2_failures = 9
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 10)
+        self.assertIsNotNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+
+        # fails 11 times
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 11)
+        self.assertIsNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+
+    def test_t2_expired_when_shutdown_sent(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+        client._send_chunk = mock_send_chunk
+
+        chunk = ShutdownChunk()
+
+        # fails once
+        client.state = RTCSctpTransport.State.SHUTDOWN_SENT
+        client._t2_start(chunk)
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 1)
+        self.assertIsNotNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_SENT)
+
+        # fails 10 times
+        client._t2_failures = 9
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 10)
+        self.assertIsNotNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_SENT)
+
+        # fails 11 times
+        client._t2_expired()
+        self.assertEqual(client._t2_failures, 11)
+        self.assertIsNone(client._t2_handle)
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
