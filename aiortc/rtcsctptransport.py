@@ -730,11 +730,16 @@ class RTCSctpTransport(EventEmitter):
                 self._outbound_queue = self._outbound_queue[done:]
                 self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
 
-            # if there is no outstanding data, stop T3
             if not len(self._outbound_queue):
+                # there is no outstanding data, stop T3
                 self._t3_cancel()
-            else:
-                await self._transmit()
+            elif done:
+                # the earliest outstanding chunk was acknowledged, restart T3
+                self._t3_handle.cancel()
+                self._t3_handle = None
+                self._t3_start()
+
+            await self._transmit()
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
             ack.params = chunk.params
@@ -938,9 +943,6 @@ class RTCSctpTransport(EventEmitter):
                 break
             await self._send_chunk(chunk)
             if not self._t3_handle:
-                self._t3_start()
-            elif self._outbound_queue_pos == 0:
-                self._t3_handle.cancel()
                 self._t3_start()
             self._outbound_queue_pos += 1
 
