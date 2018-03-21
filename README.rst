@@ -79,10 +79,17 @@ Requirements
 
 In addition to aiortc's Python dependencies you need a couple of libraries
 installed on your system for media codecs and encryption.
+To install ``libsrtp2-dev`` on Ubuntu you should add
+"Asterisk 13.18 backport for Xenial" repository_.
+
+.. _repository: https://launchpad.net/~ibro-x/+archive/ubuntu/asterisk-13.18-xenial
 
 On Debian/Ubuntu run:
 
 .. code:: bash
+
+    sudo add-apt-repository ppa:ibro-x/asterisk-13.18-xenial
+    sudo apt-get update
 
     apt install libopus-dev libsrtp2-dev libssl-dev libvpx-dev
 
