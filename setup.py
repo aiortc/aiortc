@@ -12,8 +12,8 @@ if os.environ.get('READTHEDOCS') == 'True':
     cffi_modules=[]
 else:
     cffi_modules=[
-        '_cffi_src/build_opus.py:ffibuilder',
-        '_cffi_src/build_vpx.py:ffibuilder',
+        'src/build_opus.py:ffibuilder',
+        'src/build_vpx.py:ffibuilder',
     ]
 
 setuptools.setup(
