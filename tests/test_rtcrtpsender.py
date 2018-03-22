@@ -4,6 +4,7 @@ from unittest import TestCase
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack
+from aiortc.rtcrtpparameters import RTCRtpParameters
 from aiortc.rtcrtpsender import RTCRtpSender
 
 from .utils import dummy_dtls_transport_pair, run
@@ -37,6 +38,19 @@ class RTCRtpSenderTest(TestCase):
         self.assertEqual(sender.kind, 'audio')
         self.assertEqual(sender.transport, transport)
 
-        run(asyncio.gather(
-            sender._run(codec=PCMU_CODEC),
-            transport.close()))
+        run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
+
+        run(transport.close())
+
+    def test_stop(self):
+        transport, _ = dummy_dtls_transport_pair()
+
+        sender = RTCRtpSender(AudioStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'audio')
+        self.assertEqual(sender.transport, transport)
+
+        run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
+
+        # clean shutdown
+        sender.stop()
+        run(asyncio.sleep(0))
