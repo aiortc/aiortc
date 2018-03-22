@@ -1,6 +1,8 @@
 import asyncio
 import math
 
+from pyee import EventEmitter
+
 
 class AudioFrame:
     """
@@ -26,7 +28,7 @@ class VideoFrame:
             self.data = data
 
 
-class MediaStreamTrack:
+class MediaStreamTrack(EventEmitter):
     pass
 
 
