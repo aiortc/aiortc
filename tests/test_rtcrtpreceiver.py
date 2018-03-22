@@ -4,6 +4,7 @@ from unittest import TestCase
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioFrame
+from aiortc.rtcrtpparameters import RTCRtpParameters
 from aiortc.rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 
 from .utils import dummy_dtls_transport_pair, load, run
@@ -23,9 +24,9 @@ class RTCRtpReceiverTest(TestCase):
         receiver = RTCRtpReceiver('audio', transport)
         self.assertEqual(receiver.transport, transport)
 
-        run(asyncio.gather(
-            receiver._run(codec=PCMU_CODEC),
-            transport.close()))
+        run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
+
+        run(transport.close())
 
     def test_rtp_and_rtcp(self):
         transport, remote = dummy_dtls_transport_pair()
@@ -34,9 +35,7 @@ class RTCRtpReceiverTest(TestCase):
         self.assertEqual(receiver.transport, transport)
 
         receiver._track = RemoteStreamTrack(kind='audio')
-
-        task = asyncio.ensure_future(
-            receiver._run(codec=PCMU_CODEC))
+        run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
         run(remote.send(load('rtp.bin')))
@@ -55,8 +54,9 @@ class RTCRtpReceiverTest(TestCase):
         self.assertTrue(isinstance(frame, AudioFrame))
 
         # shutdown
-        run(transport.close())
-        run(task)
+        run(asyncio.sleep(0.1))
+        receiver.stop()
+        run(asyncio.sleep(0))
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
