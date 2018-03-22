@@ -47,6 +47,8 @@ class RTCRtpReceiver:
     async def receive(self, parameters):
         """
         Attempts to set the parameters controlling the receiving of media.
+
+        :param: parameters: The :class:`RTCRtpParameters` for the receiver.
         """
         asyncio.ensure_future(self._run(parameters.codecs[0]))
 

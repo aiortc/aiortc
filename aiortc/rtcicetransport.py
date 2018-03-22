@@ -89,7 +89,7 @@ class RTCIceTransport(EventEmitter):
     @property
     def role(self):
         """
-        The current role of the ICE transport: `"controlling"` or `"controlled"`.
+        The current role of the ICE transport: `'controlling'` or `'controlled'`.
         """
         if self._connection.ice_controlling:
             return 'controlling'

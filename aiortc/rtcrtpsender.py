@@ -58,6 +58,8 @@ class RTCRtpSender:
     async def send(self, parameters):
         """
         Attempts to set the parameters controlling the sending of media.
+
+        :param: parameters: The :class:`RTCRtpParameters` for the sender.
         """
         asyncio.ensure_future(self._run(parameters.codecs[0]))
 

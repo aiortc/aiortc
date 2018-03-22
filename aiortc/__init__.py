@@ -6,6 +6,7 @@ from .rtcdtlstransport import (RTCCertificate, RTCDtlsFingerprint,  # noqa
 from .rtcicetransport import (RTCIceGatherer, RTCIceParameters,  # noqa
                               RTCIceTransport)
 from .rtcpeerconnection import RTCPeerConnection  # noqa
+from .rtcrtpparameters import RTCRtpParameters  # noqa
 from .rtcrtpreceiver import RTCRtpReceiver  # noqa
 from .rtcrtpsender import RTCRtpSender  # noqa
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport  # noqa

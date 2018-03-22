@@ -42,11 +42,14 @@ Datagram Transport Layer Security (DTLS)
 Real-time Transport Protocol (RTP)
 ----------------------------------
 
-  .. autoclass:: RTCRtpReceiver
-     :members:
+   .. autoclass:: RTCRtpReceiver
+      :members:
 
-  .. autoclass:: RTCRtpSender
-     :members:
+   .. autoclass:: RTCRtpSender
+      :members:
+
+   .. autoclass:: RTCRtpParameters()
+      :members:
 
 Stream Control Transmission Protocol (SCTP)
 -------------------------------------------
