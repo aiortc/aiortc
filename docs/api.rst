@@ -51,6 +51,9 @@ Real-time Transport Protocol (RTP)
    .. autoclass:: RTCRtpParameters()
       :members:
 
+   .. autoclass:: RTCRtpCodecParameters()
+      :members:
+
 Stream Control Transmission Protocol (SCTP)
 -------------------------------------------
 
