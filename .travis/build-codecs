@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -e
+
+destdir=/tmp/aiortc.deps
+
+for d in libvpx opus $destdir; do
+    if [ -e $d ]; then
+        rm -rf $d
+    fi
+done
+
+# build libvpx
+git clone https://chromium.googlesource.com/webm/libvpx
+cd libvpx
+git checkout -qf v1.7.0
+
+./configure --prefix=$destdir --disable-examples --disable-tools --disable-unit-tests
+make
+make install
+cd ..
+
+# build opus
+git clone https://github.com/xiph/opus
+cd opus
+git checkout -qf v1.2.1
+
+./autogen.sh
+./configure --prefix=$destdir
+make
+make install
