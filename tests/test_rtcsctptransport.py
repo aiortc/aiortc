@@ -242,11 +242,9 @@ class SctpStreamTest(TestCase):
         self.assertEqual(list(stream.pop_messages()), [])
 
         # feed first chunk again
-        stream.add_chunk(self.fragmented[0])
-        self.assertEqual(stream.reassembly, [self.fragmented[0]])
-        self.assertEqual(stream.sequence_number, 0)
-
-        self.assertEqual(list(stream.pop_messages()), [])
+        with self.assertRaises(AssertionError) as cm:
+            stream.add_chunk(self.fragmented[0])
+        self.assertEqual(str(cm.exception), '')
 
     def test_whole_in_order(self):
         stream = InboundStream()

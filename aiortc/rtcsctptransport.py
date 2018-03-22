@@ -94,6 +94,13 @@ def seq_gt(a, b):
             ((a > b) and ((a - b) < half_mod)))
 
 
+def seq_gte(a, b):
+    """
+    Return True if seq a is greater than or equal to b.
+    """
+    return (a == b) or seq_gt(a, b)
+
+
 def seq_plus_one(a):
     return (a + 1) % SCTP_SEQ_MODULO
 
@@ -372,10 +379,16 @@ class InboundStream:
 
     def add_chunk(self, chunk):
         pos = None
+
+        # should never happen, this would mean receiving a chunk
+        # for a message that has already been fully re-assembled
+        assert seq_gte(chunk.stream_seq, self.sequence_number)
+
         for i, rchunk in enumerate(self.reassembly):
-            if rchunk.tsn == chunk.tsn:
-                return
+            # should never happen, the chunk should have been eliminated
+            # as a duplicate when _mark_received() is called
             assert rchunk.tsn != chunk.tsn
+
             if tsn_gt(rchunk.tsn, chunk.tsn):
                 pos = i
                 break
