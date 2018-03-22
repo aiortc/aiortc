@@ -443,7 +443,7 @@ class RTCSctpTransport(EventEmitter):
     The :class:`RTCSctpTransport` interface includes information relating to
     Stream Control Transmission Protocol (SCTP) transport.
 
-    :param: transport: An :class:`RTCDtlstransport`.
+    :param: transport: An :class:`RTCDtlsTransport`.
     """
     def __init__(self, transport, port=5000):
         if transport.state == 'closed':
