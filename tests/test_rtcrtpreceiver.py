@@ -44,6 +44,9 @@ class RTCRtpReceiverTest(TestCase):
         # receive RTCP
         run(remote.send(load('rtcp_sr.bin')))
 
+        # receive truncated RTCP
+        run(remote.send(b'\x81\xca\x00'))
+
         # receive garbage
         run(remote.send(b'garbage'))
 

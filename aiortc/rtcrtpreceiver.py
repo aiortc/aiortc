@@ -69,7 +69,11 @@ class RTCRtpReceiver:
 
             # skip RTCP for now
             if is_rtcp(data):
-                for packet in RtcpPacket.parse(data):
+                try:
+                    packets = RtcpPacket.parse(data)
+                except ValueError:
+                    continue
+                for packet in packets:
                     logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
             # handle RTP
