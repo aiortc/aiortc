@@ -134,12 +134,32 @@ function start() {
         if (constraints.video) {
             document.getElementById('media').style.display = 'block';
         }
-        promise = navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+
+        function addNewStream(stream) {
             stream.getTracks().forEach(function(track) {
                 pc.addTrack(track, stream);
             });
+        }
+
+        var p1 = null;
+        var p2 = null;
+
+        if (constraints.audio) {
+            p1 = navigator.mediaDevices.getUserMedia({ audio: true }).then(addNewStream).catch(function (e) {
+                console.log('Audio device not found')
+            })
+        }
+
+        if (constraints.video) {
+            p2 = navigator.mediaDevices.getUserMedia({ video: true }).then(addNewStream).catch(function (e) {
+                console.log('Video device not found');
+                document.getElementById('media').style.display = 'none';
+            })
+        }
+
+        promise = Promise.all([p1, p2]).then(function () {
             return negotiate();
-        });
+        })
     } else {
         promise = negotiate();
     }
@@ -158,7 +178,7 @@ function start() {
 function stop() {
     clearInterval(dcInterval);
     pc.close();
-    getElementById('stop').style.display = 'none';
+    document.getElementById('stop').style.display = 'none';
 }
 
 </script>
