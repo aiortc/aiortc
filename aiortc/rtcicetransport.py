@@ -73,6 +73,8 @@ class RTCIceTransport(EventEmitter):
     The :class:`RTCIceTransport` interface allows an application access to
     information about the Interactive Connectivity Establishment (ICE)
     transport over which packets are sent and received.
+
+    :param: gatherer: An :class:`RTCIceGatherer`.
     """
     def __init__(self, gatherer):
         super().__init__()
@@ -120,6 +122,9 @@ class RTCIceTransport(EventEmitter):
     async def start(self, remoteParameters):
         """
         Initiate connectivity checks.
+
+        :param: remoteParameters: The :class:`RTCIceParameters` associated with
+                                  the remote :class:`RTCIceTransport`.
         """
         self.__setState('checking')
         self._connection.remote_username = remoteParameters.usernameFragment

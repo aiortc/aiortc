@@ -25,7 +25,7 @@ class RTCRtpReceiver:
     of data for a :class:`MediaStreamTrack`.
 
     :param: kind: The kind of media (`'audio'` or `'video'`).
-    :param: transport: An :class:`RTCDtlsTransport`
+    :param: transport: An :class:`RTCDtlsTransport`.
     """
     def __init__(self, kind, transport):
         if transport.state == 'closed':
@@ -46,7 +46,7 @@ class RTCRtpReceiver:
 
     async def receive(self, parameters):
         """
-        Attempts to set the parameters controlling the receiving of media.
+        Attempt to set the parameters controlling the receiving of media.
 
         :param: parameters: The :class:`RTCRtpParameters` for the receiver.
         """

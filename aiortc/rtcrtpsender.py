@@ -57,7 +57,7 @@ class RTCRtpSender:
 
     async def send(self, parameters):
         """
-        Attempts to set the parameters controlling the sending of media.
+        Attempt to set the parameters controlling the sending of media.
 
         :param: parameters: The :class:`RTCRtpParameters` for the sender.
         """

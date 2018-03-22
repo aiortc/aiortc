@@ -207,8 +207,8 @@ class RTCDtlsTransport(EventEmitter):
     The :class:`RTCDtlsTransport` object includes information relating to
     Datagram Transport Layer Security (DTLS) transport.
 
-    :param: transport: An :class:`RTCIceTransport`
-    :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently)
+    :param: transport: An :class:`RTCIceTransport`.
+    :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
     """
     def __init__(self, transport, certificates):
         assert len(certificates) == 1
@@ -274,7 +274,7 @@ class RTCDtlsTransport(EventEmitter):
         Start DTLS transport negotiation with the parameters of the remote
         DTLS transport.
 
-        :param: remoteParameters: An :class:`RTCDtlsParameters`
+        :param: remoteParameters: An :class:`RTCDtlsParameters`.
         """
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
