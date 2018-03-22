@@ -14,6 +14,12 @@ can connect to from your browser:
 
    python server.py
 
+Running via Docker
+``````````````````
+
+* Build docker container: `docker-compose build`
+* Run docker container: `docker-compose up`
+
 You can then browse to the following page with your browser:
 
 http://127.0.0.1:8080

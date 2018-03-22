@@ -1,0 +1,10 @@
+version: "2"
+services:
+    backend:
+        build: .
+        ports:
+            - 8080:8080
+        volumes:
+            - .:/app
+        working_dir: /app
+        command: python server.py --port 8080
