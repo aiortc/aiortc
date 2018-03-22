@@ -511,7 +511,8 @@ class RTCSctpTransport(EventEmitter):
         """
         return self.__transport
 
-    def getCapabilities(self):
+    @classmethod
+    def getCapabilities(cls):
         """
         Retrieve the capabilities of the transport.
 
