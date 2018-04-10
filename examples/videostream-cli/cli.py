@@ -25,12 +25,12 @@ class VideoFrame_(VideoFrame):
     @classmethod
     def from_yuv(cls, height, width, data_yuv):
         data = data_yuv.tobytes()
-        return cls(width, height, data)
+        return cls(height=height, width=width, data=data)
 
     @classmethod
     def from_bgr(cls, height, width, data_bgr):
         data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
-        return cls.from_yuv(width, height, data_yuv)
+        return cls.from_yuv(height=height, width=width, data_yuv=data_yuv)
 
     def to_yuv(self):
         # truncating the data as a workaround for #10
