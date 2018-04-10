@@ -17,13 +17,13 @@ class AudioFrame:
 
 class VideoFrame:
     """
-    Video frame in YUV420 format.
+    Video frame in YUV420 bytes format.
     """
-    def __init__(self, width, height, data=None):
+    def __init__(self, height, width, data=None):
         self.height = height
         self.width = width
         if data is None:
-            self.data = b'\x00' * math.ceil(width * height * 12 / 8)
+            self.data = b'\x00' * math.ceil(height * 12 / 8 * width)
         else:
             self.data = data
 
@@ -55,4 +55,4 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         await asyncio.sleep(0.02)
-        return VideoFrame(width=320, height=240, data=b'\x00' * 115200)
+        return VideoFrame(height=240, width=320, data=b'\x00' * 115200)
