@@ -149,7 +149,7 @@ class VpxDecoder:
                     div = p and 2 or 1
                     o_stride = img.d_w // div
                     for r in range(0, img.d_h // div):
-                        o_buf[o_pos:o_pos + o_stride] = i_buf[i_pos:i_pos + i_stride]
+                        o_buf[o_pos:o_pos + o_stride] = i_buf[i_pos:i_pos + o_stride]
                         i_pos += i_stride
                         o_pos += o_stride
 
