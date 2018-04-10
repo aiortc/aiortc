@@ -3,6 +3,7 @@ import asyncio
 import cv2
 import json
 import logging
+import math
 import numpy
 import os
 
@@ -19,6 +20,32 @@ _g_path_offer = "{}/offer.json".format(os.path.dirname(os.path.realpath(__file__
 _g_path_answer = "{}/answer.json".format(os.path.dirname(os.path.realpath(__file__)))
 
 
+class VideoFrame_(VideoFrame):
+
+    @classmethod
+    def from_yuv(cls, height, width, data_yuv):
+        data = data_yuv.tobytes()
+        return cls(width, height, data)
+
+    @classmethod
+    def from_bgr(cls, height, width, data_bgr):
+        data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
+        return cls.from_yuv(width, height, data_yuv)
+
+    def to_yuv(self):
+        # truncating the data as a workaround for #10
+        data_len = math.ceil(self.height * 12 / 8 * self.width)
+        data = self.data[0:data_len]
+        data_flat = numpy.frombuffer(data, numpy.uint8)
+        data_yuv = data_flat.reshape((math.ceil(self.height * 12 / 8), self.width))
+        return data_yuv
+
+    def to_bgr(self):
+        data_yuv = self.to_yuv()
+        data_bgr = cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_YV12)
+        return data_bgr
+
+
 class BlueVideoStreamTrack(VideoStreamTrack):
 
     def __init__(self, height=_g_height, width=_g_width):
@@ -28,7 +55,7 @@ class BlueVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         data_bgr = numpy.zeros((self.height, self.width, 3), numpy.uint8)
         data_bgr[:, :] = (255, 0, 0)  # (B, G, R)
-        return VideoFrame.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
+        return VideoFrame_.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
 
 
 class GreenVideoStreamTrack(VideoStreamTrack):
@@ -40,7 +67,7 @@ class GreenVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         data_bgr = numpy.zeros((self.height, self.width, 3), numpy.uint8)
         data_bgr[:, :] = (0, 255, 0)  # (B, G, R)
-        return VideoFrame.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
+        return VideoFrame_.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
 
 
 class RedVideoStreamTrack(VideoStreamTrack):
@@ -52,7 +79,7 @@ class RedVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         data_bgr = numpy.zeros((self.height, self.width, 3), numpy.uint8)
         data_bgr[:, :] = (0, 0, 255)  # (B, G, R)
-        return VideoFrame.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
+        return VideoFrame_.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
 
 
 class CombinedVideoStreamTrack(VideoStreamTrack):
@@ -71,23 +98,17 @@ class CombinedVideoStreamTrack(VideoStreamTrack):
         frames = [await track.recv() for track in self.tracks]
         data_bgrs = [frame.to_bgr() for frame in frames]
         data_bgr = numpy.hstack(data_bgrs)
-        return VideoFrame.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
+        return VideoFrame_.from_bgr(height=self.height, width=self.width, data_bgr=data_bgr)
 
 
-async def consume_audio(track):
-    while True:
-        try:
-            await track.recv()
-        except Exception as e:
-            print(e)
-
-
-async def consume_video(track):
+async def consume_video(track, use_disk=False):
     while True:
         try:
             frame = await track.recv()
+            frame = VideoFrame_(height=frame.height, width=frame.width, data=frame.data)
             data_bgr = frame.to_bgr()
-            cv2.imwrite(_g_path_image, data_bgr)
+            if use_disk:
+                cv2.imwrite(_g_path_image, data_bgr)
         except Exception as e:
             print(e)
 
@@ -113,7 +134,7 @@ def create_pc():
     return pc
 
 
-async def run_answer(pc):
+async def run_answer(pc, use_disk=False):
     done = asyncio.Event()
 
     _consumers = []
@@ -136,18 +157,19 @@ async def run_answer(pc):
 
     @pc.on('track')
     def on_track(track):
-        if track.kind == 'audio':
-            _consumers.append(asyncio.ensure_future(consume_audio(track)))
-        elif track.kind == 'video':
-            _consumers.append(asyncio.ensure_future(consume_video(track)))
+        if track.kind == 'video':
+            _consumers.append(asyncio.ensure_future(consume_video(track, use_disk)))
 
     # receive offer
     print('-- Please enter remote offer --')
     try:
         offer_json = json.loads(input())
-    except json.decoder.JSONDecodeError:
-        with open(_g_path_offer, 'r') as f:
-            offer_json = json.loads(f.read())
+    except json.decoder.JSONDecodeError as e:
+        if use_disk:
+            with open(_g_path_offer, 'r') as f:
+                offer_json = json.loads(f.read())
+        else:
+            raise e
     await pc.setRemoteDescription(RTCSessionDescription(
         sdp=offer_json['sdp'],
         type=offer_json['type']))
@@ -162,11 +184,12 @@ async def run_answer(pc):
         'type': answer.type
     }))
     print()
-    with open(_g_path_answer, 'w') as f:
-        f.write(json.dumps({
-            'sdp': answer.sdp,
-            'type': answer.type
-        }))
+    if use_disk:
+        with open(_g_path_answer, 'w') as f:
+            f.write(json.dumps({
+                'sdp': answer.sdp,
+                'type': answer.type
+            }))
 
     await done.wait()
 
@@ -174,7 +197,7 @@ async def run_answer(pc):
         c.cancel()
 
 
-async def run_offer(pc):
+async def run_offer(pc, use_disk=False):
     done = asyncio.Event()
 
     channel = pc.createDataChannel('chat')
@@ -204,19 +227,23 @@ async def run_offer(pc):
         'type': offer.type
     }))
     print()
-    with open(_g_path_offer, 'w') as f:
-        f.write(json.dumps({
-            'sdp': offer.sdp,
-            'type': offer.type
-        }))
+    if use_disk:
+        with open(_g_path_offer, 'w') as f:
+            f.write(json.dumps({
+                'sdp': offer.sdp,
+                'type': offer.type
+            }))
 
     # receive answer
     print('-- Please enter remote answer --')
     try:
         answer_json = json.loads(input())
-    except json.decoder.JSONDecodeError:
-        with open(_g_path_answer, 'r') as f:
-            answer_json = json.loads(f.read())
+    except json.decoder.JSONDecodeError as e:
+        if use_disk:
+            with open(_g_path_answer, 'r') as f:
+                answer_json = json.loads(f.read())
+        else:
+            raise e
     await pc.setRemoteDescription(RTCSessionDescription(
         sdp=answer_json['sdp'],
         type=answer_json['type']))
@@ -241,6 +268,7 @@ async def run_offer(pc):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data channels with copy-and-paste signaling')
     parser.add_argument('role', choices=['offer', 'answer'])
+    parser.add_argument('--disk', '-d', action='store_true')
     parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
 
@@ -249,9 +277,9 @@ if __name__ == '__main__':
 
     pc = create_pc()
     if args.role == 'offer':
-        coro = run_offer(pc)
+        coro = run_offer(pc, args.disk)
     else:
-        coro = run_answer(pc)
+        coro = run_answer(pc, args.disk)
 
     # run event loop
     loop = asyncio.get_event_loop()
