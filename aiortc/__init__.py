@@ -3,8 +3,8 @@ from .mediastreams import AudioStreamTrack, VideoStreamTrack  # noqa
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters  # noqa
 from .rtcdtlstransport import (RTCCertificate, RTCDtlsFingerprint,  # noqa
                                RTCDtlsParameters, RTCDtlsTransport)
-from .rtcicetransport import (RTCIceGatherer, RTCIceParameters,  # noqa
-                              RTCIceTransport)
+from .rtcicetransport import (RTCIceCandidate, RTCIceGatherer,  # noqa
+                              RTCIceParameters, RTCIceTransport)
 from .rtcpeerconnection import RTCPeerConnection  # noqa
 from .rtcrtpparameters import RTCRtpParameters  # noqa
 from .rtcrtpreceiver import RTCRtpReceiver  # noqa

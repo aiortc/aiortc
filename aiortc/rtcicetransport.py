@@ -1,3 +1,5 @@
+import asyncio
+
 import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
@@ -141,12 +143,18 @@ class RTCIceTransport(EventEmitter):
         """
         return self.__state
 
+    def addRemoteCandidate(self, candidate):
+        """
+        Add a remote candidate.
+        """
+        self._connection.remote_candidates += [candidate_to_aioice(candidate)]
+
     def getRemoteCandidates(self):
         """
         Retrieve the list of candidates associated with the remote
         :class:`RTCIceTransport`.
         """
-        return self._connection.remote_candidates
+        return [candidate_from_aioice(x) for x in self._connection.remote_candidates]
 
     def setRemoteCandidates(self, remoteCandidates):
         """

@@ -117,6 +117,13 @@ class RTCPeerConnection(EventEmitter):
     def signalingState(self):
         return self.__signalingState
 
+    def addIceCandidate(self, candidate):
+        for i, transceiver in enumerate(self.__transceivers):
+            if i == candidate.sdpMLineIndex:
+                iceTransport = transceiver._transport.transport
+                iceTransport.addRemoteCandidate(candidate)
+                asyncio.ensure_future(self.__connect())
+
     def addTrack(self, track):
         """
         Add a :class:`MediaStreamTrack` to the set of media tracks which
