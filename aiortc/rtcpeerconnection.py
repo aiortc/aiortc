@@ -307,6 +307,7 @@ class RTCPeerConnection(EventEmitter):
                         transceiver = t
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
+                if not self.__initialOfferer:
                     transceiver.mid = media.mid
 
                 # negotiate codecs
@@ -327,6 +328,7 @@ class RTCPeerConnection(EventEmitter):
             elif media.kind == 'application':
                 if not self.__sctp:
                     self.__createSctpTransport()
+                if not self.__initialOfferer:
                     self.__sctp.mid = media.mid
 
                 # configure sctp
