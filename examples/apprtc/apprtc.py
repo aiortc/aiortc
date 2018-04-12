@@ -24,17 +24,20 @@ class Signaling:
         await self.websocket.send(json.dumps(data))
 
     async def send_description(self, description):
+        message = json.dumps({
+            'sdp': description.sdp,
+            'type': description.type
+        })
+        print('>', message)
         await self.send({
             'cmd': 'send',
-            'msg': json.dumps({
-                'sdp': description.sdp,
-                'type': description.type
-            })
+            'msg': message
         })
 
 
 async def consume_signaling(signaling, pc, params):
     async def handle_message(message):
+        print('<', message)
         if message['type'] == 'offer':
             await pc.setRemoteDescription(RTCSessionDescription(**message))
             await pc.setLocalDescription(await pc.createAnswer())
