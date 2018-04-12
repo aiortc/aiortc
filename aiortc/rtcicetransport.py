@@ -1,5 +1,3 @@
-import asyncio
-
 import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
