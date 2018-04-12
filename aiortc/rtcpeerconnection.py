@@ -46,27 +46,21 @@ def get_ntp_seconds():
     ).total_seconds())
 
 
-def transport_sdp(iceTransport, dtlsTransport):
-    sdp = []
+def add_transport_description(media, iceTransport, dtlsTransport):
+    # ice
     iceGatherer = iceTransport.iceGatherer
-    for candidate in iceGatherer.getLocalCandidates():
-        sdp += ['a=candidate:%s' % candidate.to_sdp()]
-    sdp += ['a=end-of-candidates']
-    sdp += [
-        'a=ice-pwd:%s' % iceGatherer.getLocalParameters().password,
-        'a=ice-ufrag:%s' % iceGatherer.getLocalParameters().usernameFragment,
-    ]
+    media.ice_candidates = iceGatherer.getLocalCandidates()
+    media.ice_candidates_complete = True
+    media.ice.usernameFragment = iceGatherer.getLocalParameters().usernameFragment
+    media.ice.password = iceGatherer.getLocalParameters().password
 
+    # dtls
     dtls_parameters = dtlsTransport.getLocalParameters()
-    for fingerprint in dtls_parameters.fingerprints:
-        sdp += ['a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value)]
-
+    media.dtls.fingerprints = dtls_parameters.fingerprints
     if iceTransport.role == 'controlling':
-        sdp += ['a=setup:actpass']
+        media.dtls.role = 'auto'
     else:
-        sdp += ['a=setup:active']
-
-    return sdp
+        media.dtls.role = 'client'
 
 
 class RTCPeerConnection(EventEmitter):
@@ -378,12 +372,8 @@ class RTCPeerConnection(EventEmitter):
 
     def __createSdp(self):
         ntp_seconds = get_ntp_seconds()
-        sdp = [
-            'v=0',
-            'o=- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds),
-            's=-',
-            't=0 0',
-        ]
+        description = sdp.SessionDescription()
+        description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
 
         for transceiver in self.__transceivers:
             iceTransport = transceiver._transport.transport
@@ -392,21 +382,23 @@ class RTCPeerConnection(EventEmitter):
                 default_candidate = candidates[0]
             else:
                 default_candidate = DUMMY_CANDIDATE
-            sdp += [
-                'm=%s %d UDP/TLS/RTP/SAVPF %s' % (
-                    transceiver.kind,
-                    default_candidate.port,
-                    ' '.join([str(c.payloadType) for c in transceiver._codecs])),
-                'c=IN IP4 %s' % default_candidate.host,
-                'a=rtcp:9 IN IP4 0.0.0.0',
-                'a=rtcp-mux',
-            ]
-            sdp += transport_sdp(iceTransport, transceiver._transport)
-            sdp += ['a=%s' % transceiver.direction]
-            sdp += ['a=ssrc:%d cname:%s' % (transceiver.sender._ssrc, self.__cname)]
 
-            for codec in transceiver._codecs:
-                sdp += ['a=rtpmap:%d %s' % (codec.payloadType, str(codec))]
+            media = sdp.MediaDescription(
+                kind=transceiver.kind,
+                port=default_candidate.port,
+                profile='UDP/TLS/RTP/SAVPF',
+                fmt=[c.payloadType for c in transceiver._codecs])
+            media.host = default_candidate.host
+            media.direction = transceiver.direction
+            media.rtcp_host = '0.0.0.0'
+            media.rtcp_port = 9
+            media.rtcp.cname = self.__cname
+            media.rtcp.ssrc = transceiver.sender._ssrc
+            media.rtcp.mux = True
+            media.rtp.codecs = transceiver._codecs
+            add_transport_description(media, iceTransport, transceiver._transport)
+
+            description.media.append(media)
 
         if self.__sctp:
             iceTransport = self.__sctp.transport.transport
@@ -415,16 +407,20 @@ class RTCPeerConnection(EventEmitter):
                 default_candidate = candidates[0]
             else:
                 default_candidate = DUMMY_CANDIDATE
-            sdp += [
-                'm=application %d DTLS/SCTP %d' % (default_candidate.port, self.__sctp.port),
-                'c=IN IP4 %s' % default_candidate.host,
-            ]
-            sdp += transport_sdp(iceTransport, self.__sctp.transport)
-            sdp += ['a=sctpmap:%s webrtc-datachannel %d' % (
-                self.__sctp.port, self.__sctp.outbound_streams)]
-            sdp += ['a=max-message-size:%d' % self.__sctp.getCapabilities().maxMessageSize]
 
-        return '\r\n'.join(sdp) + '\r\n'
+            media = sdp.MediaDescription(
+                kind='application',
+                port=default_candidate.port,
+                profile='DTLS/SCTP',
+                fmt=[self.__sctp.port])
+            media.host = default_candidate.host
+            media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
+            media.sctpCapabilities = self.__sctp.getCapabilities()
+            add_transport_description(media, iceTransport, self.__sctp.transport)
+
+            description.media.append(media)
+
+        return str(description)
 
     def __createTransceiver(self, kind, sender_track=None):
         dtlsTransport = self.__createDtlsTransport()

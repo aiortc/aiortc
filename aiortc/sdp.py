@@ -115,6 +115,10 @@ class MediaDescription:
 
 class SessionDescription:
     def __init__(self):
+        self.version = 0
+        self.origin = None
+        self.name = '-'
+        self.time = '0 0'
         self.media = []
 
     @classmethod
@@ -207,3 +211,12 @@ class SessionDescription:
                             value=fingerprint))
 
         return session
+
+    def __str__(self):
+        lines = [
+            'v=%d' % self.version,
+            'o=%s' % self.origin,
+            's=%s' % self.name,
+            't=%s' % self.time,
+        ]
+        return '\r\n'.join(lines) + '\r\n' + ''.join([str(m) for m in self.media])
