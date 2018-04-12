@@ -57,6 +57,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].port, 45076)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].mid, 'audio')
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
@@ -83,6 +84,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
+        self.assertEqual(d.media[0].ice_candidates_complete, False)
         self.assertEqual(d.media[0].ice.usernameFragment, '5+Ix')
         self.assertEqual(d.media[0].ice.password, 'uK8IlylxzDMUhrkVzdmj0M+v')
 
@@ -97,6 +99,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(str(d.media[0]), lf2crlf("""m=audio 45076 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126
 c=IN IP4 192.168.99.58
 a=sendrecv
+a=mid:audio
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
 a=rtpmap:111 opus/48000/2
@@ -168,6 +171,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].port, 45274)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].mid, 'sdparta_0')
         self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
         self.assertEqual(d.media[0].rtcp_port, 38612)
         self.assertEqual(d.media[0].rtcp_mux, True)
@@ -186,6 +190,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 8)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice.usernameFragment, '403a81e1')
         self.assertEqual(d.media[0].ice.password, 'f9b83487285016f7492197a5790ceee5')
 
@@ -236,6 +241,7 @@ a=max-message-size:1073741823
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
         self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
 
@@ -250,12 +256,14 @@ a=max-message-size:1073741823
         self.assertEqual(str(d.media[0]), lf2crlf("""m=application 45791 DTLS/SCTP 5000
 c=IN IP4 192.168.99.58
 a=sendrecv
+a=mid:sdparta_0
 a=sctpmap:5000 webrtc-datachannel 256
 a=max-message-size:1073741823
 a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
 a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
 a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
 a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=end-of-candidates
 a=ice-ufrag:9889e0c4
 a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74

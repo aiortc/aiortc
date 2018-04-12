@@ -41,6 +41,7 @@ class MediaDescription:
         self.host = None
         self.profile = profile
         self.direction = None
+        self.mid = None
 
         # rtcp
         self.rtcp_port = None
@@ -61,6 +62,7 @@ class MediaDescription:
         # ICE
         self.ice = RTCIceParameters()
         self.ice_candidates = []
+        self.ice_candidates_complete = False
 
     def __str__(self):
         lines = []
@@ -73,6 +75,9 @@ class MediaDescription:
         lines.append('c=%s' % ipaddress_to_sdp(self.host))
         if self.direction is not None:
             lines.append('a=' + self.direction)
+
+        if self.mid is not None:
+            lines.append('a=mid:' + self.mid)
 
         if self.rtcp_port is not None and self.rtcp_host is not None:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
@@ -90,6 +95,8 @@ class MediaDescription:
         # ice
         for candidate in self.ice_candidates:
             lines.append('a=candidate:' + candidate.to_sdp())
+        if self.ice_candidates_complete:
+            lines.append('a=end-of-candidates')
         if self.ice.usernameFragment is not None:
             lines.append('a=ice-ufrag:' + self.ice.usernameFragment)
         if self.ice.password is not None:
@@ -143,6 +150,8 @@ class SessionDescription:
                 if current_media:
                     if attr == 'candidate':
                         current_media.ice_candidates.append(RTCIceCandidate.from_sdp(value))
+                    elif attr == 'end-of-candidates':
+                        current_media.ice_candidates_complete = True
                     elif attr == 'fingerprint':
                         algorithm, fingerprint = value.split()
                         current_media.dtls.fingerprints.append(RTCDtlsFingerprint(
@@ -155,6 +164,8 @@ class SessionDescription:
                     elif attr == 'max-message-size':
                         current_media.sctpCapabilities = RTCSctpCapabilities(
                             maxMessageSize=int(value))
+                    elif attr == 'mid':
+                        current_media.mid = value
                     elif attr == 'rtcp':
                         port, rest = value.split(' ', 1)
                         current_media.rtcp_port = int(port)
