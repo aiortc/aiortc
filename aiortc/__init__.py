@@ -9,5 +9,6 @@ from .rtcpeerconnection import RTCPeerConnection  # noqa
 from .rtcrtpparameters import RTCRtpParameters  # noqa
 from .rtcrtpreceiver import RTCRtpReceiver  # noqa
 from .rtcrtpsender import RTCRtpSender  # noqa
+from .rtcrtptransceiver import RTCRtpTransceiver  # noqa
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport  # noqa
 from .rtcsessiondescription import RTCSessionDescription  # noqa

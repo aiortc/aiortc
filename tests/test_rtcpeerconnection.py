@@ -82,6 +82,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertIsNotNone(sender)
         self.assertEqual(sender.track, track)
         self.assertEqual(pc.getSenders(), [sender])
+        self.assertEqual(len(pc.getTransceivers()), 1)
 
         # try to add same track again
         with self.assertRaises(InvalidAccessError) as cm:
@@ -110,6 +111,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertIsNotNone(video_sender)
         self.assertEqual(video_sender.track, video_track)
         self.assertEqual(pc.getSenders(), [video_sender])
+        self.assertEqual(len(pc.getTransceivers()), 1)
 
         # try to add same track again
         with self.assertRaises(InvalidAccessError) as cm:
@@ -127,6 +129,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertIsNotNone(audio_sender)
         self.assertEqual(audio_sender.track, audio_track)
         self.assertEqual(pc.getSenders(), [video_sender, audio_sender])
+        self.assertEqual(len(pc.getTransceivers()), 2)
 
     def test_addTrack_closed(self):
         pc = RTCPeerConnection()
@@ -186,6 +189,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -471,7 +475,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 0)
         self.assertEqual(len(pc2.getSenders()), 0)
-        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getTransceivers()), 0)
 
         # create answer
         answer = run(pc2.createAnswer())

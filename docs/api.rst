@@ -48,6 +48,9 @@ Real-time Transport Protocol (RTP)
    .. autoclass:: RTCRtpSender
       :members:
 
+   .. autoclass:: RTCRtpTransceiver
+      :members:
+
    .. autoclass:: RTCRtpParameters()
       :members:
 

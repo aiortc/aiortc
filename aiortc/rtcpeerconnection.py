@@ -229,10 +229,25 @@ class RTCPeerConnection(EventEmitter):
             type='offer')
 
     def getReceivers(self):
+        """
+        Returns the list of :class:`RTCRtpReceiver` objects that are currently
+        attached to the connection.
+        """
         return list(map(lambda x: x.receiver, self.__transceivers))
 
     def getSenders(self):
+        """
+        Returns the list of :class:`RTCRtpSender` objects that are currently
+        attached to the connection.
+        """
         return list(map(lambda x: x.sender, self.__transceivers))
+
+    def getTransceivers(self):
+        """
+        Returns the list of :class:`RTCRtpTransceiver` objects that are currently
+        attached to the connection.
+        """
+        return list(self.__transceivers)
 
     async def setLocalDescription(self, sessionDescription):
         """
