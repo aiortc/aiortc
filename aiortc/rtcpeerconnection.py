@@ -20,9 +20,9 @@ from .rtcsessiondescription import RTCSessionDescription
 DUMMY_CANDIDATE = RTCIceCandidate(
     foundation='',
     component=1,
-    transport='udp',
+    protocol='udp',
     priority=1,
-    host='0.0.0.0',
+    ip='0.0.0.0',
     port=0,
     type='host')
 MEDIA_KINDS = ['audio', 'video']
@@ -392,7 +392,7 @@ class RTCPeerConnection(EventEmitter):
                 port=default_candidate.port,
                 profile='UDP/TLS/RTP/SAVPF',
                 fmt=[c.payloadType for c in transceiver._codecs])
-            media.host = default_candidate.host
+            media.host = default_candidate.ip
             media.direction = transceiver.direction
             media.mid = transceiver.mid
             media.rtcp_host = '0.0.0.0'
@@ -418,7 +418,7 @@ class RTCPeerConnection(EventEmitter):
                 port=default_candidate.port,
                 profile='DTLS/SCTP',
                 fmt=[self.__sctp.port])
-            media.host = default_candidate.host
+            media.host = default_candidate.ip
             media.mid = self.__sctp.mid
             media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
             media.sctpCapabilities = self.__sctp.getCapabilities()

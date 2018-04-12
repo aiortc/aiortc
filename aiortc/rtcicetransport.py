@@ -1,7 +1,43 @@
 import attr
-from aioice import Candidate as RTCIceCandidate  # noqa
-from aioice import Connection
+from aioice import Candidate, Connection
 from pyee import EventEmitter
+
+
+@attr.s
+class RTCIceCandidate:
+    component = attr.ib()
+    foundation = attr.ib()
+    ip = attr.ib()
+    port = attr.ib()
+    priority = attr.ib()
+    protocol = attr.ib()
+    type = attr.ib()
+    sdpMLineIndex = attr.ib(default=None)
+    tcpType = attr.ib(default=None)
+
+
+def candidate_from_aioice(x):
+    return RTCIceCandidate(
+        component=x.component,
+        foundation=x.foundation,
+        ip=x.host,
+        port=x.port,
+        priority=x.priority,
+        protocol=x.transport,
+        tcpType=x.tcptype,
+        type=x.type)
+
+
+def candidate_to_aioice(x):
+    return Candidate(
+        component=x.component,
+        foundation=x.foundation,
+        host=x.ip,
+        port=x.port,
+        priority=x.priority,
+        transport=x.protocol,
+        tcptype=x.tcpType,
+        type=x.type)
 
 
 class RTCIceGatherer(EventEmitter):
@@ -38,7 +74,7 @@ class RTCIceGatherer(EventEmitter):
         Retrieve the list of valid local candidates associated with the ICE
         gatherer.
         """
-        return self._connection.local_candidates
+        return [candidate_from_aioice(x) for x in self._connection.local_candidates]
 
     def getLocalParameters(self):
         """
@@ -117,7 +153,7 @@ class RTCIceTransport(EventEmitter):
         Set the list of candidates associated with the remote
         :class:`RTCIceTransport`.
         """
-        self._connection.remote_candidates = remoteCandidates
+        self._connection.remote_candidates = [candidate_to_aioice(x) for x in remoteCandidates]
 
     async def start(self, remoteParameters):
         """

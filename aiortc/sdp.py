@@ -23,6 +23,41 @@ DTLS_ROLE_SETUP = {
 DTLS_SETUP_ROLE = dict([(v, k) for (k, v) in DTLS_ROLE_SETUP.items()])
 
 
+def candidate_from_sdp(sdp):
+    bits = sdp.split()
+    assert len(bits) >= 8
+
+    candidate = RTCIceCandidate(
+        component=int(bits[1]),
+        foundation=bits[0],
+        ip=bits[4],
+        port=int(bits[5]),
+        priority=int(bits[3]),
+        protocol=bits[2],
+        type=bits[7])
+
+    for i in range(8, len(bits) - 1, 2):
+        if bits[i] == 'tcptype':
+            candidate.tcpType = bits[i + 1]
+
+    return candidate
+
+
+def candidate_to_sdp(candidate):
+    sdp = '%s %d %s %d %s %d typ %s' % (
+        candidate.foundation,
+        candidate.component,
+        candidate.protocol,
+        candidate.priority,
+        candidate.ip,
+        candidate.port,
+        candidate.type)
+
+    if candidate.tcpType:
+        sdp += ' tcptype %s' % candidate.tcpType
+    return sdp
+
+
 def ipaddress_from_sdp(sdp):
     m = re.match('^IN (IP4|IP6) ([^ ]+)$', sdp)
     assert m
@@ -97,7 +132,7 @@ class MediaDescription:
 
         # ice
         for candidate in self.ice_candidates:
-            lines.append('a=candidate:' + candidate.to_sdp())
+            lines.append('a=candidate:' + candidate_to_sdp(candidate))
         if self.ice_candidates_complete:
             lines.append('a=end-of-candidates')
         if self.ice.usernameFragment is not None:
@@ -156,7 +191,7 @@ class SessionDescription:
                     attr = line[2:]
                 if current_media:
                     if attr == 'candidate':
-                        current_media.ice_candidates.append(RTCIceCandidate.from_sdp(value))
+                        current_media.ice_candidates.append(candidate_from_sdp(value))
                     elif attr == 'end-of-candidates':
                         current_media.ice_candidates_complete = True
                     elif attr == 'fingerprint':
