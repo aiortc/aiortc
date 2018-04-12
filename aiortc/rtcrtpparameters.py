@@ -34,6 +34,13 @@ class RTCRtpCapabilities:
 
 
 @attr.s
+class RTCRtcpParameters:
+    cname = attr.ib(default=None)
+    mux = attr.ib(default=False)
+    ssrc = attr.ib(default=None)
+
+
+@attr.s
 class RTCRtpParameters:
     """
     The :class:`RTCRtpParameters` dictionary describes the configuration of

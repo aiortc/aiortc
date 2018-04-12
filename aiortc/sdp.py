@@ -4,7 +4,8 @@ import re
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
-from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
+from .rtcrtpparameters import (RTCRtcpParameters, RTCRtpCodecParameters,
+                               RTCRtpParameters)
 from .rtcsctptransport import RTCSctpCapabilities
 
 DIRECTIONS = [
@@ -44,9 +45,9 @@ class MediaDescription:
         self.mid = None
 
         # rtcp
+        self.rtcp = RTCRtcpParameters()
         self.rtcp_port = None
         self.rtcp_host = None
-        self.rtcp_mux = False
 
         # formats
         self.fmt = fmt
@@ -81,8 +82,10 @@ class MediaDescription:
 
         if self.rtcp_port is not None and self.rtcp_host is not None:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
-        if self.rtcp_mux:
-            lines.append('a=rtcp-mux')
+            if self.rtcp.mux:
+                lines.append('a=rtcp-mux')
+            if self.rtcp.ssrc and self.rtcp.cname:
+                lines.append('a=ssrc:%d cname:%s' % (self.rtcp.ssrc, self.rtcp.cname))
 
         for codec in self.rtp.codecs:
             lines.append('a=rtpmap:%d %s' % (codec.payloadType, codec))
@@ -171,7 +174,7 @@ class SessionDescription:
                         current_media.rtcp_port = int(port)
                         current_media.rtcp_host = ipaddress_from_sdp(rest)
                     elif attr == 'rtcp-mux':
-                        current_media.rtcp_mux = True
+                        current_media.rtcp.mux = True
                     elif attr == 'setup':
                         current_media.dtls.role = DTLS_SETUP_ROLE[value]
                     elif attr in DIRECTIONS:
@@ -189,6 +192,12 @@ class SessionDescription:
                     elif attr == 'sctpmap':
                         format_id, format_desc = value.split(' ', 1)
                         getattr(current_media, attr)[int(format_id)] = format_desc
+                    elif attr == 'ssrc':
+                        ssrc, ssrc_desc = value.split(' ', 1)
+                        ssrc_attr, ssrc_value = ssrc_desc.split(':')
+                        if ssrc_attr == 'cname':
+                            current_media.rtcp.cname = ssrc_value
+                            current_media.rtcp.ssrc = int(ssrc)
                 else:
                     # session-level attributes
                     if attr == 'fingerprint':

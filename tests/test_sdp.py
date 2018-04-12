@@ -60,7 +60,9 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].mid, 'audio')
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
-        self.assertEqual(d.media[0].rtcp_mux, True)
+        self.assertEqual(d.media[0].rtcp.cname, '/vC4ULAr8vHNjXmq')
+        self.assertEqual(d.media[0].rtcp.mux, True)
+        self.assertEqual(d.media[0].rtcp.ssrc, 1944796561)
 
         # formats
         self.assertEqual(d.media[0].fmt, [
@@ -102,6 +104,7 @@ a=sendrecv
 a=mid:audio
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
+a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=rtpmap:111 opus/48000/2
 a=rtpmap:103 ISAC/16000
 a=rtpmap:104 ISAC/32000
@@ -174,7 +177,9 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].mid, 'sdparta_0')
         self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
         self.assertEqual(d.media[0].rtcp_port, 38612)
-        self.assertEqual(d.media[0].rtcp_mux, True)
+        self.assertEqual(d.media[0].rtcp.cname, '{ed463ac5-dabf-44d4-8b9f-e14318427b2b}')
+        self.assertEqual(d.media[0].rtcp.mux, True)
+        self.assertEqual(d.media[0].rtcp.ssrc, 882128807)
 
         # formats
         self.assertEqual(d.media[0].fmt, [
