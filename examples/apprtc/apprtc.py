@@ -1,12 +1,13 @@
 import argparse
 import asyncio
 import json
+import logging
 
 import requests
 import websockets
 
-from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc.sdp import candidate_from_sdp
 
 
 class Signaling:
@@ -21,6 +22,37 @@ class Signaling:
 
     async def send(self, data):
         await self.websocket.send(json.dumps(data))
+
+    async def send_description(self, description):
+        await self.send({
+            'cmd': 'send',
+            'msg': json.dumps({
+                'sdp': description.sdp,
+                'type': description.type
+            })
+        })
+
+
+async def consume_signaling(signaling, pc, params):
+    async def handle_message(message):
+        if message['type'] == 'offer':
+            await pc.setRemoteDescription(RTCSessionDescription(**message))
+            await pc.setLocalDescription(await pc.createAnswer())
+            await signaling.send_description(pc.localDescription)
+        elif message['type'] == 'answer':
+            await pc.setRemoteDescription(RTCSessionDescription(**message))
+        elif message['type'] == 'candidate':
+            candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
+            candidate.sdpMLineIndex = message['label']
+            pc.addIceCandidate(candidate)
+
+    for data in params['messages']:
+        message = json.loads(data)
+        await handle_message(message)
+    while True:
+        data = await signaling.recv()
+        message = json.loads(data['msg'])
+        await handle_message(message)
 
 
 async def consume_audio(track):
@@ -52,7 +84,6 @@ async def join_room(room):
 
     # create peer conection
     pc = RTCPeerConnection()
-    pc.addTrack(AudioStreamTrack())
     pc.addTrack(VideoStreamTrack())
 
     @pc.on('track')
@@ -72,40 +103,15 @@ async def join_room(room):
     })
 
     if params['is_initiator'] == 'true':
-        print('Please point a browser at %s' % params['room_link'])
-
         # send offer
         await pc.setLocalDescription(await pc.createOffer())
-        await signaling.send({
-            'cmd': 'send',
-            'msg': json.dumps({
-                'sdp': pc.localDescription.sdp,
-                'type': pc.localDescription.type
-            })
-        })
+        await signaling.send_description(pc.localDescription)
+        print('Please point a browser at %s' % params['room_link'] + '?audio=false')
 
-        # handle answer
-        data = await signaling.recv()
-        answer = json.loads(data['msg'])
-        await pc.setRemoteDescription(RTCSessionDescription(**answer))
-    else:
-        # handle offer
-        offer = json.loads(params['messages'][0])
-        await pc.setRemoteDescription(RTCSessionDescription(**offer))
+    asyncio.ensure_future(consume_signaling(signaling, pc, params))
 
-        # send answer
-        await pc.setLocalDescription(await pc.createAnswer())
-        await signaling.send({
-            'cmd': 'send',
-            'msg': json.dumps({
-                'sdp': pc.localDescription.sdp,
-                'type': pc.localDescription.type
-            })
-        })
-
-    # receive 10s of media
-    print('Receiving media')
-    await asyncio.sleep(10)
+    # receive 60s of media
+    await asyncio.sleep(60)
 
     # shutdown
     print('Shutting down')
@@ -116,6 +122,10 @@ async def join_room(room):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AppRTC')
     parser.add_argument('room')
+    parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
 
     asyncio.get_event_loop().run_until_complete(join_room(args.room))
