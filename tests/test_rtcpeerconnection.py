@@ -179,6 +179,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertTrue('a=mid:audio' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -200,6 +201,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=recvonly' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertTrue('a=mid:audio' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -264,6 +266,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertTrue('a=mid:audio' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -285,6 +288,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertTrue('a=mid:audio' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -349,6 +353,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertTrue('a=mid:video' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -370,6 +375,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertTrue('a=mid:video' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

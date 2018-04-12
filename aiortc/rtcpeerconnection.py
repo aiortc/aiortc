@@ -141,6 +141,7 @@ class RTCPeerConnection(EventEmitter):
                     raise InternalError('Only a single %s track is supported for now' % track.kind)
 
         transceiver = self.__createTransceiver(kind=track.kind, sender_track=track)
+        transceiver.mid = track.kind
         return transceiver.sender
 
     async def close(self):
@@ -186,6 +187,7 @@ class RTCPeerConnection(EventEmitter):
         """
         if not self.__sctp:
             self.__createSctpTransport()
+            self.__sctp.mid = 'data'
 
         parameters = RTCDataChannelParameters(label=label, protocol=protocol)
         return RTCDataChannel(self.__sctp, parameters)
@@ -283,6 +285,7 @@ class RTCPeerConnection(EventEmitter):
                         transceiver = t
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
+                    transceiver.mid = media.mid
 
                 # negotiate codecs
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
@@ -302,6 +305,7 @@ class RTCPeerConnection(EventEmitter):
             elif media.kind == 'application':
                 if not self.__sctp:
                     self.__createSctpTransport()
+                    self.__sctp.mid = media.mid
 
                 # configure sctp
                 self.__sctpRemotePort = media.fmt[0]
@@ -390,6 +394,7 @@ class RTCPeerConnection(EventEmitter):
                 fmt=[c.payloadType for c in transceiver._codecs])
             media.host = default_candidate.host
             media.direction = transceiver.direction
+            media.mid = transceiver.mid
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
             media.rtcp.cname = self.__cname
@@ -414,6 +419,7 @@ class RTCPeerConnection(EventEmitter):
                 profile='DTLS/SCTP',
                 fmt=[self.__sctp.port])
             media.host = default_candidate.host
+            media.mid = self.__sctp.mid
             media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
             media.sctpCapabilities = self.__sctp.getCapabilities()
             add_transport_description(media, iceTransport, self.__sctp.transport)
