@@ -6,7 +6,8 @@ import logging
 import requests
 import websockets
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
+                    VideoStreamTrack)
 from aiortc.sdp import candidate_from_sdp
 
 
@@ -87,6 +88,7 @@ async def join_room(room):
 
     # create peer conection
     pc = RTCPeerConnection()
+    pc.addTrack(AudioStreamTrack())
     pc.addTrack(VideoStreamTrack())
 
     @pc.on('track')
@@ -109,7 +111,7 @@ async def join_room(room):
         # send offer
         await pc.setLocalDescription(await pc.createOffer())
         await signaling.send_description(pc.localDescription)
-        print('Please point a browser at %s' % params['room_link'] + '?audio=false')
+        print('Please point a browser at %s' % params['room_link'])
 
     asyncio.ensure_future(consume_signaling(signaling, pc, params))
 
