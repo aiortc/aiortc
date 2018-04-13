@@ -30,6 +30,7 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
+        self.__started = False
         self.__stopped = asyncio.Event()
         self.__transport = transport
 
@@ -55,13 +56,18 @@ class RTCRtpSender:
     def replaceTrack(self, track):
         self._track = track
 
+    def setTransport(self, transport):
+        self.__transport = transport
+
     async def send(self, parameters):
         """
         Attempt to set the parameters controlling the sending of media.
 
         :param: parameters: The :class:`RTCRtpParameters` for the sender.
         """
-        asyncio.ensure_future(self._run(parameters.codecs[0]))
+        if not self.__started:
+            asyncio.ensure_future(self._run(parameters.codecs[0]))
+            self.__started = True
 
     def stop(self):
         """
@@ -70,6 +76,8 @@ class RTCRtpSender:
         self.__stopped.set()
 
     async def _run(self, codec):
+        logger.debug('sender(%s) - started' % self._kind)
+
         encoder = get_encoder(codec)
         packet = RtpPacket(payload_type=codec.payloadType)
         while not self.__stopped.is_set():
