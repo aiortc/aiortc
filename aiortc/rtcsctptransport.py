@@ -453,6 +453,7 @@ class RTCSctpTransport(EventEmitter):
         self.state = self.State.CLOSED
         self.__transport = transport
         self.closed = asyncio.Event()
+        self._started = False
 
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
@@ -524,8 +525,10 @@ class RTCSctpTransport(EventEmitter):
         """
         Start the transport.
         """
-        self._remote_port = remotePort
-        asyncio.ensure_future(self.__run())
+        if not self._started:
+            self._remote_port = remotePort
+            asyncio.ensure_future(self.__run())
+            self._started = True
 
     async def stop(self):
         """
