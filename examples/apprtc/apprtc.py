@@ -6,8 +6,8 @@ import logging
 import requests
 import websockets
 
-from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import (AudioStreamTrack, RTCConfiguration, RTCPeerConnection,
+                    RTCSessionDescription, VideoStreamTrack)
 from aiortc.sdp import candidate_from_sdp
 
 
@@ -87,7 +87,8 @@ async def join_room(room):
     params = data['params']
 
     # create peer conection
-    pc = RTCPeerConnection()
+    pc_config = json.loads(params['pc_config'])
+    pc = RTCPeerConnection(RTCConfiguration(bundlePolicy=pc_config['bundlePolicy']))
     pc.addTrack(AudioStreamTrack())
     pc.addTrack(VideoStreamTrack())
 
