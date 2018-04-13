@@ -343,6 +343,30 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteDtls[self.__sctp] = media.dtls
                 self.__remoteIce[self.__sctp] = media.ice
 
+        # remove bundled transports
+        if (self.__configuration.bundlePolicy != 'max-compat' and
+           len(parsedRemoteDescription.bundle) > 1):
+            masterMid = parsedRemoteDescription.bundle[0]
+            masterTransport = None
+            for transceiver in self.__transceivers:
+                if transceiver.mid == masterMid:
+                    masterTransport = transceiver._transport
+                    break
+
+            oldTransports = set()
+            slaveMids = parsedRemoteDescription.bundle[1:]
+            for transceiver in self.__transceivers:
+                if transceiver.mid in slaveMids and not transceiver._bundled:
+                    oldTransports.add(transceiver._transport)
+                    transceiver.receiver.setTransport(masterTransport)
+                    transceiver.sender.setTransport(masterTransport)
+                    transceiver._bundled = True
+                    transceiver._transport = masterTransport
+            oldIceTransports = set([x.transport for x in oldTransports])
+
+            self.__iceTransports = list(filter(
+                lambda x: x not in oldIceTransports, self.__iceTransports))
+
         # connect
         asyncio.ensure_future(self.__connect())
 
@@ -362,8 +386,9 @@ class RTCPeerConnection(EventEmitter):
 
         if self.iceConnectionState == 'new':
             for transceiver in self.__transceivers:
-                await transceiver._transport.transport.start(self.__remoteIce[transceiver])
-                await transceiver._transport.start(self.__remoteDtls[transceiver])
+                if not transceiver._bundled:
+                    await transceiver._transport.transport.start(self.__remoteIce[transceiver])
+                    await transceiver._transport.start(self.__remoteDtls[transceiver])
                 await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
                 await transceiver.receiver.receive(RTCRtpParameters(codecs=transceiver._codecs))
             if self.__sctp:
@@ -430,6 +455,8 @@ class RTCPeerConnection(EventEmitter):
             add_transport_description(media, iceTransport, transceiver._transport)
 
             description.media.append(media)
+            if self.__configuration.bundlePolicy != 'max-compat':
+                description.bundle.append(media.mid)
 
         if self.__sctp:
             iceTransport = self.__sctp.transport.transport
@@ -451,6 +478,8 @@ class RTCPeerConnection(EventEmitter):
             add_transport_description(media, iceTransport, self.__sctp.transport)
 
             description.media.append(media)
+            if self.__configuration.bundlePolicy != 'max-compat':
+                description.bundle.append(media.mid)
 
         return str(description)
 
@@ -460,6 +489,7 @@ class RTCPeerConnection(EventEmitter):
             kind=kind,
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))
+        transceiver._bundled = False
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver
