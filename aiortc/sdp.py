@@ -154,6 +154,7 @@ class SessionDescription:
         self.origin = None
         self.name = '-'
         self.time = '0 0'
+        self.bundle = []
         self.media = []
 
     @classmethod
@@ -163,6 +164,8 @@ class SessionDescription:
         session = cls()
 
         for line in sdp.splitlines():
+            if line.startswith('o='):
+                session.origin = line.strip()[2:]
             if line.startswith('m='):
                 m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$', line)
                 assert m
@@ -244,6 +247,10 @@ class SessionDescription:
                         dtls_fingerprints.append(RTCDtlsFingerprint(
                             algorithm=algorithm,
                             value=fingerprint))
+                    elif attr == 'group':
+                        bits = value.split()
+                        if bits and bits[0] == 'BUNDLE':
+                            session.bundle = bits[1:]
 
         return session
 
@@ -254,4 +261,6 @@ class SessionDescription:
             's=%s' % self.name,
             't=%s' % self.time,
         ]
+        if self.bundle:
+            lines += ['a=group:BUNDLE ' + (' '.join(self.bundle))]
         return '\r\n'.join(lines) + '\r\n' + ''.join([str(m) for m in self.media])
