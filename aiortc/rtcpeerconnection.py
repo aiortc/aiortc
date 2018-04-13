@@ -7,6 +7,7 @@ from pyee import EventEmitter
 from . import rtp, sdp
 from .codecs import MEDIA_CODECS
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
+from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
@@ -68,10 +69,11 @@ class RTCPeerConnection(EventEmitter):
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
     between the local computer and a remote peer.
     """
-    def __init__(self):
+    def __init__(self, configuration=None):
         super().__init__()
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = '{%s}' % uuid.uuid4()
+        self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports = set()
         self.__initialOfferer = None
         self.__remoteDtls = {}
