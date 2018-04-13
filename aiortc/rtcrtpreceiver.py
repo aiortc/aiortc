@@ -36,6 +36,7 @@ class RTCRtpReceiver:
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
         self._track = None
+        self._started = False
         self._stopped = asyncio.Event()
         self._transport = transport
 
@@ -53,9 +54,14 @@ class RTCRtpReceiver:
 
         :param: parameters: The :class:`RTCRtpParameters` for the receiver.
         """
-        for codec in parameters.codecs:
-            self._decoders[codec.payloadType] = get_decoder(codec)
-        asyncio.ensure_future(self._run())
+        if not self._started:
+            for codec in parameters.codecs:
+                self._decoders[codec.payloadType] = get_decoder(codec)
+            asyncio.ensure_future(self._run())
+            self._started = True
+
+    def setTransport(self, transport):
+        self._transport = transport
 
     def stop(self):
         """
@@ -107,6 +113,8 @@ class RTCRtpReceiver:
                         await self._track._queue.put(video_frame)
 
     async def _run(self):
+        logger.debug('receiver(%s) - started' % self._kind)
+
         while not self._stopped.is_set():
             try:
                 data = await first_completed(self.transport.rtp.recv(), self._stopped.wait())
