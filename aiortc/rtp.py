@@ -4,6 +4,9 @@ from struct import pack, unpack
 FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
+RTP_HEADER_LENGTH = 12
+RTCP_HEADER_LENGTH = 8
+
 RTCP_SR = 200
 RTCP_RR = 201
 RTCP_SDES = 202
@@ -74,8 +77,8 @@ class RtcpPacket:
         while pos < len(data):
             start = pos
 
-            if len(data) < 8:
-                raise ValueError('RTCP packet length is less than 8 bytes')
+            if len(data) < RTCP_HEADER_LENGTH:
+                raise ValueError('RTCP packet length is less than %d bytes' % RTCP_HEADER_LENGTH)
 
             v_p_count, packet_type, length, ssrc = unpack('!BBHL', data[pos:pos + 8])
             version = (v_p_count >> 6)
@@ -143,8 +146,8 @@ class RtpPacket:
 
     @classmethod
     def parse(cls, data):
-        if len(data) < 12:
-            raise ValueError('RTP packet length is less than 12 bytes')
+        if len(data) < RTP_HEADER_LENGTH:
+            raise ValueError('RTP packet length is less than %d bytes' % RTP_HEADER_LENGTH)
 
         v_p_x_cc, m_pt, sequence_number, timestamp, ssrc = unpack('!BBHLL', data[0:12])
         version = (v_p_x_cc >> 6)
