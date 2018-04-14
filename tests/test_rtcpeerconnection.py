@@ -1,7 +1,7 @@
 import asyncio
 from unittest import TestCase
 
-from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
@@ -77,6 +77,16 @@ class RTCRtpCodecParametersTest(TestCase):
 
 
 class RTCPeerConnectionTest(TestCase):
+    def assertBundled(self, pc):
+        transceivers = pc.getTransceivers()
+        self.assertEqual(transceivers[0].receiver.transport, transceivers[0].sender.transport)
+        transport = transceivers[0].receiver.transport
+        for i in range(1, len(transceivers)):
+            self.assertEqual(transceivers[i].receiver.transport, transport)
+            self.assertEqual(transceivers[i].sender.transport, transport)
+        if pc.sctp:
+            self.assertEqual(pc.sctp.transport, transport)
+
     def test_addTrack_audio(self):
         pc = RTCPeerConnection()
 
@@ -486,6 +496,10 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
 
+        # check a single transport is used
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+
         # close
         run(pc1.close())
         run(pc2.close())
@@ -494,24 +508,24 @@ class RTCPeerConnectionTest(TestCase):
 
         # check state changes
         self.assertEqual(pc1_states['iceConnectionState'], [
-            'new', 'checking', 'new', 'checking', 'completed', 'closed'])
+            'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], [
             'new', 'gathering', 'new', 'gathering', 'complete'])
         self.assertEqual(pc1_states['signalingState'], [
             'stable', 'have-local-offer', 'stable', 'closed'])
 
         self.assertEqual(pc2_states['iceConnectionState'], [
-            'new', 'checking', 'new', 'checking', 'completed', 'closed'])
+            'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc2_states['iceGatheringState'], [
-            'new', 'gathering', 'new', 'gathering', 'complete'])
+            'new', 'gathering', 'complete'])
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
-    def test_connect_audio_and_video_bundle(self):
-        pc1 = RTCPeerConnection(RTCConfiguration(bundlePolicy='max-bundle'))
+    def test_connect_audio_and_video_and_data_channel(self):
+        pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
-        pc2 = RTCPeerConnection(RTCConfiguration(bundlePolicy='max-bundle'))
+        pc2 = RTCPeerConnection()
         pc2_states = track_states(pc2)
 
         self.assertEqual(pc1.iceConnectionState, 'new')
@@ -527,10 +541,12 @@ class RTCPeerConnectionTest(TestCase):
         # create offer
         pc1.addTrack(AudioStreamTrack())
         pc1.addTrack(VideoStreamTrack())
+        pc1.createDataChannel('chat', protocol='bob')
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, 'offer')
         self.assertTrue('m=audio ' in offer.sdp)
         self.assertTrue('m=video ' in offer.sdp)
+        self.assertTrue('m=application ' in offer.sdp)
 
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
@@ -549,12 +565,14 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(answer.type, 'answer')
         self.assertTrue('m=audio ' in answer.sdp)
         self.assertTrue('m=video ' in answer.sdp)
+        self.assertTrue('m=application ' in answer.sdp)
 
         run(pc2.setLocalDescription(answer))
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
         self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -566,6 +584,10 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
 
+        # check a single transport is used
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+
         # close
         run(pc1.close())
         run(pc2.close())
@@ -576,7 +598,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1_states['iceConnectionState'], [
             'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], [
-            'new', 'gathering', 'new', 'gathering', 'complete'])
+            'new', 'gathering', 'new', 'gathering', 'new', 'gathering', 'complete'])
         self.assertEqual(pc1_states['signalingState'], [
             'stable', 'have-local-offer', 'stable', 'closed'])
 

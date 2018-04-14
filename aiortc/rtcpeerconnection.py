@@ -117,6 +117,14 @@ class RTCPeerConnection(EventEmitter):
         return self.__currentRemoteDescription
 
     @property
+    def sctp(self):
+        """
+        An :class:`RTCSctpTransport` describing the SCTP transport being used
+        for datachannels or `None`.
+        """
+        return self.__sctp
+
+    @property
     def signalingState(self):
         return self.__signalingState
 
@@ -163,12 +171,18 @@ class RTCPeerConnection(EventEmitter):
         self.__isClosed = True
         self.__setSignalingState('closed')
         self.__updateIceConnectionState()
+
+        # stop senders / receivers
         for transceiver in self.__transceivers:
             transceiver.stop()
+        if self.__sctp:
+            await self.__sctp.stop()
+
+        # stop transports
+        for transceiver in self.__transceivers:
             await transceiver._transport.stop()
             await transceiver._transport.transport.stop()
         if self.__sctp:
-            await self.__sctp.stop()
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
 
@@ -346,15 +360,18 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteIce[self.__sctp] = media.ice
 
         # remove bundled transports
-        if (self.__configuration.bundlePolicy != 'max-compat' and
-           len(parsedRemoteDescription.bundle) > 1):
+        if parsedRemoteDescription.bundle:
+            # find main media stream
             masterMid = parsedRemoteDescription.bundle[0]
             masterTransport = None
             for transceiver in self.__transceivers:
                 if transceiver.mid == masterMid:
                     masterTransport = transceiver._transport
                     break
+            if self.__sctp and self.__sctp.mid == masterMid:
+                masterTransport = self.__sctp.transport
 
+            # replace transport for bundled media
             oldTransports = set()
             slaveMids = parsedRemoteDescription.bundle[1:]
             for transceiver in self.__transceivers:
@@ -364,8 +381,13 @@ class RTCPeerConnection(EventEmitter):
                     transceiver.sender.setTransport(masterTransport)
                     transceiver._bundled = True
                     transceiver._transport = masterTransport
-            oldIceTransports = set([x.transport for x in oldTransports])
+            if self.__sctp and self.__sctp.mid in slaveMids:
+                oldTransports.add(self.__sctp.transport)
+                self.__sctp.setTransport(masterTransport)
+                self.__sctp._bundled = True
 
+            # discard old ICE transports
+            oldIceTransports = set([x.transport for x in oldTransports])
             self.__iceTransports = list(filter(
                 lambda x: x not in oldIceTransports, self.__iceTransports))
 
@@ -394,8 +416,9 @@ class RTCPeerConnection(EventEmitter):
                 await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
                 await transceiver.receiver.receive(self.__remoteRtp[transceiver])
             if self.__sctp:
-                await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
-                await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
+                if not self.__sctp._bundled:
+                    await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
+                    await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):
@@ -422,6 +445,7 @@ class RTCPeerConnection(EventEmitter):
 
     def __createSctpTransport(self):
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
+        self.__sctp._bundled = False
 
         @self.__sctp.on('datachannel')
         def on_datachannel(channel):
@@ -457,8 +481,7 @@ class RTCPeerConnection(EventEmitter):
             add_transport_description(media, iceTransport, transceiver._transport)
 
             description.media.append(media)
-            if self.__configuration.bundlePolicy != 'max-compat':
-                description.bundle.append(media.rtp.muxId)
+            description.bundle.append(media.rtp.muxId)
 
         if self.__sctp:
             iceTransport = self.__sctp.transport.transport
@@ -480,8 +503,7 @@ class RTCPeerConnection(EventEmitter):
             add_transport_description(media, iceTransport, self.__sctp.transport)
 
             description.media.append(media)
-            if self.__configuration.bundlePolicy != 'max-compat':
-                description.bundle.append(media.rtp.muxId)
+            description.bundle.append(media.rtp.muxId)
 
         return str(description)
 

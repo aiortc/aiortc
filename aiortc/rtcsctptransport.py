@@ -521,6 +521,9 @@ class RTCSctpTransport(EventEmitter):
         """
         return RTCSctpCapabilities(maxMessageSize=65536)
 
+    def setTransport(self, transport):
+        self.__transport = transport
+
     def start(self, remoteCaps, remotePort):
         """
         Start the transport.
