@@ -78,6 +78,7 @@ class RTCPeerConnection(EventEmitter):
         self.__initialOfferer = None
         self.__remoteDtls = {}
         self.__remoteIce = {}
+        self.__remoteRtp = {}
         self.__sctp = None
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
@@ -310,7 +311,7 @@ class RTCPeerConnection(EventEmitter):
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
                 if not self.__initialOfferer:
-                    transceiver.mid = media.mid
+                    transceiver.mid = media.rtp.muxId
 
                 # negotiate codecs
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
@@ -322,6 +323,7 @@ class RTCPeerConnection(EventEmitter):
                 iceTransport.setRemoteCandidates(media.ice_candidates)
                 self.__remoteDtls[transceiver] = media.dtls
                 self.__remoteIce[transceiver] = media.ice
+                self.__remoteRtp[transceiver] = media.rtp
 
                 if not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
@@ -331,7 +333,7 @@ class RTCPeerConnection(EventEmitter):
                 if not self.__sctp:
                     self.__createSctpTransport()
                 if not self.__initialOfferer:
-                    self.__sctp.mid = media.mid
+                    self.__sctp.mid = media.rtp.muxId
 
                 # configure sctp
                 self.__sctpRemotePort = media.fmt[0]
@@ -390,7 +392,7 @@ class RTCPeerConnection(EventEmitter):
                     await transceiver._transport.transport.start(self.__remoteIce[transceiver])
                     await transceiver._transport.start(self.__remoteDtls[transceiver])
                 await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
-                await transceiver.receiver.receive(RTCRtpParameters(codecs=transceiver._codecs))
+                await transceiver.receiver.receive(self.__remoteRtp[transceiver])
             if self.__sctp:
                 await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
                 await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
@@ -445,18 +447,18 @@ class RTCPeerConnection(EventEmitter):
                 fmt=[c.payloadType for c in transceiver._codecs])
             media.host = default_candidate.ip
             media.direction = transceiver.direction
-            media.mid = transceiver.mid
+            media.rtp.codecs = transceiver._codecs
+            media.rtp.muxId = transceiver.mid
+            media.rtp.rtcp.cname = self.__cname
+            media.rtp.rtcp.ssrc = transceiver.sender._ssrc
+            media.rtp.rtcp.mux = True
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
-            media.rtcp.cname = self.__cname
-            media.rtcp.ssrc = transceiver.sender._ssrc
-            media.rtcp.mux = True
-            media.rtp.codecs = transceiver._codecs
             add_transport_description(media, iceTransport, transceiver._transport)
 
             description.media.append(media)
             if self.__configuration.bundlePolicy != 'max-compat':
-                description.bundle.append(media.mid)
+                description.bundle.append(media.rtp.muxId)
 
         if self.__sctp:
             iceTransport = self.__sctp.transport.transport
@@ -472,14 +474,14 @@ class RTCPeerConnection(EventEmitter):
                 profile='DTLS/SCTP',
                 fmt=[self.__sctp.port])
             media.host = default_candidate.ip
-            media.mid = self.__sctp.mid
+            media.rtp.muxId = self.__sctp.mid
             media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
             media.sctpCapabilities = self.__sctp.getCapabilities()
             add_transport_description(media, iceTransport, self.__sctp.transport)
 
             description.media.append(media)
             if self.__configuration.bundlePolicy != 'max-compat':
-                description.bundle.append(media.mid)
+                description.bundle.append(media.rtp.muxId)
 
         return str(description)
 

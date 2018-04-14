@@ -14,6 +14,10 @@ from .utils import run
 LONG_DATA = b'\xff' * 2000
 
 
+def mids(pc):
+    return [x.mid for x in pc.getTransceivers()]
+
+
 class BogusStreamTrack(MediaStreamTrack):
     kind = 'bogus'
 
@@ -257,7 +261,7 @@ class RTCPeerConnectionTest(TestCase):
 
         # create offer
         pc1.addTrack(AudioStreamTrack())
-        self.assertEqual([x.mid for x in pc1.getTransceivers()], ['audio'])
+        self.assertEqual(mids(pc1), ['audio'])
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, 'offer')
         self.assertTrue('m=audio ' in offer.sdp)
@@ -281,7 +285,7 @@ class RTCPeerConnectionTest(TestCase):
 
         # create answer
         pc2.addTrack(AudioStreamTrack())
-        self.assertEqual([x.mid for x in pc1.getTransceivers()], ['audio'])
+        self.assertEqual(mids(pc1), ['audio'])
         answer = run(pc2.createAnswer())
         self.assertEqual(answer.type, 'answer')
         self.assertTrue('m=audio ' in answer.sdp)
@@ -348,10 +352,10 @@ class RTCPeerConnectionTest(TestCase):
         # add audio tracks immediately
         pc1.addTrack(AudioStreamTrack())
         pc1.getTransceivers()[0].mid = 'sdparta_0'  # pretend we're Firefox!
-        self.assertEqual([x.mid for x in pc1.getTransceivers()], ['sdparta_0'])
+        self.assertEqual(mids(pc1), ['sdparta_0'])
 
         pc2.addTrack(AudioStreamTrack())
-        self.assertEqual([x.mid for x in pc2.getTransceivers()], ['audio'])
+        self.assertEqual(mids(pc2), ['audio'])
 
         # create offer
         offer = run(pc1.createOffer())
@@ -374,7 +378,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
-        self.assertEqual([x.mid for x in pc2.getTransceivers()], ['sdparta_0'])
+        self.assertEqual(mids(pc2), ['sdparta_0'])
 
         # create answer
         answer = run(pc2.createAnswer())

@@ -35,9 +35,15 @@ class RTCRtpCapabilities:
 
 @attr.s
 class RTCRtcpParameters:
+    """
+    The :class:`RTCRtcpParameters` dictionary  provides information on RTCP settings.
+    """
     cname = attr.ib(default=None)
+    "The Canonical Name (CNAME) used by RTCP."
     mux = attr.ib(default=False)
+    "Whether RTP and RTCP are multiplexed."
     ssrc = attr.ib(default=None)
+    "The Synchronization Source identifier."
 
 
 @attr.s
@@ -48,3 +54,7 @@ class RTCRtpParameters:
     """
     codecs = attr.ib(default=attr.Factory(list))
     "A list of :class:`RTCRtpCodecParameters` to send or receive."
+    muxId = attr.ib(default='')
+    "The muxId assigned to the RTP stream, if any, empty string if unset."
+    rtcp = attr.ib(default=attr.Factory(RTCRtcpParameters))
+    "Parameters to configure RTCP."

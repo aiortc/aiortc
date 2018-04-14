@@ -59,16 +59,6 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].port, 45076)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
-        self.assertEqual(d.media[0].mid, 'audio')
-        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
-        self.assertEqual(d.media[0].rtcp_port, 9)
-        self.assertEqual(d.media[0].rtcp.cname, '/vC4ULAr8vHNjXmq')
-        self.assertEqual(d.media[0].rtcp.mux, True)
-        self.assertEqual(d.media[0].rtcp.ssrc, 1944796561)
-
-        # formats
-        self.assertEqual(d.media[0].fmt, [
-            111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111),
             RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
@@ -84,6 +74,16 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
             RTCRtpCodecParameters(name='telephone-event', clockRate=16000, payloadType=113),
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126),
         ])
+        self.assertEqual(d.media[0].rtp.muxId, 'audio')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, '/vC4ULAr8vHNjXmq')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1944796561)
+        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
+        self.assertEqual(d.media[0].rtcp_port, 9)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [
+            111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
         self.assertEqual(d.media[0].sctpmap, {})
 
         # ice
@@ -183,16 +183,6 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].port, 45274)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
-        self.assertEqual(d.media[0].mid, 'sdparta_0')
-        self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
-        self.assertEqual(d.media[0].rtcp_port, 38612)
-        self.assertEqual(d.media[0].rtcp.cname, '{ed463ac5-dabf-44d4-8b9f-e14318427b2b}')
-        self.assertEqual(d.media[0].rtcp.mux, True)
-        self.assertEqual(d.media[0].rtcp.ssrc, 882128807)
-
-        # formats
-        self.assertEqual(d.media[0].fmt, [
-            109, 9, 0, 8, 101])
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=109),
             RTCRtpCodecParameters(name='G722', clockRate=8000, channels=1, payloadType=9),
@@ -200,6 +190,16 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
         ])
+        self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, '{ed463ac5-dabf-44d4-8b9f-e14318427b2b}')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 882128807)
+        self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
+        self.assertEqual(d.media[0].rtcp_port, 38612)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [
+            109, 9, 0, 8, 101])
         self.assertEqual(d.media[0].sctpmap, {})
 
         # ice
