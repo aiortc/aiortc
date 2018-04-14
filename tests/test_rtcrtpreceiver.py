@@ -6,7 +6,7 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpParameters
 from aiortc.rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
-
+from aiortc.rtp import RtcpPacket, RtpPacket
 from .utils import dummy_dtls_transport_pair, load, run
 
 
@@ -38,23 +38,18 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
-        run(remote.send(load('rtp.bin')))
+        packet = RtpPacket.parse(load('rtp.bin'))
+        run(receiver._handle_rtp_packet(packet))
 
         # receive RTCP
-        run(remote.send(load('rtcp_sr.bin')))
-
-        # receive truncated RTCP
-        run(remote.send(b'\x81\xca\x00'))
-
-        # receive garbage
-        run(remote.send(b'garbage'))
+        for packet in RtcpPacket.parse(load('rtcp_sr.bin')):
+            run(receiver._handle_rtcp_packet(packet))
 
         # check remote track
         frame = run(receiver._track.recv())
         self.assertTrue(isinstance(frame, AudioFrame))
 
         # shutdown
-        run(asyncio.sleep(0.1))
         receiver.stop()
         run(asyncio.sleep(0))
 

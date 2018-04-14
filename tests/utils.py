@@ -11,18 +11,24 @@ class DummyIceTransport:
         self.role = role
 
 
+def dummy_register_rtp_receiver(receiver, parameters):
+    pass
+
+
 def dummy_dtls_transport_pair(loss=0):
     transport_a, transport_b = dummy_transport_pair(loss=loss)
 
     transport_a.data = transport_a
-    transport_a.rtp = transport_a
     transport_a.state = 'connected'
     transport_a.transport = DummyIceTransport(role='controlling')
+    transport_a._register_rtp_receiver = dummy_register_rtp_receiver
+    transport_a._send_rtp = transport_a.send
 
     transport_b.data = transport_b
-    transport_b.rtp = transport_b
     transport_b.state = 'connected'
     transport_b.transport = DummyIceTransport(role='controlled')
+    transport_b._register_rtp_receiver = dummy_register_rtp_receiver
+    transport_a._send_rtp = transport_b.send
 
     return transport_a, transport_b
 

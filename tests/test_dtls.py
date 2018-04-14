@@ -6,6 +6,7 @@ from unittest.mock import patch
 from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsFingerprint, RTCDtlsParameters,
                                      RTCDtlsTransport)
+from aiortc.rtcrtpparameters import RTCRtcpParameters, RTCRtpParameters
 from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
@@ -21,6 +22,18 @@ class DummyIceTransport:
 
     async def stop(self):
         await self._connection.close()
+
+
+class DummyRtpReceiver:
+    def __init__(self):
+        self.rtp_packets = []
+        self.rtcp_packets = []
+
+    async def _handle_rtp_packet(self, packet):
+        self.rtp_packets.append(packet)
+
+    async def _handle_rtcp_packet(self, packet):
+        self.rtcp_packets.append(packet)
 
 
 def dummy_ice_transport_pair(loss=0):
@@ -99,23 +112,31 @@ class RTCDtlsTransportTest(TestCase):
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
+        receiver1 = DummyRtpReceiver()
+        session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+            rtcp=RTCRtcpParameters(ssrc=1831097322)))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
+        receiver2 = DummyRtpReceiver()
+        session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+            rtcp=RTCRtcpParameters(ssrc=4028317929)))
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
             session2.start(session1.getLocalParameters())))
 
         # send RTP
-        run(session1.rtp.send(RTP))
-        data = run(session2.rtp.recv())
-        self.assertEqual(data, RTP)
+        run(session1._send_rtp(RTP))
+        run(asyncio.sleep(0.1))
+        self.assertEqual(len(receiver2.rtcp_packets), 0)
+        self.assertEqual(len(receiver2.rtp_packets), 1)
 
         # send RTCP
-        run(session2.rtp.send(RTCP))
-        data = run(session1.rtp.recv())
-        self.assertEqual(data, RTCP)
+        run(session2._send_rtp(RTCP))
+        run(asyncio.sleep(0.1))
+        self.assertEqual(len(receiver1.rtcp_packets), 1)
+        self.assertEqual(len(receiver1.rtp_packets), 0)
 
         # shutdown
         run(session1.stop())
@@ -127,13 +148,9 @@ class RTCDtlsTransportTest(TestCase):
         run(session1.stop())
         run(session2.stop())
 
-        # try receving after close
-        with self.assertRaises(ConnectionError):
-            run(session1.rtp.recv())
-
         # try sending after close
         with self.assertRaises(ConnectionError):
-            run(session1.rtp.send(RTP))
+            run(session1._send_rtp(RTP))
 
     def test_abrupt_disconnect(self):
         transport1, transport2 = dummy_ice_transport_pair()

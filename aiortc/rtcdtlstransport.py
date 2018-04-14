@@ -18,7 +18,7 @@ from OpenSSL import crypto
 from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
-from .rtp import is_rtcp
+from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed
 
 binding = Binding()
@@ -202,6 +202,18 @@ class RTCDtlsParameters:
     "The DTLS role, with a default of auto."
 
 
+class RtpRouter:
+    def __init__(self):
+        self.ssrc_table = {}
+
+    def register(self, receiver, parameters):
+        if parameters.rtcp.ssrc:
+            self.ssrc_table[parameters.rtcp.ssrc] = receiver
+
+    def route(self, packet):
+        return self.ssrc_table.get(packet.ssrc)
+
+
 class RTCDtlsTransport(EventEmitter):
     """
     The :class:`RTCDtlsTransport` object includes information relating to
@@ -218,6 +230,7 @@ class RTCDtlsTransport(EventEmitter):
         self.closed = asyncio.Event()
         self.encrypted = False
         self._role = 'auto'
+        self._rtp_router = RtpRouter()
         self._state = State.NEW
         self._transport = transport
 
@@ -226,12 +239,6 @@ class RTCDtlsTransport(EventEmitter):
             closed=self.closed,
             queue=self.data_queue,
             send=self._send_data)
-
-        self.rtp_queue = asyncio.Queue()
-        self.rtp = Channel(
-            closed=self.closed,
-            queue=self.rtp_queue,
-            send=self._send_rtp)
 
         # SSL init
         self.__ctx = create_ssl_context(certificate)
@@ -395,9 +402,20 @@ class RTCDtlsTransport(EventEmitter):
             # SRTP / SRTCP
             if is_rtcp(data):
                 data = self._rx_srtp.unprotect_rtcp(data)
+                packets = RtcpPacket.parse(data)
+                for packet in packets:
+                    receiver = self._rtp_router.route(packet)
+                    if receiver is not None:
+                        await receiver._handle_rtcp_packet(packet)
             else:
                 data = self._rx_srtp.unprotect(data)
-            await self.rtp_queue.put(data)
+                packet = RtpPacket.parse(data)
+                receiver = self._rtp_router.route(packet)
+                if receiver is not None:
+                    await receiver._handle_rtp_packet(packet)
+
+    def _register_rtp_receiver(self, receiver, parameters):
+        self._rtp_router.register(receiver, parameters)
 
     async def _send_data(self, data):
         if self._state != State.CONNECTED:

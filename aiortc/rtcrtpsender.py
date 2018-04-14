@@ -94,7 +94,7 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
                         logger.debug('sender(%s) > %s' % (self._kind, packet))
-                        await self.transport.rtp.send(bytes(packet))
+                        await self.transport._send_rtp(bytes(packet))
                     except ConnectionError:
                         self.__stopped.set()
                         break

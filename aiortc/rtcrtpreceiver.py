@@ -5,8 +5,6 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import RtcpPacket, RtpPacket, is_rtcp
-from .utils import first_completed
 
 logger = logging.getLogger('rtp')
 
@@ -57,7 +55,7 @@ class RTCRtpReceiver:
         if not self._started:
             for codec in parameters.codecs:
                 self._decoders[codec.payloadType] = get_decoder(codec)
-            asyncio.ensure_future(self._run())
+            self._transport._register_rtp_receiver(self, parameters)
             self._started = True
 
     def setTransport(self, transport):
@@ -69,19 +67,10 @@ class RTCRtpReceiver:
         """
         self._stopped.set()
 
-    async def _handle_rtcp(self, data):
-        try:
-            packets = RtcpPacket.parse(data)
-        except ValueError:
-            return
-        for packet in packets:
-            logger.debug('receiver(%s) < %s' % (self._kind, packet))
+    async def _handle_rtcp_packet(self, packet):
+        logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
-    async def _handle_rtp(self, data):
-        try:
-            packet = RtpPacket.parse(data)
-        except ValueError:
-            return
+    async def _handle_rtp_packet(self, packet):
         logger.debug('receiver(%s) < %s' % (self._kind, packet))
         if packet.payload_type in self._decoders:
             decoder = self._decoders[packet.payload_type]
@@ -111,22 +100,3 @@ class RTCRtpReceiver:
                     self._jitter_buffer.remove(count)
                     for video_frame in decoder.decode(*payloads):
                         await self._track._queue.put(video_frame)
-
-    async def _run(self):
-        logger.debug('receiver(%s) - started' % self._kind)
-
-        while not self._stopped.is_set():
-            try:
-                data = await first_completed(self.transport.rtp.recv(), self._stopped.wait())
-            except ConnectionError:
-                self._stopped.set()
-                break
-            if data is True:
-                break
-
-            if is_rtcp(data):
-                await self._handle_rtcp(data)
-            else:
-                await self._handle_rtp(data)
-
-        logger.debug('receiver(%s) - finished' % self._kind)
