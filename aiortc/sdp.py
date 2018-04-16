@@ -4,7 +4,9 @@ import re
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
-from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
+from .rtcrtpparameters import (RTCRtpCodecParameters,
+                               RTCRtpHeaderExtensionParameters,
+                               RTCRtpParameters)
 from .rtcsctptransport import RTCSctpCapabilities
 
 DIRECTIONS = [
@@ -109,6 +111,9 @@ class MediaDescription:
         if self.direction is not None:
             lines.append('a=' + self.direction)
 
+        for header in self.rtp.headerExtensions:
+            lines.append('a=extmap:%d %s' % (header.id, header.uri))
+
         if self.rtp.muxId:
             lines.append('a=mid:' + self.rtp.muxId)
 
@@ -194,6 +199,12 @@ class SessionDescription:
                         current_media.ice_candidates.append(candidate_from_sdp(value))
                     elif attr == 'end-of-candidates':
                         current_media.ice_candidates_complete = True
+                    elif attr == 'extmap':
+                        ext_id, ext_uri = value.split()
+                        if '/' in ext_id:
+                            ext_id, ext_direction = ext_id.split('/')
+                        extension = RTCRtpHeaderExtensionParameters(id=int(ext_id), uri=ext_uri)
+                        current_media.rtp.headerExtensions.append(extension)
                     elif attr == 'fingerprint':
                         algorithm, fingerprint = value.split()
                         current_media.dtls.fingerprints.append(RTCDtlsFingerprint(

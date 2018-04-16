@@ -1,6 +1,7 @@
 from unittest import TestCase
 
-from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
+                                     RTCRtpHeaderExtensionParameters)
 from aiortc.sdp import SessionDescription
 
 
@@ -74,6 +75,9 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
             RTCRtpCodecParameters(name='telephone-event', clockRate=16000, payloadType=113),
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126),
         ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [
+            RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
+        ])
         self.assertEqual(d.media[0].rtp.muxId, 'audio')
         self.assertEqual(d.media[0].rtp.rtcp.cname, '/vC4ULAr8vHNjXmq')
         self.assertEqual(d.media[0].rtp.rtcp.mux, True)
@@ -108,6 +112,7 @@ a=group:BUNDLE audio
 m=audio 45076 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126
 c=IN IP4 192.168.99.58
 a=sendrecv
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
 a=mid:audio
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
@@ -190,6 +195,10 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
         ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [
+            RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
+            RTCRtpHeaderExtensionParameters(id=2, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+        ])
         self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
         self.assertEqual(d.media[0].rtp.rtcp.cname, '{ed463ac5-dabf-44d4-8b9f-e14318427b2b}')
         self.assertEqual(d.media[0].rtp.rtcp.mux, True)
@@ -224,6 +233,8 @@ a=group:BUNDLE sdparta_0
 m=audio 45274 UDP/TLS/RTP/SAVPF 109 9 0 8 101
 c=IN IP4 192.168.99.58
 a=sendrecv
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=extmap:2 urn:ietf:params:rtp-hdrext:sdes:mid
 a=mid:sdparta_0
 a=rtcp:38612 IN IP4 192.168.99.58
 a=rtcp-mux

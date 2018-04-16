@@ -29,6 +29,19 @@ class RTCRtpCodecParameters:
 
 
 @attr.s
+class RTCRtpHeaderExtensionParameters:
+    """
+    The :class:`RTCRtpHeaderExtensionParameters` dictionary enables a header
+    extension to be configured for use within an :class:`RTCRtpSender` or
+    :class:`RTCRtpReceiver`.
+    """
+    id = attr.ib(type=int)
+    "The value that goes in the packet."
+    uri = attr.ib(type=str)
+    "The URI of the RTP header extension."
+
+
+@attr.s
 class RTCRtpCapabilities:
     codecs = attr.ib(default=attr.Factory(list))
 
@@ -54,6 +67,8 @@ class RTCRtpParameters:
     """
     codecs = attr.ib(default=attr.Factory(list))
     "A list of :class:`RTCRtpCodecParameters` to send or receive."
+    headerExtensions = attr.ib(default=attr.Factory(list))
+    "A list of :class:`RTCRtpHeaderExtensionParameters`."
     muxId = attr.ib(default='')
     "The muxId assigned to the RTP stream, if any, empty string if unset."
     rtcp = attr.ib(default=attr.Factory(RTCRtcpParameters))
