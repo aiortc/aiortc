@@ -42,7 +42,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         await asyncio.sleep(0.02)
-        return AudioFrame(channels=1, data=b'\x00' * 160, sample_rate=8000)
+        return AudioFrame(channels=1, data=b'\x00\x00' * 160, sample_rate=8000)
 
 
 class VideoStreamTrack(MediaStreamTrack):
