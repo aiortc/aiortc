@@ -156,9 +156,13 @@ function start() {
 }
 
 function stop() {
+    document.getElementById('stop').style.display = 'none';
+
     clearInterval(dcInterval);
+    pc.getSenders().forEach(function(sender) {
+        sender.track.stop();
+    });
     pc.close();
-    getElementById('stop').style.display = 'none';
 }
 
 </script>
