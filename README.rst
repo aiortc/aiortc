@@ -68,10 +68,11 @@ Working:
 - Data Channels
 - Sending and receiving audio (Opus / PCMU / PCMA)
 - Sending and receiving video (VP8)
+- Bundling audio / video / data channels
 
 TODO:
 
-- SCTP retransmission and receiver window handling
+- SCTP receiver window handling
 - ICE trickle
 
 Requirements
