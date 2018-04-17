@@ -76,7 +76,8 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
+            RTCRtpHeaderExtensionParameters(id=1,
+                                            uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'audio')
         self.assertEqual(d.media[0].rtp.rtcp.cname, '/vC4ULAr8vHNjXmq')
@@ -196,7 +197,8 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
+            RTCRtpHeaderExtensionParameters(id=1,
+                                            uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
             RTCRtpHeaderExtensionParameters(id=2, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
