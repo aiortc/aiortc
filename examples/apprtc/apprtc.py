@@ -73,7 +73,6 @@ async def consume_video(track):
     """
     while True:
         await track.recv()
-        print('got frame')
 
 
 async def join_room(room):
