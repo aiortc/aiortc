@@ -5,6 +5,7 @@ FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
 RTP_HEADER_LENGTH = 12
+RTP_SEQ_MODULO = 2 ** 16
 RTCP_HEADER_LENGTH = 8
 
 RTCP_SR = 200
@@ -15,6 +16,10 @@ RTCP_BYE = 203
 
 def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
+
+
+def seq_plus_one(a):
+    return (a + 1) % RTP_SEQ_MODULO
 
 
 class RtcpSenderInfo:

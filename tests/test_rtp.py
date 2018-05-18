@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from aiortc.rtp import (RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket,
-                        RtpPacket)
+                        RtpPacket, seq_plus_one)
 
 from .utils import load
 
@@ -143,3 +143,10 @@ class RtpPacketTest(TestCase):
         with self.assertRaises(ValueError) as cm:
             RtpPacket.parse(data)
         self.assertEqual(str(cm.exception), 'RTP packet has invalid version')
+
+
+class RtpUtilTest(TestCase):
+    def test_seq_plus_one(self):
+        self.assertEqual(seq_plus_one(0), 1)
+        self.assertEqual(seq_plus_one(1), 2)
+        self.assertEqual(seq_plus_one(65535), 0)

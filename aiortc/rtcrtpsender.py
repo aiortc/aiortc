@@ -3,7 +3,7 @@ import logging
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import RtpPacket
+from .rtp import RtpPacket, seq_plus_one
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -98,7 +98,7 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
-                    packet.sequence_number += 1
+                    packet.sequence_number = seq_plus_one(packet.sequence_number)
                 packet.timestamp += encoder.timestamp_increment
             else:
                 await asyncio.sleep(0.02)
