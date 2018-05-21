@@ -13,6 +13,7 @@ from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
                                  VideoStreamTrack)
 
 ROOT = os.path.dirname(__file__)
+AUDIO_OUTPUT_PATH = os.path.join(ROOT, 'output.wav')
 
 
 async def pause(last, ptime):
@@ -25,7 +26,7 @@ async def pause(last, ptime):
 class AudioFileTrack(AudioStreamTrack):
     def __init__(self, path):
         self.last = None
-        self.reader = wave.Wave_read(path)
+        self.reader = wave.open(path, 'rb')
 
     async def recv(self):
         self.last = await pause(self.last, 0.02)
@@ -56,10 +57,22 @@ class VideoDummyTrack(VideoStreamTrack):
 
 async def consume_audio(track):
     """
-    Drain incoming audio.
+    Drain incoming audio and write it to a file.
     """
-    while True:
-        await track.recv()
+    writer = None
+
+    try:
+        while True:
+            frame = await track.recv()
+            if writer is None:
+                writer = wave.open(AUDIO_OUTPUT_PATH, 'wb')
+                writer.setnchannels(frame.channels)
+                writer.setframerate(frame.sample_rate)
+                writer.setsampwidth(frame.sample_width)
+            writer.writeframes(frame.data)
+    finally:
+        if writer is not None:
+            writer.close()
 
 
 async def consume_video(track, local_video):
