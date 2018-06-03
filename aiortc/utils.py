@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from struct import unpack
 
 
@@ -22,3 +23,25 @@ async def first_completed(*coros, timeout=None):
         return done.pop().result()
     else:
         raise TimeoutError
+
+STUN_REGEX = '(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
+TURN_REGEX = ('(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
+              '(\?transport=(?P<transport>.*))?')
+
+
+def parse_stun_turn_uri(uri):
+    if uri.startswith('stun'):
+        match = re.fullmatch(STUN_REGEX, uri)
+    elif uri.startswith('turn'):
+        match = re.fullmatch(TURN_REGEX, uri)
+    else:
+        raise ValueError('malformed uri: invalid scheme')
+
+    if not match:
+        raise ValueError('malformed uri')
+
+    match = match.groupdict()
+    if match['port']:
+        match['port'] = int(match['port'])
+
+    return match

@@ -2,6 +2,8 @@ import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
 
+from .utils import parse_stun_turn_uri
+
 
 @attr.s
 class RTCIceCandidate:
@@ -47,10 +49,33 @@ class RTCIceGatherer(EventEmitter):
     Interactive Connectivity Establishment (ICE) parameters which can be
     exchanged in signaling.
     """
-    def __init__(self):
+    def __init__(self, servers=None):
         super().__init__()
-        self._connection = Connection(ice_controlling=False,
-                                      stun_server=('stun.l.google.com', 19302))
+        ice_kargs = {}
+        for server in servers or []:
+            uri = parse_stun_turn_uri(server.urls)
+
+            if uri['scheme'] == 'stun':
+                if 'stun_server' in ice_kargs:
+                    # do not suport multiples stun server. ignoring
+                    continue
+                ice_kargs['stun_server'] = (uri['host'], uri['port'] or 3478)
+            elif uri['scheme'] == 'turn':
+                if uri['transport'] and uri['transport'] != 'udp':
+                    # only suport udp transport. ignoring
+                    continue
+                if 'turn_server' in ice_kargs:
+                    # do not suport multiples turn server. ignoring
+                    continue
+                if server.credentialType != "password":
+                    # only suport credentialType password. ignoring
+                    continue
+                ice_kargs['turn_server'] = (uri['host'], uri['port'] or 3478)
+                ice_kargs['turn_username'] = server.username
+                ice_kargs['turn_password'] = server.credential
+
+            # ignoring unsuported schema as stuns and turns
+        self._connection = Connection(ice_controlling=False, **ice_kargs)
         self.__state = 'new'
 
     @property
