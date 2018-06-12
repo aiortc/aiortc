@@ -13,13 +13,4 @@ class RTCIceServer:
     urls = attr.ib()
     username = attr.ib(default=None)
     credential = attr.ib(default=None)
-    credentialType = attr.ib(default="password")
-
-    @classmethod
-    def fromdict(cls, server):
-        return cls(
-            server.get('urls', server.get('url')),
-            server.get('username'),
-            server.get('credential'),
-            server.get('credentialType', "password")
-        )
+    credentialType = attr.ib(default='password')
