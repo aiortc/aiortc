@@ -98,5 +98,6 @@ class RTCRtpReceiver:
 
                 if got_frame:
                     self._jitter_buffer.remove(count)
-                    for video_frame in decoder.decode(*payloads):
+                    video_frames = decoder.decode(payloads)
+                    for video_frame in video_frames:
                         await self._track._queue.put(video_frame)

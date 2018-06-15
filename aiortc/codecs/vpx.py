@@ -122,7 +122,7 @@ class VpxDecoder:
     def __del__(self):
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, *payloads):
+    def decode(self, payloads):
         data = b''
         for payload in payloads:
             if payload:
