@@ -1,5 +1,7 @@
 from struct import pack, unpack
 
+import attr
+
 # reserved to avoid confusion with RTCP
 FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
@@ -22,12 +24,41 @@ def seq_plus_one(a):
     return (a + 1) % RTP_SEQ_MODULO
 
 
+@attr.s
+class RtcpReceiverInfo:
+    ssrc = attr.ib()
+    fraction_lost = attr.ib()
+    packets_lost = attr.ib()
+    highest_sequence = attr.ib()
+    jitter = attr.ib()
+    lsr = attr.ib()
+    dlsr = attr.ib()
+
+    def __bytes__(self):
+        lost = (self.fraction_lost << 24) | self.packets_lost
+        return pack('!LLLLLL', self.ssrc, lost, self.highest_sequence,
+                    self.jitter, self.lsr, self.dlsr)
+
+    @classmethod
+    def parse(cls, data):
+        ssrc, lost, highest_sequence, jitter, lsr, dlsr = unpack('!LLLLLL', data)
+        return cls(
+            ssrc=ssrc,
+            fraction_lost=(lost >> 24) & 0xff,
+            packets_lost=lost & 0xffffff,
+            highest_sequence=highest_sequence,
+            jitter=jitter,
+            lsr=lsr,
+            dlsr=dlsr
+        )
+
+
+@attr.s
 class RtcpSenderInfo:
-    def __init__(self, ntp_timestamp, rtp_timestamp, packet_count, octet_count):
-        self.ntp_timestamp = ntp_timestamp
-        self.rtp_timestamp = rtp_timestamp
-        self.packet_count = packet_count
-        self.octet_count = octet_count
+    ntp_timestamp = attr.ib()
+    rtp_timestamp = attr.ib()
+    packet_count = attr.ib()
+    octet_count = attr.ib()
 
     def __bytes__(self):
         return pack('!QLLL',
@@ -65,7 +96,7 @@ class RtcpPacket:
             data += bytes(self.sender_info)
 
         for report in self.reports:
-            data += report
+            data += bytes(report)
 
         data += self.extension
 
@@ -101,7 +132,7 @@ class RtcpPacket:
 
             if packet_type in [RTCP_SR, RTCP_RR]:
                 for r in range(count):
-                    p.reports.append(data[pos:pos + 24])
+                    p.reports.append(RtcpReceiverInfo.parse(data[pos:pos + 24]))
                     pos += 24
             elif packet_type == RTCP_SDES:
                 for r in range(count):

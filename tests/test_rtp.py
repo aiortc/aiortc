@@ -28,6 +28,13 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.packet_type, RTCP_RR)
         self.assertEqual(packet.ssrc, 817267719)
+        self.assertEqual(packet.reports[0].ssrc, 1200895919)
+        self.assertEqual(packet.reports[0].fraction_lost, 0)
+        self.assertEqual(packet.reports[0].packets_lost, 0)
+        self.assertEqual(packet.reports[0].highest_sequence, 630)
+        self.assertEqual(packet.reports[0].jitter, 1906)
+        self.assertEqual(packet.reports[0].lsr, 0)
+        self.assertEqual(packet.reports[0].dlsr, 0)
         self.assertEqual(bytes(packet), data)
 
     def test_sdes(self):
@@ -54,6 +61,14 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.sender_info.rtp_timestamp, 1722342718)
         self.assertEqual(packet.sender_info.packet_count, 269)
         self.assertEqual(packet.sender_info.octet_count, 13557)
+        self.assertEqual(len(packet.reports), 1)
+        self.assertEqual(packet.reports[0].ssrc, 2398654957)
+        self.assertEqual(packet.reports[0].fraction_lost, 0)
+        self.assertEqual(packet.reports[0].packets_lost, 0)
+        self.assertEqual(packet.reports[0].highest_sequence, 246)
+        self.assertEqual(packet.reports[0].jitter, 127)
+        self.assertEqual(packet.reports[0].lsr, 0)
+        self.assertEqual(packet.reports[0].dlsr, 0)
         self.assertEqual(bytes(packet), data[0:52])
 
     def test_compound(self):
