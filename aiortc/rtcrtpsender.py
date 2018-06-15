@@ -77,6 +77,7 @@ class RTCRtpSender:
 
     async def _run(self, codec):
         logger.debug('sender(%s) - started' % self._kind)
+        loop = asyncio.get_event_loop()
 
         encoder = get_encoder(codec)
         packet = RtpPacket(payload_type=codec.payloadType)
@@ -86,7 +87,7 @@ class RTCRtpSender:
                 if frame is True:
                     break
                 packet.ssrc = self._ssrc
-                payloads = encoder.encode(frame)
+                payloads = await loop.run_in_executor(None, encoder.encode, frame)
                 if not isinstance(payloads, list):
                     payloads = [payloads]
                 for i, payload in enumerate(payloads):

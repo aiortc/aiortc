@@ -120,11 +120,12 @@ class RTCRtpReceiver:
         logger.debug('receiver(%s) < %s' % (self._kind, packet))
         if packet.payload_type in self._decoders:
             decoder = self._decoders[packet.payload_type]
+            loop = asyncio.get_event_loop()
             self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
 
             if self._kind == 'audio':
                 # FIXME: audio should use the jitter buffer!
-                audio_frame = decoder.decode(packet.payload)
+                audio_frame = await loop.run_in_executor(None, decoder.decode, packet.payload)
                 await self._track._queue.put(audio_frame)
             else:
                 # check if we have a complete video frame
@@ -144,6 +145,6 @@ class RTCRtpReceiver:
 
                 if got_frame:
                     self._jitter_buffer.remove(count)
-                    video_frames = decoder.decode(payloads)
+                    video_frames = await loop.run_in_executor(None, decoder.decode, payloads)
                     for video_frame in video_frames:
                         await self._track._queue.put(video_frame)
