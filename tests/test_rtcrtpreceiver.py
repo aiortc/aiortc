@@ -45,6 +45,10 @@ class RTCRtpReceiverTest(TestCase):
         # receive RTCP
         for packet in RtcpPacket.parse(load('rtcp_sr.bin')):
             run(receiver._handle_rtcp_packet(packet))
+        self.assertEqual(sorted(receiver._stats.keys()), [
+            'remote-inbound-rtp',
+            'remote-outbound-rtp'
+        ])
 
         # check remote track
         frame = run(receiver._track.recv())

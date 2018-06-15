@@ -1,10 +1,14 @@
 import asyncio
+import datetime
 import logging
 
 from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
+from .rtp import RTCP_RR, RTCP_SR
+from .stats import (RTCRemoteInboundRtpStreamStats,
+                    RTCRemoteOutboundRtpStreamStats)
 
 logger = logging.getLogger('rtp')
 
@@ -35,6 +39,7 @@ class RTCRtpReceiver:
         self._jitter_buffer = JitterBuffer(capacity=32)
         self._track = None
         self._started = False
+        self._stats = {}
         self._stopped = asyncio.Event()
         self._transport = transport
 
@@ -69,6 +74,47 @@ class RTCRtpReceiver:
 
     async def _handle_rtcp_packet(self, packet):
         logger.debug('receiver(%s) < %s' % (self._kind, packet))
+
+        if packet.packet_type == RTCP_SR:
+            stats = RTCRemoteOutboundRtpStreamStats(
+                # RTCStats
+                timestamp=datetime.datetime.now(),
+                type='remote-outbound-rtp',
+                id=str(id(self)),
+                # RTCStreamStats
+                ssrc=packet.ssrc,
+                kind=self._kind,
+                transportId=str(id(self.transport)),
+                # RTCSentRtpStreamStats
+                packetsSent=packet.sender_info.packet_count,
+                bytesSent=packet.sender_info.octet_count,
+                # RTCRemoteOutboundRtpStreamStats
+                localId='TODO',
+                remoteTimestamp=packet.sender_info.ntp_timestamp  # FIXME convert to a datetime
+            )
+            self._stats[stats.type] = stats
+
+        if packet.packet_type in [RTCP_SR, RTCP_RR]:
+            for report in packet.reports:
+                stats = RTCRemoteInboundRtpStreamStats(
+                    # RTCStats
+                    timestamp=datetime.datetime.now(),
+                    type='remote-inbound-rtp',
+                    id=str(id(self)),
+                    # RTCStreamStats
+                    ssrc=packet.ssrc,
+                    kind=self._kind,
+                    transportId=str(id(self.transport)),
+                    # RTCReceivedRtpStreamStats
+                    packetsReceived=0,  # FIXME: where do we get this?
+                    packetsLost=report.packets_lost,
+                    jitter=report.jitter,
+                    # RTCRemoteInboundRtpStreamStats
+                    localId='TODO',
+                    roundTripTime=0,  # FIXME: where do we get this?
+                    fractionLost=report.fraction_lost
+                )
+                self._stats[stats.type] = stats
 
     async def _handle_rtp_packet(self, packet):
         logger.debug('receiver(%s) < %s' % (self._kind, packet))
