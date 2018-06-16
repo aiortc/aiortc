@@ -245,7 +245,9 @@ class SessionDescription:
                     elif attr == 'ssrc':
                         ssrc, ssrc_desc = value.split(' ', 1)
                         ssrc_attr, ssrc_value = ssrc_desc.split(':')
-                        if ssrc_attr == 'cname':
+                        # NOTE: Chrome send us multiple SSRC, which we cannot store in
+                        # RTCRtcpParameters, so keep the first rather than the last.
+                        if ssrc_attr == 'cname' and not current_media.rtp.rtcp.cname:
                             current_media.rtp.rtcp.cname = ssrc_value
                             current_media.rtp.rtcp.ssrc = int(ssrc)
                 else:

@@ -335,3 +335,127 @@ a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
 a=setup:actpass
 """))  # noqa
+
+    def test_video_chrome(self):
+        d = SessionDescription.parse(lf2crlf("""v=0
+o=- 5195484278799753993 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE video
+a=msid-semantic: WMS bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
+m=video 34955 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102
+c=IN IP4 10.101.2.67
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:638323114 1 udp 2122260223 10.101.2.67 34955 typ host generation 0 network-id 2 network-cost 10
+a=candidate:1754264922 1 tcp 1518280447 10.101.2.67 9 typ host tcptype active generation 0 network-id 2 network-cost 10
+a=ice-ufrag:9KhP
+a=ice-pwd:mlPea2xBCmFmNLfmy/jlqw1D
+a=ice-options:trickle
+a=fingerprint:sha-256 30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E
+a=setup:actpass
+a=mid:video
+a=extmap:2 urn:ietf:params:rtp-hdrext:toffset
+a=extmap:3 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:4 urn:3gpp:video-orientation
+a=extmap:5 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01
+a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+a=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type
+a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/video-timing
+a=sendrecv
+a=rtcp-mux
+a=rtcp-rsize
+a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 goog-remb
+a=rtcp-fb:96 transport-cc
+a=rtcp-fb:96 ccm fir
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtpmap:98 VP9/90000
+a=rtcp-fb:98 goog-remb
+a=rtcp-fb:98 transport-cc
+a=rtcp-fb:98 ccm fir
+a=rtcp-fb:98 nack
+a=rtcp-fb:98 nack pli
+a=rtpmap:99 rtx/90000
+a=fmtp:99 apt=98
+a=rtpmap:100 red/90000
+a=rtpmap:101 rtx/90000
+a=fmtp:101 apt=100
+a=rtpmap:102 ulpfec/90000
+a=ssrc-group:FID 1845476211 3305256354
+a=ssrc:1845476211 cname:9iW3jspLCZJ5WjOZ
+a=ssrc:1845476211 msid:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:1845476211 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
+a=ssrc:1845476211 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:3305256354 cname:9iW3jspLCZJ5WjOZ
+a=ssrc:3305256354 msid:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:3305256354 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
+a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
+"""))  # noqa
+
+        self.assertEqual(d.bundle, ['video'])
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'video')
+        self.assertEqual(d.media[0].host, '10.101.2.67')
+        self.assertEqual(d.media[0].port, 34955)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=97),
+            RTCRtpCodecParameters(name='VP9', clockRate=90000, channels=None, payloadType=98),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=99),
+            RTCRtpCodecParameters(name='red', clockRate=90000, channels=None, payloadType=100),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=101),
+            RTCRtpCodecParameters(name='ulpfec', clockRate=90000, channels=None, payloadType=102)
+        ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [
+            RTCRtpHeaderExtensionParameters(
+                id=2,
+                uri='urn:ietf:params:rtp-hdrext:toffset'),
+            RTCRtpHeaderExtensionParameters(
+                id=3,
+                uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+            RTCRtpHeaderExtensionParameters(
+                id=4,
+                uri='urn:3gpp:video-orientation'),
+            RTCRtpHeaderExtensionParameters(
+                id=5,
+                uri='http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01'),
+            RTCRtpHeaderExtensionParameters(
+                id=6,
+                uri='http://www.webrtc.org/experiments/rtp-hdrext/playout-delay'),
+            RTCRtpHeaderExtensionParameters(
+                id=7,
+                uri='http://www.webrtc.org/experiments/rtp-hdrext/video-content-type'),
+            RTCRtpHeaderExtensionParameters(
+                id=8,
+                uri='http://www.webrtc.org/experiments/rtp-hdrext/video-timing')
+        ])
+        self.assertEqual(d.media[0].rtp.muxId, 'video')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, '9iW3jspLCZJ5WjOZ')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1845476211)
+        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
+        self.assertEqual(d.media[0].rtcp_port, 9)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [96, 97, 98, 99, 100, 101, 102])
+        self.assertEqual(d.media[0].sctpmap, {})
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 2)
+        self.assertEqual(d.media[0].ice_candidates_complete, False)
+        self.assertEqual(d.media[0].ice.usernameFragment, '9KhP')
+        self.assertEqual(d.media[0].ice.password, 'mlPea2xBCmFmNLfmy/jlqw1D')
+
+        # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(
+            d.media[0].dtls.fingerprints[0].value,
+            '30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E')  # noqa
+        self.assertEqual(d.media[0].dtls.role, 'auto')
