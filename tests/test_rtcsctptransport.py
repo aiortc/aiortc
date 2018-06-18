@@ -11,9 +11,9 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      InboundStream, InitChunk, Packet,
                                      RTCSctpCapabilities, RTCSctpTransport,
                                      SackChunk, ShutdownAckChunk,
-                                     ShutdownChunk, seq_gt, seq_plus_one,
-                                     tsn_gt, tsn_gte, tsn_minus_one,
-                                     tsn_plus_one)
+                                     ShutdownChunk, ShutdownCompleteChunk,
+                                     seq_gt, seq_plus_one, tsn_gt, tsn_gte,
+                                     tsn_minus_one, tsn_plus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -607,6 +607,26 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
+    def test_shutdown(self):
+        client_transport, server_transport = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        server = RTCSctpTransport(server_transport)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+
+        # shutdown
+        run(client._shutdown())
+        run(asyncio.sleep(0.5))
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+
     def test_garbage(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = RTCSctpTransport(server_transport)
@@ -803,6 +823,27 @@ class RTCSctpTransportTest(TestCase):
 
         # sack point must not changed
         self.assertEqual(client._last_sacked_tsn, sack_point)
+
+    def test_receive_shutdown(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client_transport, _ = dummy_dtls_transport_pair()
+        client = RTCSctpTransport(client_transport)
+        client._last_received_tsn = 0
+        client._send_chunk = mock_send_chunk
+        client.state = RTCSctpTransport.State.ESTABLISHED
+
+        # receive shutdown
+        chunk = ShutdownChunk()
+        chunk.cumulative_tsn = tsn_minus_one(client._last_sacked_tsn)
+        run(client._receive_chunk(chunk))
+        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+
+        # receive shutdown complete
+        chunk = ShutdownCompleteChunk()
+        run(client._receive_chunk(chunk))
+        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
 
     def test_mark_received(self):
         client_transport = DummyDtlsTransport()
