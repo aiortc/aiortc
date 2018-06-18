@@ -767,7 +767,6 @@ class RTCSctpTransport(EventEmitter):
                 self._t3_start()
 
             await self._transmit()
-            await self._send_shutdown_maybe()
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
             ack.params = chunk.params
@@ -782,12 +781,6 @@ class RTCSctpTransport(EventEmitter):
             await self._send_chunk(ack)
             self._t2_start(ack)
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
-        elif (isinstance(chunk, ShutdownAckChunk) and
-              self.state in [self.State.SHUTDOWN_SENT, self.State.SHUTDOWN_ACK_SENT]):
-            self._t2_cancel()
-            complete = ShutdownCompleteChunk()
-            await self._send_chunk(complete)
-            self._set_state(self.State.CLOSED)
         elif (isinstance(chunk, ShutdownCompleteChunk) and
               self.state == self.State.SHUTDOWN_ACK_SENT):
             self._t2_cancel()
@@ -859,17 +852,6 @@ class RTCSctpTransport(EventEmitter):
         self._sack_duplicates.clear()
         self._sack_needed = False
 
-    async def _send_shutdown_maybe(self):
-        """
-        Send a shutdown chunk if shutdown is pending and all data has been acknowledged.
-        """
-        if self.state == self.State.SHUTDOWN_PENDING and not len(self._outbound_queue):
-            chunk = ShutdownChunk()
-            chunk.cumulative_tsn = self._last_received_tsn
-            await self._send_chunk(chunk)
-            self._t2_start(chunk)
-            self._set_state(self.State.SHUTDOWN_SENT)
-
     def _set_state(self, state):
         """
         Transition the SCTP association to a new state.
@@ -884,19 +866,6 @@ class RTCSctpTransport(EventEmitter):
                 self._t2_cancel()
                 self._t3_cancel()
                 self.closed.set()
-
-    async def _shutdown(self):
-        """
-        Shutdown the association gracefully.
-        """
-        if self.state == self.State.CLOSED:
-            self.closed.set()
-        elif self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]:
-            self._set_state(self.State.CLOSED)
-        elif self.state == self.State.ESTABLISHED:
-            self._set_state(self.State.SHUTDOWN_PENDING)
-            await self._send_shutdown_maybe()
-        await self.closed.wait()
 
     def _t1_cancel(self):
         if self._t1_handle is not None:
@@ -936,8 +905,6 @@ class RTCSctpTransport(EventEmitter):
         if self._t2_failures > SCTP_MAX_ASSOCIATION_RETRANS:
             self._set_state(self.State.CLOSED)
         else:
-            if isinstance(self._t2_chunk, ShutdownChunk):
-                self._t2_chunk.cumulative_tsn = self._last_received_tsn
             asyncio.ensure_future(self._send_chunk(self._t2_chunk))
             self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 

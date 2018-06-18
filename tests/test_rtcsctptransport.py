@@ -607,26 +607,6 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
-    def test_shutdown(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
-        server = RTCSctpTransport(server_transport)
-
-        # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
-
-        # shutdown
-        run(client._shutdown())
-        run(asyncio.sleep(0.5))
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
-
     def test_garbage(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = RTCSctpTransport(server_transport)
@@ -1024,34 +1004,5 @@ class RTCSctpTransportTest(TestCase):
         self.assertIsNone(client._t2_handle)
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
 
-    def test_t2_expired_when_shutdown_sent(self):
-        async def mock_send_chunk(chunk):
-            pass
-
-        client_transport = DummyDtlsTransport()
-        client = RTCSctpTransport(client_transport)
-        client._last_received_tsn = 0
-        client._send_chunk = mock_send_chunk
-
-        chunk = ShutdownChunk()
-
-        # fails once
-        client.state = RTCSctpTransport.State.SHUTDOWN_SENT
-        client._t2_start(chunk)
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 1)
-        self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_SENT)
-
-        # fails 10 times
-        client._t2_failures = 9
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 10)
-        self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_SENT)
-
-        # fails 11 times
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 11)
-        self.assertIsNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        # let async code complete
+        run(asyncio.sleep(0.1))
