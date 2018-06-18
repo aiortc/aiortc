@@ -1005,4 +1005,31 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
 
         # let async code complete
-        run(asyncio.sleep(0.1))
+        run(asyncio.sleep(0))
+
+    def test_t3_expired(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        async def mock_transmit():
+            pass
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._send_chunk = mock_send_chunk
+
+        # 1 chunk
+        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH))
+        self.assertIsNotNone(client._t3_handle)
+        self.assertEqual(len(client._outbound_queue), 1)
+        self.assertEqual(client._outbound_queue_pos, 1)
+
+        # t3 expires
+        client._transmit = mock_transmit
+        client._t3_expired()
+        self.assertIsNone(client._t3_handle)
+        self.assertEqual(len(client._outbound_queue), 1)
+        self.assertEqual(client._outbound_queue_pos, 0)
+
+        # let async code complete
+        run(asyncio.sleep(0))
