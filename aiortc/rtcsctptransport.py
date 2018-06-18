@@ -537,7 +537,10 @@ class RTCSctpTransport(EventEmitter):
         """
         Stop the transport.
         """
-        await self._shutdown()
+        if self.state == self.State.CLOSED:
+            self.closed.set()
+        else:
+            await self._abort()
 
     async def _abort(self):
         """
