@@ -547,7 +547,10 @@ class RTCSctpTransport(EventEmitter):
         Abort the association.
         """
         chunk = AbortChunk()
-        await self._send_chunk(chunk)
+        try:
+            await self._send_chunk(chunk)
+        except ConnectionError:
+            pass
         self._set_state(self.State.CLOSED)
 
     async def __run(self):

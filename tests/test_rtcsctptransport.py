@@ -559,6 +559,9 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
     def test_abrupt_disconnect(self):
+        """
+        Abrupt disconnect causes the __run() loop to exit.
+        """
         client_transport, server_transport = dummy_dtls_transport_pair()
 
         client = RTCSctpTransport(client_transport)
@@ -584,6 +587,32 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
         # try closing again
+        run(client.stop())
+        run(server.stop())
+
+    def test_abrupt_disconnect_2(self):
+        """
+        Abrupt disconnect causes sending ABORT chunk to fail.
+        """
+        client_transport, server_transport = dummy_dtls_transport_pair()
+
+        client = RTCSctpTransport(client_transport)
+        server = RTCSctpTransport(server_transport)
+
+        # connect
+        server.start(client.getCapabilities(), client.port)
+        client.start(server.getCapabilities(), server.port)
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+
+        # break connection
+        run(client_transport.close())
+        run(server_transport.close())
+
+        # stop
         run(client.stop())
         run(server.stop())
 
