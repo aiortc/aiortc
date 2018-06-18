@@ -9,10 +9,11 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      CookieEchoChunk, DataChunk, ErrorChunk,
                                      HeartbeatAckChunk, HeartbeatChunk,
                                      InboundStream, InitChunk, Packet,
-                                     RTCSctpCapabilities, RTCSctpTransport,
-                                     SackChunk, ShutdownAckChunk,
-                                     ShutdownChunk, ShutdownCompleteChunk,
-                                     seq_gt, seq_plus_one, tsn_gt, tsn_gte,
+                                     ReconfigChunk, RTCSctpCapabilities,
+                                     RTCSctpTransport, SackChunk,
+                                     ShutdownAckChunk, ShutdownChunk,
+                                     ShutdownCompleteChunk, seq_gt,
+                                     seq_plus_one, tsn_gt, tsn_gte,
                                      tsn_minus_one, tsn_plus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
@@ -142,6 +143,21 @@ class SctpPacketTest(TestCase):
             (1, b'\xb5o\xaaZvZ\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00{\x10\x00\x00'
                 b'\x004\xeb\x07F\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
         ])
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_reconfig(self):
+        data = load('sctp_reconfig.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 3370675819)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
+        self.assertEqual(packet.chunks[0].type, 130)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(len(packet.chunks[0].body), 18)
 
         self.assertEqual(bytes(packet), data)
 
@@ -501,7 +517,9 @@ class RTCSctpTransportTest(TestCase):
         # check outcome
         run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._remote_extensions, [130])
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._remote_extensions, [130])
 
         # create data channel
         channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
@@ -539,7 +557,9 @@ class RTCSctpTransportTest(TestCase):
         # check outcome
         run(wait_for_outcome(client, server))
         self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._remote_extensions, [130])
         self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._remote_extensions, [130])
 
         # create data channel
         channel = RTCDataChannel(server, RTCDataChannelParameters(label='chat'))

@@ -37,7 +37,11 @@ SCTP_RTO_INITIAL = 3
 SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
+RECONFIG_CHUNK = 130
+
+# parameters
 STATE_COOKIE = 0x0007
+SUPPORTED_EXTENSIONS = 0x8008
 
 # data channel constants
 DATA_CHANNEL_ACK = 2
@@ -243,6 +247,10 @@ class InitAckChunk(BaseInitChunk):
     pass
 
 
+class ReconfigChunk(Chunk):
+    pass
+
+
 class SackChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
@@ -316,6 +324,7 @@ CHUNK_TYPES = {
     10: CookieEchoChunk,
     11: CookieAckChunk,
     14: ShutdownCompleteChunk,
+    130: ReconfigChunk,
 }
 
 
@@ -461,9 +470,11 @@ class RTCSctpTransport(EventEmitter):
         self.inbound_streams = 65535
         self.outbound_streams = 65535
 
+        self._local_extensions = [RECONFIG_CHUNK]
         self._local_port = port
         self._local_verification_tag = random32()
 
+        self._remote_extensions = []
         self._remote_port = None
         self._remote_verification_tag = 0
 
@@ -572,6 +583,7 @@ class RTCSctpTransport(EventEmitter):
             chunk.outbound_streams = self.outbound_streams
             chunk.inbound_streams = self.inbound_streams
             chunk.initial_tsn = self._local_tsn
+            self._set_extensions(chunk.params)
             await self._send_chunk(chunk)
 
             # start T1 timer and enter COOKIE-WAIT state
@@ -614,6 +626,20 @@ class RTCSctpTransport(EventEmitter):
             # send SACK if needed
             if self._sack_needed:
                 await self._send_sack()
+
+    def _get_extensions(self, params):
+        """
+        Gets what extensions are supported by the remote party.
+        """
+        for k, v in params:
+            if k == SUPPORTED_EXTENSIONS:
+                self._remote_extensions = list(v)
+
+    def _set_extensions(self, params):
+        """
+        Sets what extensions are supported by the local party.
+        """
+        params.append((SUPPORTED_EXTENSIONS, bytes(self._local_extensions)))
 
     def _get_timestamp(self):
         return int(time.time())
@@ -658,6 +684,7 @@ class RTCSctpTransport(EventEmitter):
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
             self._ssthresh = chunk.advertised_rwnd
+            self._get_extensions(chunk.params)
 
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
@@ -665,6 +692,7 @@ class RTCSctpTransport(EventEmitter):
             ack.outbound_streams = self.outbound_streams
             ack.inbound_streams = self.inbound_streams
             ack.initial_tsn = self._local_tsn
+            self._set_extensions(ack.params)
 
             # generate state cookie
             cookie = pack('!L', self._get_timestamp())
@@ -700,6 +728,7 @@ class RTCSctpTransport(EventEmitter):
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
             self._ssthresh = chunk.advertised_rwnd
+            self._get_extensions(chunk.params)
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
