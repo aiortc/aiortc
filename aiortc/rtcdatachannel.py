@@ -1,7 +1,10 @@
 import asyncio
+import logging
 
 import attr
 from pyee import EventEmitter
+
+logger = logging.getLogger('datachannel')
 
 
 class RTCDataChannel(EventEmitter):
@@ -65,7 +68,9 @@ class RTCDataChannel(EventEmitter):
         """
         Close the data channel.
         """
-        self._setReadyState('closed')
+        if self.__readyState not in ['closing', 'closed']:
+            self._setReadyState('closing')
+            asyncio.ensure_future(self.transport._data_channel_close(self))
 
     def send(self, data):
         """
@@ -81,7 +86,11 @@ class RTCDataChannel(EventEmitter):
 
     def _setReadyState(self, state):
         if state != self.__readyState:
+            self.__log_debug('- %s -> %s', self.__readyState, state)
             self.__readyState = state
+
+    def __log_debug(self, msg, *args):
+        logger.debug(str(self.id) + ' ' + msg, *args)
 
 
 @attr.s

@@ -40,8 +40,10 @@ SCTP_TSN_MODULO = 2 ** 32
 RECONFIG_CHUNK = 130
 
 # parameters
-STATE_COOKIE = 0x0007
-SUPPORTED_EXTENSIONS = 0x8008
+SCTP_STATE_COOKIE = 0x0007
+SCTP_STR_RESET_OUT_REQUEST = 0x000d
+SCTP_STR_RESET_RESPONSE = 0x0010
+SCTP_SUPPORTED_CHUNK_EXT = 0x8008
 
 # data channel constants
 DATA_CHANNEL_ACK = 2
@@ -247,7 +249,7 @@ class InitAckChunk(BaseInitChunk):
     pass
 
 
-class ReconfigChunk(Chunk):
+class ReconfigChunk(BaseParamsChunk):
     pass
 
 
@@ -381,6 +383,52 @@ class Packet:
         return packet
 
 
+# RFC 6525
+
+@attr.s
+class StreamResetOutgoingParam:
+    request_sequence = attr.ib()
+    response_sequence = attr.ib()
+    last_tsn = attr.ib()
+    streams = attr.ib(default=attr.Factory(list))
+
+    def __bytes__(self):
+        data = pack(
+            '!LLL',
+            self.request_sequence,
+            self.response_sequence,
+            self.last_tsn)
+        for stream in self.streams:
+            data += pack('!H', stream)
+        return data
+
+    @classmethod
+    def parse(cls, data):
+        request_sequence, response_sequence, last_tsn = unpack('!LLL', data[0:12])
+        streams = []
+        for pos in range(12, len(data), 2):
+            streams.append(unpack('!H', data[pos:pos + 2])[0])
+        return cls(
+            request_sequence=request_sequence,
+            response_sequence=response_sequence,
+            last_tsn=last_tsn,
+            streams=streams)
+
+
+@attr.s
+class StreamResetResponseParam:
+    response_sequence = attr.ib()
+    result = attr.ib()
+
+    def __bytes__(self):
+        return pack('!LL', self.response_sequence, self.result)
+
+    @classmethod
+    def parse(cls, data):
+        response_sequence, result = unpack('!LL', data[0:8])
+        return cls(response_sequence=response_sequence, result=result)
+
+
 class InboundStream:
     def __init__(self):
         self.reassembly = []
@@ -493,6 +541,11 @@ class RTCSctpTransport(EventEmitter):
         self._outbound_queue = []
         self._outbound_queue_pos = 0
         self._outbound_stream_seq = {}
+
+        # reconfiguration
+        self._reconfig_request = None
+        self._reconfig_request_seq = self._local_tsn
+        self._reconfig_response_seq = 0
 
         # timers
         self._rto = SCTP_RTO_INITIAL
@@ -632,14 +685,14 @@ class RTCSctpTransport(EventEmitter):
         Gets what extensions are supported by the remote party.
         """
         for k, v in params:
-            if k == SUPPORTED_EXTENSIONS:
+            if k == SCTP_SUPPORTED_CHUNK_EXT:
                 self._remote_extensions = list(v)
 
     def _set_extensions(self, params):
         """
         Sets what extensions are supported by the local party.
         """
-        params.append((SUPPORTED_EXTENSIONS, bytes(self._local_extensions)))
+        params.append((SCTP_SUPPORTED_CHUNK_EXT, bytes(self._local_extensions)))
 
     def _get_timestamp(self):
         return int(time.time())
@@ -682,6 +735,7 @@ class RTCSctpTransport(EventEmitter):
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
+            self._reconfig_response_seq = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
@@ -697,7 +751,7 @@ class RTCSctpTransport(EventEmitter):
             # generate state cookie
             cookie = pack('!L', self._get_timestamp())
             cookie += hmac.new(self._hmac_key, cookie, 'sha1').digest()
-            ack.params.append((STATE_COOKIE, cookie))
+            ack.params.append((SCTP_STATE_COOKIE, cookie))
             await self._send_chunk(ack)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             # check state cookie MAC
@@ -726,13 +780,14 @@ class RTCSctpTransport(EventEmitter):
             # cancel T1 timer and process chunk
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
+            self._reconfig_response_seq = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
-                if k == STATE_COOKIE:
+                if k == SCTP_STATE_COOKIE:
                     echo.body = v
                     break
             await self._send_chunk(echo)
@@ -817,6 +872,30 @@ class RTCSctpTransport(EventEmitter):
               self.state == self.State.SHUTDOWN_ACK_SENT):
             self._t2_cancel()
             self._set_state(self.State.CLOSED)
+        elif (isinstance(chunk, ReconfigChunk) and self.state == self.State.ESTABLISHED):
+            for param in chunk.params:
+                if param[0] == SCTP_STR_RESET_OUT_REQUEST:
+                    request_param = StreamResetOutgoingParam.parse(param[1])
+                    self._reconfig_response_seq = request_param.request_sequence
+
+                    # mark closed streams
+                    for stream_id in request_param.streams:
+                        self._inbound_streams.pop(stream_id)
+
+                    # send response
+                    response_param = StreamResetResponseParam(
+                        response_sequence=request_param.request_sequence,
+                        result=1)
+                    response = ReconfigChunk()
+                    response.params.append((SCTP_STR_RESET_RESPONSE, bytes(response_param)))
+                    await self._send_chunk(response)
+                elif param[0] == SCTP_STR_RESET_RESPONSE:
+                    response_param = StreamResetResponseParam.parse(param[1])
+                    if (self._reconfig_request and
+                       response_param.response_sequence == self._reconfig_request.request_sequence):
+                        # mark closed streams
+                        for stream_id in self._reconfig_request.streams:
+                            self._data_channel_closed(stream_id)
 
     async def _send(self, stream_id, pp_id, user_data):
         """
@@ -984,6 +1063,27 @@ class RTCSctpTransport(EventEmitter):
             if not self._t3_handle:
                 self._t3_start()
             self._outbound_queue_pos += 1
+
+    async def _data_channel_close(self, channel):
+        """
+        Request closing the datachannel by sending an Outgoing Stream Reset Request.
+        """
+        param = StreamResetOutgoingParam(
+            request_sequence=self._reconfig_request_seq,
+            response_sequence=self._reconfig_response_seq,
+            last_tsn=tsn_minus_one(self._local_tsn),
+            streams=[channel.id],
+        )
+        self._reconfig_request = param
+        self._reconfig_request_seq = tsn_plus_one(self._reconfig_request_seq)
+
+        chunk = ReconfigChunk()
+        chunk.params.append((SCTP_STR_RESET_OUT_REQUEST, bytes(param)))
+        await self._send_chunk(chunk)
+
+    def _data_channel_closed(self, stream_id):
+        channel = self._data_channels.pop(stream_id)
+        channel._setReadyState('closed')
 
     async def _data_channel_flush(self):
         """

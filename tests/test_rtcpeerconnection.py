@@ -814,7 +814,7 @@ class RTCPeerConnectionTest(TestCase):
 
         # close data channel
         dc.close()
-        self.assertEqual(dc.readyState, 'closed')
+        self.assertEqual(dc.readyState, 'closing')
 
         # close
         run(pc1.close())

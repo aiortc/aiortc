@@ -12,7 +12,9 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      ReconfigChunk, RTCSctpCapabilities,
                                      RTCSctpTransport, SackChunk,
                                      ShutdownAckChunk, ShutdownChunk,
-                                     ShutdownCompleteChunk, seq_gt,
+                                     ShutdownCompleteChunk,
+                                     StreamResetOutgoingParam,
+                                     StreamResetResponseParam, seq_gt,
                                      seq_plus_one, tsn_gt, tsn_gte,
                                      tsn_minus_one, tsn_plus_one)
 
@@ -146,8 +148,8 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
-    def test_parse_reconfig(self):
-        data = load('sctp_reconfig.bin')
+    def test_parse_reconfig_request(self):
+        data = load('sctp_reconfig_request.bin')
         packet = Packet.parse(data)
         self.assertEqual(packet.source_port, 5000)
         self.assertEqual(packet.destination_port, 5000)
@@ -157,7 +159,42 @@ class SctpPacketTest(TestCase):
         self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
         self.assertEqual(packet.chunks[0].type, 130)
         self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(len(packet.chunks[0].body), 18)
+        self.assertEqual(packet.chunks[0].params, [
+            (13, b'\x8b\xd8\n[\xe4\x8b\xecs\x8b\xd8\n^\x00\x01')
+        ])
+
+        # Outgoing SSN Reset Request Parameter
+        param_data = packet.chunks[0].params[0][1]
+        param = StreamResetOutgoingParam.parse(param_data)
+        self.assertEqual(param.request_sequence, 2346191451)
+        self.assertEqual(param.response_sequence, 3834375283)
+        self.assertEqual(param.last_tsn, 2346191454)
+        self.assertEqual(param.streams, [1])
+        self.assertEqual(bytes(param), param_data)
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_reconfig_response(self):
+        data = load('sctp_reconfig_response.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 2982117117)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
+        self.assertEqual(packet.chunks[0].type, 130)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].params, [
+            (16, b'\x91S\x1fT\x00\x00\x00\x01')
+        ])
+
+        # Re-configuration Response Parameter
+        param_data = packet.chunks[0].params[0][1]
+        param = StreamResetResponseParam.parse(param_data)
+        self.assertEqual(param.response_sequence, 2438143828)
+        self.assertEqual(param.result, 1)
+        self.assertEqual(bytes(param), param_data)
 
         self.assertEqual(bytes(packet), data)
 
