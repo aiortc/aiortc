@@ -73,6 +73,13 @@ function start() {
     document.getElementById('start').style.display = 'none';
 
     dc = pc.createDataChannel('chat');
+    dc.onclose = function() {
+        clearInterval(dcInterval);
+        dataChannelLog.textContent += '- close\n';
+    };
+    dc.onopen = function() {
+        dataChannelLog.textContent += '- open\n';
+    };
     dc.onmessage = function(evt) {
         dataChannelLog.textContent += '< ' + evt.data + '\n';
     };
@@ -111,10 +118,14 @@ function start() {
 function stop() {
     document.getElementById('stop').style.display = 'none';
 
-    clearInterval(dcInterval);
+    // close data channel
     dc.close();
+
+    // close audio / video
     pc.getSenders().forEach(function(sender) {
         sender.track.stop();
     });
+
+    // close peer connection
     pc.close();
 }
