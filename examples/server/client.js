@@ -112,6 +112,7 @@ function stop() {
     document.getElementById('stop').style.display = 'none';
 
     clearInterval(dcInterval);
+    dc.close();
     pc.getSenders().forEach(function(sender) {
         sender.track.stop();
     });
