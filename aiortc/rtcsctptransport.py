@@ -880,7 +880,7 @@ class RTCSctpTransport(EventEmitter):
 
                     # mark closed streams
                     for stream_id in request_param.streams:
-                        self._inbound_streams.pop(stream_id)
+                        self._inbound_streams.pop(stream_id, None)
 
                     # send response
                     response_param = StreamResetResponseParam(
@@ -895,7 +895,10 @@ class RTCSctpTransport(EventEmitter):
                        response_param.response_sequence == self._reconfig_request.request_sequence):
                         # mark closed streams
                         for stream_id in self._reconfig_request.streams:
+                            self._outbound_stream_seq.pop(stream_id, None)
                             self._data_channel_closed(stream_id)
+
+                        self._config_request = None
 
     async def _send(self, stream_id, pp_id, user_data):
         """
