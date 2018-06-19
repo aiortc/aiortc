@@ -64,6 +64,13 @@ def add_transport_description(media, iceTransport, dtlsTransport):
         media.dtls.role = 'client'
 
 
+def add_remote_candidates(iceTransport, media):
+    for candidate in media.ice_candidates:
+        iceTransport.addRemoteCandidate(candidate)
+    if media.ice_candidates_complete:
+        iceTransport.addRemoteCandidate(None)
+
+
 class RTCPeerConnection(EventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
@@ -334,7 +341,7 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure transport
                 iceTransport = transceiver._transport.transport
-                iceTransport.setRemoteCandidates(media.ice_candidates)
+                add_remote_candidates(iceTransport, media)
                 self.__remoteDtls[transceiver] = media.dtls
                 self.__remoteIce[transceiver] = media.ice
                 self.__remoteRtp[transceiver] = media.rtp
@@ -355,7 +362,7 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure transport
                 iceTransport = self.__sctp.transport.transport
-                iceTransport.setRemoteCandidates(media.ice_candidates)
+                add_remote_candidates(iceTransport, media)
                 self.__remoteDtls[self.__sctp] = media.dtls
                 self.__remoteIce[self.__sctp] = media.ice
 

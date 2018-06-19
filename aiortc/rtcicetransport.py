@@ -170,7 +170,8 @@ class RTCIceTransport(EventEmitter):
         """
         Add a remote candidate.
         """
-        self._connection.remote_candidates += [candidate_to_aioice(candidate)]
+        if candidate is not None:
+            self._connection.remote_candidates += [candidate_to_aioice(candidate)]
 
     def getRemoteCandidates(self):
         """
@@ -178,13 +179,6 @@ class RTCIceTransport(EventEmitter):
         :class:`RTCIceTransport`.
         """
         return [candidate_from_aioice(x) for x in self._connection.remote_candidates]
-
-    def setRemoteCandidates(self, remoteCandidates):
-        """
-        Set the list of candidates associated with the remote
-        :class:`RTCIceTransport`.
-        """
-        self._connection.remote_candidates = [candidate_to_aioice(x) for x in remoteCandidates]
 
     async def start(self, remoteParameters):
         """

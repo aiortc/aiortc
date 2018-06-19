@@ -39,5 +39,5 @@ setuptools.setup(
     cffi_modules=cffi_modules,
     packages=['aiortc', 'aiortc.codecs'],
     setup_requires=['cffi'],
-    install_requires=['aioice>=0.5.1', 'attrs', 'crcmod', 'cryptography>=2.2', 'pyee', 'pylibsrtp>=0.5.0', 'pyopenssl'],
+    install_requires=['aioice>=0.5.1,<0.6.0', 'attrs', 'crcmod', 'cryptography>=2.2', 'pyee', 'pylibsrtp>=0.5.0', 'pyopenssl'],
 )
