@@ -89,6 +89,11 @@ class RTCDataChannel(EventEmitter):
             self.__log_debug('- %s -> %s', self.__readyState, state)
             self.__readyState = state
 
+            if state == 'open':
+                self.emit('open')
+            elif state == 'closed':
+                self.emit('close')
+
     def __log_debug(self, msg, *args):
         logger.debug(str(self.id) + ' ' + msg, *args)
 
