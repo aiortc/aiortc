@@ -42,6 +42,11 @@ class ConnectionKwargsTest(TestCase):
             'turn_username': None,
         })
 
+    def test_turn_over_tcp(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turn:turn.example.com?transport=tcp'),
+        ]), {})
+
     def test_turn_with_password(self):
         self.assertEqual(connection_kwargs([
             RTCIceServer(
@@ -107,16 +112,16 @@ class ParseStunTurnUriTest(TestCase):
             'host': '1.2.3.4',
             'port': 3478,
             'scheme': 'turn',
-            'transport': None,
+            'transport': 'udp',
         })
 
     def test_turn_with_port_and_transport(self):
-        uri = parse_stun_turn_uri('turn:1.2.3.4:3478?transport=udp')
+        uri = parse_stun_turn_uri('turn:1.2.3.4:3478?transport=tcp')
         self.assertEqual(uri, {
             'host': '1.2.3.4',
             'port': 3478,
             'scheme': 'turn',
-            'transport': 'udp',
+            'transport': 'tcp',
         })
 
     def test_turns(self):
@@ -125,5 +130,14 @@ class ParseStunTurnUriTest(TestCase):
             'host': '1.2.3.4',
             'port': 5349,
             'scheme': 'turns',
-            'transport': None,
+            'transport': 'tcp',
+        })
+
+    def test_turns_with_port_and_transport(self):
+        uri = parse_stun_turn_uri('turns:1.2.3.4:1234?transport=tcp')
+        self.assertEqual(uri, {
+            'host': '1.2.3.4',
+            'port': 1234,
+            'scheme': 'turns',
+            'transport': 'tcp',
         })

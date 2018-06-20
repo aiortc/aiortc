@@ -64,7 +64,7 @@ def connection_kwargs(servers):
                 continue
 
             # only 'udp' transport is supported
-            if uri['transport'] and uri['transport'] != 'udp':
+            if uri['transport'] != 'udp':
                 continue
 
             # only 'password' credentialType is supported
@@ -97,6 +97,12 @@ def parse_stun_turn_uri(uri):
         match['port'] = 5349
     else:
         match['port'] = 3478
+
+    # set transport
+    if match['scheme'] == 'turn' and not match['transport']:
+        match['transport'] = 'udp'
+    elif match['scheme'] == 'turns' and not match['transport']:
+        match['transport'] = 'tcp'
 
     return match
 
