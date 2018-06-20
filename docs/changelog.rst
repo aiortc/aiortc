@@ -4,8 +4,10 @@ Changelog
 0.6.0
 -----
 
-Media
-.....
+Peer connection
+...............
+
+  * Make it possible to specify one STUN server and / or one TURN server.
 
   * Add `BUNDLE` support to use a single ICE/DTLS transport for multiple media.
 
