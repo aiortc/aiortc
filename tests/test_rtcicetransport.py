@@ -15,12 +15,22 @@ class ConnectionKwargsTest(TestCase):
             'stun_server': ('stun.l.google.com', 19302),
         })
 
-    def test_stun_multiple(self):
+    def test_stun_multiple_servers(self):
         self.assertEqual(connection_kwargs([
             RTCIceServer('stun:stun.l.google.com:19302'),
             RTCIceServer('stun:stun.example.com'),
         ]), {
             'stun_server': ('stun.l.google.com', 19302),
+        })
+
+    def test_stun_multiple_urls(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer([
+                'stun:stun1.l.google.com:19302',
+                'stun:stun2.l.google.com:19302',
+            ]),
+        ]), {
+            'stun_server': ('stun1.l.google.com', 19302),
         })
 
     def test_turn(self):
@@ -32,13 +42,25 @@ class ConnectionKwargsTest(TestCase):
             'turn_username': None,
         })
 
-    def test_turn_multiple(self):
+    def test_turn_multiple_servers(self):
         self.assertEqual(connection_kwargs([
             RTCIceServer('turn:turn.example.com'),
             RTCIceServer('turn:turn.example.net'),
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_username': None,
+        })
+
+    def test_turn_multiple_urls(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer([
+                'turn:turn1.example.com',
+                'turn:turn2.example.com',
+            ])
+        ]), {
+            'turn_password': None,
+            'turn_server': ('turn1.example.com', 3478),
             'turn_username': None,
         })
 

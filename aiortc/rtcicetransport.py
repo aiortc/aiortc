@@ -50,30 +50,36 @@ def connection_kwargs(servers):
     kwargs = {}
 
     for server in servers:
-        uri = parse_stun_turn_uri(server.urls)
+        if isinstance(server.urls, list):
+            uris = server.urls
+        else:
+            uris = [server.urls]
 
-        if uri['scheme'] == 'stun':
-            # only a single STUN server is supported
-            if 'stun_server' in kwargs:
-                continue
+        for uri in uris:
+            parsed = parse_stun_turn_uri(uri)
 
-            kwargs['stun_server'] = (uri['host'], uri['port'])
-        elif uri['scheme'] == 'turn':
-            # only a single TURN server is supported
-            if 'turn_server' in kwargs:
-                continue
+            if parsed['scheme'] == 'stun':
+                # only a single STUN server is supported
+                if 'stun_server' in kwargs:
+                    continue
 
-            # only 'udp' transport is supported
-            if uri['transport'] != 'udp':
-                continue
+                kwargs['stun_server'] = (parsed['host'], parsed['port'])
+            elif parsed['scheme'] == 'turn':
+                # only a single TURN server is supported
+                if 'turn_server' in kwargs:
+                    continue
 
-            # only 'password' credentialType is supported
-            if server.credentialType != 'password':
-                continue
+                # only 'udp' transport is supported
+                if parsed['transport'] != 'udp':
+                    continue
 
-            kwargs['turn_server'] = (uri['host'], uri['port'])
-            kwargs['turn_username'] = server.username
-            kwargs['turn_password'] = server.credential
+                # only 'password' credentialType is supported
+                if server.credentialType != 'password':
+                    continue
+
+                kwargs['turn_server'] = (parsed['host'], parsed['port'])
+                kwargs['turn_username'] = server.username
+                kwargs['turn_password'] = server.credential
 
     return kwargs
 
