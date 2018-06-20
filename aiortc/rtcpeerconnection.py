@@ -438,7 +438,7 @@ class RTCPeerConnection(EventEmitter):
 
     def __createDtlsTransport(self):
         # create ICE transport
-        iceGatherer = RTCIceGatherer(servers=self.__configuration.iceServers)
+        iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
         iceGatherer.on('statechange', self.__updateIceGatheringState)
         iceTransport = RTCIceTransport(iceGatherer)
         iceTransport.on('statechange', self.__updateIceConnectionState)

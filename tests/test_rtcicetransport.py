@@ -1,7 +1,8 @@
 from unittest import TestCase
 
 from aiortc.rtcconfiguration import RTCIceServer
-from aiortc.rtcicetransport import connection_kwargs, parse_stun_turn_uri
+from aiortc.rtcicetransport import (RTCIceGatherer, connection_kwargs,
+                                    parse_stun_turn_uri)
 
 
 class ConnectionKwargsTest(TestCase):
@@ -163,3 +164,10 @@ class ParseStunTurnUriTest(TestCase):
             'scheme': 'turns',
             'transport': 'tcp',
         })
+
+
+class RTCIceGathererTest(TestCase):
+    def test_default_ice_servers(self):
+        self.assertEqual(RTCIceGatherer.getDefaultIceServers(), [
+            RTCIceServer(urls='stun:stun.l.google.com:19302')
+        ])

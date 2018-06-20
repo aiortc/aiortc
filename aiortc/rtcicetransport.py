@@ -4,6 +4,8 @@ import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
 
+from .rtcconfiguration import RTCIceServer
+
 STUN_REGEX = re.compile('(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
 TURN_REGEX = re.compile('(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
                         '(\?transport=(?P<transport>.*))?')
@@ -120,9 +122,13 @@ class RTCIceGatherer(EventEmitter):
     Interactive Connectivity Establishment (ICE) parameters which can be
     exchanged in signaling.
     """
-    def __init__(self, servers=None):
+    def __init__(self, iceServers=None):
         super().__init__()
-        ice_kwargs = connection_kwargs(servers or [])
+
+        if iceServers is None:
+            iceServers = self.getDefaultIceServers()
+        ice_kwargs = connection_kwargs(iceServers)
+
         self._connection = Connection(ice_controlling=False, **ice_kwargs)
         self.__state = 'new'
 
@@ -141,6 +147,13 @@ class RTCIceGatherer(EventEmitter):
             self.__setState('gathering')
             await self._connection.gather_candidates()
             self.__setState('completed')
+
+    @classmethod
+    def getDefaultIceServers(cls):
+        """
+        Return the list of default :class:`RTCIceServer`.
+        """
+        return [RTCIceServer('stun:stun.l.google.com:19302')]
 
     def getLocalCandidates(self):
         """
