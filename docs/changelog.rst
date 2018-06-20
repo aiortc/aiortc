@@ -14,11 +14,11 @@ Media
 Data channels
 .............
 
-  * Use SCTP `ABORT` instead of `SHUTDOWN` when stopping :class:`RTCSctpTransport`.
+  * Use SCTP `ABORT` instead of `SHUTDOWN` when stopping :class:`aiortc.RTCSctpTransport`.
 
   * Advertise support for SCTP `RE-CONFIG` extension.
 
-  * Make :class:`RTCDataChannel` emit `open` and `close` events.
+  * Make :class:`aiortc.RTCDataChannel` emit `open` and `close` events.
 
 Examples
 ........
