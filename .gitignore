@@ -1,6 +1,8 @@
 *.egg-info
 *.pyc
 .coverage
+.eggs
+.vscode
 /aiortc/codecs/_opus.*
 /aiortc/codecs/_vpx.*
 /build
