@@ -46,6 +46,38 @@ def candidate_to_aioice(x):
         type=x.type)
 
 
+def connection_kwargs(servers):
+    kwargs = {}
+
+    for server in servers:
+        uri = parse_stun_turn_uri(server.urls)
+
+        if uri['scheme'] == 'stun':
+            # only a single STUN server is supported
+            if 'stun_server' in kwargs:
+                continue
+
+            kwargs['stun_server'] = (uri['host'], uri['port'])
+        elif uri['scheme'] == 'turn':
+            # only a single TURN server is supported
+            if 'turn_server' in kwargs:
+                continue
+
+            # only 'udp' transport is supported
+            if uri['transport'] and uri['transport'] != 'udp':
+                continue
+
+            # only 'password' credentialType is supported
+            if server.credentialType != 'password':
+                continue
+
+            kwargs['turn_server'] = (uri['host'], uri['port'])
+            kwargs['turn_username'] = server.username
+            kwargs['turn_password'] = server.credential
+
+    return kwargs
+
+
 def parse_stun_turn_uri(uri):
     if uri.startswith('stun'):
         match = STUN_REGEX.fullmatch(uri)
@@ -78,32 +110,8 @@ class RTCIceGatherer(EventEmitter):
     """
     def __init__(self, servers=None):
         super().__init__()
-        ice_kargs = {}
-        for server in servers or []:
-            uri = parse_stun_turn_uri(server.urls)
-
-            if uri['scheme'] == 'stun':
-                if 'stun_server' in ice_kargs:
-                    # do not suport multiples stun server. ignoring
-                    continue
-
-                ice_kargs['stun_server'] = (uri['host'], uri['port'])
-            elif uri['scheme'] == 'turn':
-                if 'turn_server' in ice_kargs:
-                    # do not suport multiples turn server. ignoring
-                    continue
-
-                if uri['transport'] and uri['transport'] != 'udp':
-                    # only suport udp transport. ignoring
-                    continue
-                if server.credentialType != 'password':
-                    # only suport credentialType password. ignoring
-                    continue
-                ice_kargs['turn_server'] = (uri['host'], uri['port'])
-                ice_kargs['turn_username'] = server.username
-                ice_kargs['turn_password'] = server.credential
-
-        self._connection = Connection(ice_controlling=False, **ice_kargs)
+        ice_kwargs = connection_kwargs(servers or [])
+        self._connection = Connection(ice_controlling=False, **ice_kwargs)
         self.__state = 'new'
 
     @property

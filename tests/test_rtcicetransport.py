@@ -1,6 +1,69 @@
 from unittest import TestCase
 
-from aiortc.rtcicetransport import parse_stun_turn_uri
+from aiortc.rtcconfiguration import RTCIceServer
+from aiortc.rtcicetransport import connection_kwargs, parse_stun_turn_uri
+
+
+class ConnectionKwargsTest(TestCase):
+    def test_empty(self):
+        self.assertEqual(connection_kwargs([]), {})
+
+    def test_stun(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('stun:stun.l.google.com:19302'),
+        ]), {
+            'stun_server': ('stun.l.google.com', 19302),
+        })
+
+    def test_stun_multiple(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('stun:stun.l.google.com:19302'),
+            RTCIceServer('stun:stun.example.com'),
+        ]), {
+            'stun_server': ('stun.l.google.com', 19302),
+        })
+
+    def test_turn(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turn:turn.example.com'),
+        ]), {
+            'turn_password': None,
+            'turn_server': ('turn.example.com', 3478),
+            'turn_username': None,
+        })
+
+    def test_turn_multiple(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turn:turn.example.com'),
+            RTCIceServer('turn:turn.example.net'),
+        ]), {
+            'turn_password': None,
+            'turn_server': ('turn.example.com', 3478),
+            'turn_username': None,
+        })
+
+    def test_turn_with_password(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer(
+                urls='turn:turn.example.com',
+                username='foo',
+                credential='bar'
+            ),
+        ]), {
+            'turn_password': 'bar',
+            'turn_server': ('turn.example.com', 3478),
+            'turn_username': 'foo',
+        })
+
+    def test_turn_with_token(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer(
+                urls='turn:turn.example.com',
+                username='foo',
+                credential='bar',
+                credentialType='token',
+            ),
+        ]), {})
 
 
 class ParseStunTurnUriTest(TestCase):
