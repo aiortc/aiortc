@@ -1,8 +1,12 @@
+import re
+
 import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
 
-from .utils import parse_stun_turn_uri
+STUN_REGEX = re.compile('(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
+TURN_REGEX = re.compile('(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
+                        '(\?transport=(?P<transport>.*))?')
 
 
 @attr.s
@@ -42,6 +46,29 @@ def candidate_to_aioice(x):
         type=x.type)
 
 
+def parse_stun_turn_uri(uri):
+    if uri.startswith('stun'):
+        match = STUN_REGEX.fullmatch(uri)
+    elif uri.startswith('turn'):
+        match = TURN_REGEX.fullmatch(uri)
+    else:
+        raise ValueError('malformed uri: invalid scheme')
+
+    if not match:
+        raise ValueError('malformed uri')
+
+    # set port
+    match = match.groupdict()
+    if match['port']:
+        match['port'] = int(match['port'])
+    elif match['scheme'] in ['stuns', 'turns']:
+        match['port'] = 5349
+    else:
+        match['port'] = 3478
+
+    return match
+
+
 class RTCIceGatherer(EventEmitter):
     """
     The :class:`RTCIceGatherer` interface gathers local host, server reflexive
@@ -59,22 +86,23 @@ class RTCIceGatherer(EventEmitter):
                 if 'stun_server' in ice_kargs:
                     # do not suport multiples stun server. ignoring
                     continue
-                ice_kargs['stun_server'] = (uri['host'], uri['port'] or 3478)
+
+                ice_kargs['stun_server'] = (uri['host'], uri['port'])
             elif uri['scheme'] == 'turn':
-                if uri['transport'] and uri['transport'] != 'udp':
-                    # only suport udp transport. ignoring
-                    continue
                 if 'turn_server' in ice_kargs:
                     # do not suport multiples turn server. ignoring
                     continue
-                if server.credentialType != "password":
+
+                if uri['transport'] and uri['transport'] != 'udp':
+                    # only suport udp transport. ignoring
+                    continue
+                if server.credentialType != 'password':
                     # only suport credentialType password. ignoring
                     continue
-                ice_kargs['turn_server'] = (uri['host'], uri['port'] or 3478)
+                ice_kargs['turn_server'] = (uri['host'], uri['port'])
                 ice_kargs['turn_username'] = server.username
                 ice_kargs['turn_password'] = server.credential
 
-            # ignoring unsuported schema as stuns and turns
         self._connection = Connection(ice_controlling=False, **ice_kargs)
         self.__state = 'new'
 
