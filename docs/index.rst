@@ -45,4 +45,5 @@ channels or apply computer vision algorithms to video frames using OpenCV.
    :maxdepth: 2
 
    api
+   changelog
    license

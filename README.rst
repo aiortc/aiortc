@@ -72,8 +72,8 @@ Working:
 
 TODO:
 
+- Trickle ICE
 - SCTP receiver window handling
-- ICE trickle
 
 Requirements
 ------------
