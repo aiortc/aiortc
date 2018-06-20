@@ -12,6 +12,9 @@ WebRTC
    .. autoclass:: RTCSessionDescription
       :members:
 
+   .. autoclass:: RTCConfiguration
+      :members:
+
 Interactive Connectivity Establishment (ICE)
 --------------------------------------------
 
@@ -22,6 +25,9 @@ Interactive Connectivity Establishment (ICE)
       :members:
 
    .. autoclass:: RTCIceParameters
+      :members:
+
+   .. autoclass:: RTCIceServer
       :members:
 
 Datagram Transport Layer Security (DTLS)
