@@ -170,8 +170,10 @@ class RTCIceTransport(EventEmitter):
         """
         Add a remote candidate.
         """
-        if candidate is not None:
-            self._connection.remote_candidates += [candidate_to_aioice(candidate)]
+        if candidate is None:
+            self._connection.add_remote_candidate(None)
+        else:
+            self._connection.add_remote_candidate(candidate_to_aioice(candidate))
 
     def getRemoteCandidates(self):
         """
