@@ -75,6 +75,8 @@ class RTCPeerConnection(EventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
     between the local computer and a remote peer.
+
+    :param: configuration: An optional :class:`RTCConfiguration`.
     """
     def __init__(self, configuration=None):
         super().__init__()
