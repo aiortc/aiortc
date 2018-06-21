@@ -68,9 +68,7 @@ class RTCDataChannel(EventEmitter):
         """
         Close the data channel.
         """
-        if self.__readyState not in ['closing', 'closed']:
-            self._setReadyState('closing')
-            asyncio.ensure_future(self.transport._data_channel_close(self))
+        self.transport._data_channel_close(self)
 
     def send(self, data):
         """

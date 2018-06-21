@@ -931,11 +931,11 @@ class RTCSctpTransport(EventEmitter):
             # mark closed inbound streams
             for stream_id in param.streams:
                 self._inbound_streams.pop(stream_id, None)
-                # close corresponding outbound streams
-                if (stream_id in self._outbound_stream_seq and
-                   stream_id not in self._reconfig_queue):
-                    self._reconfig_queue.append(stream_id)
-            await self._transmit_reconfig()
+
+                # close data channel
+                channel = self._data_channels.get(stream_id)
+                if channel:
+                    self._data_channel_close(channel)
 
             # send response
             response_param = StreamResetResponseParam(
@@ -1161,13 +1161,15 @@ class RTCSctpTransport(EventEmitter):
 
             await self._send_reconfig_param(param)
 
-    async def _data_channel_close(self, channel):
+    def _data_channel_close(self, channel, transmit=True):
         """
         Request closing the datachannel by sending an Outgoing Stream Reset Request.
         """
-        if channel.id not in self._reconfig_queue:
+        if channel.readyState not in ['closing', 'closed']:
+            channel._setReadyState('closing')
             self._reconfig_queue.append(channel.id)
-        await self._transmit_reconfig()
+            if len(self._reconfig_queue) == 1:
+                asyncio.ensure_future(self._transmit_reconfig())
 
     def _data_channel_closed(self, stream_id):
         channel = self._data_channels.pop(stream_id)
