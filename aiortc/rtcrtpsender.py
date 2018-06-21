@@ -30,6 +30,7 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
+        self.__exited = asyncio.Event()
         self.__started = False
         self.__stopped = asyncio.Event()
         self.__transport = transport
@@ -74,6 +75,7 @@ class RTCRtpSender:
         Irreversibly stop the sender.
         """
         self.__stopped.set()
+        await self.__exited.wait()
 
     async def _run(self, codec):
         logger.debug('sender(%s) - started' % self._kind)
@@ -105,3 +107,4 @@ class RTCRtpSender:
                 await asyncio.sleep(0.02)
 
         logger.debug('sender(%s) - finished' % self._kind)
+        self.__exited.set()
