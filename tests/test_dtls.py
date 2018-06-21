@@ -1,7 +1,6 @@
 import asyncio
 import datetime
-import os
-from unittest import TestCase, skipIf
+from unittest import TestCase
 from unittest.mock import patch
 
 from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
@@ -37,7 +36,7 @@ class DummyRtpReceiver:
         self.rtcp_packets.append(packet)
 
 
-def dummy_ice_transport_pair(loss=0):
+def dummy_ice_transport_pair(loss=None):
     transport1, transport2 = dummy_transport_pair(loss=loss)
     return (
         DummyIceTransport(transport1, 'controlling'),
@@ -233,9 +232,11 @@ class RTCDtlsTransportTest(TestCase):
         run(session1.stop())
         run(session2.stop())
 
-    @skipIf(os.environ.get('TRAVIS') == 'true', 'flakey test')
     def test_lossy_channel(self):
-        transport1, transport2 = dummy_ice_transport_pair(loss=0.3)
+        """
+        Transport with 25% loss eventually connects.
+        """
+        transport1, transport2 = dummy_ice_transport_pair(loss=[True, False, False, False])
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])

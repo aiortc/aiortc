@@ -1,6 +1,5 @@
 import asyncio
-import os
-from unittest import TestCase, skipIf
+from unittest import TestCase
 
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -497,7 +496,7 @@ class RTCSctpTransportTest(TestCase):
         """
         Transport with 100% loss never connects.
         """
-        client_transport, server_transport = dummy_dtls_transport_pair(loss=1)
+        client_transport, server_transport = dummy_dtls_transport_pair(loss=[True])
         client = RTCSctpTransport(client_transport)
         client._rto = 0.1
         self.assertFalse(client.is_server)
@@ -520,12 +519,13 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
 
-    @skipIf(os.environ.get('TRAVIS') == 'true', 'flakey test')
     def test_connect_lossy_transport(self):
         """
-        Transport with 40% loss eventually connects.
+        Transport with 25% loss eventually connects.
         """
-        client_transport, server_transport = dummy_dtls_transport_pair(loss=0.4)
+        client_transport, server_transport = dummy_dtls_transport_pair(
+            loss=[True, False, False, False])
+
         client = RTCSctpTransport(client_transport)
         client._rto = 0.1
         self.assertFalse(client.is_server)

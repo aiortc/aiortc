@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import random
 
 from aiortc.utils import first_completed
 
@@ -15,7 +14,7 @@ def dummy_register_rtp_receiver(receiver, parameters):
     pass
 
 
-def dummy_dtls_transport_pair(loss=0):
+def dummy_dtls_transport_pair(loss=None):
     transport_a, transport_b = dummy_transport_pair(loss=loss)
 
     transport_a.data = transport_a
@@ -33,7 +32,7 @@ def dummy_dtls_transport_pair(loss=0):
     return transport_a, transport_b
 
 
-def dummy_transport_pair(loss=0):
+def dummy_transport_pair(loss=None):
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
     return (
@@ -45,7 +44,8 @@ def dummy_transport_pair(loss=0):
 class DummyTransport:
     def __init__(self, rx_queue, tx_queue, loss):
         self.closed = asyncio.Event()
-        self.loss = loss
+        self.loss_cursor = 0
+        self.loss_pattern = loss
         self.rx_queue = rx_queue
         self.tx_queue = tx_queue
 
@@ -61,8 +61,14 @@ class DummyTransport:
     async def send(self, data):
         if self.closed.is_set():
             raise ConnectionError
-        if random.random() > self.loss:
-            await self.tx_queue.put(data)
+
+        if self.loss_pattern is not None:
+            lost = self.loss_pattern[self.loss_cursor]
+            self.loss_cursor = (self.loss_cursor + 1) % len(self.loss_pattern)
+            if lost:
+                return
+
+        await self.tx_queue.put(data)
 
 
 def load(name):
