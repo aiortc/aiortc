@@ -71,6 +71,14 @@ def add_remote_candidates(iceTransport, media):
         iceTransport.addRemoteCandidate(None)
 
 
+def get_default_candidate(iceTransport):
+    candidates = iceTransport.iceGatherer.getLocalCandidates()
+    if candidates:
+        return candidates[0]
+    else:
+        return DUMMY_CANDIDATE
+
+
 class RTCPeerConnection(EventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
@@ -466,12 +474,9 @@ class RTCPeerConnection(EventEmitter):
         description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
 
         for transceiver in self.__transceivers:
-            iceTransport = transceiver._transport.transport
-            candidates = iceTransport.iceGatherer.getLocalCandidates()
-            if candidates:
-                default_candidate = candidates[0]
-            else:
-                default_candidate = DUMMY_CANDIDATE
+            dtlsTransport = transceiver._transport
+            iceTransport = dtlsTransport.transport
+            default_candidate = get_default_candidate(iceTransport)
 
             media = sdp.MediaDescription(
                 kind=transceiver.kind,
@@ -487,18 +492,15 @@ class RTCPeerConnection(EventEmitter):
             media.rtp.rtcp.mux = True
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
-            add_transport_description(media, iceTransport, transceiver._transport)
+            add_transport_description(media, iceTransport, dtlsTransport)
 
             description.media.append(media)
             description.bundle.append(media.rtp.muxId)
 
         if self.__sctp:
-            iceTransport = self.__sctp.transport.transport
-            candidates = iceTransport.iceGatherer.getLocalCandidates()
-            if candidates:
-                default_candidate = candidates[0]
-            else:
-                default_candidate = DUMMY_CANDIDATE
+            dtlsTransport = self.__sctp.transport
+            iceTransport = dtlsTransport.transport
+            default_candidate = get_default_candidate(iceTransport)
 
             media = sdp.MediaDescription(
                 kind='application',
@@ -509,7 +511,7 @@ class RTCPeerConnection(EventEmitter):
             media.rtp.muxId = self.__sctp.mid
             media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
             media.sctpCapabilities = self.__sctp.getCapabilities()
-            add_transport_description(media, iceTransport, self.__sctp.transport)
+            add_transport_description(media, iceTransport, dtlsTransport)
 
             description.media.append(media)
             description.bundle.append(media.rtp.muxId)
