@@ -7,4 +7,4 @@ First install dependencies:
 
 .. code:: bash
 
-   pip install websockets
+   pip install aiohttp websockets

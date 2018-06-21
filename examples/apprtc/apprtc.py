@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 
-import requests
+import aiohttp
 import websockets
 
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
@@ -79,9 +79,11 @@ async def join_room(room):
     consumers = []
 
     # fetch room parameters
-    response = requests.post('https://appr.tc/join/%s' % room)
-    response.raise_for_status()
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.post('https://appr.tc/join/' + room) as response:
+            # we cannot use response.json() due to:
+            # https://github.com/webrtc/apprtc/issues/562
+            data = json.loads(await response.text())
     assert data['result'] == 'SUCCESS'
     params = data['params']
 
