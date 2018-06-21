@@ -1,8 +1,9 @@
 import re
 
 import attr
-from aioice import Candidate, Connection
 from pyee import EventEmitter
+
+from aioice import Candidate, Connection
 
 from .rtcconfiguration import RTCIceServer
 
