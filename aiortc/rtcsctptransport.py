@@ -878,16 +878,22 @@ class RTCSctpTransport(EventEmitter):
             for param in chunk.params:
                 if param[0] == SCTP_STR_RESET_OUT_REQUEST:
                     request_param = StreamResetOutgoingParam.parse(param[1])
-                    self._reconfig_response_seq = request_param.request_sequence
 
-                    # mark closed streams
+                    # mark closed inbound streams
                     for stream_id in request_param.streams:
                         self._inbound_streams.pop(stream_id, None)
+                        # close corresponding outbound streams
+                        if (stream_id in self._outbound_stream_seq and
+                           stream_id not in self._reconfig_queue):
+                            self._reconfig_queue.append(stream_id)
+                    await self._transmit_reconfig()
 
                     # send response
                     response_param = StreamResetResponseParam(
                         response_sequence=request_param.request_sequence,
                         result=1)
+                    self._reconfig_response_seq = request_param.request_sequence
+
                     response = ReconfigChunk()
                     response.params.append((SCTP_STR_RESET_RESPONSE, bytes(response_param)))
                     await self._send_chunk(response)
@@ -1093,7 +1099,8 @@ class RTCSctpTransport(EventEmitter):
         """
         Request closing the datachannel by sending an Outgoing Stream Reset Request.
         """
-        self._reconfig_queue.append(channel.id)
+        if channel.id not in self._reconfig_queue:
+            self._reconfig_queue.append(channel.id)
         await self._transmit_reconfig()
 
     def _data_channel_closed(self, stream_id):
