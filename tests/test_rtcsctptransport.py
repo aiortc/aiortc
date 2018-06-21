@@ -13,6 +13,7 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      RTCSctpTransport, SackChunk,
                                      ShutdownAckChunk, ShutdownChunk,
                                      ShutdownCompleteChunk,
+                                     StreamAddOutgoingParam,
                                      StreamResetOutgoingParam,
                                      StreamResetResponseParam, seq_gt,
                                      seq_plus_one, tsn_gt, tsn_gte,
@@ -148,8 +149,8 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
-    def test_parse_reconfig_request(self):
-        data = load('sctp_reconfig_request.bin')
+    def test_parse_reconfig_reset_out(self):
+        data = load('sctp_reconfig_reset_out.bin')
         packet = Packet.parse(data)
         self.assertEqual(packet.source_port, 5000)
         self.assertEqual(packet.destination_port, 5000)
@@ -170,6 +171,30 @@ class SctpPacketTest(TestCase):
         self.assertEqual(param.response_sequence, 3834375283)
         self.assertEqual(param.last_tsn, 2346191454)
         self.assertEqual(param.streams, [1])
+        self.assertEqual(bytes(param), param_data)
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_reconfig_add_out(self):
+        data = load('sctp_reconfig_add_out.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 3909981950)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
+        self.assertEqual(packet.chunks[0].type, 130)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].params, [
+            (17, b'\xca\x02\xf60\x00\x10\x00\x00')
+        ])
+
+        # Add Outgoing Streams Request Parameter
+        param_data = packet.chunks[0].params[0][1]
+        param = StreamAddOutgoingParam.parse(param_data)
+        self.assertEqual(param.request_sequence, 3389191728)
+        self.assertEqual(param.new_streams, 16)
         self.assertEqual(bytes(param), param_data)
 
         self.assertEqual(bytes(packet), data)

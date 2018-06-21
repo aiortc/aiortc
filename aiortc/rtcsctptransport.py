@@ -44,6 +44,7 @@ RECONFIG_MAX_STREAMS = 64
 SCTP_STATE_COOKIE = 0x0007
 SCTP_STR_RESET_OUT_REQUEST = 0x000d
 SCTP_STR_RESET_RESPONSE = 0x0010
+SCTP_STR_RESET_ADD_OUT_STREAMS = 0x0011
 SCTP_SUPPORTED_CHUNK_EXT = 0x8008
 
 # data channel constants
@@ -417,6 +418,27 @@ class StreamResetOutgoingParam:
 
 
 @attr.s
+class StreamAddOutgoingParam:
+    request_sequence = attr.ib()
+    new_streams = attr.ib()
+
+    def __bytes__(self):
+        data = pack(
+            '!LHH',
+            self.request_sequence,
+            self.new_streams,
+            0)
+        return data
+
+    @classmethod
+    def parse(cls, data):
+        request_sequence, new_streams, reserved = unpack('!LHH', data[0:8])
+        return cls(
+            request_sequence=request_sequence,
+            new_streams=new_streams)
+
+
+@attr.s
 class StreamResetResponseParam:
     response_sequence = attr.ib()
     result = attr.ib()
@@ -742,6 +764,9 @@ class RTCSctpTransport(EventEmitter):
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
+            self.__log_debug('- Peer supports %d outbound streams, %d inbound streams',
+                             chunk.outbound_streams, chunk.inbound_streams)
+
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
             ack.advertised_rwnd = self._advertised_rwnd
@@ -786,6 +811,9 @@ class RTCSctpTransport(EventEmitter):
             self._remote_verification_tag = chunk.initiate_tag
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
+
+            self.__log_debug('- Peer supports %d outbound streams, %d inbound streams',
+                             chunk.outbound_streams, chunk.inbound_streams)
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
