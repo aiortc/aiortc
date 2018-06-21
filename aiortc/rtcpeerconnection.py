@@ -191,7 +191,7 @@ class RTCPeerConnection(EventEmitter):
 
         # stop senders / receivers
         for transceiver in self.__transceivers:
-            transceiver.stop()
+            await transceiver.stop()
         if self.__sctp:
             await self.__sctp.stop()
 

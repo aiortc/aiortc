@@ -69,7 +69,7 @@ class RTCRtpSender:
             asyncio.ensure_future(self._run(parameters.codecs[0]))
             self.__started = True
 
-    def stop(self):
+    async def stop(self):
         """
         Irreversibly stop the sender.
         """

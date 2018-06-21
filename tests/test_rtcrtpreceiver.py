@@ -55,7 +55,7 @@ class RTCRtpReceiverTest(TestCase):
         self.assertTrue(isinstance(frame, AudioFrame))
 
         # shutdown
-        receiver.stop()
+        run(receiver.stop())
         run(asyncio.sleep(0))
 
     def test_invalid_dtls_transport_state(self):

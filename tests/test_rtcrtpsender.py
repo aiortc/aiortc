@@ -52,5 +52,5 @@ class RTCRtpSenderTest(TestCase):
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # clean shutdown
-        sender.stop()
+        run(sender.stop())
         run(asyncio.sleep(0))

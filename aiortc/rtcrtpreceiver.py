@@ -66,7 +66,7 @@ class RTCRtpReceiver:
     def setTransport(self, transport):
         self._transport = transport
 
-    def stop(self):
+    async def stop(self):
         """
         Irreversibly stop the receiver.
         """

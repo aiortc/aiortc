@@ -42,9 +42,9 @@ class RTCRtpTransceiver:
         """
         return self.__sender
 
-    def stop(self):
+    async def stop(self):
         """
         Permanently stops the :class:`RTCRtpTransceiver`.
         """
-        self.__receiver.stop()
-        self.__sender.stop()
+        await self.__receiver.stop()
+        await self.__sender.stop()
