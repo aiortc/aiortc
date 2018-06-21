@@ -39,7 +39,7 @@ SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
 RECONFIG_CHUNK = 130
-RECONFIG_MAX_STREAMS = 64
+RECONFIG_MAX_STREAMS = 135
 
 # parameters
 SCTP_STATE_COOKIE = 0x0007
@@ -451,6 +451,13 @@ class StreamResetResponseParam:
     def parse(cls, data):
         response_sequence, result = unpack('!LL', data[0:8])
         return cls(response_sequence=response_sequence, result=result)
+
+
+RECONFIG_PARAM_TYPES = {
+    13: StreamResetOutgoingParam,
+    16: StreamResetResponseParam,
+    17: StreamAddOutgoingParam
+}
 
 
 class InboundStream:
@@ -910,38 +917,54 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.CLOSED)
         elif (isinstance(chunk, ReconfigChunk) and self.state == self.State.ESTABLISHED):
             for param in chunk.params:
-                if param[0] == SCTP_STR_RESET_OUT_REQUEST:
-                    request_param = StreamResetOutgoingParam.parse(param[1])
+                cls = RECONFIG_PARAM_TYPES.get(param[0])
+                if cls:
+                    await self._receive_reconfig_param(cls.parse(param[1]))
 
-                    # mark closed inbound streams
-                    for stream_id in request_param.streams:
-                        self._inbound_streams.pop(stream_id, None)
-                        # close corresponding outbound streams
-                        if (stream_id in self._outbound_stream_seq and
-                           stream_id not in self._reconfig_queue):
-                            self._reconfig_queue.append(stream_id)
-                    await self._transmit_reconfig()
+    async def _receive_reconfig_param(self, param):
+        """
+        Handle a RE-CONFIG parameter.
+        """
+        self.__log_debug('<< %s', repr(param))
 
-                    # send response
-                    response_param = StreamResetResponseParam(
-                        response_sequence=request_param.request_sequence,
-                        result=1)
-                    self._reconfig_response_seq = request_param.request_sequence
+        if isinstance(param, StreamResetOutgoingParam):
+            # mark closed inbound streams
+            for stream_id in param.streams:
+                self._inbound_streams.pop(stream_id, None)
+                # close corresponding outbound streams
+                if (stream_id in self._outbound_stream_seq and
+                   stream_id not in self._reconfig_queue):
+                    self._reconfig_queue.append(stream_id)
+            await self._transmit_reconfig()
 
-                    response = ReconfigChunk()
-                    response.params.append((SCTP_STR_RESET_RESPONSE, bytes(response_param)))
-                    await self._send_chunk(response)
-                elif param[0] == SCTP_STR_RESET_RESPONSE:
-                    response_param = StreamResetResponseParam.parse(param[1])
-                    if (self._reconfig_request and
-                       response_param.response_sequence == self._reconfig_request.request_sequence):
-                        # mark closed streams
-                        for stream_id in self._reconfig_request.streams:
-                            self._outbound_stream_seq.pop(stream_id, None)
-                            self._data_channel_closed(stream_id)
+            # send response
+            response_param = StreamResetResponseParam(
+                response_sequence=param.request_sequence,
+                result=1)
+            self._reconfig_response_seq = param.request_sequence
 
-                        self._reconfig_request = None
-                        await self._transmit_reconfig()
+            await self._send_reconfig_param(response_param)
+        elif isinstance(param, StreamAddOutgoingParam):
+            # increase inbound streams
+            self.inbound_streams += param.new_streams
+
+            # send response
+            response_param = StreamResetResponseParam(
+                response_sequence=param.request_sequence,
+                result=1)
+            self._reconfig_response_seq = param.request_sequence
+
+            await self._send_reconfig_param(response_param)
+        elif isinstance(param, StreamResetResponseParam):
+            if (self._reconfig_request and
+               param.response_sequence == self._reconfig_request.request_sequence):
+                # mark closed streams
+                for stream_id in self._reconfig_request.streams:
+                    self._outbound_stream_seq.pop(stream_id, None)
+                    self._data_channel_closed(stream_id)
+
+                self._reconfig_request = None
+                await self._transmit_reconfig()
 
     async def _send(self, stream_id, pp_id, user_data):
         """
@@ -983,6 +1006,17 @@ class RTCSctpTransport(EventEmitter):
             verification_tag=self._remote_verification_tag)
         packet.chunks.append(chunk)
         await self.transport.data.send(bytes(packet))
+
+    async def _send_reconfig_param(self, param):
+        chunk = ReconfigChunk()
+        for k, cls in RECONFIG_PARAM_TYPES.items():
+            if isinstance(param, cls):
+                param_type = k
+                break
+        chunk.params.append((param_type, bytes(param)))
+
+        self.__log_debug('>> %s', repr(param))
+        await self._send_chunk(chunk)
 
     async def _send_sack(self):
         """
@@ -1125,9 +1159,7 @@ class RTCSctpTransport(EventEmitter):
             self._reconfig_request = param
             self._reconfig_request_seq = tsn_plus_one(self._reconfig_request_seq)
 
-            chunk = ReconfigChunk()
-            chunk.params.append((SCTP_STR_RESET_OUT_REQUEST, bytes(param)))
-            await self._send_chunk(chunk)
+            await self._send_reconfig_param(param)
 
     async def _data_channel_close(self, channel):
         """
