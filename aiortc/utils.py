@@ -18,7 +18,7 @@ async def first_completed(*coros, timeout=None):
         raise
     for task in pending:
         task.cancel()
-    if len(done):
-        return done.pop().result()
-    else:
-        raise TimeoutError
+    for task in tasks:
+        if task in done:
+            return task.result()
+    raise TimeoutError
