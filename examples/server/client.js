@@ -22,16 +22,8 @@ pc.addEventListener('signalingstatechange', function() {
 }, false);
 signalingLog.textContent = pc.signalingState;
 
-// connect audio / video
-pc.addEventListener('track', function(evt) {
-    if (evt.track.kind == 'video')
-        document.getElementById('video').srcObject = evt.streams[0];
-    else
-        document.getElementById('audio').srcObject = evt.streams[0];
-});
-
-// data channel
-var dc = null, dcInterval = null;
+// data channels
+var dcs = [];
 
 function negotiate() {
     return pc.createOffer().then(function(offer) {
@@ -58,7 +50,7 @@ function negotiate() {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,
-                video_transform: document.getElementById('video-transform').value
+                video_transform: 'none'
             }),
             headers: {
                 'Content-Type': 'application/json'
@@ -76,58 +68,19 @@ function negotiate() {
 function start() {
     document.getElementById('start').style.display = 'none';
 
-    if (document.getElementById('use-datachannel').checked) {
-        dc = pc.createDataChannel('chat');
+    var dc;
+    for (var i = 0; i < 512; ++i) {
+        dc = pc.createDataChannel('channel-' + i);
         dc.onclose = function() {
-            clearInterval(dcInterval);
-            dataChannelLog.textContent += '- close\n';
-        };
+            dataChannelLog.textContent += this.label + ' (id: ' + this.id + ') - close\n';
+        }
         dc.onopen = function() {
-            dataChannelLog.textContent += '- open\n';
-            dcInterval = setInterval(function() {
-                var message = 'ping';
-                dataChannelLog.textContent += '> ' + message + '\n';
-                dc.send(message);
-            }, 1000);
-        };
-        dc.onmessage = function(evt) {
-            dataChannelLog.textContent += '< ' + evt.data + '\n';
-        };
-    }
-
-    var constraints = {
-        audio: document.getElementById('use-audio').checked,
-        video: false
-    };
-
-    if (document.getElementById('use-video').checked) {
-        var resolution = document.getElementById('video-resolution').value;
-        if (resolution) {
-            resolution = resolution.split('x');
-            constraints.video = {
-                width: parseInt(resolution[0], 0),
-                height: parseInt(resolution[1], 0)
-            };
-        } else {
-            constraints.video = true;
+            dataChannelLog.textContent += this.label + ' (id: ' + this.id + ') - open\n';
         }
+        dcs.push(dc);
     }
 
-    if (constraints.audio || constraints.video) {
-        if (constraints.video) {
-            document.getElementById('media').style.display = 'block';
-        }
-        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-            stream.getTracks().forEach(function(track) {
-                pc.addTrack(track, stream);
-            });
-            return negotiate();
-        }, function(err) {
-            alert('Could not acquire media: ' + err);
-        });
-    } else {
-        negotiate();
-    }
+    negotiate();
 
     document.getElementById('stop').style.display = 'inline-block';
 }
@@ -135,18 +88,9 @@ function start() {
 function stop() {
     document.getElementById('stop').style.display = 'none';
 
-    // close data channel
-    if (dc) {
-        dc.close();
+    // close data channels
+    for (var i = 0; i < dcs.length; ++i) {
+        dcs[i].close();
     }
-
-    // close audio / video
-    pc.getSenders().forEach(function(sender) {
-        sender.track.stop();
-    });
-
-    // close peer connection
-    setTimeout(function() {
-        pc.close();
-    }, 500);
+    dcs = [];
 }
