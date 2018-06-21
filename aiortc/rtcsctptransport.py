@@ -21,6 +21,7 @@ logger = logging.getLogger('sctp')
 # local constants
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
+MAX_STREAMS = 65535
 USERDATA_MAX_LENGTH = 1200
 
 # protocol constants
@@ -538,8 +539,9 @@ class RTCSctpTransport(EventEmitter):
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
 
-        self.inbound_streams = 65535
-        self.outbound_streams = 65535
+        self.inbound_streams = 0
+        self.inbound_streams_max = MAX_STREAMS
+        self.outbound_streams = MAX_STREAMS
 
         self._local_extensions = [RECONFIG_CHUNK]
         self._local_port = port
@@ -658,7 +660,7 @@ class RTCSctpTransport(EventEmitter):
             chunk.initiate_tag = self._local_verification_tag
             chunk.advertised_rwnd = self._advertised_rwnd
             chunk.outbound_streams = self.outbound_streams
-            chunk.inbound_streams = self.inbound_streams
+            chunk.inbound_streams = self.inbound_streams_max
             chunk.initial_tsn = self._local_tsn
             self._set_extensions(chunk.params)
             await self._send_chunk(chunk)
@@ -764,14 +766,16 @@ class RTCSctpTransport(EventEmitter):
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
-            self.__log_debug('- Peer supports %d outbound streams, %d inbound streams',
+            self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
                              chunk.outbound_streams, chunk.inbound_streams)
+            self.inbound_streams = min(chunk.outbound_streams, self.inbound_streams_max)
+            self.outbound_streams = min(self.outbound_streams, chunk.inbound_streams)
 
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
             ack.advertised_rwnd = self._advertised_rwnd
             ack.outbound_streams = self.outbound_streams
-            ack.inbound_streams = self.inbound_streams
+            ack.inbound_streams = self.inbound_streams_max
             ack.initial_tsn = self._local_tsn
             self._set_extensions(ack.params)
 
@@ -812,8 +816,10 @@ class RTCSctpTransport(EventEmitter):
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
-            self.__log_debug('- Peer supports %d outbound streams, %d inbound streams',
+            self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
                              chunk.outbound_streams, chunk.inbound_streams)
+            self.inbound_streams = min(chunk.outbound_streams, self.inbound_streams_max)
+            self.outbound_streams = min(self.outbound_streams, chunk.inbound_streams)
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
