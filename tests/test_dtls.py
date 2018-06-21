@@ -7,7 +7,6 @@ from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsFingerprint, RTCDtlsParameters,
                                      RTCDtlsTransport)
 from aiortc.rtcrtpparameters import RTCRtcpParameters, RTCRtpParameters
-from aiortc.utils import first_completed
 
 from .utils import dummy_transport_pair, load, run
 
@@ -166,19 +165,13 @@ class RTCDtlsTransportTest(TestCase):
             session2.start(session1.getLocalParameters())))
 
         # break one connection
-        run(first_completed(
-            session1.data.recv(),
-            transport1.stop(),
-        ))
-        run(asyncio.sleep(0))
+        with self.assertRaises(ConnectionError):
+            run(asyncio.gather(session1.data.recv(), transport1.stop()))
         self.assertEqual(session1.state, 'closed')
 
         # break other connection
-        run(first_completed(
-            session2.data.recv(),
-            transport2.stop(),
-        ))
-        run(asyncio.sleep(0))
+        with self.assertRaises(ConnectionError):
+            run(asyncio.gather(session2.data.recv(), transport2.stop()))
         self.assertEqual(session2.state, 'closed')
 
         # try closing again
