@@ -586,7 +586,16 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.outbound_streams, 2048)
         self.assertEqual(server._remote_extensions, [130])
 
+        # client requests additional outbound streams
+        param = StreamAddOutgoingParam(
+            request_sequence=client._reconfig_request_seq,
+            new_streams=16)
+        run(client._send_reconfig_param(param))
+
         run(asyncio.sleep(0.5))
+
+        self.assertEqual(server.inbound_streams, 272)
+        self.assertEqual(server.outbound_streams, 2048)
 
         # shutdown
         run(client.stop())
