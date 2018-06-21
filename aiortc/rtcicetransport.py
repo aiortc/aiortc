@@ -21,6 +21,7 @@ class RTCIceCandidate:
     priority = attr.ib()
     protocol = attr.ib()
     type = attr.ib()
+    sdpMid = attr.ib(default=None)
     sdpMLineIndex = attr.ib(default=None)
     tcpType = attr.ib(default=None)
 

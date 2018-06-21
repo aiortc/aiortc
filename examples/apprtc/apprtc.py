@@ -47,6 +47,7 @@ async def consume_signaling(signaling, pc, params):
             await pc.setRemoteDescription(RTCSessionDescription(**message))
         elif message['type'] == 'candidate':
             candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
+            candidate.sdpMid = message['id']
             candidate.sdpMLineIndex = message['label']
             pc.addIceCandidate(candidate)
 
