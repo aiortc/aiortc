@@ -97,7 +97,7 @@ def create_ssl_context(certificate):
     if hasattr(lib, 'DTLS_method'):
         # openssl >= 1.0.2
         method = lib.DTLS_method
-    else:
+    else:  # pragma: no cover
         # openssl < 1.0.2
         method = lib.DTLSv1_method
     ctx = lib.SSL_CTX_new(method())
