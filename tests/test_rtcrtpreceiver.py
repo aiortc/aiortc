@@ -1,4 +1,3 @@
-import asyncio
 from unittest import TestCase
 
 from aiortc.codecs import PCMU_CODEC
@@ -56,7 +55,6 @@ class RTCRtpReceiverTest(TestCase):
 
         # shutdown
         run(receiver.stop())
-        run(asyncio.sleep(0))
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
