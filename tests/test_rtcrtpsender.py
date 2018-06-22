@@ -1,4 +1,3 @@
-import asyncio
 from unittest import TestCase
 
 from aiortc.codecs import PCMU_CODEC
