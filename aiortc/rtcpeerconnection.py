@@ -427,15 +427,13 @@ class RTCPeerConnection(EventEmitter):
 
         if self.iceConnectionState == 'new':
             for transceiver in self.__transceivers:
-                if not transceiver._bundled:
-                    await transceiver._transport.transport.start(self.__remoteIce[transceiver])
-                    await transceiver._transport.start(self.__remoteDtls[transceiver])
+                await transceiver._transport.transport.start(self.__remoteIce[transceiver])
+                await transceiver._transport.start(self.__remoteDtls[transceiver])
                 await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
                 await transceiver.receiver.receive(self.__remoteRtp[transceiver])
             if self.__sctp:
-                if not self.__sctp._bundled:
-                    await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
-                    await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
+                await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
+                await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):

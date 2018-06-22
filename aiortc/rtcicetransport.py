@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 import attr
@@ -202,6 +203,7 @@ class RTCIceTransport(EventEmitter):
     """
     def __init__(self, gatherer):
         super().__init__()
+        self.__start = None
         self.__iceGatherer = gatherer
         self.__state = 'new'
 
@@ -252,11 +254,17 @@ class RTCIceTransport(EventEmitter):
         :param: remoteParameters: The :class:`RTCIceParameters` associated with
                                   the remote :class:`RTCIceTransport`.
         """
+        # handle the case where start is already in progress
+        if self.__start is not None:
+            return await self.__start.wait()
+        self.__start = asyncio.Event()
+
         self.__setState('checking')
         self._connection.remote_username = remoteParameters.usernameFragment
         self._connection.remote_password = remoteParameters.password
         await self._connection.connect()
         self.__setState('completed')
+        self.__start.set()
 
     async def stop(self):
         """

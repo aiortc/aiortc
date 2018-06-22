@@ -231,6 +231,7 @@ class RTCDtlsTransport(EventEmitter):
         self.encrypted = False
         self._role = 'auto'
         self._rtp_router = RtpRouter()
+        self._start = None
         self._state = State.NEW
         self._transport = transport
 
@@ -283,8 +284,13 @@ class RTCDtlsTransport(EventEmitter):
 
         :param: remoteParameters: An :class:`RTCDtlsParameters`.
         """
-        assert self._state == State.NEW
+        assert self._state not in [State.CLOSED, State.FAILED]
         assert len(remoteParameters.fingerprints)
+
+        # handle the case where start is already in progress
+        if self._start is not None:
+            return await self._start.wait()
+        self._start = asyncio.Event()
 
         if self.transport.role == 'controlling':
             self._role = 'server'
@@ -344,6 +350,7 @@ class RTCDtlsTransport(EventEmitter):
         self.__log_debug('- DTLS handshake complete')
         self._set_state(State.CONNECTED)
         asyncio.ensure_future(self.__run())
+        self._start.set()
 
     async def stop(self):
         """
