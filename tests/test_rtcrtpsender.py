@@ -53,4 +53,8 @@ class RTCRtpSenderTest(TestCase):
 
         # clean shutdown
         run(sender.stop())
-        run(asyncio.sleep(0))
+
+    def test_stop_before_send(self):
+        transport, _ = dummy_dtls_transport_pair()
+        sender = RTCRtpSender(AudioStreamTrack(), transport)
+        run(sender.stop())

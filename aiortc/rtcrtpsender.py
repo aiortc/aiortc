@@ -75,7 +75,8 @@ class RTCRtpSender:
         Irreversibly stop the sender.
         """
         self.__stopped.set()
-        await self.__exited.wait()
+        if self.__started:
+            await self.__exited.wait()
 
     async def _run(self, codec):
         logger.debug('sender(%s) - started' % self._kind)
