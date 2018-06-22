@@ -510,7 +510,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1_states['iceConnectionState'], [
             'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], [
-            'new', 'gathering', 'new', 'gathering', 'complete'])
+            'new', 'gathering', 'complete'])
         self.assertEqual(pc1_states['signalingState'], [
             'stable', 'have-local-offer', 'stable', 'closed'])
 
@@ -598,7 +598,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1_states['iceConnectionState'], [
             'new', 'checking', 'completed', 'closed'])
         self.assertEqual(pc1_states['iceGatheringState'], [
-            'new', 'gathering', 'new', 'gathering', 'new', 'gathering', 'complete'])
+            'new', 'gathering', 'complete'])
         self.assertEqual(pc1_states['signalingState'], [
             'stable', 'have-local-offer', 'stable', 'closed'])
 

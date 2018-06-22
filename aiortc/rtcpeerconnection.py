@@ -437,8 +437,8 @@ class RTCPeerConnection(EventEmitter):
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):
-        for iceTransport in self.__iceTransports:
-            await iceTransport.iceGatherer.gather()
+        coros = map(lambda t: t.iceGatherer.gather(), self.__iceTransports)
+        await asyncio.gather(*coros)
 
     def __assertNotClosed(self):
         if self.__isClosed:
