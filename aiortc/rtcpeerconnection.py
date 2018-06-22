@@ -150,7 +150,6 @@ class RTCPeerConnection(EventEmitter):
             if i == candidate.sdpMLineIndex:
                 iceTransport = transceiver._transport.transport
                 iceTransport.addRemoteCandidate(candidate)
-                asyncio.ensure_future(self.__connect())
 
     def addTrack(self, track):
         """
@@ -420,20 +419,20 @@ class RTCPeerConnection(EventEmitter):
         self.__currentRemoteDescription = sessionDescription
 
     async def __connect(self):
-        for iceTransport in self.__iceTransports:
-            if (not iceTransport.iceGatherer.getLocalCandidates() or
-               not iceTransport.getRemoteCandidates()):
-                return
-
-        if self.iceConnectionState == 'new':
-            for transceiver in self.__transceivers:
-                await transceiver._transport.transport.start(self.__remoteIce[transceiver])
-                await transceiver._transport.start(self.__remoteDtls[transceiver])
+        for transceiver in self.__transceivers:
+            dtlsTransport = transceiver._transport
+            iceTransport = dtlsTransport.transport
+            if iceTransport.iceGatherer.getLocalCandidates() and transceiver in self.__remoteIce:
+                await iceTransport.start(self.__remoteIce[transceiver])
+                await dtlsTransport.start(self.__remoteDtls[transceiver])
                 await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
                 await transceiver.receiver.receive(self.__remoteRtp[transceiver])
-            if self.__sctp:
-                await self.__sctp.transport.transport.start(self.__remoteIce[self.__sctp])
-                await self.__sctp.transport.start(self.__remoteDtls[self.__sctp])
+        if self.__sctp:
+            dtlsTransport = self.__sctp.transport
+            iceTransport = dtlsTransport.transport
+            if iceTransport.iceGatherer.getLocalCandidates() and self.__sctp in self.__remoteIce:
+                await iceTransport.start(self.__remoteIce[self.__sctp])
+                await dtlsTransport.start(self.__remoteDtls[self.__sctp])
                 self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):
