@@ -1,8 +1,11 @@
 from unittest import TestCase
 
 from aiortc.rtcconfiguration import RTCIceServer
-from aiortc.rtcicetransport import (RTCIceGatherer, connection_kwargs,
+from aiortc.rtcicetransport import (RTCIceCandidate, RTCIceGatherer,
+                                    RTCIceTransport, connection_kwargs,
                                     parse_stun_turn_uri)
+
+from .utils import run
 
 
 class ConnectionKwargsTest(TestCase):
@@ -167,7 +170,39 @@ class ParseStunTurnUriTest(TestCase):
 
 
 class RTCIceGathererTest(TestCase):
+    def test_construct(self):
+        gatherer = RTCIceGatherer()
+        self.assertEqual(gatherer.state, 'new')
+        self.assertEqual(gatherer.getLocalCandidates(), [])
+        run(gatherer.gather())
+        self.assertTrue(len(gatherer.getLocalCandidates()) > 0)
+
     def test_default_ice_servers(self):
         self.assertEqual(RTCIceGatherer.getDefaultIceServers(), [
             RTCIceServer(urls='stun:stun.l.google.com:19302')
         ])
+
+
+class RTCIceTransportTest(TestCase):
+    def test_construct(self):
+        gatherer = RTCIceGatherer()
+        connection = RTCIceTransport(gatherer)
+        self.assertEqual(connection.state, 'new')
+        self.assertEqual(connection.getRemoteCandidates(), [])
+
+        candidate = RTCIceCandidate(
+            component=1,
+            foundation='0',
+            ip='192.168.99.7',
+            port=33543,
+            priority=2122252543,
+            protocol='UDP',
+            type='host')
+
+        # add candidate
+        connection.addRemoteCandidate(candidate)
+        self.assertEqual(connection.getRemoteCandidates(), [candidate])
+
+        # end-of-candidates
+        connection.addRemoteCandidate(None)
+        self.assertEqual(connection.getRemoteCandidates(), [candidate])
