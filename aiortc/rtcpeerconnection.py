@@ -160,7 +160,7 @@ class RTCPeerConnection(EventEmitter):
                 iceTransport.addRemoteCandidate(candidate)
                 return
 
-        if self.__sctp and candidate.sdpMid == transceiver.mid and not self.__sctp._bundled:
+        if self.__sctp and candidate.sdpMid == self.__sctp.mid and not self.__sctp._bundled:
             iceTransport = self.__sctp.transport.transport
             iceTransport.addRemoteCandidate(candidate)
 
