@@ -51,7 +51,7 @@ def add_transport_description(media, iceTransport, dtlsTransport):
     # ice
     iceGatherer = iceTransport.iceGatherer
     media.ice_candidates = iceGatherer.getLocalCandidates()
-    media.ice_candidates_complete = True
+    media.ice_candidates_complete = (iceGatherer.state == 'completed')
     media.ice.usernameFragment = iceGatherer.getLocalParameters().usernameFragment
     media.ice.password = iceGatherer.getLocalParameters().password
 
