@@ -31,7 +31,7 @@ pc.addEventListener('track', function(evt) {
 });
 
 // data channel
-var dc = null, dcInterval;
+var dc = null, dcInterval = null;
 
 function negotiate() {
     return pc.createOffer().then(function(offer) {
@@ -72,45 +72,43 @@ function negotiate() {
 function start() {
     document.getElementById('start').style.display = 'none';
 
-    dc = pc.createDataChannel('chat');
-    dc.onclose = function() {
-        clearInterval(dcInterval);
-        dataChannelLog.textContent += '- close\n';
-    };
-    dc.onopen = function() {
-        dataChannelLog.textContent += '- open\n';
-    };
-    dc.onmessage = function(evt) {
-        dataChannelLog.textContent += '< ' + evt.data + '\n';
-    };
+    if (document.getElementById('use-datachannel').checked) {
+        dc = pc.createDataChannel('chat');
+        dc.onclose = function() {
+            clearInterval(dcInterval);
+            dataChannelLog.textContent += '- close\n';
+        };
+        dc.onopen = function() {
+            dataChannelLog.textContent += '- open\n';
+            dcInterval = setInterval(function() {
+                var message = 'ping';
+                dataChannelLog.textContent += '> ' + message + '\n';
+                dc.send(message);
+            }, 1000);
+        };
+        dc.onmessage = function(evt) {
+            dataChannelLog.textContent += '< ' + evt.data + '\n';
+        };
+    }
 
     var constraints = {
         audio: document.getElementById('use-audio').checked,
         video: document.getElementById('use-video').checked
     };
 
-    var promise;
     if (constraints.audio || constraints.video) {
         if (constraints.video) {
             document.getElementById('media').style.display = 'block';
         }
-        promise = navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
             stream.getTracks().forEach(function(track) {
                 pc.addTrack(track, stream);
             });
             return negotiate();
         });
     } else {
-        promise = negotiate();
+        negotiate();
     }
-
-    promise.then(function() {
-        dcInterval = setInterval(function() {
-            var message = 'ping';
-            dataChannelLog.textContent += '> ' + message + '\n';
-            dc.send(message);
-        }, 1000);
-    });
 
     document.getElementById('stop').style.display = 'inline-block';
 }
@@ -119,7 +117,9 @@ function stop() {
     document.getElementById('stop').style.display = 'none';
 
     // close data channel
-    dc.close();
+    if (dc) {
+        dc.close();
+    }
 
     // close audio / video
     pc.getSenders().forEach(function(sender) {
