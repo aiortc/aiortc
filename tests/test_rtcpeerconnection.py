@@ -2,7 +2,7 @@ import asyncio
 import re
 from unittest import TestCase
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
@@ -94,6 +94,34 @@ class RTCPeerConnectionTest(TestCase):
             self.assertEqual(transceivers[i].sender.transport, transport)
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
+
+    def test_addIceCandidate_no_sdpMid(self):
+        pc = RTCPeerConnection()
+        with self.assertRaises(ValueError) as cm:
+            pc.addIceCandidate(RTCIceCandidate(
+                component=1,
+                foundation='0',
+                ip='192.168.99.7',
+                port=33543,
+                priority=2122252543,
+                protocol='UDP',
+                sdpMLineIndex=0,
+                type='host'))
+        self.assertEqual(str(cm.exception), 'Candidate must have both sdpMid and sdpMLineIndex')
+
+    def test_addIceCandidate_no_sdpMLineIndex(self):
+        pc = RTCPeerConnection()
+        with self.assertRaises(ValueError) as cm:
+            pc.addIceCandidate(RTCIceCandidate(
+                component=1,
+                foundation='0',
+                ip='192.168.99.7',
+                port=33543,
+                priority=2122252543,
+                protocol='UDP',
+                sdpMid='audio',
+                type='host'))
+        self.assertEqual(str(cm.exception), 'Candidate must have both sdpMid and sdpMLineIndex')
 
     def test_addTrack_audio(self):
         pc = RTCPeerConnection()
