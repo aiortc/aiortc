@@ -146,10 +146,23 @@ class RTCPeerConnection(EventEmitter):
         return self.__signalingState
 
     def addIceCandidate(self, candidate):
-        for i, transceiver in enumerate(self.__transceivers):
-            if i == candidate.sdpMLineIndex:
+        """
+        Add a new :class:`RTCIceCandidate` received from the remote peer.
+
+        The specified candidate must have a value for both `sdpMid` and `sdpMLineIndex`.
+        """
+        if candidate.sdpMid is None or candidate.sdpMLineIndex is None:
+            raise ValueError('Candidate must have both sdpMid and sdpMLineIndex')
+
+        for transceiver in self.__transceivers:
+            if candidate.sdpMid == transceiver.mid and not transceiver._bundled:
                 iceTransport = transceiver._transport.transport
                 iceTransport.addRemoteCandidate(candidate)
+                return
+
+        if self.__sctp and candidate.sdpMid == transceiver.mid and not self.__sctp._bundled:
+            iceTransport = self.__sctp.transport.transport
+            iceTransport.addRemoteCandidate(candidate)
 
     def addTrack(self, track):
         """
