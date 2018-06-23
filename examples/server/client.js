@@ -127,5 +127,7 @@ function stop() {
     });
 
     // close peer connection
-    pc.close();
+    setTimeout(function() {
+        pc.close();
+    }, 500);
 }
