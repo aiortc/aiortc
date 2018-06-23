@@ -53,27 +53,20 @@ channels or apply computer vision algorithms to video frames using OpenCV.
 Implementation status
 ---------------------
 
-``aiortc`` is a work in progress, but it is already possible to set up a
-connection with an actual browser (tested with Chrome and Firefox), exchange
-messages over a data channel and audio / video with the browser.
-
-Working:
+``aiortc`` allows you to exchange audio, video and data channels and
+interoperability is regularly tested against both Chrome and Firefox. Here are
+some of its features:
 
 - SDP generation / parsing
-- Interactive Connectivity Establishment
+- Interactive Connectivity Establishment, including half-trickle
 - DTLS key and certificate generation
 - DTLS handshake, encryption / decryption (for SCTP)
 - SRTP keying, encryption and decryption for RTP and RTCP
-- Simple SCTP implementation
+- Pure Python SCTP implementation
 - Data Channels
 - Sending and receiving audio (Opus / PCMU / PCMA)
 - Sending and receiving video (VP8)
 - Bundling audio / video / data channels
-
-TODO:
-
-- Trickle ICE
-- SCTP receiver window handling
 
 Requirements
 ------------
