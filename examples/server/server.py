@@ -38,21 +38,22 @@ class AudioFileTrack(AudioStreamTrack):
 
 class VideoDummyTrack(VideoStreamTrack):
     def __init__(self):
-        width = 640
-        height = 480
-
         self.counter = 0
-        self.frame_green = VideoFrame(width=width, height=height)
-        self.frame_remote = VideoFrame(width=width, height=height)
-        self.last = None
+        self.green = None
+        self.received = asyncio.Queue(maxsize=1)
 
     async def recv(self):
-        self.last = await pause(self.last, 0.04)
+        frame = await self.received.get()
+
+        # we initialize the green frame once we know the frame size
+        if self.green is None:
+            self.green = VideoFrame(width=frame.width, height=frame.height)
+
         self.counter += 1
         if (self.counter % 100) < 50:
-            return self.frame_green
+            return self.green
         else:
-            return self.frame_remote
+            return frame
 
 
 async def consume_audio(track):
@@ -80,7 +81,13 @@ async def consume_video(track, local_video):
     Drain incoming video, and echo it back.
     """
     while True:
-        local_video.frame_remote = await track.recv()
+        frame = await track.recv()
+
+        # we are only interested in the latest frame
+        if local_video.received.full():
+            await local_video.received.get()
+
+        await local_video.received.put(frame)
 
 
 async def index(request):
