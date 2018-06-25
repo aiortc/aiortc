@@ -1,8 +1,8 @@
 Changelog
 =========
 
-0.7.0 (in development)
-----------------------
+0.7.0
+-----
 
 Peer connection
 ...............

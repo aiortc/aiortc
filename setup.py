@@ -18,7 +18,7 @@ else:
 
 setuptools.setup(
     name='aiortc',
-    version='0.6.0',
+    version='0.7.0',
     description='An implementation of WebRTC and ORTC',
     long_description=long_description,
     url='https://github.com/jlaine/aiortc',
@@ -26,7 +26,7 @@ setuptools.setup(
     author_email='jeremy.laine@m4x.org',
     license='BSD',
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
