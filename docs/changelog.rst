@@ -1,6 +1,45 @@
 Changelog
 =========
 
+0.7.0 (in development)
+----------------------
+
+Peer connection
+...............
+
+  * Add addIceCandidate() method to :class:`aiortc.RTCPeerConnection` to handle
+    trickled ICE candidates.
+
+Media
+.....
+
+  * Make stop() methods of :class:`aiortc.RTCRtpReceiver`, :class:`aiortc.RTCRtpSender`
+    and :class:`RTCRtpTransceiver` coroutines to enable clean shutdown.
+
+Data channels
+.............
+
+  * Clean up :class:`aiortc.RTCDataChannel` shutdown sequence.
+
+  * Support receiving an SCTP `RE-CONFIG` to raise number of inbound streams.
+
+Examples
+........
+
+  * `server`:
+
+    - ensure "green frame" dimensions match those of real frames (avoids a vpx error).
+
+    - make it possible to disable data channels.
+
+    - make demo web interface more mobile-friendly.
+
+  * `apprtc`:
+
+    - automatically create a room if no room is specified on command line.
+
+    - handle `bye` command.
+
 0.6.0
 -----
 
