@@ -1,10 +1,16 @@
 aiortc
 ======
 
-|rtd| |pypi-l| |travis| |coveralls|
+|rtd| |pypi-v| |pypi-pyversions| |pypi-l| |travis| |coveralls|
 
 .. |rtd| image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
    :target: https://aiortc.readthedocs.io/
+
+.. |pypi-v| image:: https://img.shields.io/pypi/v/aiortc.svg
+    :target: https://pypi.python.org/pypi/aiortc
+
+.. |pypi-pyversions| image:: https://img.shields.io/pypi/pyversions/aiortc.svg
+    :target: https://pypi.python.org/pypi/aiortc
 
 .. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
     :target: https://pypi.python.org/pypi/aiortc
