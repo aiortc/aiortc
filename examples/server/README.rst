@@ -8,11 +8,11 @@ OpenCV.
 Running
 -------
 
-To run this example, you will need to install ``aiohttp``:
+First install the required packages:
 
 .. code-block:: console
 
-    $ pip install aiohttp opencv-python
+    $ pip install aiohttp aiortc opencv-python
 
 When you start the example, it will create an HTTP server which you
 can connect to from your browser:

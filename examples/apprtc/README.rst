@@ -3,11 +3,11 @@ AppRTC client
 
 This example illustrates how to connect to Google's AppRTC demo application.
 
-First install dependencies:
+First install the required packages:
 
 .. code-block:: console
 
-    $ pip install aiohttp websockets
+    $ pip install aiohttp aiortc websockets
 
 When you run the example, it will connect to AppRTC and wait for a participant
 to join the room:

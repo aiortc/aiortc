@@ -7,26 +7,26 @@ RTCPeerConnection and a "copy and paste" signaling channel to exchange SDP.
 The video stream is composed of three separate streams that have been combined
 into a single stream that is three times as wide.
 
-First install dependencies:
+First install the required packages:
 
-.. code:: bash
+.. code-block:: console
 
-   pip install numpy opencv-python
+   $ pip install aiortc opencv-python
 
 To run the example, you will need instances of the `cli` example:
 
 - The first takes on the role of the offerer. It generates an offer which you
   must copy-and-paste to the answerer.
 
-.. code:: bash
+.. code-block:: console
 
-   python cli.py offer
+   $ python cli.py offer
 
 - The second takes on the role of the answerer. When given an offer, it will
   generate an answer which you must copy-and-paste to the offerer.
 
-.. code:: bash
+.. code-block:: console
 
-   python cli.py answer
+   $ python cli.py answer
 
 Check `output.png` for the result of the stream.
