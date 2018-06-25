@@ -28,7 +28,7 @@ Examples
 
   * `server`:
 
-    - ensure "green frame" dimensions match those of real frames (avoids a vpx error).
+    - perform some image processing using OpenCV.
 
     - make it possible to disable data channels.
 

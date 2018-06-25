@@ -2,7 +2,8 @@ Audio, video and data channel server
 ====================================
 
 This example illustrates establishing audio, video and a data channel with a
-browser.
+browser. It also performs some image processing on the video frames using
+OpenCV.
 
 Running
 -------
@@ -11,7 +12,7 @@ To run this example, you will need to install ``aiohttp``:
 
 .. code-block:: console
 
-    $ pip install aiohttp
+    $ pip install aiohttp opencv-python
 
 When you start the example, it will create an HTTP server which you
 can connect to from your browser:

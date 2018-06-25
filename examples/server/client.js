@@ -55,7 +55,11 @@ function negotiate() {
         var offer = pc.localDescription;
         document.getElementById('offer-sdp').textContent = offer.sdp;
         return fetch('/offer', {
-            body: JSON.stringify(offer),
+            body: JSON.stringify({
+                sdp: offer.sdp,
+                type: offer.type,
+                video_transform: document.getElementById('video-transform').value
+            }),
             headers: {
                 'Content-Type': 'application/json'
             },

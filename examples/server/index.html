@@ -20,6 +20,10 @@
     .option {
         margin-bottom: 8px;
     }
+
+    #media {
+        max-width: 640px;
+    }
     </style>
 </head>
 <body>
@@ -36,6 +40,11 @@
 <div class="option">
     <input id="use-video" type="checkbox"/>
     <label for="use-video">Use video</label>
+    <select id="video-transform">
+        <option value="edges">Edge detection</option>
+        <option value="green">Green frame</option>
+        <option value="rotate">Rotate</option>
+    </select>
 </div>
 
 <button id="start" onclick="start()">Start</button>
@@ -55,7 +64,7 @@
 <div id="media" style="display: none">
     <h2>Media</h2>
 
-    <p>You should see a video alternating between green and your camera</p>
+    <p>You should see a video alternating between the raw and transformed video.</p>
     <audio id="audio" autoplay="true"></audio>
     <video id="video" autoplay="true"></video>
 </div>

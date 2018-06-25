@@ -2,10 +2,13 @@ import argparse
 import asyncio
 import json
 import logging
+import math
 import os
 import time
 import wave
 
+import cv2
+import numpy
 from aiohttp import web
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -15,6 +18,23 @@ from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
 ROOT = os.path.dirname(__file__)
 AUDIO_OUTPUT_PATH = os.path.join(ROOT, 'output.wav')
 AUDIO_PTIME = 0.020  # 20ms audio packetization
+
+
+def frame_from_bgr(data_bgr):
+    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
+    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
+
+
+def frame_from_gray(data_gray):
+    data_bgr = cv2.cvtColor(data_gray, cv2.COLOR_GRAY2BGR)
+    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
+    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
+
+
+def frame_to_bgr(frame):
+    data_flat = numpy.frombuffer(frame.data, numpy.uint8)
+    data_yuv = data_flat.reshape((math.ceil(frame.height * 12 / 8), frame.width))
+    return cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_YV12)
 
 
 class AudioFileTrack(AudioStreamTrack):
@@ -37,23 +57,32 @@ class AudioFileTrack(AudioStreamTrack):
             sample_rate=self.reader.getframerate())
 
 
-class VideoDummyTrack(VideoStreamTrack):
-    def __init__(self):
+class VideoTransformTrack(VideoStreamTrack):
+    def __init__(self, transform):
         self.counter = 0
-        self.green = None
         self.received = asyncio.Queue(maxsize=1)
+        self.transform = transform
 
     async def recv(self):
         frame = await self.received.get()
 
-        # we initialize the green frame once we know the frame size
-        if self.green is None:
-            self.green = VideoFrame(width=frame.width, height=frame.height)
-
         self.counter += 1
         if (self.counter % 100) < 50:
-            return self.green
+            # apply image processing to frame
+            if self.transform == 'edges':
+                img = frame_to_bgr(frame)
+                edges = cv2.Canny(img, 100, 200)
+                return frame_from_gray(edges)
+            elif self.transform == 'rotate':
+                img = frame_to_bgr(frame)
+                rows, cols, _ = img.shape
+                M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 7.2, 1)
+                rotated = cv2.warpAffine(img, M, (cols, rows))
+                return frame_from_bgr(rotated)
+            else:
+                return VideoFrame(width=frame.width, height=frame.height)
         else:
+            # return raw frame
             return frame
 
 
@@ -102,10 +131,10 @@ async def javascript(request):
 
 
 async def offer(request):
-    offer = await request.json()
+    params = await request.json()
     offer = RTCSessionDescription(
-        sdp=offer['sdp'],
-        type=offer['type'])
+        sdp=params['sdp'],
+        type=params['type'])
 
     pc = RTCPeerConnection()
     pc._consumers = []
@@ -113,7 +142,7 @@ async def offer(request):
 
     # prepare local media
     local_audio = AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav'))
-    local_video = VideoDummyTrack()
+    local_video = VideoTransformTrack(transform=params['video_transform'])
 
     @pc.on('datachannel')
     def on_datachannel(channel):
