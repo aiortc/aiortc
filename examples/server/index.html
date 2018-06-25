@@ -1,18 +1,42 @@
 <html>
 <head>
     <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebRTC demo</title>
+    <style>
+    button {
+        padding: 8px 16px;
+    }
+
+    pre {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    video {
+        width: 100%;
+    }
+
+    .option {
+        margin-bottom: 8px;
+    }
+    </style>
 </head>
 <body>
 
-<label for="use-datachannel">Use datachannel</label>
-<input id="use-datachannel" checked="checked" type="checkbox"/>
-
-<label for="use-audio">Use audio</label>
-<input id="use-audio" checked="checked" type="checkbox"/>
-
-<label for="use-video">Use video</label>
-<input id="use-video" type="checkbox"/>
+<h2>Options</h2>
+<div class="option">
+    <input id="use-datachannel" checked="checked" type="checkbox"/>
+    <label for="use-datachannel">Use datachannel</label>
+</div>
+<div class="option">
+    <input id="use-audio" checked="checked" type="checkbox"/>
+    <label for="use-audio">Use audio</label>
+</div>
+<div class="option">
+    <input id="use-video" type="checkbox"/>
+    <label for="use-video">Use video</label>
+</div>
 
 <button id="start" onclick="start()">Start</button>
 <button id="stop" style="display: none" onclick="stop()">Stop</button>
@@ -37,7 +61,7 @@
 </div>
 
 <h2>Data channel</h2>
-<pre id="data-channel" style="height: 200px; overflow-y: scroll"></pre>
+<pre id="data-channel" style="height: 200px;"></pre>
 
 <h2>SDP</h2>
 
