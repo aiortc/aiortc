@@ -14,25 +14,26 @@ from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
 
 ROOT = os.path.dirname(__file__)
 AUDIO_OUTPUT_PATH = os.path.join(ROOT, 'output.wav')
-
-
-async def pause(last, ptime):
-    if last:
-        now = time.time()
-        await asyncio.sleep(last + ptime - now)
-    return time.time()
+AUDIO_PTIME = 0.020  # 20ms audio packetization
 
 
 class AudioFileTrack(AudioStreamTrack):
     def __init__(self, path):
         self.last = None
         self.reader = wave.open(path, 'rb')
+        self.frames_per_packet = int(self.reader.getframerate() * AUDIO_PTIME)
 
     async def recv(self):
-        self.last = await pause(self.last, 0.02)
+        # as we are reading audio from a file and not using a "live" source,
+        # we need to control the rate at which audio is sent
+        if self.last:
+            now = time.time()
+            await asyncio.sleep(self.last + AUDIO_PTIME - now)
+        self.last = time.time()
+
         return AudioFrame(
             channels=self.reader.getnchannels(),
-            data=self.reader.readframes(160),
+            data=self.reader.readframes(self.frames_per_packet),
             sample_rate=self.reader.getframerate())
 
 
