@@ -6,7 +6,7 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import RTCP_RR, RTCP_SR, datetime_from_ntp
+from .rtp import RtcpRrPacket, RtcpSrPacket, datetime_from_ntp
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 
@@ -75,7 +75,7 @@ class RTCRtpReceiver:
     async def _handle_rtcp_packet(self, packet):
         logger.debug('receiver(%s) < %s' % (self._kind, packet))
 
-        if packet.packet_type == RTCP_SR:
+        if isinstance(packet, RtcpSrPacket):
             stats = RTCRemoteOutboundRtpStreamStats(
                 # RTCStats
                 timestamp=datetime.datetime.now(),
@@ -94,7 +94,7 @@ class RTCRtpReceiver:
             )
             self._stats[stats.type] = stats
 
-        if packet.packet_type in [RTCP_SR, RTCP_RR]:
+        if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in packet.reports:
                 stats = RTCRemoteInboundRtpStreamStats(
                     # RTCStats

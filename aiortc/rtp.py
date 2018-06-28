@@ -19,6 +19,14 @@ RTCP_BYE = 203
 NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
 
 
+def pack_rtcp_packet(packet_type, count, payload):
+    assert len(payload) % 4 == 0
+    return pack('!BBH',
+                (2 << 6) | count,
+                packet_type,
+                len(payload) // 4) + payload
+
+
 def datetime_from_ntp(ntp):
     seconds = (ntp >> 32)
     microseconds = ((ntp & 0xffffffff) * 1000000) / (1 << 32)
@@ -93,76 +101,140 @@ class RtcpSenderInfo:
             octet_count=octet_count)
 
 
+@attr.s
+class RtcpSourceInfo:
+    ssrc = attr.ib()
+    items = attr.ib()
+
+
 class RtcpPacket:
-    def __init__(self, packet_type, ssrc):
-        self.version = 2
-        self.packet_type = packet_type
-        self.ssrc = ssrc
-        self.reports = []
-        self.extension = b''
-
-    def __bytes__(self):
-        payload = b''
-        if self.packet_type == RTCP_SR:
-            payload += bytes(self.sender_info)
-        for report in self.reports:
-            payload += bytes(report)
-        payload += self.extension
-
-        assert len(payload) % 4 == 0
-        return pack('!BBHL',
-                    (self.version << 6) | len(self.reports),
-                    self.packet_type,
-                    len(payload) // 4 + 1,
-                    self.ssrc) + payload
-
-    def __repr__(self):
-        return 'RtcpPacket(pt=%d)' % self.packet_type
-
     @classmethod
     def parse(cls, data):
         pos = 0
         packets = []
 
         while pos < len(data):
-            start = pos
-
             if len(data) < RTCP_HEADER_LENGTH:
                 raise ValueError('RTCP packet length is less than %d bytes' % RTCP_HEADER_LENGTH)
 
-            v_p_count, packet_type, length, ssrc = unpack('!BBHL', data[pos:pos + 8])
+            v_p_count, packet_type, length = unpack('!BBH', data[pos:pos + 4])
             version = (v_p_count >> 6)
             # padding = ((v_p_count >> 5) & 1)
             count = (v_p_count & 0x1f)
             if version != 2:
                 raise ValueError('RTCP packet has invalid version')
-            pos += 8
-
-            p = cls(packet_type=packet_type, ssrc=ssrc)
-            if packet_type == RTCP_SR:
-                p.sender_info = RtcpSenderInfo.parse(data[pos:pos + 20])
-                pos += 20
-
-            if packet_type in [RTCP_SR, RTCP_RR]:
-                for r in range(count):
-                    p.reports.append(RtcpReceiverInfo.parse(data[pos:pos + 24]))
-                    pos += 24
-            elif packet_type == RTCP_SDES:
-                for r in range(count):
-                    r_start = pos
-                    while True:
-                        d_type, d_length = unpack('!BB', data[pos:pos + 2])
-                        pos += 2 + d_length
-                        if d_type == 0:
-                            break
-                    p.reports.append(data[r_start:pos])
-
-            end = start + (length + 1) * 4
-            p.extension = data[pos:end]
-            packets.append(p)
+            pos += 4
+            end = pos + length * 4
+            payload = data[pos:end]
             pos = end
 
+            if packet_type == RTCP_BYE:
+                packets.append(RtcpByePacket.parse(payload, count))
+            elif packet_type == RTCP_SDES:
+                packets.append(RtcpSdesPacket.parse(payload, count))
+            elif packet_type == RTCP_SR:
+                packets.append(RtcpSrPacket.parse(payload, count))
+            elif packet_type == RTCP_RR:
+                packets.append(RtcpRrPacket.parse(payload, count))
+
         return packets
+
+
+@attr.s
+class RtcpByePacket:
+    sources = attr.ib()
+
+    def __bytes__(self):
+        payload = b''.join([pack('!L', ssrc) for ssrc in self.sources])
+        return pack_rtcp_packet(RTCP_BYE, len(self.sources), payload)
+
+    @classmethod
+    def parse(cls, data, count):
+        sources = list(unpack('!' + ('L' * count), data))
+        return cls(sources=sources)
+
+
+@attr.s
+class RtcpRrPacket:
+    ssrc = attr.ib()
+    reports = attr.ib(default=attr.Factory(list))
+
+    def __bytes__(self):
+        payload = pack('!L', self.ssrc)
+        for report in self.reports:
+            payload += bytes(report)
+        return pack_rtcp_packet(RTCP_RR, len(self.reports), payload)
+
+    @classmethod
+    def parse(cls, data, count):
+        ssrc = unpack('!L', data[0:4])[0]
+        pos = 4
+        reports = []
+        for r in range(count):
+            reports.append(RtcpReceiverInfo.parse(data[pos:pos + 24]))
+            pos += 24
+        return cls(ssrc=ssrc, reports=reports)
+
+
+@attr.s
+class RtcpSdesPacket:
+    chunks = attr.ib(default=attr.Factory(list))
+
+    def __bytes__(self):
+        payload = b''
+        for chunk in self.chunks:
+            payload += pack('!L', chunk.ssrc)
+            for d_type, d_value in chunk.items:
+                payload += pack('!BB', d_type, len(d_value)) + d_value
+            payload += b'\x00\x00'
+        while len(payload) % 4:
+            payload += b'\x00'
+        return pack_rtcp_packet(RTCP_SDES, len(self.chunks), payload)
+
+    @classmethod
+    def parse(cls, data, count):
+        pos = 0
+        chunks = []
+        for r in range(count):
+            ssrc = unpack('!L', data[pos:pos + 4])[0]
+            pos += 4
+            items = []
+            while True:
+                d_type, d_length = unpack('!BB', data[pos:pos + 2])
+                pos += 2
+                d_value = data[pos:pos + d_length]
+                pos += d_length
+                if d_type == 0:
+                    break
+                else:
+                    items.append((d_type, d_value))
+            chunks.append(RtcpSourceInfo(ssrc=ssrc, items=items))
+        return cls(chunks=chunks)
+
+
+@attr.s
+class RtcpSrPacket:
+    ssrc = attr.ib()
+    sender_info = attr.ib()
+    reports = attr.ib(default=attr.Factory(list))
+
+    def __bytes__(self):
+        payload = pack('!L', self.ssrc)
+        payload += bytes(self.sender_info)
+        for report in self.reports:
+            payload += bytes(report)
+        return pack_rtcp_packet(RTCP_SR, len(self.reports), payload)
+
+    @classmethod
+    def parse(cls, data, count):
+        ssrc = unpack('!L', data[0:4])[0]
+        sender_info = RtcpSenderInfo.parse(data[4:24])
+        pos = 24
+        reports = []
+        for r in range(count):
+            reports.append(RtcpReceiverInfo.parse(data[pos:pos + 24]))
+            pos += 24
+        return RtcpSrPacket(ssrc=ssrc, sender_info=sender_info, reports=reports)
 
 
 class RtpPacket:

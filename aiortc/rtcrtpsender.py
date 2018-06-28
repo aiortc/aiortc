@@ -4,7 +4,7 @@ import random
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import RTCP_SR, RtcpPacket, RtcpSenderInfo, RtpPacket, seq_plus_one
+from .rtp import RtcpSenderInfo, RtcpSrPacket, RtpPacket, seq_plus_one
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -133,12 +133,13 @@ class RTCRtpSender:
                 break
 
             # send RTCP
-            packet = RtcpPacket(packet_type=RTCP_SR, ssrc=self._ssrc)
-            packet.sender_info = RtcpSenderInfo(
-                ntp_timestamp=0,
-                rtp_timestamp=0,
-                packet_count=self.__packet_count,
-                octet_count=self.__octet_count)
+            packet = RtcpSrPacket(
+                ssrc=self._ssrc,
+                sender_info=RtcpSenderInfo(
+                    ntp_timestamp=0,
+                    rtp_timestamp=0,
+                    packet_count=self.__packet_count,
+                    octet_count=self.__octet_count))
             logger.debug('sender(%s) > %s' % (self._kind, packet))
             try:
                 await self.transport._send_rtp(bytes(packet))

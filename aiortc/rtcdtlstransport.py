@@ -210,8 +210,8 @@ class RtpRouter:
         if parameters.rtcp.ssrc:
             self.ssrc_table[parameters.rtcp.ssrc] = receiver
 
-    def route(self, packet):
-        return self.ssrc_table.get(packet.ssrc)
+    def route(self, ssrc):
+        return self.ssrc_table.get(ssrc)
 
 
 class RTCDtlsTransport(EventEmitter):
@@ -411,13 +411,15 @@ class RTCDtlsTransport(EventEmitter):
                 data = self._rx_srtp.unprotect_rtcp(data)
                 packets = RtcpPacket.parse(data)
                 for packet in packets:
-                    receiver = self._rtp_router.route(packet)
-                    if receiver is not None:
-                        await receiver._handle_rtcp_packet(packet)
+                    # FIXME: route BYE and SDES packets too
+                    if hasattr(packet, 'ssrc'):
+                        receiver = self._rtp_router.route(packet.ssrc)
+                        if receiver is not None:
+                            await receiver._handle_rtcp_packet(packet)
             else:
                 data = self._rx_srtp.unprotect(data)
                 packet = RtpPacket.parse(data)
-                receiver = self._rtp_router.route(packet)
+                receiver = self._rtp_router.route(packet.ssrc)
                 if receiver is not None:
                     await receiver._handle_rtp_packet(packet)
 

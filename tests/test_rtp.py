@@ -1,9 +1,9 @@
 import datetime
 from unittest import TestCase
 
-from aiortc.rtp import (RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket,
-                        RtpPacket, datetime_from_ntp, datetime_to_ntp,
-                        seq_plus_one)
+from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpRrPacket,
+                        RtcpSdesPacket, RtcpSrPacket, RtpPacket,
+                        datetime_from_ntp, datetime_to_ntp, seq_plus_one)
 
 from .utils import load
 
@@ -15,11 +15,11 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, RTCP_BYE)
-        self.assertEqual(packet.ssrc, 2924645187)
+        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertEqual(packet.sources, [2924645187])
+        self.assertEqual(bytes(packet), data)
 
-        self.assertEqual(repr(packet), 'RtcpPacket(pt=203)')
+        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[2924645187])')
 
     def test_rr(self):
         data = load('rtcp_rr.bin')
@@ -27,8 +27,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, RTCP_RR)
+        self.assertTrue(isinstance(packet, RtcpRrPacket))
         self.assertEqual(packet.ssrc, 817267719)
         self.assertEqual(packet.reports[0].ssrc, 1200895919)
         self.assertEqual(packet.reports[0].fraction_lost, 0)
@@ -45,9 +44,11 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, RTCP_SDES)
-        self.assertEqual(packet.ssrc, 1831097322)
+        self.assertTrue(isinstance(packet, RtcpSdesPacket))
+        self.assertEqual(packet.chunks[0].ssrc, 1831097322)
+        self.assertEqual(packet.chunks[0].items, [
+            (1, b'{63f459ea-41fe-4474-9d33-9707c9ee79d1}'),
+        ])
         self.assertEqual(bytes(packet), data)
 
     def test_sr(self):
@@ -56,8 +57,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertEqual(packet.version, 2)
-        self.assertEqual(packet.packet_type, RTCP_SR)
+        self.assertTrue(isinstance(packet, RtcpSrPacket))
         self.assertEqual(packet.ssrc, 1831097322)
         self.assertEqual(packet.sender_info.ntp_timestamp, 16016567581311369308)
         self.assertEqual(packet.sender_info.rtp_timestamp, 1722342718)
@@ -78,8 +78,8 @@ class RtcpPacketTest(TestCase):
 
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 2)
-        self.assertEqual(packets[0].packet_type, RTCP_SR)
-        self.assertEqual(packets[1].packet_type, RTCP_SDES)
+        self.assertTrue(isinstance(packets[0], RtcpSrPacket))
+        self.assertTrue(isinstance(packets[1], RtcpSdesPacket))
 
     def test_truncated(self):
         data = load('rtcp_rr.bin')[0:7]
