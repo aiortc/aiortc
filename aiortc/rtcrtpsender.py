@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import random
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import RtpPacket, seq_plus_one
+from .rtp import RTCP_SR, RtcpPacket, RtcpSenderInfo, RtpPacket, seq_plus_one
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -30,10 +31,15 @@ class RTCRtpSender:
             self._kind = trackOrKind
             self._track = None
         self._ssrc = random32()
-        self.__exited = asyncio.Event()
+        self.__rtp_exited = asyncio.Event()
+        self.__rtcp_exited = asyncio.Event()
         self.__started = False
         self.__stopped = asyncio.Event()
         self.__transport = transport
+
+        # stats
+        self.__octet_count = 0
+        self.__packet_count = 0
 
     @property
     def kind(self):
@@ -67,7 +73,8 @@ class RTCRtpSender:
         :param: parameters: The :class:`RTCRtpParameters` for the sender.
         """
         if not self.__started:
-            asyncio.ensure_future(self._run(parameters.codecs[0]))
+            asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
+            asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
     async def stop(self):
@@ -76,10 +83,12 @@ class RTCRtpSender:
         """
         self.__stopped.set()
         if self.__started:
-            await self.__exited.wait()
+            await asyncio.gather(
+                self.__rtp_exited.wait(),
+                self.__rtcp_exited.wait())
 
-    async def _run(self, codec):
-        logger.debug('sender(%s) - started' % self._kind)
+    async def _run_rtp(self, codec):
+        logger.debug('sender(%s) - RTP started' % self._kind)
         loop = asyncio.get_event_loop()
 
         encoder = get_encoder(codec)
@@ -102,10 +111,39 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
+                    self.__octet_count += len(payload)
+                    self.__packet_count += 1
                     packet.sequence_number = seq_plus_one(packet.sequence_number)
                 packet.timestamp += encoder.timestamp_increment
             else:
                 await asyncio.sleep(0.02)
 
-        logger.debug('sender(%s) - finished' % self._kind)
-        self.__exited.set()
+        logger.debug('sender(%s) - RTP finished' % self._kind)
+        self.__rtp_exited.set()
+
+    async def _run_rtcp(self):
+        logger.debug('sender(%s) - RTCP started' % self._kind)
+
+        while not self.__stopped.is_set():
+            # The interval between RTCP packets is varied randomly over the
+            # range [0.5, 1.5] times the calculated interval.
+            sleep = 0.5 + random.random()
+            result = await first_completed(asyncio.sleep(sleep), self.__stopped.wait())
+            if result is True:
+                break
+
+            # send RTCP
+            packet = RtcpPacket(packet_type=RTCP_SR, ssrc=self._ssrc)
+            packet.sender_info = RtcpSenderInfo(
+                ntp_timestamp=0,
+                rtp_timestamp=0,
+                packet_count=self.__packet_count,
+                octet_count=self.__octet_count)
+            logger.debug('sender(%s) > %s' % (self._kind, packet))
+            try:
+                await self.transport._send_rtp(bytes(packet))
+            except ConnectionError:
+                self.__stopped.set()
+
+        logger.debug('sender(%s) - RTCP finished' % self._kind)
+        self.__rtcp_exited.set()
