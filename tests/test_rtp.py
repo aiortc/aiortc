@@ -1,7 +1,9 @@
+import datetime
 from unittest import TestCase
 
 from aiortc.rtp import (RTCP_BYE, RTCP_RR, RTCP_SDES, RTCP_SR, RtcpPacket,
-                        RtpPacket, seq_plus_one)
+                        RtpPacket, datetime_from_ntp, datetime_to_ntp,
+                        seq_plus_one)
 
 from .utils import load
 
@@ -161,6 +163,14 @@ class RtpPacketTest(TestCase):
 
 
 class RtpUtilTest(TestCase):
+    def test_datetime_from_ntp(self):
+        dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
+        self.assertEqual(datetime_from_ntp(16059593044731306503), dt)
+
+    def test_datetime_to_ntp(self):
+        dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
+        self.assertEqual(datetime_to_ntp(dt), 16059593044731306503)
+
     def test_seq_plus_one(self):
         self.assertEqual(seq_plus_one(0), 1)
         self.assertEqual(seq_plus_one(1), 2)

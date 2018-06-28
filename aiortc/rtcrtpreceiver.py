@@ -6,7 +6,7 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import RTCP_RR, RTCP_SR
+from .rtp import RTCP_RR, RTCP_SR, datetime_from_ntp
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 
@@ -90,7 +90,7 @@ class RTCRtpReceiver:
                 bytesSent=packet.sender_info.octet_count,
                 # RTCRemoteOutboundRtpStreamStats
                 localId='TODO',
-                remoteTimestamp=packet.sender_info.ntp_timestamp  # FIXME convert to a datetime
+                remoteTimestamp=datetime_from_ntp(packet.sender_info.ntp_timestamp)
             )
             self._stats[stats.type] = stats
 

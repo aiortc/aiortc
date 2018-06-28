@@ -1,3 +1,4 @@
+import datetime
 from struct import pack, unpack
 
 import attr
@@ -14,6 +15,21 @@ RTCP_SR = 200
 RTCP_RR = 201
 RTCP_SDES = 202
 RTCP_BYE = 203
+
+NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
+
+
+def datetime_from_ntp(ntp):
+    seconds = (ntp >> 32)
+    microseconds = ((ntp & 0xffffffff) * 1000000) / (1 << 32)
+    return NTP_EPOCH + datetime.timedelta(seconds=seconds, microseconds=microseconds)
+
+
+def datetime_to_ntp(dt):
+    delta = dt - NTP_EPOCH
+    high = int(delta.total_seconds())
+    low = round((delta.microseconds * (1 << 32)) // 1000000)
+    return (high << 32) | low
 
 
 def is_rtcp(msg):
