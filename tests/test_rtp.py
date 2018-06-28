@@ -3,7 +3,8 @@ from unittest import TestCase
 
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpRrPacket,
                         RtcpSdesPacket, RtcpSrPacket, RtpPacket,
-                        datetime_from_ntp, datetime_to_ntp, seq_plus_one)
+                        datetime_from_ntp, datetime_to_ntp, seq_gt,
+                        seq_plus_one)
 
 from .utils import load
 
@@ -170,6 +171,14 @@ class RtpUtilTest(TestCase):
     def test_datetime_to_ntp(self):
         dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
         self.assertEqual(datetime_to_ntp(dt), 16059593044731306503)
+
+    def test_seq_gt(self):
+        self.assertFalse(seq_gt(0, 1))
+        self.assertFalse(seq_gt(1, 1))
+        self.assertTrue(seq_gt(2, 1))
+        self.assertTrue(seq_gt(32768, 1))
+        self.assertFalse(seq_gt(32769, 1))
+        self.assertFalse(seq_gt(65535, 1))
 
     def test_seq_plus_one(self):
         self.assertEqual(seq_plus_one(0), 1)

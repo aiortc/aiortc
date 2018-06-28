@@ -44,8 +44,18 @@ def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
+def seq_gt(a, b):
+    half_mod = (1 << 15)
+    return (((a < b) and ((b - a) > half_mod)) or
+            ((a > b) and ((a - b) < half_mod)))
+
+
 def seq_plus_one(a):
     return (a + 1) % RTP_SEQ_MODULO
+
+
+def utcnow():
+    return datetime.datetime.now().astimezone(datetime.timezone.utc)
 
 
 @attr.s

@@ -4,7 +4,8 @@ import random
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import RtcpSenderInfo, RtcpSrPacket, RtpPacket, seq_plus_one
+from .rtp import (RtcpSenderInfo, RtcpSrPacket, RtpPacket, datetime_to_ntp,
+                  seq_plus_one, utcnow)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -38,6 +39,8 @@ class RTCRtpSender:
         self.__transport = transport
 
         # stats
+        self.__ntp_timestamp = 0
+        self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
 
@@ -111,6 +114,8 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
+                    self.__ntp_timestamp = datetime_to_ntp(utcnow())
+                    self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     packet.sequence_number = seq_plus_one(packet.sequence_number)
@@ -136,8 +141,8 @@ class RTCRtpSender:
             packet = RtcpSrPacket(
                 ssrc=self._ssrc,
                 sender_info=RtcpSenderInfo(
-                    ntp_timestamp=0,
-                    rtp_timestamp=0,
+                    ntp_timestamp=self.__ntp_timestamp,
+                    rtp_timestamp=self.__rtp_timestamp,
                     packet_count=self.__packet_count,
                     octet_count=self.__octet_count))
             logger.debug('sender(%s) > %s' % (self._kind, packet))
