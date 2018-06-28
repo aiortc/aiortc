@@ -102,21 +102,19 @@ class RtcpPacket:
         self.extension = b''
 
     def __bytes__(self):
-        data = pack('!BBHL',
+        payload = b''
+        if self.packet_type == RTCP_SR:
+            payload += bytes(self.sender_info)
+        for report in self.reports:
+            payload += bytes(report)
+        payload += self.extension
+
+        assert len(payload) % 4 == 0
+        return pack('!BBHL',
                     (self.version << 6) | len(self.reports),
                     self.packet_type,
-                    self._length,
-                    self.ssrc)
-
-        if self.packet_type == RTCP_SR:
-            data += bytes(self.sender_info)
-
-        for report in self.reports:
-            data += bytes(report)
-
-        data += self.extension
-
-        return data
+                    len(payload) // 4 + 1,
+                    self.ssrc) + payload
 
     def __repr__(self):
         return 'RtcpPacket(pt=%d)' % self.packet_type
@@ -134,14 +132,13 @@ class RtcpPacket:
 
             v_p_count, packet_type, length, ssrc = unpack('!BBHL', data[pos:pos + 8])
             version = (v_p_count >> 6)
-            # padding = ((v_p_rc >> 5) & 1)
+            # padding = ((v_p_count >> 5) & 1)
             count = (v_p_count & 0x1f)
             if version != 2:
                 raise ValueError('RTCP packet has invalid version')
             pos += 8
 
             p = cls(packet_type=packet_type, ssrc=ssrc)
-            p._length = length
             if packet_type == RTCP_SR:
                 p.sender_info = RtcpSenderInfo.parse(data[pos:pos + 20])
                 pos += 20
