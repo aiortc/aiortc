@@ -92,7 +92,7 @@ class RTCRtpSender:
                 self.__rtcp_exited.wait())
 
     async def _run_rtp(self, codec):
-        logger.debug('sender(%s) - RTP started' % self._kind)
+        self.__log_debug('- RTP started')
         loop = asyncio.get_event_loop()
 
         encoder = get_encoder(codec)
@@ -110,7 +110,7 @@ class RTCRtpSender:
                     packet.payload = payload
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
-                        logger.debug('sender(%s) > %s' % (self._kind, packet))
+                        self.__log_debug('> %s', packet)
                         await self.transport._send_rtp(bytes(packet))
                     except ConnectionError:
                         self.__stopped.set()
@@ -124,11 +124,11 @@ class RTCRtpSender:
             else:
                 await asyncio.sleep(0.02)
 
-        logger.debug('sender(%s) - RTP finished' % self._kind)
+        self.__log_debug('- RTP finished')
         self.__rtp_exited.set()
 
     async def _run_rtcp(self):
-        logger.debug('sender(%s) - RTCP started' % self._kind)
+        self.__log_debug('- RTCP started')
 
         while not self.__stopped.is_set():
             # The interval between RTCP packets is varied randomly over the
@@ -159,16 +159,19 @@ class RTCRtpSender:
         packet = RtcpByePacket(sources=[self._ssrc])
         await self._send_rtcp([packet])
 
-        logger.debug('sender(%s) - RTCP finished' % self._kind)
+        self.__log_debug('- RTCP finished')
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packets):
         payload = b''
         for packet in packets:
-            logger.debug('sender(%s) > %s' % (self._kind, packet))
+            self.__log_debug('> %s', packet)
             payload += bytes(packet)
 
         try:
             await self.transport._send_rtp(payload)
         except ConnectionError:
             pass
+
+    def __log_debug(self, msg, *args):
+        logger.debug('sender(%s) ' + msg, self._kind, *args)

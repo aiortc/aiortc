@@ -73,7 +73,7 @@ class RTCRtpReceiver:
         self._stopped.set()
 
     async def _handle_rtcp_packet(self, packet):
-        logger.debug('receiver(%s) < %s' % (self._kind, packet))
+        self.__log_debug('< %s', packet)
 
         if isinstance(packet, RtcpSrPacket):
             stats = RTCRemoteOutboundRtpStreamStats(
@@ -117,7 +117,7 @@ class RTCRtpReceiver:
                 self._stats[stats.type] = stats
 
     async def _handle_rtp_packet(self, packet):
-        logger.debug('receiver(%s) < %s' % (self._kind, packet))
+        self.__log_debug('< %s', packet)
         if packet.payload_type in self._decoders:
             decoder = self._decoders[packet.payload_type]
             loop = asyncio.get_event_loop()
@@ -148,3 +148,6 @@ class RTCRtpReceiver:
                     video_frames = await loop.run_in_executor(None, decoder.decode, payloads)
                     for video_frame in video_frames:
                         await self._track._queue.put(video_frame)
+
+    def __log_debug(self, msg, *args):
+        logger.debug('receiver(%s) ' + msg, self._kind, *args)
