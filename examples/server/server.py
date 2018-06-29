@@ -67,7 +67,7 @@ class VideoTransformTrack(VideoStreamTrack):
         frame = await self.received.get()
 
         self.counter += 1
-        if (self.counter % 100) < 50:
+        if (self.counter % 100) > 50:
             # apply image processing to frame
             if self.transform == 'edges':
                 img = frame_to_bgr(frame)
@@ -79,8 +79,10 @@ class VideoTransformTrack(VideoStreamTrack):
                 M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 7.2, 1)
                 rotated = cv2.warpAffine(img, M, (cols, rows))
                 return frame_from_bgr(rotated)
-            else:
+            elif self.transform == 'green':
                 return VideoFrame(width=frame.width, height=frame.height)
+            else:
+                return frame
         else:
             # return raw frame
             return frame
