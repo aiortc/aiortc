@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
+from aiortc.rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
                                      RTCRtpHeaderExtensionParameters)
 from aiortc.sdp import SessionDescription
 
@@ -61,7 +61,8 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111),
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111,
+                                  rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')]),
             RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
             RTCRtpCodecParameters(name='ISAC', clockRate=32000, payloadType=104),
             RTCRtpCodecParameters(name='G722', clockRate=8000, payloadType=9),
@@ -119,6 +120,7 @@ a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
 a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=rtpmap:111 opus/48000/2
+a=rtcp-fb:111 transport-cc
 a=rtpmap:103 ISAC/16000
 a=rtpmap:104 ISAC/32000
 a=rtpmap:9 G722/8000
@@ -404,13 +406,25 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=97),
-            RTCRtpCodecParameters(name='VP9', clockRate=90000, channels=None, payloadType=98),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=99),
-            RTCRtpCodecParameters(name='red', clockRate=90000, channels=None, payloadType=100),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, channels=None, payloadType=101),
-            RTCRtpCodecParameters(name='ulpfec', clockRate=90000, channels=None, payloadType=102)
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96, rtcpFeedback=[
+                RTCRtcpFeedback(type='goog-remb'),
+                RTCRtcpFeedback(type='transport-cc'),
+                RTCRtcpFeedback(type='ccm', parameter='fir'),
+                RTCRtcpFeedback(type='nack'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
+            ]),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97),
+            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98, rtcpFeedback=[
+                RTCRtcpFeedback(type='goog-remb'),
+                RTCRtcpFeedback(type='transport-cc'),
+                RTCRtcpFeedback(type='ccm', parameter='fir'),
+                RTCRtcpFeedback(type='nack'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
+            ]),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99),
+            RTCRtpCodecParameters(name='red', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101),
+            RTCRtpCodecParameters(name='ulpfec', clockRate=90000, payloadType=102)
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(
@@ -512,8 +526,18 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=120),
-            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121),
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=120, rtcpFeedback=[
+                RTCRtcpFeedback(type='nack'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
+                RTCRtcpFeedback(type='ccm', parameter='fir'),
+                RTCRtcpFeedback(type='goog-remb'),
+            ]),
+            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121, rtcpFeedback=[
+                RTCRtcpFeedback(type='nack'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
+                RTCRtcpFeedback(type='ccm', parameter='fir'),
+                RTCRtcpFeedback(type='goog-remb'),
+            ]),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(
@@ -550,3 +574,39 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
             d.media[0].dtls.fingerprints[0].value,
             'AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5')  # noqa
         self.assertEqual(d.media[0].dtls.role, 'auto')
+
+        self.assertEqual(str(d), lf2crlf("""v=0
+o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE sdparta_0
+m=video 42738 UDP/TLS/RTP/SAVPF 120 121
+c=IN IP4 192.168.99.7
+a=sendrecv
+a=extmap:3 urn:ietf:params:rtp-hdrext:sdes:mid
+a=extmap:4 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:5 urn:ietf:params:rtp-hdrext:toffset
+a=mid:sdparta_0
+a=rtcp:52914 IN IP4 192.168.99.7
+a=rtcp-mux
+a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
+a=rtpmap:120 VP8/90000
+a=rtcp-fb:120 nack
+a=rtcp-fb:120 nack pli
+a=rtcp-fb:120 ccm fir
+a=rtcp-fb:120 goog-remb
+a=rtpmap:121 VP9/90000
+a=rtcp-fb:121 nack
+a=rtcp-fb:121 nack pli
+a=rtcp-fb:121 ccm fir
+a=rtcp-fb:121 goog-remb
+a=candidate:0 1 UDP 2122252543 192.168.99.7 42738 typ host
+a=candidate:1 1 TCP 2105524479 192.168.99.7 9 typ host tcptype active
+a=candidate:0 2 UDP 2122252542 192.168.99.7 52914 typ host
+a=candidate:1 2 TCP 2105524478 192.168.99.7 9 typ host tcptype active
+a=end-of-candidates
+a=ice-ufrag:1a0e6b24
+a=ice-pwd:c43b0306087bb4de15f70e4405c4dafe
+a=fingerprint:sha-256 AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5
+a=setup:actpass
+"""))  # noqa

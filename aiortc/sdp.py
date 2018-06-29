@@ -4,7 +4,7 @@ import re
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
-from .rtcrtpparameters import (RTCRtpCodecParameters,
+from .rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
                                RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters)
 from .rtcsctptransport import RTCSctpCapabilities
@@ -59,6 +59,19 @@ def candidate_to_sdp(candidate):
     return sdp
 
 
+def grouplines(sdp):
+    session = []
+    media = []
+    for line in sdp.splitlines():
+        if line.startswith('m='):
+            media.append([line])
+        elif len(media):
+            media[-1].append(line)
+        else:
+            session.append(line)
+    return session, media
+
+
 def ipaddress_from_sdp(sdp):
     m = re.match('^IN (IP4|IP6) ([^ ]+)$', sdp)
     assert m
@@ -68,6 +81,13 @@ def ipaddress_from_sdp(sdp):
 def ipaddress_to_sdp(addr):
     version = ipaddress.ip_address(addr).version
     return 'IN IP%d %s' % (version, addr)
+
+
+def parse_attr(line):
+    if ':' in line:
+        return line[2:].split(':', 1)
+    else:
+        return line[2:], None
 
 
 class MediaDescription:
@@ -126,6 +146,11 @@ class MediaDescription:
 
         for codec in self.rtp.codecs:
             lines.append('a=rtpmap:%d %s' % (codec.payloadType, codec))
+            for feedback in codec.rtcpFeedback:
+                value = feedback.type
+                if feedback.parameter:
+                    value += ' ' + feedback.parameter
+                lines.append('a=rtcp-fb:%d %s' % (codec.payloadType, value))
 
         for k, v in self.sctpmap.items():
             lines.append('a=sctpmap:%d %s' % (k, v))
@@ -163,38 +188,57 @@ class SessionDescription:
     def parse(cls, sdp):
         current_media = None
         dtls_fingerprints = []
-        session = cls()
 
-        for line in sdp.splitlines():
+        def find_codec(pt):
+            for codec in current_media.rtp.codecs:
+                if codec.payloadType == pt:
+                    return codec
+
+        session_lines, media_groups = grouplines(sdp)
+
+        # parse session
+        session = cls()
+        for line in session_lines:
             if line.startswith('o='):
                 session.origin = line.strip()[2:]
-            if line.startswith('m='):
-                m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$', line)
-                assert m
-
-                # check payload types are valid
-                kind = m.group(1)
-                fmt = [int(x) for x in m.group(4).split()]
-                if kind in ['audio', 'video']:
-                    for pt in fmt:
-                        assert pt >= 0 and pt < 256
-                        assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
-
-                current_media = MediaDescription(
-                    kind=kind,
-                    port=int(m.group(2)),
-                    profile=m.group(3),
-                    fmt=fmt)
-                current_media.dtls.fingerprints = dtls_fingerprints
-                session.media.append(current_media)
-            elif line.startswith('c=') and current_media:
-                current_media.host = ipaddress_from_sdp(line[2:])
             elif line.startswith('a='):
-                if ':' in line:
-                    attr, value = line[2:].split(':', 1)
-                else:
-                    attr = line[2:]
-                if current_media:
+                attr, value = parse_attr(line)
+                if attr == 'fingerprint':
+                    algorithm, fingerprint = value.split()
+                    dtls_fingerprints.append(RTCDtlsFingerprint(
+                        algorithm=algorithm,
+                        value=fingerprint))
+                elif attr == 'group':
+                    bits = value.split()
+                    if bits and bits[0] == 'BUNDLE':
+                        session.bundle = bits[1:]
+
+        # parse media
+        for media_lines in media_groups:
+            m = re.match('^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$', media_lines[0])
+            assert m
+
+            # check payload types are valid
+            kind = m.group(1)
+            fmt = [int(x) for x in m.group(4).split()]
+            if kind in ['audio', 'video']:
+                for pt in fmt:
+                    assert pt >= 0 and pt < 256
+                    assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
+
+            current_media = MediaDescription(
+                kind=kind,
+                port=int(m.group(2)),
+                profile=m.group(3),
+                fmt=fmt)
+            current_media.dtls.fingerprints = dtls_fingerprints
+            session.media.append(current_media)
+
+            for line in media_lines[1:]:
+                if line.startswith('c='):
+                    current_media.host = ipaddress_from_sdp(line[2:])
+                elif line.startswith('a='):
+                    attr, value = parse_attr(line)
                     if attr == 'candidate':
                         current_media.ice_candidates.append(candidate_from_sdp(value))
                     elif attr == 'end-of-candidates':
@@ -250,17 +294,17 @@ class SessionDescription:
                         if ssrc_attr == 'cname' and not current_media.rtp.rtcp.cname:
                             current_media.rtp.rtcp.cname = ssrc_value
                             current_media.rtp.rtcp.ssrc = int(ssrc)
-                else:
-                    # session-level attributes
-                    if attr == 'fingerprint':
-                        algorithm, fingerprint = value.split()
-                        dtls_fingerprints.append(RTCDtlsFingerprint(
-                            algorithm=algorithm,
-                            value=fingerprint))
-                    elif attr == 'group':
+
+            # requires codecs to have been parsed
+            for line in media_lines[1:]:
+                if line.startswith('a='):
+                    attr, value = parse_attr(line)
+                    if attr == 'rtcp-fb':
                         bits = value.split()
-                        if bits and bits[0] == 'BUNDLE':
-                            session.bundle = bits[1:]
+                        codec = find_codec(int(bits[0]))
+                        codec.rtcpFeedback.append(RTCRtcpFeedback(
+                            type=bits[1],
+                            parameter=bits[2] if len(bits) > 2 else None))
 
         return session
 

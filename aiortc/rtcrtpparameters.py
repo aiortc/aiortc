@@ -15,6 +15,8 @@ class RTCRtpCodecParameters:
     "The number of channels supported (e.g. two for stereo)."
     payloadType = attr.ib(default=None)
     "The value that goes in the RTP Payload Type Field."
+    rtcpFeedback = attr.ib(default=attr.Factory(list))
+    "Transport layer and codec-specific feedback messages for this codec."
 
     def clone(self, payloadType):
         return RTCRtpCodecParameters(
@@ -47,9 +49,18 @@ class RTCRtpCapabilities:
 
 
 @attr.s
+class RTCRtcpFeedback:
+    """
+    The :class:`RTCRtcpFeedback` dictionary provides information on RTCP feedback messages.
+    """
+    type = attr.ib()
+    parameter = attr.ib(default=None)
+
+
+@attr.s
 class RTCRtcpParameters:
     """
-    The :class:`RTCRtcpParameters` dictionary  provides information on RTCP settings.
+    The :class:`RTCRtcpParameters` dictionary provides information on RTCP settings.
     """
     cname = attr.ib(default=None)
     "The Canonical Name (CNAME) used by RTCP."
