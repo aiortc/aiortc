@@ -411,12 +411,16 @@ class RTCDtlsTransport(EventEmitter):
                 data = self._rx_srtp.unprotect_rtcp(data)
                 packets = RtcpPacket.parse(data)
                 for packet in packets:
-                    # FIXME: route BYE packets too
                     receiver = None
                     if hasattr(packet, 'ssrc'):
+                        # SR and RR
                         receiver = self._rtp_router.route(packet.ssrc)
-                    elif getattr(packet, 'chunks'):
+                    elif getattr(packet, 'chunks', None):
+                        # SDES
                         receiver = self._rtp_router.route(packet.chunks[0].ssrc)
+                    elif getattr(packet, 'sources', None):
+                        # BYE
+                        receiver = self._rtp_router.route(packet.sources[0])
                     if receiver is not None:
                         await receiver._handle_rtcp_packet(packet)
             else:

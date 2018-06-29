@@ -4,8 +4,9 @@ import random
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import (RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
-                  RtpPacket, datetime_to_ntp, seq_plus_one, utcnow)
+from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
+                  RtcpSourceInfo, RtcpSrPacket, RtpPacket, datetime_to_ntp,
+                  seq_plus_one, utcnow)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -138,28 +139,36 @@ class RTCRtpSender:
                 break
 
             # RTCP SR
-            packet = RtcpSrPacket(
+            packets = [RtcpSrPacket(
                 ssrc=self._ssrc,
                 sender_info=RtcpSenderInfo(
                     ntp_timestamp=self.__ntp_timestamp,
                     rtp_timestamp=self.__rtp_timestamp,
                     packet_count=self.__packet_count,
-                    octet_count=self.__octet_count))
-            logger.debug('sender(%s) > %s' % (self._kind, packet))
-            payload = bytes(packet)
+                    octet_count=self.__octet_count))]
 
             # RTCP SDES
             if self._cname is not None:
-                packet = RtcpSdesPacket(chunks=[RtcpSourceInfo(
+                packets.append(RtcpSdesPacket(chunks=[RtcpSourceInfo(
                     ssrc=self._ssrc,
-                    items=[(1, self._cname.encode('utf8'))])])
-                logger.debug('sender(%s) > %s' % (self._kind, packet))
-                payload += bytes(packet)
+                    items=[(1, self._cname.encode('utf8'))])]))
 
-            try:
-                await self.transport._send_rtp(payload)
-            except ConnectionError:
-                pass
+            await self._send_rtcp(packets)
+
+        # RTCP BYE
+        packet = RtcpByePacket(sources=[self._ssrc])
+        await self._send_rtcp([packet])
 
         logger.debug('sender(%s) - RTCP finished' % self._kind)
         self.__rtcp_exited.set()
+
+    async def _send_rtcp(self, packets):
+        payload = b''
+        for packet in packets:
+            logger.debug('sender(%s) > %s' % (self._kind, packet))
+            payload += bytes(packet)
+
+        try:
+            await self.transport._send_rtp(payload)
+        except ConnectionError:
+            pass
