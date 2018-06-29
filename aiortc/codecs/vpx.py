@@ -172,7 +172,7 @@ class VpxDecoder:
 
 
 class VpxEncoder:
-    timestamp_increment = 1
+    timestamp_increment = 3000
 
     def __init__(self):
         self.cx = lib.vpx_codec_vp8_cx()
