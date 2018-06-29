@@ -459,3 +459,94 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
             d.media[0].dtls.fingerprints[0].value,
             '30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E')  # noqa
         self.assertEqual(d.media[0].dtls.role, 'auto')
+
+    def test_video_firefox(self):
+        d = SessionDescription.parse(lf2crlf("""v=0
+o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=sendrecv
+a=fingerprint:sha-256 AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5
+a=group:BUNDLE sdparta_0
+a=ice-options:trickle
+a=msid-semantic:WMS *
+m=video 42738 UDP/TLS/RTP/SAVPF 120 121
+c=IN IP4 192.168.99.7
+a=candidate:0 1 UDP 2122252543 192.168.99.7 42738 typ host
+a=candidate:1 1 TCP 2105524479 192.168.99.7 9 typ host tcptype active
+a=candidate:0 2 UDP 2122252542 192.168.99.7 52914 typ host
+a=candidate:1 2 TCP 2105524478 192.168.99.7 9 typ host tcptype active
+a=sendrecv
+a=end-of-candidates
+a=extmap:3 urn:ietf:params:rtp-hdrext:sdes:mid
+a=extmap:4 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:5 urn:ietf:params:rtp-hdrext:toffset
+a=fmtp:120 max-fs=12288;max-fr=60
+a=fmtp:121 max-fs=12288;max-fr=60
+a=ice-pwd:c43b0306087bb4de15f70e4405c4dafe
+a=ice-ufrag:1a0e6b24
+a=mid:sdparta_0
+a=msid:{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} {d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}
+a=rtcp:52914 IN IP4 192.168.99.7
+a=rtcp-fb:120 nack
+a=rtcp-fb:120 nack pli
+a=rtcp-fb:120 ccm fir
+a=rtcp-fb:120 goog-remb
+a=rtcp-fb:121 nack
+a=rtcp-fb:121 nack pli
+a=rtcp-fb:121 ccm fir
+a=rtcp-fb:121 goog-remb
+a=rtcp-mux
+a=rtpmap:120 VP8/90000
+a=rtpmap:121 VP9/90000
+a=setup:actpass
+a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
+"""))  # noqa
+
+        self.assertEqual(d.bundle, ['sdparta_0'])
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'video')
+        self.assertEqual(d.media[0].host, '192.168.99.7')
+        self.assertEqual(d.media[0].port, 42738)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=120),
+            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121),
+        ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [
+            RTCRtpHeaderExtensionParameters(
+                id=3,
+                uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+            RTCRtpHeaderExtensionParameters(
+                id=4,
+                uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+            RTCRtpHeaderExtensionParameters(
+                id=5,
+                uri='urn:ietf:params:rtp-hdrext:toffset'),
+        ])
+        self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, '{6f52d07e-17ef-42c5-932b-3b57c64fe049}')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 3408404552)
+        self.assertEqual(d.media[0].rtcp_host, '192.168.99.7')
+        self.assertEqual(d.media[0].rtcp_port, 52914)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [120, 121])
+        self.assertEqual(d.media[0].sctpmap, {})
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 4)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice.usernameFragment, '1a0e6b24')
+        self.assertEqual(d.media[0].ice.password, 'c43b0306087bb4de15f70e4405c4dafe')
+
+        # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(
+            d.media[0].dtls.fingerprints[0].value,
+            'AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5')  # noqa
+        self.assertEqual(d.media[0].dtls.role, 'auto')
