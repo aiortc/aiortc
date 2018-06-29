@@ -55,7 +55,7 @@ def seq_plus_one(a):
 
 
 def utcnow():
-    return datetime.datetime.now().astimezone(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 @attr.s
