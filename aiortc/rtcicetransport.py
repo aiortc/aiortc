@@ -2,9 +2,8 @@ import asyncio
 import re
 
 import attr
-from pyee import EventEmitter
-
 from aioice import Candidate, Connection
+from pyee import EventEmitter
 
 from .rtcconfiguration import RTCIceServer
 
