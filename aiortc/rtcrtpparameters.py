@@ -17,6 +17,8 @@ class RTCRtpCodecParameters:
     "The value that goes in the RTP Payload Type Field."
     rtcpFeedback = attr.ib(default=attr.Factory(list))
     "Transport layer and codec-specific feedback messages for this codec."
+    parameters = attr.ib(default=attr.Factory(dict))
+    "Codec-specific parameters available for signaling."
 
     def clone(self, payloadType):
         return RTCRtpCodecParameters(

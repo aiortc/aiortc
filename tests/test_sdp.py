@@ -10,6 +10,8 @@ def lf2crlf(x):
 
 
 class SdpTest(TestCase):
+    maxDiff = None
+
     def test_audio_chrome(self):
         d = SessionDescription.parse(lf2crlf("""v=0
 o=- 863426017819471768 2 IN IP4 127.0.0.1
@@ -62,7 +64,8 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111,
-                                  rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')]),
+                                  rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')],
+                                  parameters={'minptime': '10', 'useinbandfec': '1'}),
             RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
             RTCRtpCodecParameters(name='ISAC', clockRate=32000, payloadType=104),
             RTCRtpCodecParameters(name='G722', clockRate=8000, payloadType=9),
@@ -121,6 +124,7 @@ a=rtcp-mux
 a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=rtpmap:111 opus/48000/2
 a=rtcp-fb:111 transport-cc
+a=fmtp:111 minptime=10;useinbandfec=1
 a=rtpmap:103 ISAC/16000
 a=rtpmap:104 ISAC/32000
 a=rtpmap:9 G722/8000
@@ -192,11 +196,16 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=109),
+            RTCRtpCodecParameters(
+                name='opus', clockRate=48000, channels=2, payloadType=109,
+                parameters={
+                    'maxplaybackrate': '48000', 'stereo': '1', 'useinbandfec': '1'
+                }),
             RTCRtpCodecParameters(name='G722', clockRate=8000, channels=1, payloadType=9),
             RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101,
+                                  parameters={'0-15': None}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(id=1,
@@ -244,10 +253,12 @@ a=rtcp:38612 IN IP4 192.168.99.58
 a=rtcp-mux
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 a=rtpmap:109 opus/48000/2
+a=fmtp:109 maxplaybackrate=48000;stereo=1;useinbandfec=1
 a=rtpmap:9 G722/8000
 a=rtpmap:0 PCMU/8000
 a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
 a=candidate:0 1 UDP 2122187007 192.168.99.58 45274 typ host
 a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 47387 typ host
 a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
@@ -413,7 +424,8 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
                 RTCRtcpFeedback(type='nack'),
                 RTCRtcpFeedback(type='nack', parameter='pli'),
             ]),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+                                  parameters={'apt': '96'}),
             RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98, rtcpFeedback=[
                 RTCRtcpFeedback(type='goog-remb'),
                 RTCRtcpFeedback(type='transport-cc'),
@@ -421,9 +433,11 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
                 RTCRtcpFeedback(type='nack'),
                 RTCRtcpFeedback(type='nack', parameter='pli'),
             ]),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99,
+                                  parameters={'apt': '98'}),
             RTCRtpCodecParameters(name='red', clockRate=90000, payloadType=100),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                                  parameters={'apt': '100'}),
             RTCRtpCodecParameters(name='ulpfec', clockRate=90000, payloadType=102)
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
@@ -531,13 +545,13 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='ccm', parameter='fir'),
                 RTCRtcpFeedback(type='goog-remb'),
-            ]),
+            ], parameters={'max-fs': '12288', 'max-fr': '60'}),
             RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121, rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='ccm', parameter='fir'),
                 RTCRtcpFeedback(type='goog-remb'),
-            ]),
+            ], parameters={'max-fs': '12288', 'max-fr': '60'}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(
@@ -595,11 +609,13 @@ a=rtcp-fb:120 nack
 a=rtcp-fb:120 nack pli
 a=rtcp-fb:120 ccm fir
 a=rtcp-fb:120 goog-remb
+a=fmtp:120 max-fs=12288;max-fr=60
 a=rtpmap:121 VP9/90000
 a=rtcp-fb:121 nack
 a=rtcp-fb:121 nack pli
 a=rtcp-fb:121 ccm fir
 a=rtcp-fb:121 goog-remb
+a=fmtp:121 max-fs=12288;max-fr=60
 a=candidate:0 1 UDP 2122252543 192.168.99.7 42738 typ host
 a=candidate:1 1 TCP 2105524479 192.168.99.7 9 typ host tcptype active
 a=candidate:0 2 UDP 2122252542 192.168.99.7 52914 typ host

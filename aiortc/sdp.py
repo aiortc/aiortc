@@ -146,11 +146,23 @@ class MediaDescription:
 
         for codec in self.rtp.codecs:
             lines.append('a=rtpmap:%d %s' % (codec.payloadType, codec))
+
+            # RTCP feedback
             for feedback in codec.rtcpFeedback:
                 value = feedback.type
                 if feedback.parameter:
                     value += ' ' + feedback.parameter
                 lines.append('a=rtcp-fb:%d %s' % (codec.payloadType, value))
+
+            # parameters
+            params = []
+            for param_k, param_v in codec.parameters.items():
+                if param_v is not None:
+                    params.append('%s=%s' % (param_k, param_v))
+                else:
+                    params.append(param_k)
+            if params:
+                lines.append('a=fmtp:%d %s' % (codec.payloadType, ';'.join(params)))
 
         for k, v in self.sctpmap.items():
             lines.append('a=sctpmap:%d %s' % (k, v))
@@ -299,8 +311,17 @@ class SessionDescription:
             for line in media_lines[1:]:
                 if line.startswith('a='):
                     attr, value = parse_attr(line)
-                    if attr == 'rtcp-fb':
-                        bits = value.split()
+                    if attr == 'fmtp':
+                        format_id, format_desc = value.split(' ', 1)
+                        codec = find_codec(int(format_id))
+                        for param in format_desc.split(';'):
+                            if '=' in param:
+                                k, v = param.split('=', 1)
+                                codec.parameters[k] = v
+                            else:
+                                codec.parameters[param] = None
+                    elif attr == 'rtcp-fb':
+                        bits = value.split(' ', 2)
                         codec = find_codec(int(bits[0]))
                         codec.rtcpFeedback.append(RTCRtcpFeedback(
                             type=bits[1],

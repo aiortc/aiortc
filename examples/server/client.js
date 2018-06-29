@@ -1,4 +1,5 @@
 var pc = new RTCPeerConnection();
+console.log('pc', pc);
 
 // get DOM elements
 var dataChannelLog = document.getElementById('data-channel'),
