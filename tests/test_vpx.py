@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.vpx import (VpxDecoder, VpxEncoder, VpxPayloadDescriptor,
-                               _vpx_assert)
+                               _vpx_assert, number_of_threads)
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
@@ -147,3 +147,9 @@ class Vp8Test(TestCase):
         payloads = encoder.encode(frame)
         self.assertEqual(len(payloads), 7)
         self.assertEqual(len(payloads[0]), 1300)
+
+    def test_number_of_threads(self):
+        self.assertEqual(number_of_threads(1920 * 1080, 16), 8)
+        self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
+        self.assertEqual(number_of_threads(1920 * 1080, 4), 2)
+        self.assertEqual(number_of_threads(1920 * 1080, 2), 1)

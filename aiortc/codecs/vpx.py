@@ -1,10 +1,22 @@
 import math
+import multiprocessing
 from struct import pack, unpack
 
 from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
 PACKET_MAX = 1300 - 1
+
+
+def number_of_threads(pixels, cpus):
+    if pixels >= 1920 * 1080 and cpus > 8:
+        return 8
+    elif pixels > 1280 * 960 and cpus >= 6:
+        return 3
+    elif pixels > 640 * 480 and cpus >= 3:
+        return 2
+    else:
+        return 1
 
 
 class VpxPayloadDescriptor:
@@ -182,8 +194,15 @@ class VpxEncoder:
 
         if not self.codec:
             self.codec = ffi.new('vpx_codec_ctx_t *')
+            self.cfg.g_timebase.num = 1
+            self.cfg.g_timebase.den = 90000
+            self.cfg.g_threads = number_of_threads(frame.width * frame.height,
+                                                   multiprocessing.cpu_count())
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
+            self.cfg.rc_end_usage = lib.VPX_CBR
+            self.cfg.rc_min_quantizer = 2
+            self.cfg.rc_max_quantizer = 56
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
         elif frame.width != self.cfg.g_w or frame.height != self.cfg.g_h:
             self.cfg.g_w = frame.width

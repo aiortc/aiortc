@@ -68,6 +68,18 @@ typedef int64_t vpx_codec_pts_t;
 
 typedef const struct vpx_codec_iface vpx_codec_iface_t;
 
+typedef struct vpx_rational {
+  int num;
+  int den;
+} vpx_rational_t;
+
+enum vpx_rc_mode {
+  VPX_VBR,
+  VPX_CBR,
+  VPX_CQ,
+  VPX_Q,
+};
+
 typedef struct vpx_codec_dec_cfg {
   unsigned int threads;
   unsigned int w;
@@ -80,6 +92,12 @@ typedef struct vpx_codec_enc_cfg {
   unsigned int g_profile;
   unsigned int g_w;
   unsigned int g_h;
+  struct vpx_rational g_timebase;
+
+  enum vpx_rc_mode rc_end_usage;
+  unsigned int rc_target_bitrate;
+  unsigned int rc_min_quantizer;
+  unsigned int rc_max_quantizer;
   ...;
 } vpx_codec_enc_cfg_t;
 
