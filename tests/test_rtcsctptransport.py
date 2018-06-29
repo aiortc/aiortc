@@ -65,6 +65,7 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].type, 1)
         self.assertEqual(packet.chunks[0].flags, 0)
         self.assertEqual(len(packet.chunks[0].body), 82)
+        self.assertEqual(repr(packet.chunks[0]), 'InitChunk(flags=0)')
 
         self.assertEqual(bytes(packet), data)
 
@@ -110,6 +111,27 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].params, [
             (13, b'Expected B-bit for TSN=4ce1f17f, SID=0001, SSN=0000'),
         ])
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_data(self):
+        data = load('sctp_data.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 264304801)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], DataChunk))
+        self.assertEqual(packet.chunks[0].type, 0)
+        self.assertEqual(packet.chunks[0].flags, 3)
+        self.assertEqual(packet.chunks[0].tsn, 2584679421)
+        self.assertEqual(packet.chunks[0].stream_id, 1)
+        self.assertEqual(packet.chunks[0].stream_seq, 1)
+        self.assertEqual(packet.chunks[0].protocol, 51)
+        self.assertEqual(packet.chunks[0].user_data, b'ping')
+        self.assertEqual(repr(packet.chunks[0]),
+                         'DataChunk(flags=3, tsn=2584679421, stream_id=1, stream_seq=1)')
 
         self.assertEqual(bytes(packet), data)
 
@@ -236,6 +258,9 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].cumulative_tsn, 2222939037)
         self.assertEqual(packet.chunks[0].gaps, [(2, 2), (4, 4)])
         self.assertEqual(packet.chunks[0].duplicates, [2222939041])
+        self.assertEqual(repr(packet.chunks[0]),
+                         'SackChunk(flags=0, advertised_rwnd=128160, cumulative_tsn=2222939037, '
+                         'gaps=[(2, 2), (4, 4)])')
 
         self.assertEqual(bytes(packet), data)
 
