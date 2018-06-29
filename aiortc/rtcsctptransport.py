@@ -763,7 +763,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Handle an incoming chunk.
         """
-        self.__log_debug('< %s', repr(chunk))
+        self.__log_debug('< %s', chunk)
 
         # server
         if isinstance(chunk, InitChunk) and self.is_server:
@@ -925,7 +925,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Handle a RE-CONFIG parameter.
         """
-        self.__log_debug('<< %s', repr(param))
+        self.__log_debug('<< %s', param)
 
         if isinstance(param, StreamResetOutgoingParam):
             # mark closed inbound streams
@@ -999,7 +999,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit a chunk (no bundling for now).
         """
-        self.__log_debug('> %s', repr(chunk))
+        self.__log_debug('> %s', chunk)
         packet = Packet(
             source_port=self._local_port,
             destination_port=self._remote_port,
@@ -1015,7 +1015,7 @@ class RTCSctpTransport(EventEmitter):
                 break
         chunk.params.append((param_type, bytes(param)))
 
-        self.__log_debug('>> %s', repr(param))
+        self.__log_debug('>> %s', param)
         await self._send_chunk(chunk)
 
     async def _send_sack(self):
