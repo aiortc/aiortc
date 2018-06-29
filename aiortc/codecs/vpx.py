@@ -204,6 +204,13 @@ class VpxEncoder:
             self.cfg.rc_end_usage = lib.VPX_CBR
             self.cfg.rc_min_quantizer = 2
             self.cfg.rc_max_quantizer = 56
+            self.cfg.rc_undershoot_pct = 100
+            self.cfg.rc_overshoot_pct = 15
+            self.cfg.rc_buf_initial_sz = 500
+            self.cfg.rc_buf_optimal_sz = 600
+            self.cfg.rc_buf_sz = 1000
+            self.cfg.kf_mode = lib.VPX_KF_AUTO
+            self.cfg.kf_max_dist = 3000
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
         elif frame.width != self.cfg.g_w or frame.height != self.cfg.g_h:
             self.cfg.g_w = frame.width

@@ -80,6 +80,12 @@ enum vpx_rc_mode {
   VPX_Q,
 };
 
+enum vpx_kf_mode {
+  VPX_KF_FIXED,
+  VPX_KF_AUTO,
+  VPX_KF_DISABLED = 0
+};
+
 typedef struct vpx_codec_dec_cfg {
   unsigned int threads;
   unsigned int w;
@@ -98,6 +104,14 @@ typedef struct vpx_codec_enc_cfg {
   unsigned int rc_target_bitrate;
   unsigned int rc_min_quantizer;
   unsigned int rc_max_quantizer;
+  unsigned int rc_undershoot_pct;
+  unsigned int rc_overshoot_pct;
+  unsigned int rc_buf_sz;
+  unsigned int rc_buf_initial_sz;
+  unsigned int rc_buf_optimal_sz;
+
+  enum vpx_kf_mode kf_mode;
+  unsigned int kf_max_dist;
   ...;
 } vpx_codec_enc_cfg_t;
 
