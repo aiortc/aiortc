@@ -4,8 +4,8 @@ import random
 
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import (RtcpSenderInfo, RtcpSrPacket, RtpPacket, datetime_to_ntp,
-                  seq_plus_one, utcnow)
+from .rtp import (RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
+                  RtpPacket, datetime_to_ntp, seq_plus_one, utcnow)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -137,7 +137,7 @@ class RTCRtpSender:
             if result is True:
                 break
 
-            # send RTCP
+            # RTCP SR
             packet = RtcpSrPacket(
                 ssrc=self._ssrc,
                 sender_info=RtcpSenderInfo(
@@ -146,10 +146,20 @@ class RTCRtpSender:
                     packet_count=self.__packet_count,
                     octet_count=self.__octet_count))
             logger.debug('sender(%s) > %s' % (self._kind, packet))
+            payload = bytes(packet)
+
+            # RTCP SDES
+            if self._cname is not None:
+                packet = RtcpSdesPacket(chunks=[RtcpSourceInfo(
+                    ssrc=self._ssrc,
+                    items=[(1, self._cname.encode('utf8'))])])
+                logger.debug('sender(%s) > %s' % (self._kind, packet))
+                payload += bytes(packet)
+
             try:
-                await self.transport._send_rtp(bytes(packet))
+                await self.transport._send_rtp(payload)
             except ConnectionError:
-                self.__stopped.set()
+                pass
 
         logger.debug('sender(%s) - RTCP finished' % self._kind)
         self.__rtcp_exited.set()
