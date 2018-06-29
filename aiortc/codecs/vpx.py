@@ -6,6 +6,7 @@ from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
 PACKET_MAX = 1300 - 1
+MAX_FRAME_RATE = 30
 
 
 def number_of_threads(pixels, cpus):
@@ -180,7 +181,7 @@ class VpxEncoder:
         lib.vpx_codec_enc_config_default(self.cx, self.cfg, 0)
 
         self.codec = None
-        self.frame_count = 0
+        self.timestamp = 0
 
     def __del__(self):
         if self.codec:
@@ -209,9 +210,10 @@ class VpxEncoder:
             self.cfg.g_h = frame.height
             _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
 
+        duration = 90000 // MAX_FRAME_RATE
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, self.frame_count, 1,  0, lib.VPX_DL_REALTIME))
-        self.frame_count += 1
+            self.codec, image, self.timestamp, duration,  0, lib.VPX_DL_REALTIME))
+        self.timestamp += duration
 
         it = ffi.new('vpx_codec_iter_t *')
         payloads = []
