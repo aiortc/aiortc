@@ -13,6 +13,7 @@ install:
       brew upgrade python3
       brew install opus libvpx
     fi
+  - pip3 install -U setuptools
   - pip3 install coveralls flake8
 language: python
 matrix:
@@ -21,6 +22,7 @@ matrix:
     os: osx
   - python: "3.5"
   - python: "3.6"
+  - python: "3.7-dev"
 script:
   - flake8 aiortc examples tests
   - coverage run setup.py test
