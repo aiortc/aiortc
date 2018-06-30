@@ -1,6 +1,32 @@
 Changelog
 =========
 
+0.7.5 (under development)
+-------------------------
+
+Media
+.....
+
+  * Align VP8 settings with those used by WebRTC project, which greatly improves
+    video quality.
+
+  * Send RTCP source description, sender report, receiver report and bye packets.
+
+Examples
+........
+
+  * `server`:
+
+    - make it possible to not transform video at all.
+
+    - allow video display to be up to 1280px wide.
+
+Miscellaneous
+.............
+
+  * Delay logging string interpolation to reduce cost of packet logging in
+    non-verbose mode.
+
 0.7.0
 -----
 
