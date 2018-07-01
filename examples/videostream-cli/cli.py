@@ -44,7 +44,8 @@ class CombinedVideoStreamTrack(VideoStreamTrack):
         self.tracks = tracks
 
     async def recv(self):
-        frames = [await track.recv() for track in self.tracks]
+        coros = [track.recv() for track in self.tracks]
+        frames = await asyncio.gather(*coros)
         data_bgrs = [frame_to_bgr(frame) for frame in frames]
         data_bgr = numpy.hstack(data_bgrs)
         return frame_from_bgr(data_bgr)

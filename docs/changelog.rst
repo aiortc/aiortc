@@ -21,6 +21,10 @@ Examples
 
     - allow video display to be up to 1280px wide.
 
+  * `videostream-cli`:
+
+    - fix Python 3.5 compatibility
+
 Miscellaneous
 .............
 
