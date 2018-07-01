@@ -23,6 +23,17 @@ matrix:
   - python: "3.5"
   - python: "3.6"
   - python: "3.7-dev"
+  - env: BUILD=sdist
+    python: "3.6"
 script:
-  - flake8 aiortc examples tests
-  - coverage run setup.py test
+  - |
+    if [ "$BUILD" = "sdist" ]; then
+      python3 setup.py sdist
+      if [ -n "$TRAVIS_TAG" ]; then
+        pip3 install twine
+        python3 -m twine upload --skip-existing dist/*
+      fi
+    else
+      flake8 aiortc examples tests
+      coverage run setup.py test
+    fi
