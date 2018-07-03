@@ -354,7 +354,7 @@ a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:C
 a=setup:actpass
 """))  # noqa
 
-    def test_datachannel_firefox_53(self):
+    def test_datachannel_firefox_63(self):
         d = SessionDescription.parse(lf2crlf("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
