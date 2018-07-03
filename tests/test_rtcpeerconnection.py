@@ -24,6 +24,15 @@ def mids(pc):
     return [x.mid for x in pc.getTransceivers()]
 
 
+def modernise_datachannel_sdp(description):
+    sdp = re.sub('(m=application [0-9]+) DTLS/SCTP 5000',
+                 '\\1 UDP/DTLS/SCTP webrtc-datachannel', description.sdp)
+    sdp = sdp.replace('a=sctpmap:5000 webrtc-datachannel 65535', 'a=sctp-port:5000')
+    return RTCSessionDescription(
+        sdp=sdp,
+        type=description.type)
+
+
 def strip_candidates(description):
     return RTCSessionDescription(
         sdp=STRIP_CANDIDATES_RE.sub('', description.sdp),
@@ -944,6 +953,155 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc2.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertEqual(dc.readyState, 'open')
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].protocol, 'bob')
+
+        # check pc2 got messages
+        run(asyncio.sleep(1))
+        self.assertEqual(pc2_data_messages, [
+            'hello',
+            '',
+            b'\x00\x01\x02\x03',
+            b'',
+            LONG_DATA,
+        ])
+
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, [
+            'string-echo: hello',
+            'string-echo: ',
+            b'binary-echo: \x00\x01\x02\x03',
+            b'binary-echo: ',
+            b'binary-echo: ' + LONG_DATA,
+        ])
+
+        # close data channel
+        dc.close()
+        self.assertEqual(dc.readyState, 'closing')
+        run(asyncio.sleep(0.5))
+        self.assertEqual(dc.readyState, 'closed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_modern_sdp(self):
+        pc1 = RTCPeerConnection()
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        @pc2.on('datachannel')
+        def on_datachannel(channel):
+            self.assertEqual(channel.readyState, 'open')
+            pc2_data_channels.append(channel)
+
+            @channel.on('message')
+            def on_message(message):
+                pc2_data_messages.append(message)
+                if isinstance(message, str):
+                    channel.send('string-echo: ' + message)
+                else:
+                    channel.send(b'binary-echo: ' + message)
+
+        # create data channel
+        dc = pc1.createDataChannel('chat', protocol='bob')
+        self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.protocol, 'bob')
+        self.assertEqual(dc.readyState, 'connecting')
+
+        # send messages
+        dc.send('hello')
+        dc.send('')
+        dc.send(b'\x00\x01\x02\x03')
+        dc.send(b'')
+        dc.send(LONG_DATA)
+        with self.assertRaises(ValueError) as cm:
+            dc.send(1234)
+        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+
+        @dc.on('message')
+        def on_message(message):
+            pc1_data_messages.append(message)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=application ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc1.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
+        self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+
+        # modernise SDP
+        desc1 = modernise_datachannel_sdp(pc1.localDescription)
+
+        # handle offer
+        run(pc2.setRemoteDescription(desc1))
+        self.assertEqual(pc2.remoteDescription, desc1)
+        self.assertEqual(len(pc2.getReceivers()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getTransceivers()), 0)
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=application ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
+        self.assertTrue('a=sctp-port:5000' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 

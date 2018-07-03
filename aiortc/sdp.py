@@ -106,10 +106,11 @@ class MediaDescription:
         # formats
         self.fmt = fmt
         self.rtp = RTCRtpParameters()
-        self.sctpmap = {}
 
         # SCTP
         self.sctpCapabilities = None
+        self.sctpmap = {}
+        self.sctp_port = None
 
         # DTLS
         self.dtls = RTCDtlsParameters()
@@ -166,6 +167,8 @@ class MediaDescription:
 
         for k, v in self.sctpmap.items():
             lines.append('a=sctpmap:%d %s' % (k, v))
+        if self.sctp_port is not None:
+            lines.append('a=sctp-port:%d' % self.sctp_port)
         if self.sctpCapabilities is not None:
             lines.append('a=max-message-size:%d' % self.sctpCapabilities.maxMessageSize)
 
@@ -232,8 +235,9 @@ class SessionDescription:
 
             # check payload types are valid
             kind = m.group(1)
-            fmt = [int(x) for x in m.group(4).split()]
+            fmt = m.group(4).split()
             if kind in ['audio', 'video']:
+                fmt = [int(x) for x in fmt]
                 for pt in fmt:
                     assert pt >= 0 and pt < 256
                     assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
@@ -298,6 +302,8 @@ class SessionDescription:
                     elif attr == 'sctpmap':
                         format_id, format_desc = value.split(' ', 1)
                         getattr(current_media, attr)[int(format_id)] = format_desc
+                    elif attr == 'sctp-port':
+                        current_media.sctp_port = int(value)
                     elif attr == 'ssrc':
                         ssrc, ssrc_desc = value.split(' ', 1)
                         ssrc_attr, ssrc_value = ssrc_desc.split(':')

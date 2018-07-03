@@ -94,6 +94,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].fmt, [
             111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
         self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
@@ -223,6 +224,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].fmt, [
             109, 9, 0, 8, 101])
         self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 8)
@@ -306,10 +308,13 @@ a=max-message-size:1073741823
         self.assertEqual(d.media[0].host, '192.168.99.58')
         self.assertEqual(d.media[0].port, 45791)
         self.assertEqual(d.media[0].profile, 'DTLS/SCTP')
-        self.assertEqual(d.media[0].fmt, [5000])
+        self.assertEqual(d.media[0].fmt, ['5000'])
+
+        # sctp
         self.assertEqual(d.media[0].sctpmap, {
             5000: 'webrtc-datachannel 256',
         })
+        self.assertEqual(d.media[0].sctp_port, None)
         self.assertIsNotNone(d.media[0].sctpCapabilities)
         self.assertEqual(d.media[0].sctpCapabilities.maxMessageSize, 1073741823)
 
@@ -337,6 +342,82 @@ c=IN IP4 192.168.99.58
 a=sendrecv
 a=mid:sdparta_0
 a=sctpmap:5000 webrtc-datachannel 256
+a=max-message-size:1073741823
+a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
+a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
+a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=end-of-candidates
+a=ice-ufrag:9889e0c4
+a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
+a=setup:actpass
+"""))  # noqa
+
+    def test_datachannel_firefox_53(self):
+        d = SessionDescription.parse(lf2crlf("""v=0
+o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=sendrecv
+a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
+a=group:BUNDLE sdparta_0
+a=ice-options:trickle
+a=msid-semantic:WMS *
+m=application 45791 UDP/DTLS/SCTP webrtc-datachannel
+c=IN IP4 192.168.99.58
+a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
+a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
+a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=sendrecv
+a=end-of-candidates
+a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=ice-ufrag:9889e0c4
+a=mid:sdparta_0
+a=sctp-port:5000
+a=setup:actpass
+a=max-message-size:1073741823
+"""))  # noqa
+        self.assertEqual(d.bundle, ['sdparta_0'])
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'application')
+        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].port, 45791)
+        self.assertEqual(d.media[0].profile, 'UDP/DTLS/SCTP')
+        self.assertEqual(d.media[0].fmt, ['webrtc-datachannel'])
+
+        # sctp
+        self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, 5000)
+        self.assertIsNotNone(d.media[0].sctpCapabilities)
+        self.assertEqual(d.media[0].sctpCapabilities.maxMessageSize, 1073741823)
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 4)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
+        self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
+
+        # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(
+            d.media[0].dtls.fingerprints[0].value,
+            '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa
+        self.assertEqual(d.media[0].dtls.role, 'auto')
+
+        self.assertEqual(str(d), lf2crlf("""v=0
+o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE sdparta_0
+m=application 45791 UDP/DTLS/SCTP webrtc-datachannel
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=mid:sdparta_0
+a=sctp-port:5000
 a=max-message-size:1073741823
 a=candidate:0 1 UDP 2122187007 192.168.99.58 45791 typ host
 a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 44087 typ host
@@ -473,6 +554,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         # formats
         self.assertEqual(d.media[0].fmt, [96, 97, 98, 99, 100, 101, 102])
         self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 2)
@@ -574,6 +656,7 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         # formats
         self.assertEqual(d.media[0].fmt, [120, 121])
         self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)

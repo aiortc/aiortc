@@ -97,6 +97,7 @@ class RTCPeerConnection(EventEmitter):
         self.__remoteIce = {}
         self.__remoteRtp = {}
         self.__sctp = None
+        self.__sctpLegacySdp = True
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
         self.__transceivers = []
@@ -379,7 +380,12 @@ class RTCPeerConnection(EventEmitter):
                     self.__sctp.mid = media.rtp.muxId
 
                 # configure sctp
-                self.__sctpRemotePort = media.fmt[0]
+                if media.profile == 'DTLS/SCTP':
+                    self.__sctpLegacySdp = True
+                    self.__sctpRemotePort = int(media.fmt[0])
+                else:
+                    self.__sctpLegacySdp = False
+                    self.__sctpRemotePort = media.sctp_port
                 self.__sctpRemoteCaps = media.sctpCapabilities
 
                 # configure transport
@@ -512,14 +518,24 @@ class RTCPeerConnection(EventEmitter):
             iceTransport = dtlsTransport.transport
             default_candidate = get_default_candidate(iceTransport)
 
-            media = sdp.MediaDescription(
-                kind='application',
-                port=default_candidate.port,
-                profile='DTLS/SCTP',
-                fmt=[self.__sctp.port])
+            if self.__sctpLegacySdp:
+                media = sdp.MediaDescription(
+                    kind='application',
+                    port=default_candidate.port,
+                    profile='DTLS/SCTP',
+                    fmt=[self.__sctp.port])
+                media.sctpmap[self.__sctp.port] = (
+                    'webrtc-datachannel %d' % self.__sctp.outbound_streams)
+            else:
+                media = sdp.MediaDescription(
+                    kind='application',
+                    port=default_candidate.port,
+                    profile='UDP/DTLS/SCTP',
+                    fmt=['webrtc-datachannel'])
+                media.sctp_port = self.__sctp.port
+
             media.host = default_candidate.ip
             media.rtp.muxId = self.__sctp.mid
-            media.sctpmap[self.__sctp.port] = 'webrtc-datachannel %d' % self.__sctp.outbound_streams
             media.sctpCapabilities = self.__sctp.getCapabilities()
             add_transport_description(media, iceTransport, dtlsTransport)
 
