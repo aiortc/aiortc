@@ -96,6 +96,19 @@ class RtcpPacketTest(TestCase):
 
 
 class RtpPacketTest(TestCase):
+    def test_dtmf(self):
+        data = load('rtp_dtmf.bin')
+        packet = RtpPacket.parse(data)
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.extension, 0)
+        self.assertEqual(packet.marker, 1)
+        self.assertEqual(packet.payload_type, 101)
+        self.assertEqual(packet.sequence_number, 24152)
+        self.assertEqual(packet.timestamp, 4021352124)
+        self.assertEqual(packet.csrc, [])
+        self.assertEqual(len(packet.payload), 4)
+        self.assertEqual(bytes(packet), data)
+
     def test_no_ssrc(self):
         data = load('rtp.bin')
         packet = RtpPacket.parse(data)
