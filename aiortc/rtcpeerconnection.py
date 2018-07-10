@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import datetime
 import uuid
 
@@ -34,8 +35,9 @@ def find_common_codecs(local_codecs, remote_codecs):
     for c in remote_codecs:
         for codec in local_codecs:
             if codec.name == c.name and codec.clockRate == c.clockRate:
+                codec = copy.deepcopy(codec)
                 if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
-                    codec = codec.clone(payloadType=c.payloadType)
+                    codec.payloadType = c.payloadType
                 common.append(codec)
                 break
     return common
@@ -264,11 +266,11 @@ class RTCPeerConnection(EventEmitter):
         for transceiver in self.__transceivers:
             codecs = []
             for codec in MEDIA_CODECS[transceiver.kind]:
+                codec = copy.deepcopy(codec)
                 if codec.payloadType is None:
-                    codecs.append(codec.clone(payloadType=dynamic_pt))
+                    codec.payloadType = dynamic_pt
                     dynamic_pt += 1
-                else:
-                    codecs.append(codec)
+                codecs.append(codec)
             transceiver._codecs = codecs
 
         return RTCSessionDescription(

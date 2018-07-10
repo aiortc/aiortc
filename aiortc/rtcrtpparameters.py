@@ -22,11 +22,6 @@ class RTCRtpCodecParameters:
     parameters = attr.ib(default=attr.Factory(OrderedDict))
     "Codec-specific parameters available for signaling."
 
-    def clone(self, payloadType):
-        return RTCRtpCodecParameters(
-            name=self.name, clockRate=self.clockRate,
-            channels=self.channels, payloadType=payloadType)
-
     def __str__(self):
         s = '%s/%d' % (self.name, self.clockRate)
         if self.channels == 2:
