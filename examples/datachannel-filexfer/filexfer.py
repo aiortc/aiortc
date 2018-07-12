@@ -6,10 +6,6 @@ import logging
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
 
-def channel_log(channel, t, message):
-    print('channel(%s) %s %s' % (channel.label, t, message))
-
-
 async def run_answer(pc, filename):
     done = asyncio.Event()
 
@@ -46,9 +42,7 @@ async def run_answer(pc, filename):
 
 async def run_offer(pc, fp):
     done = asyncio.Event()
-
     channel = pc.createDataChannel('filexfer')
-    channel_log(channel, '-', 'created by local party')
 
     @channel.on('message')
     def on_message(message):
