@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import json
 import logging
 import math
 import os
@@ -8,8 +7,9 @@ import os
 import cv2
 import numpy
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection
 from aiortc.mediastreams import VideoFrame, VideoStreamTrack
+from signaling import CopyAndPasteSignaling
 
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -51,7 +51,7 @@ class CombinedVideoStreamTrack(VideoStreamTrack):
         return frame_from_bgr(data_bgr)
 
 
-async def run_answer(pc):
+async def run_answer(pc, signaling):
     remote_track = None
 
     @pc.on('track')
@@ -61,22 +61,12 @@ async def run_answer(pc):
         remote_track = track
 
     # receive offer
-    print('-- Please enter remote offer --')
-    offer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=offer_json['sdp'],
-        type=offer_json['type']))
-    print()
+    offer = await signaling.receive()
+    await pc.setRemoteDescription(offer)
 
     # send answer
     await pc.setLocalDescription(await pc.createAnswer())
-    answer = pc.localDescription
-    print('-- Your answer --')
-    print(json.dumps({
-        'sdp': answer.sdp,
-        'type': answer.type
-    }))
-    print()
+    await signaling.send(pc.localDescription)
 
     print('Receiving video, press CTRL-C to stop')
     while True:
@@ -85,7 +75,7 @@ async def run_answer(pc):
         cv2.imwrite(OUTPUT_PATH, data_bgr)
 
 
-async def run_offer(pc):
+async def run_offer(pc, signaling):
     # add video track
     width = 320
     height = 240
@@ -98,21 +88,11 @@ async def run_offer(pc):
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
-    offer = pc.localDescription
-    print('-- Your offer --')
-    print(json.dumps({
-        'sdp': offer.sdp,
-        'type': offer.type
-    }))
-    print()
+    await signaling.send(pc.localDescription)
 
     # receive answer
-    print('-- Please enter remote answer --')
-    answer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=answer_json['sdp'],
-        type=answer_json['type']))
-    print()
+    answer = await signaling.receive()
+    await pc.setRemoteDescription(answer)
 
     print('Sending video for 10s')
     await asyncio.sleep(10)
@@ -128,10 +108,11 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     pc = RTCPeerConnection()
+    signaling = CopyAndPasteSignaling()
     if args.role == 'offer':
-        coro = run_offer(pc)
+        coro = run_offer(pc, signaling)
     else:
-        coro = run_answer(pc)
+        coro = run_answer(pc, signaling)
 
     # run event loop
     loop = asyncio.get_event_loop()

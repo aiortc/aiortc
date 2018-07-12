@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-import json
 import logging
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection
+from signaling import CopyAndPasteSignaling
 
 
 def channel_log(channel, t, message):
@@ -27,7 +27,7 @@ def create_pc():
     return pc
 
 
-async def run_answer(pc):
+async def run_answer(pc, signaling):
     done = asyncio.Event()
 
     @pc.on('datachannel')
@@ -43,27 +43,17 @@ async def run_answer(pc):
             done.set()
 
     # receive offer
-    print('-- Please enter remote offer --')
-    offer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=offer_json['sdp'],
-        type=offer_json['type']))
-    print()
+    offer = await signaling.receive()
+    await pc.setRemoteDescription(offer)
 
     # send answer
     await pc.setLocalDescription(await pc.createAnswer())
-    answer = pc.localDescription
-    print('-- Your answer --')
-    print(json.dumps({
-        'sdp': answer.sdp,
-        'type': answer.type
-    }))
-    print()
+    await signaling.send(pc.localDescription)
 
     await done.wait()
 
 
-async def run_offer(pc):
+async def run_offer(pc, signaling):
     done = asyncio.Event()
 
     channel = pc.createDataChannel('chat')
@@ -77,21 +67,11 @@ async def run_offer(pc):
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
-    offer = pc.localDescription
-    print('-- Your offer --')
-    print(json.dumps({
-        'sdp': offer.sdp,
-        'type': offer.type
-    }))
-    print()
+    await signaling.send(pc.localDescription)
 
     # receive answer
-    print('-- Please enter remote answer --')
-    answer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=answer_json['sdp'],
-        type=answer_json['type']))
-    print()
+    answer = await signaling.receive()
+    await pc.setRemoteDescription(answer)
 
     # send message
     message = 'ping'
@@ -111,10 +91,11 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     pc = create_pc()
+    signaling = CopyAndPasteSignaling()
     if args.role == 'offer':
-        coro = run_offer(pc)
+        coro = run_offer(pc, signaling)
     else:
-        coro = run_answer(pc)
+        coro = run_answer(pc, signaling)
 
     # run event loop
     loop = asyncio.get_event_loop()

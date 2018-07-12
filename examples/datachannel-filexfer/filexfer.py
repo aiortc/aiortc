@@ -1,12 +1,12 @@
 import argparse
 import asyncio
-import json
 import logging
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection
+from signaling import CopyAndPasteSignaling
 
 
-async def run_answer(pc, filename):
+async def run_answer(pc, signaling, filename):
     done = asyncio.Event()
 
     @pc.on('datachannel')
@@ -20,27 +20,16 @@ async def run_answer(pc, filename):
                 done.set()
 
     # receive offer
-    print('-- Please enter remote offer --')
-    offer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=offer_json['sdp'],
-        type=offer_json['type']))
-    print()
+    offer = await signaling.receive()
+    await pc.setRemoteDescription(offer)
 
     # send answer
     await pc.setLocalDescription(await pc.createAnswer())
-    answer = pc.localDescription
-    print('-- Your answer --')
-    print(json.dumps({
-        'sdp': answer.sdp,
-        'type': answer.type
-    }))
-    print()
-
+    await signaling.send(pc.localDescription)
     await done.wait()
 
 
-async def run_offer(pc, fp):
+async def run_offer(pc, signaling, fp):
     done = asyncio.Event()
     channel = pc.createDataChannel('filexfer')
 
@@ -52,21 +41,11 @@ async def run_offer(pc, fp):
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
-    offer = pc.localDescription
-    print('-- Your offer --')
-    print(json.dumps({
-        'sdp': offer.sdp,
-        'type': offer.type
-    }))
-    print()
+    await signaling.send(pc.localDescription)
 
     # receive answer
-    print('-- Please enter remote answer --')
-    answer_json = json.loads(input())
-    await pc.setRemoteDescription(RTCSessionDescription(
-        sdp=answer_json['sdp'],
-        type=answer_json['type']))
-    print()
+    answer = await signaling.receive()
+    await pc.setRemoteDescription(answer)
 
     # send file
     while True:
@@ -89,12 +68,13 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     pc = RTCPeerConnection()
+    signaling = CopyAndPasteSignaling()
     if args.role == 'send':
         fp = open(args.filename, 'rb')
-        coro = run_offer(pc, fp)
+        coro = run_offer(pc, signaling, fp)
     else:
         fp = open(args.filename, 'wb')
-        coro = run_answer(pc, fp)
+        coro = run_answer(pc, signaling, fp)
 
     # run event loop
     loop = asyncio.get_event_loop()
