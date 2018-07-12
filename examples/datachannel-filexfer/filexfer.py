@@ -15,14 +15,11 @@ async def run_answer(pc, filename):
 
     @pc.on('datachannel')
     def on_datachannel(channel):
-        fp = open(filename, 'wb')
-
         @channel.on('message')
         def on_message(message):
             if message:
                 fp.write(message)
             else:
-                fp.close()
                 channel.send('done')
                 done.set()
 
@@ -47,7 +44,7 @@ async def run_answer(pc, filename):
     await done.wait()
 
 
-async def run_offer(pc, filename):
+async def run_offer(pc, fp):
     done = asyncio.Event()
 
     channel = pc.createDataChannel('filexfer')
@@ -56,7 +53,8 @@ async def run_offer(pc, filename):
     @channel.on('message')
     def on_message(message):
         # quit
-        done.set()
+        if message == 'done':
+            done.set()
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
@@ -77,14 +75,11 @@ async def run_offer(pc, filename):
     print()
 
     # send file
-    with open(filename, 'rb') as fp:
-        while True:
-            data = fp.read(4096)
-            if data:
-                channel.send(data)
-            else:
-                channel.send(b'')
-                break
+    while True:
+        data = fp.read(4096)
+        channel.send(data)
+        if not data:
+            break
 
     await done.wait()
 
@@ -101,9 +96,11 @@ if __name__ == '__main__':
 
     pc = RTCPeerConnection()
     if args.role == 'send':
-        coro = run_offer(pc, args.filename)
+        fp = open(args.filename, 'rb')
+        coro = run_offer(pc, fp)
     else:
-        coro = run_answer(pc, args.filename)
+        fp = open(args.filename, 'wb')
+        coro = run_answer(pc, fp)
 
     # run event loop
     loop = asyncio.get_event_loop()
@@ -112,4 +109,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     finally:
+        fp.close()
         loop.run_until_complete(pc.close())
