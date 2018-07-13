@@ -84,7 +84,7 @@ On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libopus-dev libvpx-dev
+    apt install libopus-dev libvpx-dev libffi-dev
 
 On OS X run:
 
