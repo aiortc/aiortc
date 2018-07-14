@@ -48,7 +48,10 @@ class Tun:
     def ifflags(self):
         # Get existing device flags
         ifreq = struct.pack('16sh', self.name, 0)
-        flags = struct.unpack('16sh', fcntl.ioctl(self.sockfd, SIOCGIFFLAGS, ifreq))[1]
+        flags = struct.unpack(
+            '16sh',
+            fcntl.ioctl(self.sockfd, SIOCGIFFLAGS, ifreq)
+            )[1]
         return flags
 
     @ifflags.setter
@@ -58,7 +61,10 @@ class Tun:
 
     def get_mtu(self):
         ifreq = struct.pack('16sh', self.name, 0)
-        self.mtu = struct.unpack('16sh', fcntl.ioctl(self.sockfd, SIOCGIFMTU, ifreq))[1]
+        self.mtu = struct.unpack(
+            '16sh',
+            fcntl.ioctl(self.sockfd, SIOCGIFMTU, ifreq)
+            )[1]
 
     def up(self):
         ''' Bring up interface. Equivalent to ifconfig [iface] up. '''
@@ -81,10 +87,6 @@ class Tun:
         else:
             return False
 
-    @property
-    def _fileno(self):
-        return self.fd._fileno
-
     def open(self):
         ''' Open file corresponding to the TUN device. '''
         self.fd = open('/dev/net/tun', 'rb+', buffering=0)
@@ -95,5 +97,7 @@ class Tun:
         self.ifflags = self.ifflags | IFF_RUNNING
 
     def close(self):
-        self.ifflags = self.ifflags & ~IFF_RUNNING
-        self.fd.close()
+        if self.fd:
+            self.ifflags = self.ifflags & ~IFF_RUNNING
+            self.fd.close()
+
