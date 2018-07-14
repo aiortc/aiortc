@@ -229,7 +229,9 @@ class RTCRtpReceiver:
                 dlsr = 0
                 if self.__lsr is not None:
                     lsr = self.__lsr
-                    dlsr = int((time.time() - self.__lsr_time) * 65536)
+                    delay = time.time() - self.__lsr_time
+                    if delay > 0 and delay < 65536:
+                        dlsr = int(delay * 65536)
 
                 packet = RtcpRrPacket(
                     ssrc=self._ssrc,
