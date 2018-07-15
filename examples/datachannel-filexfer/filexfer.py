@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import time
 
 from aiortc import RTCPeerConnection
 from signaling import CopyAndPasteSignaling
@@ -11,11 +12,19 @@ async def run_answer(pc, signaling, filename):
 
     @pc.on('datachannel')
     def on_datachannel(channel):
+        start = time.time()
+        octets = 0
+
         @channel.on('message')
         def on_message(message):
+            nonlocal octets
+
             if message:
+                octets += len(message)
                 fp.write(message)
             else:
+                elapsed = time.time() - start
+                print('received %d bytes in %.1f s' % (octets, elapsed))
                 channel.send('done')
                 done.set()
 
