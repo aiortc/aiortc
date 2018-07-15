@@ -1034,7 +1034,7 @@ class RTCSctpTransport(EventEmitter):
 
         sack = SackChunk()
         sack.cumulative_tsn = self._last_received_tsn
-        sack.advertised_rwnd = self._advertised_rwnd
+        sack.advertised_rwnd = max(0, self._advertised_rwnd)
         sack.duplicates = self._sack_duplicates[:]
         sack.gaps = [tuple(x) for x in gaps]
 
