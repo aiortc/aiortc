@@ -70,14 +70,14 @@ class RTCDataChannel(EventEmitter):
         """
         self.transport._data_channel_close(self)
 
-    def send(self, data):
+    async def send(self, data):
         """
         Send `data` across the data channel to the remote peer.
         """
         if not isinstance(data, (str, bytes)):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
-        asyncio.ensure_future(self.transport._data_channel_send(self, data))
+        await self.transport._data_channel_send(self, data)
 
     def _setId(self, id):
         self.__id = id

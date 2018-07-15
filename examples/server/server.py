@@ -149,8 +149,8 @@ async def offer(request):
     @pc.on('datachannel')
     def on_datachannel(channel):
         @channel.on('message')
-        def on_message(message):
-            channel.send('pong')
+        async def on_message(message):
+            await channel.send('pong')
 
     @pc.on('track')
     def on_track(track):
