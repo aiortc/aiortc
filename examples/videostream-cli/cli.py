@@ -108,7 +108,7 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    signaling = create_signaling(args.signaling)
+    signaling = create_signaling(args)
     pc = RTCPeerConnection()
     if args.role == 'offer':
         coro = run_offer(pc, signaling)
