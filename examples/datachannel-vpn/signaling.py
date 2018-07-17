@@ -19,4 +19,3 @@ class CopyAndPasteSignaling:
             'type': descr.type
         }))
         print()
-

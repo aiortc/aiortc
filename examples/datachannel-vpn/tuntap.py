@@ -100,4 +100,3 @@ class Tun:
         if self.fd:
             self.ifflags = self.ifflags & ~IFF_RUNNING
             self.fd.close()
-
