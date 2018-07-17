@@ -198,6 +198,10 @@ class VpxEncoder:
         lib.vpx_img_wrap(image, lib.VPX_IMG_FMT_I420,
                          frame.width, frame.height, 1, frame.data)
 
+        if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
+            lib.vpx_codec_destroy(self.codec)
+            self.codec = None
+
         if not self.codec:
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
@@ -218,10 +222,6 @@ class VpxEncoder:
             self.cfg.kf_mode = lib.VPX_KF_AUTO
             self.cfg.kf_max_dist = 3000
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
-        elif frame.width != self.cfg.g_w or frame.height != self.cfg.g_h:
-            self.cfg.g_w = frame.width
-            self.cfg.g_h = frame.height
-            _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
 
         duration = 90000 // MAX_FRAME_RATE
         _vpx_assert(lib.vpx_codec_encode(
