@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
     tap = tuntap.Tun(name="revpn-%s" % args.role)
 
-    signaling = create_signaling()
+    signaling = create_signaling(args)
     pc = create_pc()
     if args.role == 'offer':
         coro = run_offer(pc, signaling, tap)
