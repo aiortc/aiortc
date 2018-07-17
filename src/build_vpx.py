@@ -37,6 +37,8 @@ ffibuilder.cdef("""
 #define VPX_PLANE_V 2
 #define VPX_PLANE_ALPHA 3
 
+#define VP8_SET_POSTPROC 3
+
 typedef enum {
   VPX_CODEC_OK,
   VPX_CODEC_ERROR,
@@ -162,11 +164,24 @@ typedef struct vpx_image {
    ...;
 } vpx_image_t;
 
+enum vp8_postproc_level {
+  VP8_NOFILTERING = 0,
+  VP8_DEBLOCK = 1,
+  VP8_DEMACROBLOCK = 2
+};
+
+typedef struct vp8_postproc_cfg {
+  int post_proc_flag;
+  int deblocking_level;
+  int noise_level;
+} vp8_postproc_cfg_t;
+
 extern vpx_codec_iface_t *vpx_codec_vp8_cx(void);
 extern vpx_codec_iface_t *vpx_codec_vp8_dx(void);
 extern vpx_codec_iface_t *vpx_codec_vp9_cx(void);
 extern vpx_codec_iface_t *vpx_codec_vp9_dx(void);
 
+vpx_codec_err_t vpx_codec_control_(vpx_codec_ctx_t *ctx, int ctrl_id, ...);
 vpx_codec_err_t vpx_codec_destroy(vpx_codec_ctx_t *ctx);
 
 vpx_codec_err_t vpx_codec_dec_init(vpx_codec_ctx_t *ctx,

@@ -132,6 +132,11 @@ class VpxDecoder:
         self.codec = ffi.new('vpx_codec_ctx_t *')
         _vpx_assert(lib.vpx_codec_dec_init(self.codec, lib.vpx_codec_vp8_dx(), ffi.NULL, 0))
 
+        ppcfg = ffi.new('vp8_postproc_cfg_t *')
+        ppcfg.post_proc_flag = lib.VP8_DEMACROBLOCK | lib.VP8_DEBLOCK
+        ppcfg.deblocking_level = 3
+        lib.vpx_codec_control_(self.codec, lib.VP8_SET_POSTPROC, ppcfg)
+
     def __del__(self):
         lib.vpx_codec_destroy(self.codec)
 
@@ -201,6 +206,7 @@ class VpxEncoder:
                                                    multiprocessing.cpu_count())
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
+            self.cfg.rc_target_bitrate = 900
             self.cfg.rc_end_usage = lib.VPX_CBR
             self.cfg.rc_min_quantizer = 2
             self.cfg.rc_max_quantizer = 56
