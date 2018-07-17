@@ -4,7 +4,7 @@ import logging
 import time
 
 from aiortc import RTCPeerConnection
-from signaling import CopyAndPasteSignaling
+from signaling import add_signaling_arguments, create_signaling
 
 
 async def run_answer(pc, signaling, filename):
@@ -71,13 +71,14 @@ if __name__ == '__main__':
     parser.add_argument('role', choices=['send', 'receive'])
     parser.add_argument('filename')
     parser.add_argument('--verbose', '-v', action='count')
+    add_signaling_arguments(parser)
     args = parser.parse_args()
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    signaling = create_signaling(args)
     pc = RTCPeerConnection()
-    signaling = CopyAndPasteSignaling()
     if args.role == 'send':
         fp = open(args.filename, 'rb')
         coro = run_offer(pc, signaling, fp)
@@ -94,3 +95,4 @@ if __name__ == '__main__':
     finally:
         fp.close()
         loop.run_until_complete(pc.close())
+        loop.run_until_complete(signaling.close())

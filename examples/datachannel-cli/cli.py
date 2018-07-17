@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from aiortc import RTCPeerConnection
-from signaling import CopyAndPasteSignaling
+from signaling import add_signaling_arguments, create_signaling
 
 
 def channel_log(channel, t, message):
@@ -82,16 +82,18 @@ async def run_offer(pc, signaling):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Data channels with copy-and-paste signaling')
+    parser = argparse.ArgumentParser(description='Data channels ping/pong')
     parser.add_argument('role', choices=['offer', 'answer'])
     parser.add_argument('--verbose', '-v', action='count')
+    add_signaling_arguments(parser)
+
     args = parser.parse_args()
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    signaling = create_signaling(args)
     pc = create_pc()
-    signaling = CopyAndPasteSignaling()
     if args.role == 'offer':
         coro = run_offer(pc, signaling)
     else:
@@ -105,3 +107,4 @@ if __name__ == '__main__':
         pass
     finally:
         loop.run_until_complete(pc.close())
+        loop.run_until_complete(signaling.close())

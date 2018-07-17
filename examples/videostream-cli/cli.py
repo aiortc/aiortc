@@ -9,7 +9,7 @@ import numpy
 
 from aiortc import RTCPeerConnection
 from aiortc.mediastreams import VideoFrame, VideoStreamTrack
-from signaling import CopyAndPasteSignaling
+from signaling import add_signaling_arguments, create_signaling
 
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -99,16 +99,17 @@ async def run_offer(pc, signaling):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Video stream with copy-and-paste signaling')
+    parser = argparse.ArgumentParser(description='Video stream from the command line')
     parser.add_argument('role', choices=['offer', 'answer'])
     parser.add_argument('--verbose', '-v', action='count')
+    add_signaling_arguments(parser)
     args = parser.parse_args()
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    signaling = create_signaling(args.signaling)
     pc = RTCPeerConnection()
-    signaling = CopyAndPasteSignaling()
     if args.role == 'offer':
         coro = run_offer(pc, signaling)
     else:
@@ -122,3 +123,4 @@ if __name__ == '__main__':
         pass
     finally:
         loop.run_until_complete(pc.close())
+        loop.run_until_complete(signaling.close())
