@@ -48,4 +48,5 @@ Then setup network with system instruments. I.e.:
 and
 
 .. code-block:: console
+
     $ ip a a 172.16.0.2/24 dev revpn-answer
