@@ -5,8 +5,8 @@ import logging
 import random
 
 import aiohttp
-import websockets
 
+import websockets
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
 from aiortc.sdp import candidate_from_sdp

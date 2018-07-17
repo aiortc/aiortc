@@ -1,10 +1,11 @@
 import argparse
 import asyncio
+import functools
 import logging
+
+import tuntap
 from aiortc import RTCPeerConnection
 from signaling import CopyAndPasteSignaling
-import tuntap
-import functools
 
 logger = logging.Logger('vpn')
 

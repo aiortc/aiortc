@@ -1,7 +1,7 @@
-import os
 import fcntl
-import struct
+import os
 import socket
+import struct
 
 TUNSETIFF = 0x400454ca
 TUNSETOWNER = TUNSETIFF + 2
