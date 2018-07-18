@@ -17,23 +17,30 @@ from .utils import first_completed
 logger = logging.getLogger('rtp')
 
 
-class LossCounter:
-    def __init__(self, seq):
-        self.base_seq = seq
-        self.max_seq = seq
+class StreamStatistics:
+    def __init__(self, ssrc):
+        self.base_seq = None
+        self.max_seq = None
         self.cycles = 0
-        self.packets_received = 1
+        self.packets_received = 0
+        self.ssrc = ssrc
 
         # fraction lost
         self._expected_prior = 0
         self._received_prior = 0
 
-    def add(self, seq):
+    def add(self, packet):
+        in_order = self.max_seq is None or seq_gt(packet.sequence_number, self.max_seq)
         self.packets_received += 1
-        if seq_gt(seq, self.max_seq):
-            if seq < self.max_seq:
+
+        if self.base_seq is None:
+            self.base_seq = packet.sequence_number
+
+        if in_order:
+            if self.max_seq is not None and packet.sequence_number < self.max_seq:
                 self.cycles += RTP_SEQ_MODULO
-            self.max_seq = seq
+
+            self.max_seq = packet.sequence_number
 
     @property
     def fraction_lost(self):
@@ -92,7 +99,6 @@ class RTCRtpReceiver:
         self.__lsr = None
         self.__lsr_stamp = None
         self.__remote_counter = None
-        self.__remote_ssrc = None
 
     @property
     def transport(self):
@@ -179,11 +185,9 @@ class RTCRtpReceiver:
             loop = asyncio.get_event_loop()
 
             # RTCP
-            if self.__remote_ssrc is None:
-                self.__remote_ssrc = packet.ssrc
-                self.__remote_counter = LossCounter(packet.sequence_number)
-            else:
-                self.__remote_counter.add(packet.sequence_number)
+            if self.__remote_counter is None or self.__remote_counter.ssrc != packet.ssrc:
+                self.__remote_counter = StreamStatistics(packet.ssrc)
+            self.__remote_counter.add(packet)
 
             if self._kind == 'audio':
                 # FIXME: audio should use the jitter buffer!
@@ -224,7 +228,7 @@ class RTCRtpReceiver:
                 break
 
             # RTCP RR
-            if self._ssrc is not None and self.__remote_ssrc is not None:
+            if self._ssrc is not None and self.__remote_counter is not None:
                 lsr = 0
                 dlsr = 0
                 if self.__lsr is not None:
@@ -236,7 +240,7 @@ class RTCRtpReceiver:
                 packet = RtcpRrPacket(
                     ssrc=self._ssrc,
                     reports=[RtcpReceiverInfo(
-                        ssrc=self.__remote_ssrc,
+                        ssrc=self.__remote_counter.ssrc,
                         fraction_lost=self.__remote_counter.fraction_lost,
                         packets_lost=self.__remote_counter.packets_lost,
                         highest_sequence=self.__remote_counter.max_seq,
