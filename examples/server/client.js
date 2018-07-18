@@ -97,8 +97,21 @@ function start() {
 
     var constraints = {
         audio: document.getElementById('use-audio').checked,
-        video: document.getElementById('use-video').checked
+        video: false
     };
+
+    if (document.getElementById('use-video').checked) {
+        var resolution = document.getElementById('video-resolution').value;
+        if (resolution) {
+            resolution = resolution.split('x');
+            constraints.video = {
+                width: parseInt(resolution[0], 0),
+                height: parseInt(resolution[1], 0)
+            };
+        } else {
+            constraints.video = true;
+        }
+    }
 
     if (constraints.audio || constraints.video) {
         if (constraints.video) {
@@ -109,6 +122,8 @@ function start() {
                 pc.addTrack(track, stream);
             });
             return negotiate();
+        }, function(err) {
+            alert('Could not acquire media: ' + err);
         });
     } else {
         negotiate();

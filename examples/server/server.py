@@ -112,8 +112,16 @@ async def consume_video(track, local_video):
     """
     Drain incoming video, and echo it back.
     """
+    last_size = None
+
     while True:
         frame = await track.recv()
+
+        # print frame size
+        frame_size = (frame.width, frame.height)
+        if frame_size != last_size:
+            print('Received frame size', frame_size)
+            last_size = frame_size
 
         # we are only interested in the latest frame
         if local_video.received.full():
