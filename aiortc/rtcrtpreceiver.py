@@ -106,7 +106,7 @@ class RTCRtpReceiver:
         self.__codecs = {}
         self.__decoders = {}
         self._kind = kind
-        self._jitter_buffer = JitterBuffer(capacity=32)
+        self._jitter_buffer = JitterBuffer(capacity=128)
         self._track = None
         self.__rtcp_exited = asyncio.Event()
         self.__started = False
