@@ -1,5 +1,4 @@
 MAX_MISORDER = 100
-MAX_DROPOUT = 3000
 
 
 class JitterFrame:
@@ -33,13 +32,17 @@ class JitterBuffer:
             return
 
         delta = sequence_number - self._origin
-        if delta >= self._capacity:
-            if delta > MAX_DROPOUT:
-                self.__reset()
-                self._origin = sequence_number
-                delta = 0
-            else:
-                return
+        if delta >= 2 * self.capacity:
+            # received packet is so far beyond capacity we cannot keep any
+            # previous packets, so reset the buffer
+            self.__reset()
+            self._origin = sequence_number
+            delta = 0
+        elif delta >= self.capacity:
+            # remove just enough packets to fit the received packets
+            excess = delta - self.capacity + 1
+            self.remove(excess)
+            delta = sequence_number - self._origin
 
         pos = (self._head + delta) % self._capacity
         self._frames[pos] = JitterFrame(payload=payload,
