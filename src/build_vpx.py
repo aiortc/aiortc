@@ -101,7 +101,9 @@ typedef struct vpx_codec_enc_cfg {
   unsigned int g_w;
   unsigned int g_h;
   struct vpx_rational g_timebase;
+  unsigned int g_lag_in_frames;
 
+  unsigned int rc_resize_allowed;
   enum vpx_rc_mode rc_end_usage;
   unsigned int rc_target_bitrate;
   unsigned int rc_min_quantizer;

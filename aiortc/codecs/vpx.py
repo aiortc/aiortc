@@ -206,12 +206,14 @@ class VpxEncoder:
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
             self.cfg.g_timebase.den = 90000
+            self.cfg.g_lag_in_frames = 0
             self.cfg.g_threads = number_of_threads(frame.width * frame.height,
                                                    multiprocessing.cpu_count())
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
-            self.cfg.rc_target_bitrate = 900
+            self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
+            self.cfg.rc_target_bitrate = 900
             self.cfg.rc_min_quantizer = 2
             self.cfg.rc_max_quantizer = 56
             self.cfg.rc_undershoot_pct = 100
@@ -220,7 +222,7 @@ class VpxEncoder:
             self.cfg.rc_buf_optimal_sz = 600
             self.cfg.rc_buf_sz = 1000
             self.cfg.kf_mode = lib.VPX_KF_AUTO
-            self.cfg.kf_max_dist = 3000
+            self.cfg.kf_max_dist = 600
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
         duration = 90000 // MAX_FRAME_RATE
