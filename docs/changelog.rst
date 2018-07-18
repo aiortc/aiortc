@@ -1,8 +1,8 @@
 Changelog
 =========
 
-0.9.0 (under development)
--------------------------
+0.9.0
+-----
 
 Media
 .....
@@ -16,6 +16,8 @@ Media
   * Implement jitter estimation for RTCP reports.
 
   * Avoid overflowing the DLSR field for RTCP reports.
+
+  * Raise video jitter buffer size.
 
 Data channels
 .............
