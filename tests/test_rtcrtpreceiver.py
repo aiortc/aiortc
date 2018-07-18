@@ -1,4 +1,5 @@
 from unittest import TestCase
+from unittest.mock import patch
 
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
@@ -26,7 +27,7 @@ class StreamStatisticsTest(TestCase):
         return packets
 
     def test_no_loss(self):
-        counter = StreamStatistics(0)
+        counter = StreamStatistics(ssrc=0, clockrate=8000)
         packets = self.create_packets(20, 0)
 
         # receive 10 packets
@@ -48,7 +49,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.fraction_lost, 0)
 
     def test_no_loss_cycle(self):
-        counter = StreamStatistics(0)
+        counter = StreamStatistics(ssrc=0, clockrate=8000)
 
         # receive 10 packets (with sequence cycle)
         for packet in self.create_packets(10, 65530):
@@ -60,7 +61,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.fraction_lost, 0)
 
     def test_with_loss(self):
-        counter = StreamStatistics(0)
+        counter = StreamStatistics(ssrc=0, clockrate=8000)
         packets = self.create_packets(20, 0)
         packets.pop(1)
 
@@ -81,6 +82,46 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.packets_received, 19)
         self.assertEqual(counter.packets_lost, 1)
         self.assertEqual(counter.fraction_lost, 0)
+
+    @patch('time.time')
+    def test_no_jitter(self, mock_time):
+        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        packets = self.create_packets(3, 0)
+
+        mock_time.return_value = 1531562330.00
+        counter.add(packets[0])
+        self.assertEqual(counter._jitter_q4, 0)
+        self.assertEqual(counter.jitter, 0)
+
+        mock_time.return_value = 1531562330.02
+        counter.add(packets[1])
+        self.assertEqual(counter._jitter_q4, 0)
+        self.assertEqual(counter.jitter, 0)
+
+        mock_time.return_value = 1531562330.04
+        counter.add(packets[2])
+        self.assertEqual(counter._jitter_q4, 0)
+        self.assertEqual(counter.jitter, 0)
+
+    @patch('time.time')
+    def test_with_jitter(self, mock_time):
+        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        packets = self.create_packets(3, 0)
+
+        mock_time.return_value = 1531562330.00
+        counter.add(packets[0])
+        self.assertEqual(counter._jitter_q4, 0)
+        self.assertEqual(counter.jitter, 0)
+
+        mock_time.return_value = 1531562330.03
+        counter.add(packets[1])
+        self.assertEqual(counter._jitter_q4, 80)
+        self.assertEqual(counter.jitter, 5)
+
+        mock_time.return_value = 1531562330.05
+        counter.add(packets[2])
+        self.assertEqual(counter._jitter_q4, 75)
+        self.assertEqual(counter.jitter, 4)
 
 
 class RTCRtpReceiverTest(TestCase):

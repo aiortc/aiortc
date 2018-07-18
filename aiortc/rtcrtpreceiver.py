@@ -18,12 +18,18 @@ logger = logging.getLogger('rtp')
 
 
 class StreamStatistics:
-    def __init__(self, ssrc):
+    def __init__(self, ssrc, clockrate):
         self.base_seq = None
         self.max_seq = None
         self.cycles = 0
         self.packets_received = 0
         self.ssrc = ssrc
+
+        # jitter
+        self._clockrate = clockrate
+        self._jitter_q4 = 0
+        self._last_arrival = None
+        self._last_timestamp = None
 
         # fraction lost
         self._expected_prior = 0
@@ -37,10 +43,19 @@ class StreamStatistics:
             self.base_seq = packet.sequence_number
 
         if in_order:
+            arrival = int(time.time() * self._clockrate)
+
             if self.max_seq is not None and packet.sequence_number < self.max_seq:
                 self.cycles += RTP_SEQ_MODULO
-
             self.max_seq = packet.sequence_number
+
+            if packet.timestamp != self._last_timestamp and self.packets_received > 1:
+                diff = abs((arrival - self._last_arrival) -
+                           (packet.timestamp - self._last_timestamp))
+                self._jitter_q4 += diff - ((self._jitter_q4 + 8) >> 4)
+
+            self._last_arrival = arrival
+            self._last_timestamp = packet.timestamp
 
     @property
     def fraction_lost(self):
@@ -53,6 +68,10 @@ class StreamStatistics:
             return 0
         else:
             return (lost_interval << 8) // expected_interval
+
+    @property
+    def jitter(self):
+        return self._jitter_q4 >> 4
 
     @property
     def packets_expected(self):
@@ -84,7 +103,8 @@ class RTCRtpReceiver:
         if transport.state == 'closed':
             raise InvalidStateError
 
-        self._decoders = {}
+        self.__codecs = {}
+        self.__decoders = {}
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=32)
         self._track = None
@@ -116,7 +136,8 @@ class RTCRtpReceiver:
         """
         if not self.__started:
             for codec in parameters.codecs:
-                self._decoders[codec.payloadType] = get_decoder(codec)
+                self.__codecs[codec.payloadType] = codec
+                self.__decoders[codec.payloadType] = get_decoder(codec)
             self.__transport._register_rtp_receiver(self, parameters)
             asyncio.ensure_future(self._run_rtcp())
             self.__started = True
@@ -180,13 +201,14 @@ class RTCRtpReceiver:
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
-        if packet.payload_type in self._decoders:
-            decoder = self._decoders[packet.payload_type]
+        if packet.payload_type in self.__decoders:
+            decoder = self.__decoders[packet.payload_type]
             loop = asyncio.get_event_loop()
 
             # RTCP
             if self.__remote_counter is None or self.__remote_counter.ssrc != packet.ssrc:
-                self.__remote_counter = StreamStatistics(packet.ssrc)
+                codec = self.__codecs[packet.payload_type]
+                self.__remote_counter = StreamStatistics(packet.ssrc, codec.clockRate)
             self.__remote_counter.add(packet)
 
             if self._kind == 'audio':
@@ -244,7 +266,7 @@ class RTCRtpReceiver:
                         fraction_lost=self.__remote_counter.fraction_lost,
                         packets_lost=self.__remote_counter.packets_lost,
                         highest_sequence=self.__remote_counter.max_seq,
-                        jitter=0,  # TODO
+                        jitter=self.__remote_counter.jitter,
                         lsr=lsr,
                         dlsr=dlsr)])
                 await self._send_rtcp(packet)
