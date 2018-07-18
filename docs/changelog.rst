@@ -1,6 +1,40 @@
 Changelog
 =========
 
+0.9.0 (under development)
+-------------------------
+
+Media
+.....
+
+  * Enable post-processing in VP8 decoder to remove (macro) blocks.
+
+  * Set target bitrate for VP8 encoder to 900kbps.
+
+  * Re-create VP8 encoder if frame size changes.
+
+  * Implement jitter estimation for RTCP reports.
+
+  * Avoid overflowing the DLSR field for RTCP reports.
+
+Data channels
+.............
+
+  * BREAKING CHANGE: make RTCDataChannel.send a coroutine.
+
+  * Support spec-compliant SDP format for datachannels, as used in Firefox 63.
+
+  * Never send a negative advertised_cwnd.
+
+Examples
+........
+
+  * `datachannel-filexfer`: new example for file transfer over a data channel.
+
+  * `datachannel-vpn`: new example for a VPN over a data channel.
+
+  * `server`: make it possible to select video resolution.
+
 0.8.0
 -----
 
