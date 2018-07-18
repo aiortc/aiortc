@@ -59,7 +59,6 @@ class RTCDataChannel(EventEmitter):
     def transport(self):
         """
         The :class:`RTCSctpTransport` over which data is transmitted.
-        transmitted.
         """
         return self.__transport
 
