@@ -53,7 +53,8 @@ SCTP_SUPPORTED_CHUNK_EXT = 0x8008
 DATA_CHANNEL_ACK = 2
 DATA_CHANNEL_OPEN = 3
 
-DATA_CHANNEL_RELIABLE = 0
+DATA_CHANNEL_RELIABLE = 0x00
+DATA_CHANNEL_RELIABLE_UNORDERED = 0x80
 
 WEBRTC_DCEP = 50
 WEBRTC_STRING = 51
@@ -968,7 +969,7 @@ class RTCSctpTransport(EventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
-    async def _send(self, stream_id, pp_id, user_data):
+    async def _send(self, stream_id, pp_id, user_data, ordered=True):
         """
         Send data ULP -> stream.
         """
@@ -979,6 +980,8 @@ class RTCSctpTransport(EventEmitter):
         for fragment in range(0, fragments):
             chunk = DataChunk()
             chunk.flags = 0
+            if not ordered:
+                chunk.flags = SCTP_DATA_UNORDERED
             if fragment == 0:
                 chunk.flags |= SCTP_DATA_FIRST_FRAG
             if fragment == fragments - 1:
@@ -1200,12 +1203,16 @@ class RTCSctpTransport(EventEmitter):
                 channel._setId(stream_id)
 
             # send data
-            await self._send(stream_id, protocol, user_data)
+            await self._send(stream_id, protocol, user_data, ordered=channel.ordered)
             if protocol in [WEBRTC_STRING_EMPTY, WEBRTC_STRING, WEBRTC_BINARY_EMPTY, WEBRTC_BINARY]:
                 channel._addBufferedAmount(-len(user_data))
 
     def _data_channel_open(self, channel):
-        data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
+        if channel.ordered:
+            channel_type = DATA_CHANNEL_RELIABLE
+        else:
+            channel_type = DATA_CHANNEL_RELIABLE_UNORDERED
+        data = pack('!BBHLHH', DATA_CHANNEL_OPEN, channel_type,
                     0, 0, len(channel.label), len(channel.protocol))
         data += channel.label.encode('utf8')
         data += channel.protocol.encode('utf8')
@@ -1229,8 +1236,14 @@ class RTCSctpTransport(EventEmitter):
                 pos += label_length
                 protocol = data[pos:pos + protocol_length].decode('utf8')
 
+                # check channel type is supported
+                assert channel_type in [DATA_CHANNEL_RELIABLE, DATA_CHANNEL_RELIABLE_UNORDERED]
+
                 # register channel
-                parameters = RTCDataChannelParameters(label=label, protocol=protocol)
+                parameters = RTCDataChannelParameters(
+                    label=label,
+                    ordered=(channel_type & 0x80) == 0,
+                    protocol=protocol)
                 channel = RTCDataChannel(self, parameters, id=stream_id)
                 channel._setReadyState('open')
                 self._data_channels[stream_id] = channel

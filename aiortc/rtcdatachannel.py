@@ -58,6 +58,13 @@ class RTCDataChannel(EventEmitter):
         return self.__parameters.label
 
     @property
+    def ordered(self):
+        """
+        Indicates whether or not the data channel guarantees in-order delivery of messages.
+        """
+        return self.__parameters.ordered
+
+    @property
     def protocol(self):
         """
         The name of the subprotocol in use.
@@ -127,6 +134,9 @@ class RTCDataChannelParameters:
     """
     label = attr.ib(default='')
     "A name describing the data channel."
+
+    ordered = attr.ib(default=True)
+    "Whether the data channel guarantees in-order delivery of messages."
 
     protocol = attr.ib(default='')
     "The name of the subprotocol in use."

@@ -235,7 +235,7 @@ class RTCPeerConnection(EventEmitter):
             sdp=self.__createSdp(),
             type='answer')
 
-    def createDataChannel(self, label, protocol=''):
+    def createDataChannel(self, label, ordered=True, protocol=''):
         """
         Create a data channel with the given label.
 
@@ -245,7 +245,7 @@ class RTCPeerConnection(EventEmitter):
             self.__createSctpTransport()
             self.__sctp.mid = 'data'
 
-        parameters = RTCDataChannelParameters(label=label, protocol=protocol)
+        parameters = RTCDataChannelParameters(label=label, ordered=ordered, protocol=protocol)
         return RTCDataChannel(self.__sctp, parameters)
 
     async def createOffer(self):
