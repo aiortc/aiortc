@@ -1255,7 +1255,7 @@ class RTCSctpTransport(EventEmitter):
             # emit message
             self._data_channels[stream_id].emit('message', b'')
 
-    async def _data_channel_send(self, channel, data):
+    def _data_channel_send(self, channel, data):
         if data == '':
             pp_id, user_data = WEBRTC_STRING_EMPTY, b'\x00'
         elif isinstance(data, str):
@@ -1266,7 +1266,7 @@ class RTCSctpTransport(EventEmitter):
             pp_id, user_data = WEBRTC_BINARY, data
 
         self._data_channel_queue.append((channel, pp_id, user_data))
-        await self._data_channel_flush()
+        asyncio.ensure_future(self._data_channel_flush())
 
     def __log_debug(self, msg, *args):
         role = self.is_server and 'server' or 'client'

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 import attr
@@ -76,7 +75,7 @@ class RTCDataChannel(EventEmitter):
         if not isinstance(data, (str, bytes)):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
-        asyncio.ensure_future(self.transport._data_channel_send(self, data))
+        self.transport._data_channel_send(self, data)
 
     def _setId(self, id):
         self.__id = id
