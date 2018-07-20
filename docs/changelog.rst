@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.9.1
+-----
+
+Data channels
+.............
+
+  * Revert making RTCDataChannel.send a coroutine.
+
 0.9.0
 -----
 
