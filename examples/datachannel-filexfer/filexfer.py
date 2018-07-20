@@ -16,7 +16,7 @@ async def run_answer(pc, signaling, filename):
         octets = 0
 
         @channel.on('message')
-        async def on_message(message):
+        def on_message(message):
             nonlocal octets
 
             if message:
@@ -25,7 +25,7 @@ async def run_answer(pc, signaling, filename):
             else:
                 elapsed = time.time() - start
                 print('received %d bytes in %.1f s' % (octets, elapsed))
-                await channel.send('done')
+                channel.send('done')
                 done.set()
 
     # receive offer
@@ -59,7 +59,7 @@ async def run_offer(pc, signaling, fp):
     # send file
     while True:
         data = fp.read(4096)
-        await channel.send(data)
+        channel.send(data)
         if not data:
             break
 

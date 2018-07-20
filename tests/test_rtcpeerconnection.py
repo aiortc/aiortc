@@ -888,12 +888,12 @@ class RTCPeerConnectionTest(TestCase):
             pc2_data_channels.append(channel)
 
             @channel.on('message')
-            async def on_message(message):
+            def on_message(message):
                 pc2_data_messages.append(message)
                 if isinstance(message, str):
-                    await channel.send('string-echo: ' + message)
+                    channel.send('string-echo: ' + message)
                 else:
-                    await channel.send(b'binary-echo: ' + message)
+                    channel.send(b'binary-echo: ' + message)
 
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
@@ -902,13 +902,13 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        run(dc.send('hello'))
-        run(dc.send(''))
-        run(dc.send(b'\x00\x01\x02\x03'))
-        run(dc.send(b''))
-        run(dc.send(LONG_DATA))
+        dc.send('hello')
+        dc.send('')
+        dc.send(b'\x00\x01\x02\x03')
+        dc.send(b'')
+        dc.send(LONG_DATA)
         with self.assertRaises(ValueError) as cm:
-            run(dc.send(1234))
+            dc.send(1234)
         self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')
@@ -1034,12 +1034,12 @@ class RTCPeerConnectionTest(TestCase):
             pc2_data_channels.append(channel)
 
             @channel.on('message')
-            async def on_message(message):
+            def on_message(message):
                 pc2_data_messages.append(message)
                 if isinstance(message, str):
-                    await channel.send('string-echo: ' + message)
+                    channel.send('string-echo: ' + message)
                 else:
-                    await channel.send(b'binary-echo: ' + message)
+                    channel.send(b'binary-echo: ' + message)
 
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
@@ -1048,13 +1048,13 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        run(dc.send('hello'))
-        run(dc.send(''))
-        run(dc.send(b'\x00\x01\x02\x03'))
-        run(dc.send(b''))
-        run(dc.send(LONG_DATA))
+        dc.send('hello')
+        dc.send('')
+        dc.send(b'\x00\x01\x02\x03')
+        dc.send(b'')
+        dc.send(LONG_DATA)
         with self.assertRaises(ValueError) as cm:
-            run(dc.send(1234))
+            dc.send(1234)
         self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')
@@ -1183,12 +1183,12 @@ class RTCPeerConnectionTest(TestCase):
             pc2_data_channels.append(channel)
 
             @channel.on('message')
-            async def on_message(message):
+            def on_message(message):
                 pc2_data_messages.append(message)
                 if isinstance(message, str):
-                    await channel.send('string-echo: ' + message)
+                    channel.send('string-echo: ' + message)
                 else:
-                    await channel.send(b'binary-echo: ' + message)
+                    channel.send(b'binary-echo: ' + message)
 
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
@@ -1197,13 +1197,13 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        run(dc.send('hello'))
-        run(dc.send(''))
-        run(dc.send(b'\x00\x01\x02\x03'))
-        run(dc.send(b''))
-        run(dc.send(LONG_DATA))
+        dc.send('hello')
+        dc.send('')
+        dc.send(b'\x00\x01\x02\x03')
+        dc.send(b'')
+        dc.send(LONG_DATA)
         with self.assertRaises(ValueError) as cm:
-            run(dc.send(1234))
+            dc.send(1234)
         self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')

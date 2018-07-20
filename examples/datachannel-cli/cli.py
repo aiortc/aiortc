@@ -33,11 +33,11 @@ async def run_answer(pc, signaling):
     @pc.on('datachannel')
     def on_datachannel(channel):
         @channel.on('message')
-        async def on_message(message):
+        def on_message(message):
             # reply
             message = 'pong'
             channel_log(channel, '>', message)
-            await channel.send(message)
+            channel.send(message)
 
             # quit
             done.set()
@@ -76,7 +76,7 @@ async def run_offer(pc, signaling):
     # send message
     message = 'ping'
     channel_log(channel, '>', message)
-    await channel.send(message)
+    channel.send(message)
 
     await done.wait()
 
