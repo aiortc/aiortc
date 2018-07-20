@@ -21,6 +21,7 @@ logger = logging.getLogger('sctp')
 # local constants
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
+MAX_OUTBOUND_QUEUE = 100
 MAX_STREAMS = 65535
 USERDATA_MAX_LENGTH = 1200
 
@@ -896,6 +897,7 @@ class RTCSctpTransport(EventEmitter):
                 self._t3_handle = None
                 self._t3_start()
 
+            await self._data_channel_flush()
             await self._transmit()
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
@@ -1186,7 +1188,9 @@ class RTCSctpTransport(EventEmitter):
         if self.state != self.State.ESTABLISHED:
             return
 
-        for channel, protocol, user_data in self._data_channel_queue:
+        while len(self._outbound_queue) < MAX_OUTBOUND_QUEUE and self._data_channel_queue:
+            channel, protocol, user_data = self._data_channel_queue.pop(0)
+
             # register channel if necessary
             stream_id = channel.id
             if stream_id is None:
@@ -1197,8 +1201,8 @@ class RTCSctpTransport(EventEmitter):
 
             # send data
             await self._send(stream_id, protocol, user_data)
-
-        self._data_channel_queue = []
+            if protocol in [WEBRTC_STRING_EMPTY, WEBRTC_STRING, WEBRTC_BINARY_EMPTY, WEBRTC_BINARY]:
+                channel._addBufferedAmount(-len(user_data))
 
     def _data_channel_open(self, channel):
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, DATA_CHANNEL_RELIABLE,
@@ -1265,6 +1269,7 @@ class RTCSctpTransport(EventEmitter):
         else:
             pp_id, user_data = WEBRTC_BINARY, data
 
+        channel._addBufferedAmount(len(user_data))
         self._data_channel_queue.append((channel, pp_id, user_data))
         asyncio.ensure_future(self._data_channel_flush())
 

@@ -17,6 +17,8 @@ class RTCDataChannel(EventEmitter):
 
     def __init__(self, transport, parameters, id=None):
         super().__init__()
+        self.__bufferedAmount = 0
+        self.__bufferedAmountLowThreshold = 0
         self.__id = id
         self.__parameters = parameters
         self.__readyState = 'connecting'
@@ -24,6 +26,20 @@ class RTCDataChannel(EventEmitter):
 
         if self.__id is None:
             self.__transport._data_channel_open(self)
+
+    @property
+    def bufferedAmount(self):
+        """
+        The number of bytes of data currently queued to be sent over the data channel.
+        """
+        return self.__bufferedAmount
+
+    @property
+    def bufferedAmountLowThreshold(self):
+        """
+        The number of bytes of buffered outgoing data that is considered "low".
+        """
+        return self.__bufferedAmountLowThreshold
 
     @property
     def id(self):
@@ -76,6 +92,15 @@ class RTCDataChannel(EventEmitter):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
         self.transport._data_channel_send(self, data)
+
+    def _addBufferedAmount(self, amount):
+        crosses_threshold = (
+            self.__bufferedAmount > self.bufferedAmountLowThreshold and
+            self.__bufferedAmount + amount <= self.bufferedAmountLowThreshold
+        )
+        self.__bufferedAmount += amount
+        if crosses_threshold:
+            self.emit('bufferedamountlow')
 
     def _setId(self, id):
         self.__id = id

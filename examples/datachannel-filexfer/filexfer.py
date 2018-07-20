@@ -40,7 +40,18 @@ async def run_answer(pc, signaling, filename):
 
 async def run_offer(pc, signaling, fp):
     done = asyncio.Event()
+    done_reading = False
     channel = pc.createDataChannel('filexfer')
+
+    @channel.on('bufferedamountlow')
+    def on_bufferedamountlow():
+        nonlocal done_reading
+
+        while (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) and not done_reading:
+            data = fp.read(16384)
+            channel.send(data)
+            if not data:
+                done_reading = True
 
     @channel.on('message')
     def on_message(message):
@@ -56,12 +67,8 @@ async def run_offer(pc, signaling, fp):
     answer = await signaling.receive()
     await pc.setRemoteDescription(answer)
 
-    # send file
-    while True:
-        data = fp.read(4096)
-        channel.send(data)
-        if not data:
-            break
+    # start sending file
+    on_bufferedamountlow()
 
     await done.wait()
 
