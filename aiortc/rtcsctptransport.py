@@ -905,6 +905,21 @@ class RTCSctpTransport(EventEmitter):
                 self._outbound_queue = self._outbound_queue[done:]
                 self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
 
+            # handle gap blocks
+            if chunk.gaps:
+                highest_seen_tsn = (chunk.cumulative_tsn + chunk.gaps[-1][1]) % SCTP_TSN_MODULO
+                seen = set()
+                for gap in chunk.gaps:
+                    for pos in range(gap[0], gap[1] + 1):
+                        tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
+                        seen.add(tsn)
+                for i in range(len(self._outbound_queue)):
+                    schunk = self._outbound_queue[i]
+                    if tsn_gt(schunk.tsn, highest_seen_tsn):
+                        break
+                    if schunk.tsn not in seen:
+                        schunk._misses += 1
+
             if not len(self._outbound_queue):
                 # there is no outstanding data, stop T3
                 self._t3_cancel()
@@ -1009,6 +1024,7 @@ class RTCSctpTransport(EventEmitter):
             chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
             # initialize counters
+            chunk._misses = 0
             chunk._sent_count = 0
             chunk._sent_time = None
 
@@ -1162,6 +1178,17 @@ class RTCSctpTransport(EventEmitter):
         flightsize = 0
         for pos in range(self._outbound_queue_pos):
             flightsize += len(self._outbound_queue[pos].user_data)
+
+        # fast retransmit
+        for pos in range(self._outbound_queue_pos):
+            chunk = self._outbound_queue[pos]
+            if chunk._misses >= 3:
+                burst += 1
+                chunk._misses = 0
+                chunk._sent_count += 1
+                chunk._sent_time = time.time()
+                await self._send_chunk(chunk)
+                break
 
         while self._outbound_queue_pos < len(self._outbound_queue):
             chunk = self._outbound_queue[self._outbound_queue_pos]
