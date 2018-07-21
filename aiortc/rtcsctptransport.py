@@ -35,7 +35,11 @@ SCTP_DATA_UNORDERED = 0x04
 
 SCTP_MAX_ASSOCIATION_RETRANS = 10
 SCTP_MAX_INIT_RETRANS = 8
+SCTP_RTO_ALPHA = 1 / 8
+SCTP_RTO_BETA = 1 / 4
 SCTP_RTO_INITIAL = 3
+SCTP_RTO_MIN = 1
+SCTP_RTO_MAX = 60
 SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
@@ -582,6 +586,10 @@ class RTCSctpTransport(EventEmitter):
         self._reconfig_request_seq = self._local_tsn
         self._reconfig_response_seq = 0
 
+        # rtt calculation
+        self._srtt = None
+        self._rttvar = None
+
         # timers
         self._rto = SCTP_RTO_INITIAL
         self._t1_handle = None
@@ -875,6 +883,7 @@ class RTCSctpTransport(EventEmitter):
             if tsn_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
                 return
 
+            received_time = time.time()
             self._last_sacked_tsn = chunk.cumulative_tsn
             done = 0
 
@@ -884,6 +893,12 @@ class RTCSctpTransport(EventEmitter):
                 if tsn_gt(schunk.tsn, self._last_sacked_tsn):
                     break
                 done += 1
+
+                # update RTO estimate
+                if done == 1 and schunk._sent_count == 1:
+                    self._update_rto(received_time - schunk._sent_time)
+
+                # grow cwnd
                 self._cwnd = min(self._cwnd + len(schunk.user_data), self._ssthresh)
             if done:
                 self._outbound_queue = self._outbound_queue[done:]
@@ -991,6 +1006,10 @@ class RTCSctpTransport(EventEmitter):
             chunk.stream_seq = stream_seq
             chunk.protocol = pp_id
             chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
+
+            # initialize counters
+            chunk._sent_count = 0
+            chunk._sent_time = None
 
             pos += USERDATA_MAX_LENGTH
             self._local_tsn = tsn_plus_one(self._local_tsn)
@@ -1146,6 +1165,11 @@ class RTCSctpTransport(EventEmitter):
             flightsize += len(chunk.user_data)
             if flightsize > self._cwnd:
                 break
+
+            # update counters
+            chunk._sent_count += 1
+            chunk._sent_time = time.time()
+
             await self._send_chunk(chunk)
             if not self._t3_handle:
                 self._t3_start()
@@ -1165,6 +1189,18 @@ class RTCSctpTransport(EventEmitter):
             self._reconfig_request_seq = tsn_plus_one(self._reconfig_request_seq)
 
             await self._send_reconfig_param(param)
+
+    def _update_rto(self, R):
+        """
+        Update RTO given a new roundtrip measurement R.
+        """
+        if self._srtt is None:
+            self._rttvar = R / 2
+            self._srtt = R
+        else:
+            self._rttvar = (1 - SCTP_RTO_BETA) * self._rttvar + SCTP_RTO_BETA * abs(self._srtt - R)
+            self._srtt = (1 - SCTP_RTO_ALPHA) * self._srtt + SCTP_RTO_ALPHA * R
+        self._rto = max(SCTP_RTO_MIN, min(self._srtt + 4 * self._rttvar, SCTP_RTO_MAX))
 
     def _data_channel_close(self, channel, transmit=True):
         """
