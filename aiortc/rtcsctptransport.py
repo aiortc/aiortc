@@ -34,6 +34,7 @@ SCTP_DATA_FIRST_FRAG = 0x02
 SCTP_DATA_UNORDERED = 0x04
 
 SCTP_MAX_ASSOCIATION_RETRANS = 10
+SCTP_MAX_BURST = 4
 SCTP_MAX_INIT_RETRANS = 8
 SCTP_RTO_ALPHA = 1 / 8
 SCTP_RTO_BETA = 1 / 4
@@ -1017,7 +1018,8 @@ class RTCSctpTransport(EventEmitter):
         self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
 
         # transmit outbound data
-        await self._transmit()
+        if not self._t3_handle:
+            await self._transmit()
 
     async def _send_chunk(self, chunk):
         """
@@ -1156,6 +1158,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit outbound data.
         """
+        burst = 0
         flightsize = 0
         for pos in range(self._outbound_queue_pos):
             flightsize += len(self._outbound_queue[pos].user_data)
@@ -1174,6 +1177,11 @@ class RTCSctpTransport(EventEmitter):
             if not self._t3_handle:
                 self._t3_start()
             self._outbound_queue_pos += 1
+
+            # check burst size
+            burst += 1
+            if burst >= SCTP_MAX_BURST:
+                break
 
     async def _transmit_reconfig(self):
         if self._reconfig_queue and not self._reconfig_request:
