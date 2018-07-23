@@ -341,11 +341,11 @@ CHUNK_TYPES = {
 
 
 class Packet:
-    def __init__(self, source_port, destination_port, verification_tag):
+    def __init__(self, source_port, destination_port, verification_tag, chunks):
         self.source_port = source_port
         self.destination_port = destination_port
         self.verification_tag = verification_tag
-        self.chunks = []
+        self.chunks = chunks
 
     def __bytes__(self):
         checksum = 0
@@ -378,7 +378,8 @@ class Packet:
         packet = cls(
             source_port=source_port,
             destination_port=destination_port,
-            verification_tag=verification_tag)
+            verification_tag=verification_tag,
+            chunks=[])
 
         pos = 12
         while pos <= len(data) - 4:
@@ -1110,8 +1111,8 @@ class RTCSctpTransport(EventEmitter):
         packet = Packet(
             source_port=self._local_port,
             destination_port=self._remote_port,
-            verification_tag=self._remote_verification_tag)
-        packet.chunks.append(chunk)
+            verification_tag=self._remote_verification_tag,
+            chunks=[chunk])
         await self.transport.data.send(bytes(packet))
 
     async def _send_reconfig_param(self, param):
