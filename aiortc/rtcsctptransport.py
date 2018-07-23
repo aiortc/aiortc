@@ -575,11 +575,15 @@ class RTCSctpTransport(EventEmitter):
 
         # outbound
         self._cwnd = 3 * USERDATA_MAX_LENGTH
+        self._fast_recovery_exit = None
+        self._fast_recovery_transmit = False
+        self._flight_size = 0
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
         self._outbound_queue = []
         self._outbound_queue_pos = 0
         self._outbound_stream_seq = {}
+        self._partial_bytes_acked = 0
 
         # reconfiguration
         self._reconfig_queue = []
@@ -723,6 +727,12 @@ class RTCSctpTransport(EventEmitter):
             # send SACK if needed
             if self._sack_needed:
                 await self._send_sack()
+
+    def _flight_size_decrease(self, chunk):
+        self._flight_size = max(0, self._flight_size - chunk._book_size)
+
+    def _flight_size_increase(self, chunk):
+        self._flight_size += chunk._book_size
 
     def _get_extensions(self, params):
         """
@@ -888,24 +898,24 @@ class RTCSctpTransport(EventEmitter):
             self._last_sacked_tsn = chunk.cumulative_tsn
             done = 0
             done_bytes = 0
+            restart_t3 = False
 
-            # discard acknowledged data
+            # handle acknowledged data
             for i in range(len(self._outbound_queue)):
                 schunk = self._outbound_queue[i]
                 if tsn_gt(schunk.tsn, self._last_sacked_tsn):
                     break
                 done += 1
-                done_bytes += len(schunk.user_data)
+                done_bytes += schunk._book_size
+                if not schunk._acked:
+                    self._flight_size_decrease(schunk)
 
                 # update RTO estimate
                 if done == 1 and schunk._sent_count == 1:
                     self._update_rto(received_time - schunk._sent_time)
-            if done:
-                self._outbound_queue = self._outbound_queue[done:]
-                self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
-                self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
 
             # handle gap blocks
+            loss = False
             if chunk.gaps:
                 highest_seen_tsn = (chunk.cumulative_tsn + chunk.gaps[-1][1]) % SCTP_TSN_MODULO
                 seen = set()
@@ -913,17 +923,55 @@ class RTCSctpTransport(EventEmitter):
                     for pos in range(gap[0], gap[1] + 1):
                         tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
                         seen.add(tsn)
-                for i in range(len(self._outbound_queue)):
+                for i in range(done, len(self._outbound_queue)):
                     schunk = self._outbound_queue[i]
                     if tsn_gt(schunk.tsn, highest_seen_tsn):
                         break
                     if schunk.tsn not in seen:
                         schunk._misses += 1
+                        if schunk._misses == 3:
+                            schunk._acked = False
+                            schunk._misses = 0
+                            schunk._retransmit = True
+                            loss = True
+                            self._flight_size_decrease(schunk)
+                            if i == done:
+                                restart_t3 = True
+                    elif not schunk._acked:
+                        schunk._acked = True
+                        self._flight_size_decrease(schunk)
+
+            # discard acknowledged data
+            if done:
+                self._outbound_queue = self._outbound_queue[done:]
+                self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
+                restart_t3 = True
+
+            # adjust congestion window
+            if self._fast_recovery_exit is None:
+                if done:
+                    if self._cwnd <= self._ssthresh:
+                        # slow start
+                        self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
+                    else:
+                        # congestion avoidance
+                        self._partial_bytes_acked += done_bytes
+                        if self._partial_bytes_acked >= self._cwnd:
+                            self._partial_bytes_acked -= self._cwnd
+                            self._cwnd += USERDATA_MAX_LENGTH
+                if loss:
+                    self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
+                    self._cwnd = self._ssthresh
+                    self._partial_bytes_acked = 0
+                    self._fast_recovery_exit = highest_seen_tsn
+                    self._fast_recovery_transmit = True
+            elif tsn_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
+                self._fast_recovery_exit = None
 
             if not len(self._outbound_queue):
                 # there is no outstanding data, stop T3
                 self._t3_cancel()
-            elif done:
+            elif restart_t3:
                 # the earliest outstanding chunk was acknowledged, restart T3
                 self._t3_handle.cancel()
                 self._t3_handle = None
@@ -1024,7 +1072,10 @@ class RTCSctpTransport(EventEmitter):
             chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
             # initialize counters
+            chunk._acked = False
+            chunk._book_size = len(chunk.user_data)
             chunk._misses = 0
+            chunk._retransmit = False
             chunk._sent_count = 0
             chunk._sent_time = None
 
@@ -1155,6 +1206,8 @@ class RTCSctpTransport(EventEmitter):
         self.__log_debug('x T3 expired')
 
         # retransmit
+        self._flight_size = 0
+        self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
         self._cwnd = USERDATA_MAX_LENGTH
         self._outbound_queue_pos = 0
         asyncio.ensure_future(self._transmit())
@@ -1174,27 +1227,25 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit outbound data.
         """
-        burst = 0
-        flightsize = 0
-        for pos in range(self._outbound_queue_pos):
-            flightsize += len(self._outbound_queue[pos].user_data)
-
-        # fast retransmit
+        # retransmit
         for pos in range(self._outbound_queue_pos):
             chunk = self._outbound_queue[pos]
-            if chunk._misses >= 3:
-                burst += 1
-                chunk._misses = 0
+            if chunk._retransmit:
+                if self._fast_recovery_transmit:
+                    self._fast_recovery_transmit = False
+                elif self._flight_size + chunk._book_size > self._cwnd:
+                    return
+                self._flight_size_increase(chunk)
+
+                chunk._retransmit = False
                 chunk._sent_count += 1
-                chunk._sent_time = time.time()
                 await self._send_chunk(chunk)
-                break
 
         while self._outbound_queue_pos < len(self._outbound_queue):
             chunk = self._outbound_queue[self._outbound_queue_pos]
-            flightsize += len(chunk.user_data)
-            if flightsize > self._cwnd:
+            if self._flight_size + chunk._book_size > self._cwnd:
                 break
+            self._flight_size_increase(chunk)
 
             # update counters
             chunk._sent_count += 1
@@ -1204,11 +1255,6 @@ class RTCSctpTransport(EventEmitter):
             if not self._t3_handle:
                 self._t3_start()
             self._outbound_queue_pos += 1
-
-            # check burst size
-            burst += 1
-            if burst >= SCTP_MAX_BURST:
-                break
 
     async def _transmit_reconfig(self):
         if self._reconfig_queue and not self._reconfig_request:
