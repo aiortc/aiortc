@@ -835,7 +835,7 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.ESTABLISHED)
 
         # client
-        if isinstance(chunk, InitAckChunk) and self.state == self.State.COOKIE_WAIT:
+        elif isinstance(chunk, InitAckChunk) and self.state == self.State.COOKIE_WAIT:
             # cancel T1 timer and process chunk
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
@@ -872,116 +872,9 @@ class RTCSctpTransport(EventEmitter):
 
         # common
         elif isinstance(chunk, DataChunk):
-            self._sack_needed = True
-
-            # mark as received
-            if self._mark_received(chunk.tsn):
-                return
-
-            # find stream
-            if chunk.stream_id not in self._inbound_streams:
-                self._inbound_streams[chunk.stream_id] = InboundStream()
-            inbound_stream = self._inbound_streams[chunk.stream_id]
-
-            # defragment data
-            inbound_stream.add_chunk(chunk)
-            self._advertised_rwnd -= len(chunk.user_data)
-            for message in inbound_stream.pop_messages():
-                self._advertised_rwnd += len(message[2])
-                await self._receive(*message)
-
+            await self._receive_data_chunk(chunk)
         elif isinstance(chunk, SackChunk):
-            if tsn_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
-                return
-
-            received_time = time.time()
-            self._last_sacked_tsn = chunk.cumulative_tsn
-            done = 0
-            done_bytes = 0
-            restart_t3 = False
-
-            # handle acknowledged data
-            for i in range(len(self._outbound_queue)):
-                schunk = self._outbound_queue[i]
-                if tsn_gt(schunk.tsn, self._last_sacked_tsn):
-                    break
-                done += 1
-                if not schunk._acked:
-                    done_bytes += schunk._book_size
-                    self._flight_size_decrease(schunk)
-
-                # update RTO estimate
-                if done == 1 and schunk._sent_count == 1:
-                    self._update_rto(received_time - schunk._sent_time)
-
-            # handle gap blocks
-            loss = False
-            if chunk.gaps:
-                highest_seen_tsn = (chunk.cumulative_tsn + chunk.gaps[-1][1]) % SCTP_TSN_MODULO
-                seen = set()
-                for gap in chunk.gaps:
-                    for pos in range(gap[0], gap[1] + 1):
-                        tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
-                        seen.add(tsn)
-                for i in range(done, len(self._outbound_queue)):
-                    schunk = self._outbound_queue[i]
-                    if tsn_gt(schunk.tsn, highest_seen_tsn):
-                        break
-                    if schunk.tsn not in seen:
-                        schunk._misses += 1
-                        if schunk._misses == 3:
-                            schunk._misses = 0
-                            schunk._retransmit = True
-
-                            schunk._acked = False
-                            self._flight_size_decrease(schunk)
-
-                            loss = True
-                            if i == done:
-                                restart_t3 = True
-                    elif not schunk._acked:
-                        done_bytes += schunk._book_size
-                        schunk._acked = True
-                        self._flight_size_decrease(schunk)
-
-            # discard acknowledged data
-            if done:
-                self._outbound_queue = self._outbound_queue[done:]
-                self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
-                restart_t3 = True
-
-            # adjust congestion window
-            if self._fast_recovery_exit is None:
-                if done:
-                    if self._cwnd <= self._ssthresh:
-                        # slow start
-                        self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
-                    else:
-                        # congestion avoidance
-                        self._partial_bytes_acked += done_bytes
-                        if self._partial_bytes_acked >= self._cwnd:
-                            self._partial_bytes_acked -= self._cwnd
-                            self._cwnd += USERDATA_MAX_LENGTH
-                if loss:
-                    self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
-                    self._cwnd = self._ssthresh
-                    self._partial_bytes_acked = 0
-                    self._fast_recovery_exit = highest_seen_tsn
-                    self._fast_recovery_transmit = True
-            elif tsn_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
-                self._fast_recovery_exit = None
-
-            if not len(self._outbound_queue):
-                # there is no outstanding data, stop T3
-                self._t3_cancel()
-            elif restart_t3:
-                # the earliest outstanding chunk was acknowledged, restart T3
-                self._t3_handle.cancel()
-                self._t3_handle = None
-                self._t3_start()
-
-            await self._data_channel_flush()
-            await self._transmit()
+            await self._receive_sack_chunk(chunk)
         elif isinstance(chunk, HeartbeatChunk):
             ack = HeartbeatAckChunk()
             ack.params = chunk.params
@@ -1005,6 +898,124 @@ class RTCSctpTransport(EventEmitter):
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls:
                     await self._receive_reconfig_param(cls.parse(param[1]))
+
+    async def _receive_data_chunk(self, chunk):
+        """
+        Handle a DATA chunk.
+        """
+        self._sack_needed = True
+
+        # mark as received
+        if self._mark_received(chunk.tsn):
+            return
+
+        # find stream
+        if chunk.stream_id not in self._inbound_streams:
+            self._inbound_streams[chunk.stream_id] = InboundStream()
+        inbound_stream = self._inbound_streams[chunk.stream_id]
+
+        # defragment data
+        inbound_stream.add_chunk(chunk)
+        self._advertised_rwnd -= len(chunk.user_data)
+        for message in inbound_stream.pop_messages():
+            self._advertised_rwnd += len(message[2])
+            await self._receive(*message)
+
+    async def _receive_sack_chunk(self, chunk):
+        """
+        Handle a SACK chunk.
+        """
+        if tsn_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
+            return
+
+        received_time = time.time()
+        self._last_sacked_tsn = chunk.cumulative_tsn
+        done = 0
+        done_bytes = 0
+        restart_t3 = False
+
+        # handle acknowledged data
+        for i in range(len(self._outbound_queue)):
+            schunk = self._outbound_queue[i]
+            if tsn_gt(schunk.tsn, self._last_sacked_tsn):
+                break
+            done += 1
+            if not schunk._acked:
+                done_bytes += schunk._book_size
+                self._flight_size_decrease(schunk)
+
+            # update RTO estimate
+            if done == 1 and schunk._sent_count == 1:
+                self._update_rto(received_time - schunk._sent_time)
+
+        # handle gap blocks
+        loss = False
+        if chunk.gaps:
+            highest_seen_tsn = (chunk.cumulative_tsn + chunk.gaps[-1][1]) % SCTP_TSN_MODULO
+            seen = set()
+            for gap in chunk.gaps:
+                for pos in range(gap[0], gap[1] + 1):
+                    tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
+                    seen.add(tsn)
+            for i in range(done, len(self._outbound_queue)):
+                schunk = self._outbound_queue[i]
+                if tsn_gt(schunk.tsn, highest_seen_tsn):
+                    break
+                if schunk.tsn not in seen:
+                    schunk._misses += 1
+                    if schunk._misses == 3:
+                        schunk._misses = 0
+                        schunk._retransmit = True
+
+                        schunk._acked = False
+                        self._flight_size_decrease(schunk)
+
+                        loss = True
+                        if i == done:
+                            restart_t3 = True
+                elif not schunk._acked:
+                    done_bytes += schunk._book_size
+                    schunk._acked = True
+                    self._flight_size_decrease(schunk)
+
+        # discard acknowledged data
+        if done:
+            self._outbound_queue = self._outbound_queue[done:]
+            self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
+            restart_t3 = True
+
+        # adjust congestion window
+        if self._fast_recovery_exit is None:
+            if done:
+                if self._cwnd <= self._ssthresh:
+                    # slow start
+                    self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
+                else:
+                    # congestion avoidance
+                    self._partial_bytes_acked += done_bytes
+                    if self._partial_bytes_acked >= self._cwnd:
+                        self._partial_bytes_acked -= self._cwnd
+                        self._cwnd += USERDATA_MAX_LENGTH
+            if loss:
+                self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
+                self._cwnd = self._ssthresh
+                self._partial_bytes_acked = 0
+                self._fast_recovery_exit = highest_seen_tsn
+                self._fast_recovery_transmit = True
+        elif tsn_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
+            self._fast_recovery_exit = None
+
+        if not len(self._outbound_queue):
+            # there is no outstanding data, stop T3
+            self._t3_cancel()
+        elif restart_t3:
+            # the earliest outstanding chunk was acknowledged, restart T3
+            self._t3_handle.cancel()
+            self._t3_handle = None
+            self._t3_start()
+
+        await self._data_channel_flush()
+        await self._transmit()
 
     async def _receive_reconfig_param(self, param):
         """
