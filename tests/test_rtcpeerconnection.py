@@ -911,6 +911,7 @@ class RTCPeerConnectionTest(TestCase):
         with self.assertRaises(ValueError) as cm:
             dc.send(1234)
         self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+        self.assertEqual(dc.bufferedAmount, 2011)
 
         @dc.on('message')
         def on_message(message):
@@ -967,6 +968,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
         self.assertEqual(dc.readyState, 'open')
+        self.assertEqual(dc.bufferedAmount, 0)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
