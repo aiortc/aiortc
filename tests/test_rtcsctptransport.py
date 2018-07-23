@@ -1143,6 +1143,81 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(len(client._outbound_queue), 1)
         self.assertEqual(client._outbound_queue_pos, 1)
 
+    def test_send_data_congestion_control(self):
+        sent_tsns = []
+
+        def queued_tsns():
+            return [chunk.tsn for chunk in client._outbound_queue]
+
+        async def mock_send_chunk(chunk):
+            sent_tsns.append(chunk.tsn)
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._cwnd = 4800
+        client._last_sacked_tsn = 4294967295
+        client._local_tsn = 0
+        client._ssthresh = 4800
+        client._send_chunk = mock_send_chunk
+
+        # queue 16 chunks, but cwnd only allows 4
+        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 16))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3])
+        self.assertEqual(queued_tsns(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(client._outbound_queue_pos, 4)
+
+        # SACK comes in acknowledging 2 chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 1
+        run(client._receive_chunk(sack))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(queued_tsns(), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 6000)
+        self.assertEqual(client._outbound_queue_pos, 5)
+
+        # SACK comes in acknowledging 2 more chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 3
+        run(client._receive_chunk(sack))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(queued_tsns(), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 6000)
+        self.assertEqual(client._outbound_queue_pos, 5)
+
+        # SACK comes in acknowledging 2 more chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 5
+        run(client._receive_chunk(sack))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(queued_tsns(), [6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 6000)
+        self.assertEqual(client._outbound_queue_pos, 5)
+
+        # SACK comes in acknowledging 2 more chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 7
+        run(client._receive_chunk(sack))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        self.assertEqual(queued_tsns(), [8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 7200)
+        self.assertEqual(client._outbound_queue_pos, 6)
+
+        # SACK comes in acknowledging 2 more chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 9
+        run(client._receive_chunk(sack))
+
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(), [10, 11, 12, 13, 14, 15])
+        self.assertEqual(client._cwnd, 7200)
+        self.assertEqual(client._outbound_queue_pos, 6)
+
     def test_send_data_slow_start(self):
         sent_tsns = []
 
@@ -1185,7 +1260,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(queued_tsns(), [2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 4)
 
-        # STEP 3 - sack comes in acknowledging 2 more chunks
+        # SACK sack comes in acknowledging 2 more chunks
         previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 3
