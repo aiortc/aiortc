@@ -1221,9 +1221,12 @@ class RTCSctpTransport(EventEmitter):
 
         # retransmit
         self._flight_size = 0
+        self._outbound_queue_pos = 0
+        self._partial_bytes_acked = 0
+
         self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
         self._cwnd = USERDATA_MAX_LENGTH
-        self._outbound_queue_pos = 0
+
         asyncio.ensure_future(self._transmit())
 
     def _t3_start(self):
