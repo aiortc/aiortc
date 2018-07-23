@@ -24,7 +24,7 @@ async def run_answer(pc, signaling, filename):
                 fp.write(message)
             else:
                 elapsed = time.time() - start
-                print('received %d bytes in %.1f s' % (octets, elapsed))
+                print('received %d bytes in %.1f s (%.3f Mbps)' % (octets, elapsed, octets * 8 / elapsed / 1000000))
                 channel.send('done')
                 done.set()
 
