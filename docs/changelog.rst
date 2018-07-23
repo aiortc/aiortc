@@ -1,6 +1,19 @@
 Changelog
 =========
 
+0.9.2
+-----
+
+Data channels
+.............
+
+  * Numerous performance improvements in congestion control.
+
+Examples
+........
+
+  * `datachannel-filexfer`: use uvloop instead of default asyncio loop.
+
 0.9.1
 -----
 
