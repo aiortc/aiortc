@@ -906,8 +906,8 @@ class RTCSctpTransport(EventEmitter):
                 if tsn_gt(schunk.tsn, self._last_sacked_tsn):
                     break
                 done += 1
-                done_bytes += schunk._book_size
                 if not schunk._acked:
+                    done_bytes += schunk._book_size
                     self._flight_size_decrease(schunk)
 
                 # update RTO estimate
@@ -930,14 +930,17 @@ class RTCSctpTransport(EventEmitter):
                     if schunk.tsn not in seen:
                         schunk._misses += 1
                         if schunk._misses == 3:
-                            schunk._acked = False
                             schunk._misses = 0
                             schunk._retransmit = True
-                            loss = True
+
+                            schunk._acked = False
                             self._flight_size_decrease(schunk)
+
+                            loss = True
                             if i == done:
                                 restart_t3 = True
                     elif not schunk._acked:
+                        done_bytes += schunk._book_size
                         schunk._acked = True
                         self._flight_size_decrease(schunk)
 
