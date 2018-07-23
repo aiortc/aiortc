@@ -887,6 +887,7 @@ class RTCSctpTransport(EventEmitter):
             received_time = time.time()
             self._last_sacked_tsn = chunk.cumulative_tsn
             done = 0
+            done_bytes = 0
 
             # discard acknowledged data
             for i in range(len(self._outbound_queue)):
@@ -894,16 +895,15 @@ class RTCSctpTransport(EventEmitter):
                 if tsn_gt(schunk.tsn, self._last_sacked_tsn):
                     break
                 done += 1
+                done_bytes += len(schunk.user_data)
 
                 # update RTO estimate
                 if done == 1 and schunk._sent_count == 1:
                     self._update_rto(received_time - schunk._sent_time)
-
-                # grow cwnd
-                self._cwnd = min(self._cwnd + len(schunk.user_data), self._ssthresh)
             if done:
                 self._outbound_queue = self._outbound_queue[done:]
                 self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
+                self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
 
             # handle gap blocks
             if chunk.gaps:
