@@ -3,8 +3,9 @@ from unittest import TestCase
 
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpRrPacket,
                         RtcpSdesPacket, RtcpSrPacket, RtpPacket,
-                        datetime_from_ntp, datetime_to_ntp, seq_gt,
-                        seq_plus_one)
+                        clamp_packets_lost, datetime_from_ntp, datetime_to_ntp,
+                        pack_packets_lost, seq_gt, seq_plus_one,
+                        unpack_packets_lost)
 
 from .utils import load
 
@@ -177,6 +178,13 @@ class RtpPacketTest(TestCase):
 
 
 class RtpUtilTest(TestCase):
+    def test_clamp_packets_lost(self):
+        self.assertEqual(clamp_packets_lost(-8388609), -8388608)
+        self.assertEqual(clamp_packets_lost(-8388608), -8388608)
+        self.assertEqual(clamp_packets_lost(0), 0)
+        self.assertEqual(clamp_packets_lost(8388607), 8388607)
+        self.assertEqual(clamp_packets_lost(8388608), 8388607)
+
     def test_datetime_from_ntp(self):
         dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
         self.assertEqual(datetime_from_ntp(16059593044731306503), dt)
@@ -184,6 +192,13 @@ class RtpUtilTest(TestCase):
     def test_datetime_to_ntp(self):
         dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
         self.assertEqual(datetime_to_ntp(dt), 16059593044731306503)
+
+    def test_pack_packets_lost(self):
+        self.assertEqual(pack_packets_lost(-8388608), b'\x80\x00\x00')
+        self.assertEqual(pack_packets_lost(-1), b'\xff\xff\xff')
+        self.assertEqual(pack_packets_lost(0), b'\x00\x00\x00')
+        self.assertEqual(pack_packets_lost(1), b'\x00\x00\x01')
+        self.assertEqual(pack_packets_lost(8388607), b'\x7f\xff\xff')
 
     def test_seq_gt(self):
         self.assertFalse(seq_gt(0, 1))
@@ -197,3 +212,10 @@ class RtpUtilTest(TestCase):
         self.assertEqual(seq_plus_one(0), 1)
         self.assertEqual(seq_plus_one(1), 2)
         self.assertEqual(seq_plus_one(65535), 0)
+
+    def test_unpack_packets_lost(self):
+        self.assertEqual(unpack_packets_lost(b'\x80\x00\x00'), -8388608)
+        self.assertEqual(unpack_packets_lost(b'\xff\xff\xff'), -1)
+        self.assertEqual(unpack_packets_lost(b'\x00\x00\x00'), 0)
+        self.assertEqual(unpack_packets_lost(b'\x00\x00\x01'), 1)
+        self.assertEqual(unpack_packets_lost(b'\x7f\xff\xff'), 8388607)

@@ -11,12 +11,31 @@ RTP_HEADER_LENGTH = 12
 RTP_SEQ_MODULO = 2 ** 16
 RTCP_HEADER_LENGTH = 8
 
+PACKETS_LOST_MIN = - (1 << 23)
+PACKETS_LOST_MAX = (1 << 23) - 1
+
 RTCP_SR = 200
 RTCP_RR = 201
 RTCP_SDES = 202
 RTCP_BYE = 203
 
 NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
+
+
+def clamp_packets_lost(count):
+    return max(PACKETS_LOST_MIN, min(count, PACKETS_LOST_MAX))
+
+
+def pack_packets_lost(count):
+    return pack('!l', count)[1:]
+
+
+def unpack_packets_lost(d):
+    if d[0] & 0x80:
+        d = b'\xff' + d
+    else:
+        d = b'\x00' + d
+    return unpack('!l', d)[0]
 
 
 def pack_rtcp_packet(packet_type, count, payload):
@@ -69,17 +88,20 @@ class RtcpReceiverInfo:
     dlsr = attr.ib()
 
     def __bytes__(self):
-        lost = (self.fraction_lost << 24) | self.packets_lost
-        return pack('!LLLLLL', self.ssrc, lost, self.highest_sequence,
-                    self.jitter, self.lsr, self.dlsr)
+        data = pack('!LB', self.ssrc, self.fraction_lost)
+        data += pack_packets_lost(self.packets_lost)
+        data += pack('!LLLL', self.highest_sequence, self.jitter, self.lsr, self.dlsr)
+        return data
 
     @classmethod
     def parse(cls, data):
-        ssrc, lost, highest_sequence, jitter, lsr, dlsr = unpack('!LLLLLL', data)
+        ssrc, fraction_lost = unpack('!LB', data[0:5])
+        packets_lost = unpack_packets_lost(data[5:8])
+        highest_sequence, jitter, lsr, dlsr = unpack('!LLLL', data[8:])
         return cls(
             ssrc=ssrc,
-            fraction_lost=(lost >> 24) & 0xff,
-            packets_lost=lost & 0xffffff,
+            fraction_lost=fraction_lost,
+            packets_lost=packets_lost,
             highest_sequence=highest_sequence,
             jitter=jitter,
             lsr=lsr,

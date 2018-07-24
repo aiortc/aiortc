@@ -9,7 +9,7 @@ from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rtp import (RTP_SEQ_MODULO, RtcpReceiverInfo, RtcpRrPacket, RtcpSrPacket,
-                  datetime_from_ntp, seq_gt)
+                  clamp_packets_lost, datetime_from_ntp, seq_gt)
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 from .utils import first_completed
@@ -79,7 +79,7 @@ class StreamStatistics:
 
     @property
     def packets_lost(self):
-        return self.packets_expected - self.packets_received
+        return clamp_packets_lost(self.packets_expected - self.packets_received)
 
 
 class RemoteStreamTrack(MediaStreamTrack):
