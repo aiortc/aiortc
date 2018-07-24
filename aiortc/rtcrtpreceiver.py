@@ -212,29 +212,16 @@ class RTCRtpReceiver:
             self.__remote_counter.add(packet)
 
             if self._kind == 'audio':
-                # FIXME: audio should use the jitter buffer!
+                # FIXME: audio should use a jitter buffer!
                 audio_frame = await loop.run_in_executor(None, decoder.decode, packet.payload)
                 await self._track._queue.put(audio_frame)
             else:
                 # check if we have a complete video frame
                 self._jitter_buffer.add(packet)
-                payloads = []
-                got_frame = False
-                last_timestamp = None
-                for count in range(self._jitter_buffer.capacity):
-                    frame = self._jitter_buffer.peek(count)
-                    if frame is None:
-                        break
-                    if last_timestamp is None:
-                        last_timestamp = frame.timestamp
-                    elif frame.timestamp != last_timestamp:
-                        got_frame = True
-                        break
-                    payloads.append(frame.payload)
-
-                if got_frame:
-                    self._jitter_buffer.remove(count)
-                    video_frames = await loop.run_in_executor(None, decoder.decode, payloads)
+                encoded_frame = self._jitter_buffer.remove_frame()
+                if encoded_frame is not None:
+                    video_frames = await loop.run_in_executor(None, decoder.decode,
+                                                              encoded_frame.payloads)
                     for video_frame in video_frames:
                         await self._track._queue.put(video_frame)
 

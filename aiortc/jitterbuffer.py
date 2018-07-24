@@ -1,6 +1,12 @@
 MAX_MISORDER = 100
 
 
+class JitterFrame:
+    def __init__(self, payloads, timestamp):
+        self.payloads = payloads
+        self.timestamp = timestamp
+
+
 class JitterBuffer:
     def __init__(self, capacity):
         self._capacity = capacity
@@ -37,21 +43,28 @@ class JitterBuffer:
         pos = (self._head + delta) % self._capacity
         self._packets[pos] = packet
 
-    def peek(self, offset):
-        if offset >= self._capacity:
-            raise IndexError('Cannot peek at offset %d, capacity is %d' % (offset, self._capacity))
-        pos = (self._head + offset) % self._capacity
-        return self._packets[pos]
+    def remove_frame(self):
+        timestamp = None
+        payloads = []
+
+        for count in range(self.capacity):
+            pos = (self._head + count) % self._capacity
+            packet = self._packets[pos]
+            if packet is None:
+                break
+            if timestamp is None:
+                timestamp = packet.timestamp
+            elif packet.timestamp != timestamp:
+                self.remove(count)
+                return JitterFrame(payloads=payloads, timestamp=timestamp)
+            payloads.append(packet.payload)
 
     def remove(self, count):
         assert count <= self._capacity
-        packets = [None for i in range(count)]
         for i in range(count):
-            packets[i] = self._packets[self._head]
             self._packets[self._head] = None
             self._head = (self._head + 1) % self._capacity
             self._origin += 1
-        return packets
 
     def __reset(self):
         self._head = 0

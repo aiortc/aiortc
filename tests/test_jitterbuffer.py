@@ -174,32 +174,6 @@ class JitterBufferTest(TestCase):
         self.assertIsNone(jbuffer._packets[2])
         self.assertIsNone(jbuffer._packets[3])
 
-    def test_peek(self):
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
-        jbuffer.add(RtpPacket(payload=b'0002', sequence_number=2, timestamp=1234))
-        jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1234))
-
-        packet = jbuffer.peek(0)
-        self.assertIsNotNone(packet)
-        self.assertEqual(packet.sequence_number, 1)
-
-        packet = jbuffer.peek(1)
-        self.assertIsNotNone(packet)
-        self.assertEqual(packet.sequence_number, 2)
-
-        packet = jbuffer.peek(2)
-        self.assertIsNone(packet)
-
-        packet = jbuffer.peek(3)
-        self.assertIsNotNone(packet)
-        self.assertEqual(packet.sequence_number, 4)
-
-        with self.assertRaises(IndexError) as cm:
-            jbuffer.peek(4)
-        self.assertEqual(str(cm.exception), 'Cannot peek at offset 4, capacity is 4')
-
     def test_remove(self):
         jbuffer = JitterBuffer(capacity=4)
 
@@ -209,11 +183,7 @@ class JitterBufferTest(TestCase):
         jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1234))
 
         # remove 1 packet
-        packets = jbuffer.remove(1)
-        self.assertEqual(len(packets), 1)
-        self.assertEqual(packets[0].sequence_number, 1)
-
-        # check buffer
+        jbuffer.remove(1)
         self.assertEqual(jbuffer._head, 1)
         self.assertEqual(jbuffer._origin, 2)
         self.assertIsNone(jbuffer._packets[0])
@@ -222,15 +192,32 @@ class JitterBufferTest(TestCase):
         self.assertIsNotNone(jbuffer._packets[3])
 
         # remove 2 packets
-        packets = jbuffer.remove(2)
-        self.assertEqual(len(packets), 2)
-        self.assertEqual(packets[0].sequence_number, 2)
-        self.assertEqual(packets[1].sequence_number, 3)
-
-        # check buffer
+        jbuffer.remove(2)
         self.assertEqual(jbuffer._head, 3)
         self.assertEqual(jbuffer._origin, 4)
         self.assertIsNone(jbuffer._packets[0])
         self.assertIsNone(jbuffer._packets[1])
         self.assertIsNone(jbuffer._packets[2])
         self.assertIsNotNone(jbuffer._packets[3])
+
+    def test_remove_frame(self):
+        jbuffer = JitterBuffer(capacity=4)
+
+        jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
+        self.assertIsNone(jbuffer.remove_frame())
+
+        jbuffer.add(RtpPacket(payload=b'0002', sequence_number=2, timestamp=1234))
+        self.assertIsNone(jbuffer.remove_frame())
+
+        jbuffer.add(RtpPacket(payload=b'0003', sequence_number=3, timestamp=1234))
+        self.assertIsNone(jbuffer.remove_frame())
+
+        jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1235))
+        frame = jbuffer.remove_frame()
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.payloads, [
+            b'0001',
+            b'0002',
+            b'0003',
+        ])
+        self.assertEqual(frame.timestamp, 1234)
