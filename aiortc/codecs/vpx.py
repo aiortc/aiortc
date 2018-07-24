@@ -139,13 +139,7 @@ class VpxDecoder:
     def __del__(self):
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, payloads):
-        data = b''
-        for payload in payloads:
-            if payload:
-                vpx_descriptor, rest = VpxPayloadDescriptor.parse(payload)
-                data += rest
-
+    def decode(self, data):
         frames = []
         result = lib.vpx_codec_decode(self.codec, data, len(data), ffi.NULL, lib.VPX_DL_REALTIME)
         if result == lib.VPX_CODEC_OK:
@@ -173,6 +167,12 @@ class VpxDecoder:
                 frames.append(VideoFrame(width=img.d_w, height=img.d_h, data=bytes(o_buf)))
 
         return frames
+
+    def parse(self, packet):
+        descriptor, data = VpxPayloadDescriptor.parse(packet.payload)
+        packet._data = data
+        packet._first_in_frame = descriptor.partition_start
+        packet._picture_id = descriptor.picture_id
 
 
 class VpxEncoder:

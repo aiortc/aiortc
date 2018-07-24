@@ -2,8 +2,8 @@ MAX_MISORDER = 100
 
 
 class JitterFrame:
-    def __init__(self, payloads, timestamp):
-        self.payloads = payloads
+    def __init__(self, data, timestamp):
+        self.data = data
         self.timestamp = timestamp
 
 
@@ -43,7 +43,7 @@ class JitterBuffer:
 
     def remove_frame(self):
         timestamp = None
-        payloads = []
+        packets = []
 
         for count in range(self.capacity):
             pos = (self._origin + count) % self._capacity
@@ -54,8 +54,9 @@ class JitterBuffer:
                 timestamp = packet.timestamp
             elif packet.timestamp != timestamp:
                 self.remove(count)
-                return JitterFrame(payloads=payloads, timestamp=timestamp)
-            payloads.append(packet.payload)
+                return JitterFrame(data=b''.join([x._data for x in packets]),
+                                   timestamp=timestamp)
+            packets.append(packet)
 
     def remove(self, count):
         assert count <= self._capacity
