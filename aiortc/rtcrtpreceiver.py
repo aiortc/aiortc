@@ -216,16 +216,22 @@ class RTCRtpReceiver:
                 audio_frame = await loop.run_in_executor(None, decoder.decode, packet.payload)
                 await self._track._queue.put(audio_frame)
             else:
-                # check if we have a complete video frame
                 if packet.payload:
+                    # Parse codec-specific information
                     decoder.parse(packet)
+                else:
+                    # Firefox sends empty frames
+                    packet._data = b''
+                    packet._first_in_frame = False
+                    packet._picture_id = None
 
-                    encoded_frame = self._jitter_buffer.add(packet)
-                    if encoded_frame is not None:
-                        video_frames = await loop.run_in_executor(None, decoder.decode,
-                                                                  encoded_frame.data)
-                        for video_frame in video_frames:
-                            await self._track._queue.put(video_frame)
+                # check if we have a complete video frame
+                encoded_frame = self._jitter_buffer.add(packet)
+                if encoded_frame is not None:
+                    video_frames = await loop.run_in_executor(None, decoder.decode,
+                                                              encoded_frame.data)
+                    for video_frame in video_frames:
+                        await self._track._queue.put(video_frame)
 
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')
