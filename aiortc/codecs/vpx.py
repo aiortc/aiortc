@@ -1,11 +1,12 @@
 import math
 import multiprocessing
+import random
 from struct import pack, unpack
 
 from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
-PACKET_MAX = 1300 - 1
+PACKET_MAX = 1300 - 4
 MAX_FRAME_RATE = 30
 
 
@@ -21,8 +22,6 @@ def number_of_threads(pixels, cpus):
 
 
 class VpxPayloadDescriptor:
-    props = ['partition_start', 'partition_id', 'picture_id']
-
     def __init__(self, partition_start, partition_id, picture_id=None,
                  tl0picidx=None, tid=None, keyidx=None):
         self.partition_start = partition_start
@@ -186,6 +185,7 @@ class VpxEncoder:
         lib.vpx_codec_enc_config_default(self.cx, self.cfg, 0)
 
         self.codec = None
+        self.picture_id = random.randint(0, (1 << 15) - 1)
         self.timestamp = 0
 
     def __del__(self):
@@ -238,9 +238,11 @@ class VpxEncoder:
                 break
             if pkt and pkt.kind == lib.VPX_CODEC_CX_FRAME_PKT:
                 buf = ffi.buffer(pkt.data.frame.buf, pkt.data.frame.sz)
-                descr = VpxPayloadDescriptor(partition_start=1, partition_id=0)
+                descr = VpxPayloadDescriptor(partition_start=1, partition_id=0,
+                                             picture_id=self.picture_id)
                 for pos in range(0, len(buf), PACKET_MAX):
                     data = buf[pos:pos + PACKET_MAX]
                     payloads.append(bytes(descr) + data)
                     descr.partition_start = 0
+                self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads
