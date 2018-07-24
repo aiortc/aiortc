@@ -93,29 +93,29 @@ class JitterBufferTest(TestCase):
     def test_add_seq_too_high_discard_one(self):
         jbuffer = JitterBuffer(capacity=4)
 
+        jbuffer.add(RtpPacket(payload=b'0000', sequence_number=0, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 0)
         jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 1)
+        self.assertEqual(jbuffer._origin, 0)
         jbuffer.add(RtpPacket(payload=b'0002', sequence_number=2, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 1)
+        self.assertEqual(jbuffer._origin, 0)
         jbuffer.add(RtpPacket(payload=b'0003', sequence_number=3, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 1)
+        self.assertEqual(jbuffer._origin, 0)
         jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1234))
         self.assertEqual(jbuffer._origin, 1)
-        jbuffer.add(RtpPacket(payload=b'0005', sequence_number=5, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 2)
 
         self.assertIsNotNone(jbuffer._packets[0])
-        self.assertEqual(jbuffer._packets[0].payload, b'0005')
-        self.assertEqual(jbuffer._packets[0].sequence_number, 5)
+        self.assertEqual(jbuffer._packets[0].payload, b'0004')
+        self.assertEqual(jbuffer._packets[0].sequence_number, 4)
         self.assertIsNotNone(jbuffer._packets[1])
-        self.assertEqual(jbuffer._packets[1].payload, b'0002')
-        self.assertEqual(jbuffer._packets[1].sequence_number, 2)
+        self.assertEqual(jbuffer._packets[1].payload, b'0001')
+        self.assertEqual(jbuffer._packets[1].sequence_number, 1)
         self.assertIsNotNone(jbuffer._packets[2])
-        self.assertEqual(jbuffer._packets[2].payload, b'0003')
-        self.assertEqual(jbuffer._packets[2].sequence_number, 3)
+        self.assertEqual(jbuffer._packets[2].payload, b'0002')
+        self.assertEqual(jbuffer._packets[2].sequence_number, 2)
         self.assertIsNotNone(jbuffer._packets[3])
-        self.assertEqual(jbuffer._packets[3].payload, b'0004')
-        self.assertEqual(jbuffer._packets[3].sequence_number, 4)
+        self.assertEqual(jbuffer._packets[3].payload, b'0003')
+        self.assertEqual(jbuffer._packets[3].sequence_number, 3)
 
     def test_add_seq_too_high_discard_four(self):
         jbuffer = JitterBuffer(capacity=4)
@@ -162,14 +162,14 @@ class JitterBufferTest(TestCase):
     def test_add_seq_too_high_reset(self):
         jbuffer = JitterBuffer(capacity=4)
 
-        jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 1)
-        jbuffer.add(RtpPacket(payload=b'3002', sequence_number=3002, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 3002)
+        jbuffer.add(RtpPacket(payload=b'0000', sequence_number=0, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 0)
+        jbuffer.add(RtpPacket(payload=b'3000', sequence_number=3000, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 3000)
 
         self.assertIsNotNone(jbuffer._packets[0])
-        self.assertEqual(jbuffer._packets[0].payload, b'3002')
-        self.assertEqual(jbuffer._packets[0].sequence_number, 3002)
+        self.assertEqual(jbuffer._packets[0].payload, b'3000')
+        self.assertEqual(jbuffer._packets[0].sequence_number, 3000)
         self.assertIsNone(jbuffer._packets[1])
         self.assertIsNone(jbuffer._packets[2])
         self.assertIsNone(jbuffer._packets[3])
@@ -177,15 +177,15 @@ class JitterBufferTest(TestCase):
     def test_remove(self):
         jbuffer = JitterBuffer(capacity=4)
 
+        jbuffer.add(RtpPacket(payload=b'0000', sequence_number=0, timestamp=1234))
         jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
         jbuffer.add(RtpPacket(payload=b'0002', sequence_number=2, timestamp=1234))
         jbuffer.add(RtpPacket(payload=b'0003', sequence_number=3, timestamp=1234))
-        jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 0)
 
         # remove 1 packet
         jbuffer.remove(1)
-        self.assertEqual(jbuffer._head, 1)
-        self.assertEqual(jbuffer._origin, 2)
+        self.assertEqual(jbuffer._origin, 1)
         self.assertIsNone(jbuffer._packets[0])
         self.assertIsNotNone(jbuffer._packets[1])
         self.assertIsNotNone(jbuffer._packets[2])
@@ -193,8 +193,7 @@ class JitterBufferTest(TestCase):
 
         # remove 2 packets
         jbuffer.remove(2)
-        self.assertEqual(jbuffer._head, 3)
-        self.assertEqual(jbuffer._origin, 4)
+        self.assertEqual(jbuffer._origin, 3)
         self.assertIsNone(jbuffer._packets[0])
         self.assertIsNone(jbuffer._packets[1])
         self.assertIsNone(jbuffer._packets[2])
@@ -203,21 +202,21 @@ class JitterBufferTest(TestCase):
     def test_remove_frame(self):
         jbuffer = JitterBuffer(capacity=4)
 
+        jbuffer.add(RtpPacket(payload=b'0000', sequence_number=0, timestamp=1234))
+        self.assertIsNone(jbuffer.remove_frame())
+
         jbuffer.add(RtpPacket(payload=b'0001', sequence_number=1, timestamp=1234))
         self.assertIsNone(jbuffer.remove_frame())
 
         jbuffer.add(RtpPacket(payload=b'0002', sequence_number=2, timestamp=1234))
         self.assertIsNone(jbuffer.remove_frame())
 
-        jbuffer.add(RtpPacket(payload=b'0003', sequence_number=3, timestamp=1234))
-        self.assertIsNone(jbuffer.remove_frame())
-
-        jbuffer.add(RtpPacket(payload=b'0004', sequence_number=4, timestamp=1235))
+        jbuffer.add(RtpPacket(payload=b'0003', sequence_number=3, timestamp=1235))
         frame = jbuffer.remove_frame()
         self.assertIsNotNone(frame)
         self.assertEqual(frame.payloads, [
+            b'0000',
             b'0001',
             b'0002',
-            b'0003',
         ])
         self.assertEqual(frame.timestamp, 1234)
