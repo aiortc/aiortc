@@ -1,22 +1,22 @@
 MAX_MISORDER = 100
 
 
-class JitterFrame:
+class JitterPacket:
     def __init__(self, payload, sequence_number, timestamp):
         self.payload = payload
         self.sequence_number = sequence_number
         self.timestamp = timestamp
 
     def __repr__(self):
-        return 'JitterFrame(seq=%d, ts=%d)' % (self.sequence_number, self.timestamp)
+        return 'JitterPacket(seq=%d, ts=%d)' % (self.sequence_number, self.timestamp)
 
 
 class JitterBuffer:
     def __init__(self, capacity):
         self._capacity = capacity
-        self._frames = [None for i in range(capacity)]
         self._head = 0
         self._origin = None
+        self._packets = [None for i in range(capacity)]
 
     @property
     def capacity(self):
@@ -45,29 +45,29 @@ class JitterBuffer:
             delta = sequence_number - self._origin
 
         pos = (self._head + delta) % self._capacity
-        self._frames[pos] = JitterFrame(payload=payload,
-                                        sequence_number=sequence_number,
-                                        timestamp=timestamp)
+        self._packets[pos] = JitterPacket(payload=payload,
+                                          sequence_number=sequence_number,
+                                          timestamp=timestamp)
 
     def peek(self, offset):
         if offset >= self._capacity:
             raise IndexError('Cannot peek at offset %d, capacity is %d' % (offset, self._capacity))
         pos = (self._head + offset) % self._capacity
-        return self._frames[pos]
+        return self._packets[pos]
 
     def remove(self, count):
         assert count <= self._capacity
-        frames = [None for i in range(count)]
+        packets = [None for i in range(count)]
         for i in range(count):
-            frames[i] = self._frames[self._head]
-            self._frames[self._head] = None
+            packets[i] = self._packets[self._head]
+            self._packets[self._head] = None
             self._head = (self._head + 1) % self._capacity
             self._origin += 1
-        return frames
+        return packets
 
     def __reset(self):
         self._head = 0
         self._origin = None
 
         for i in range(self._capacity):
-            self._frames[i] = None
+            self._packets[i] = None
