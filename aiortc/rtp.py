@@ -248,7 +248,8 @@ class RtcpSrPacket:
 
 
 class RtpPacket:
-    def __init__(self, payload_type, extension=0, marker=0, sequence_number=0, timestamp=0, ssrc=0):
+    def __init__(self, payload_type=0, extension=0, marker=0, sequence_number=0, timestamp=0,
+                 ssrc=0, payload=b''):
         self.version = 2
         self.extension = extension
         self.marker = marker
@@ -257,7 +258,7 @@ class RtpPacket:
         self.timestamp = timestamp
         self.ssrc = ssrc
         self.csrc = []
-        self.payload = b''
+        self.payload = payload
 
     def __bytes__(self):
         data = pack(

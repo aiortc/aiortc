@@ -1,16 +1,6 @@
 MAX_MISORDER = 100
 
 
-class JitterPacket:
-    def __init__(self, payload, sequence_number, timestamp):
-        self.payload = payload
-        self.sequence_number = sequence_number
-        self.timestamp = timestamp
-
-    def __repr__(self):
-        return 'JitterPacket(seq=%d, ts=%d)' % (self.sequence_number, self.timestamp)
-
-
 class JitterBuffer:
     def __init__(self, capacity):
         self._capacity = capacity
@@ -22,32 +12,30 @@ class JitterBuffer:
     def capacity(self):
         return self._capacity
 
-    def add(self, payload, sequence_number, timestamp):
+    def add(self, packet):
         if self._origin is None:
-            self._origin = sequence_number
-        elif sequence_number <= self._origin - MAX_MISORDER:
+            self._origin = packet.sequence_number
+        elif packet.sequence_number <= self._origin - MAX_MISORDER:
             self.__reset()
-            self._origin = sequence_number
-        elif sequence_number < self._origin:
+            self._origin = packet.sequence_number
+        elif packet.sequence_number < self._origin:
             return
 
-        delta = sequence_number - self._origin
+        delta = packet.sequence_number - self._origin
         if delta >= 2 * self.capacity:
             # received packet is so far beyond capacity we cannot keep any
             # previous packets, so reset the buffer
             self.__reset()
-            self._origin = sequence_number
+            self._origin = packet.sequence_number
             delta = 0
         elif delta >= self.capacity:
             # remove just enough packets to fit the received packets
             excess = delta - self.capacity + 1
             self.remove(excess)
-            delta = sequence_number - self._origin
+            delta = packet.sequence_number - self._origin
 
         pos = (self._head + delta) % self._capacity
-        self._packets[pos] = JitterPacket(payload=payload,
-                                          sequence_number=sequence_number,
-                                          timestamp=timestamp)
+        self._packets[pos] = packet
 
     def peek(self, offset):
         if offset >= self._capacity:

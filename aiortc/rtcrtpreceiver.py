@@ -217,7 +217,7 @@ class RTCRtpReceiver:
                 await self._track._queue.put(audio_frame)
             else:
                 # check if we have a complete video frame
-                self._jitter_buffer.add(packet.payload, packet.sequence_number, packet.timestamp)
+                self._jitter_buffer.add(packet)
                 payloads = []
                 got_frame = False
                 last_timestamp = None
