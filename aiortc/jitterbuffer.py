@@ -9,8 +9,8 @@ class JitterFrame:
 
 class JitterBuffer:
     def __init__(self, capacity):
+        assert capacity & (capacity - 1) == 0, 'capacity must be a power of 2'
         self._capacity = capacity
-        self._head = 0
         self._origin = None
         self._packets = [None for i in range(capacity)]
 
@@ -22,7 +22,7 @@ class JitterBuffer:
         if self._origin is None:
             self._origin = packet.sequence_number
         elif packet.sequence_number <= self._origin - MAX_MISORDER:
-            self.__reset()
+            self.remove(self.capacity)
             self._origin = packet.sequence_number
         elif packet.sequence_number < self._origin:
             return
@@ -31,16 +31,14 @@ class JitterBuffer:
         if delta >= 2 * self.capacity:
             # received packet is so far beyond capacity we cannot keep any
             # previous packets, so reset the buffer
-            self.__reset()
+            self.remove(self.capacity)
             self._origin = packet.sequence_number
-            delta = 0
         elif delta >= self.capacity:
             # remove just enough packets to fit the received packets
             excess = delta - self.capacity + 1
             self.remove(excess)
-            delta = packet.sequence_number - self._origin
 
-        pos = (self._head + delta) % self._capacity
+        pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
 
     def remove_frame(self):
@@ -48,7 +46,7 @@ class JitterBuffer:
         payloads = []
 
         for count in range(self.capacity):
-            pos = (self._head + count) % self._capacity
+            pos = (self._origin + count) % self._capacity
             packet = self._packets[pos]
             if packet is None:
                 break
@@ -62,13 +60,6 @@ class JitterBuffer:
     def remove(self, count):
         assert count <= self._capacity
         for i in range(count):
-            self._packets[self._head] = None
-            self._head = (self._head + 1) % self._capacity
+            pos = self._origin % self._capacity
+            self._packets[pos] = None
             self._origin += 1
-
-    def __reset(self):
-        self._head = 0
-        self._origin = None
-
-        for i in range(self._capacity):
-            self._packets[i] = None
