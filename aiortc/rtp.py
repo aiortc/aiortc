@@ -270,28 +270,33 @@ class RtcpSrPacket:
 
 
 class RtpPacket:
-    def __init__(self, payload_type=0, extension=0, marker=0, sequence_number=0, timestamp=0,
+    def __init__(self, payload_type=0, marker=0, sequence_number=0, timestamp=0,
                  ssrc=0, payload=b''):
         self.version = 2
-        self.extension = extension
         self.marker = marker
         self.payload_type = payload_type
         self.sequence_number = sequence_number
         self.timestamp = timestamp
         self.ssrc = ssrc
         self.csrc = []
+        self.extension_profile = 0
+        self.extension_value = None
         self.payload = payload
 
     def __bytes__(self):
+        extension = self.extension_value is not None
         data = pack(
             '!BBHLL',
-            (self.version << 6) | (self.extension << 4) | len(self.csrc),
+            (self.version << 6) | (extension << 4) | len(self.csrc),
             (self.marker << 7) | self.payload_type,
             self.sequence_number,
             self.timestamp,
             self.ssrc)
         for csrc in self.csrc:
             data += pack('!L', csrc)
+        if self.extension_value is not None:
+            data += pack('!HH', self.extension_profile, len(self.extension_value) >> 2)
+            data += self.extension_value
         return data + self.payload
 
     def __repr__(self):
@@ -306,12 +311,12 @@ class RtpPacket:
         v_p_x_cc, m_pt, sequence_number, timestamp, ssrc = unpack('!BBHLL', data[0:12])
         version = (v_p_x_cc >> 6)
         padding = ((v_p_x_cc >> 5) & 1)
+        extension = ((v_p_x_cc >> 4) & 1)
         cc = (v_p_x_cc & 0x0f)
         if version != 2:
             raise ValueError('RTP packet has invalid version')
 
         packet = cls(
-            extension=((v_p_x_cc >> 4) & 1),
             marker=(m_pt >> 7),
             payload_type=(m_pt & 0x7f),
             sequence_number=sequence_number,
@@ -322,6 +327,12 @@ class RtpPacket:
         for i in range(0, cc):
             packet.csrc.append(unpack('!L', data[pos:pos+4])[0])
             pos += 4
+
+        if extension:
+            packet.extension_profile, x_length = unpack('!HH', data[pos:pos+4])
+            pos += 4
+            packet.extension_value = data[pos:pos+x_length*4]
+            pos += x_length * 4
 
         if padding:
             padding_len = data[-1]
