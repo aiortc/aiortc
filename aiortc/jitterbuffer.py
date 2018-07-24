@@ -41,7 +41,9 @@ class JitterBuffer:
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
 
-    def remove_frame(self):
+        return self._remove_frame(packet.sequence_number)
+
+    def _remove_frame(self, sequence_number):
         timestamp = None
         packets = []
 

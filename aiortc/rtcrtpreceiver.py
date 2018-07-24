@@ -220,8 +220,7 @@ class RTCRtpReceiver:
                 if packet.payload:
                     decoder.parse(packet)
 
-                    self._jitter_buffer.add(packet)
-                    encoded_frame = self._jitter_buffer.remove_frame()
+                    encoded_frame = self._jitter_buffer.add(packet)
                     if encoded_frame is not None:
                         video_frames = await loop.run_in_executor(None, decoder.decode,
                                                                   encoded_frame.data)
