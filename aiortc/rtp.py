@@ -89,8 +89,10 @@ def get_header_extensions(packet):
     Parse header extensions according to RFC5285.
     """
     extensions = {}
+    pos = 0
+
     if packet.extension_profile == 0xBEDE:
-        pos = 0
+        # One-Byte Header
         while pos < len(packet.extension_value):
             if packet.extension_value[pos] == 0:
                 pos += 1
@@ -103,6 +105,20 @@ def get_header_extensions(packet):
             x_value = packet.extension_value[pos:pos + x_length]
             extensions[x_id] = x_value
             pos += x_length
+    elif packet.extension_profile == 0x1000:
+        # Two-Byte Header
+        while pos < len(packet.extension_value):
+            if packet.extension_value[pos] == 0:
+                pos += 1
+                continue
+
+            x_id, x_length = unpack('!BB', packet.extension_value[pos:pos+2])
+            pos += 2
+
+            x_value = packet.extension_value[pos:pos + x_length]
+            extensions[x_id] = x_value
+            pos += x_length
+
     return extensions
 
 
@@ -110,13 +126,36 @@ def set_header_extensions(packet, extensions):
     """
     Serialize header extensions according to RFC5285.
     """
-    packet.extension_profile = 0xBEDE
-    packet.extension_value = b''
+    if not extensions:
+        packet.extension_profile = 0
+        packet.extension_value = None
+        return
+
+    one_byte = True
     for x_id, x_value in extensions.items():
         x_length = len(x_value)
-        assert x_length > 0
-        packet.extension_value += pack('!B', (x_id << 4) | (x_length - 1))
-        packet.extension_value += x_value
+        assert x_id > 0 and x_id < 256
+        assert x_length >= 0 and x_length < 256
+        if x_id > 14 or x_length == 0 or x_length > 16:
+            one_byte = False
+
+    if one_byte:
+        # One-Byte Header
+        packet.extension_profile = 0xBEDE
+        packet.extension_value = b''
+        for x_id, x_value in extensions.items():
+            x_length = len(x_value)
+            packet.extension_value += pack('!B', (x_id << 4) | (x_length - 1))
+            packet.extension_value += x_value
+    else:
+        # Two-Byte Header
+        packet.extension_profile = 0x1000
+        packet.extension_value = b''
+        for x_id, x_value in extensions.items():
+            x_length = len(x_value)
+            packet.extension_value += pack('!BB', x_id, x_length)
+            packet.extension_value += x_value
+
     packet.extension_value += b'\x00' * padl(len(packet.extension_value))
 
 
