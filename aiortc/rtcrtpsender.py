@@ -32,6 +32,7 @@ class RTCRtpSender:
         else:
             self._kind = trackOrKind
             self._track = None
+        self.__cname = None
         self._ssrc = random32()
         self.__rtp_exited = asyncio.Event()
         self.__rtcp_exited = asyncio.Event()
@@ -77,6 +78,7 @@ class RTCRtpSender:
         :param: parameters: The :class:`RTCRtpParameters` for the sender.
         """
         if not self.__started:
+            self.__cname = parameters.rtcp.cname
             asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             asyncio.ensure_future(self._run_rtcp())
             self.__started = True
@@ -148,10 +150,10 @@ class RTCRtpSender:
                     octet_count=self.__octet_count))]
 
             # RTCP SDES
-            if self._cname is not None:
+            if self.__cname is not None:
                 packets.append(RtcpSdesPacket(chunks=[RtcpSourceInfo(
                     ssrc=self._ssrc,
-                    items=[(1, self._cname.encode('utf8'))])]))
+                    items=[(1, self.__cname.encode('utf8'))])]))
 
             await self._send_rtcp(packets)
 

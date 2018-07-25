@@ -12,7 +12,7 @@ from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
-from .rtcrtpparameters import RTCRtpParameters
+from .rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -27,6 +27,9 @@ DUMMY_CANDIDATE = RTCIceCandidate(
     ip='0.0.0.0',
     port=0,
     type='host')
+HEADER_EXTENSIONS = [
+    RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid')
+]
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -40,6 +43,15 @@ def find_common_codecs(local_codecs, remote_codecs):
                     codec.payloadType = c.payloadType
                 common.append(codec)
                 break
+    return common
+
+
+def find_common_header_extensions(local_extensions, remote_extensions):
+    common = []
+    for rx in remote_extensions:
+        for lx in local_extensions:
+            if lx.uri == rx.uri:
+                common.append(rx)
     return common
 
 
@@ -272,6 +284,7 @@ class RTCPeerConnection(EventEmitter):
                     dynamic_pt += 1
                 codecs.append(codec)
             transceiver._codecs = codecs
+            transceiver._headerExtensions = HEADER_EXTENSIONS[:]
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -363,6 +376,8 @@ class RTCPeerConnection(EventEmitter):
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
                 assert len(common)
                 transceiver._codecs = common
+                transceiver._headerExtensions = find_common_header_extensions(
+                    HEADER_EXTENSIONS, media.rtp.headerExtensions)
 
                 # configure transport
                 iceTransport = transceiver._transport.transport
@@ -446,7 +461,7 @@ class RTCPeerConnection(EventEmitter):
             if iceTransport.iceGatherer.getLocalCandidates() and transceiver in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[transceiver])
                 await dtlsTransport.start(self.__remoteDtls[transceiver])
-                await transceiver.sender.send(RTCRtpParameters(codecs=transceiver._codecs))
+                await transceiver.sender.send(self.__localRtp(transceiver))
                 await transceiver.receiver.receive(self.__remoteRtp[transceiver])
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
@@ -503,11 +518,7 @@ class RTCPeerConnection(EventEmitter):
                 fmt=[c.payloadType for c in transceiver._codecs])
             media.host = default_candidate.ip
             media.direction = transceiver.direction
-            media.rtp.codecs = transceiver._codecs
-            media.rtp.muxId = transceiver.mid
-            media.rtp.rtcp.cname = self.__cname
-            media.rtp.rtcp.ssrc = transceiver.sender._ssrc
-            media.rtp.rtcp.mux = True
+            media.rtp = self.__localRtp(transceiver)
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
             add_transport_description(media, iceTransport, dtlsTransport)
@@ -553,11 +564,20 @@ class RTCPeerConnection(EventEmitter):
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))
         transceiver.receiver._ssrc = transceiver.sender._ssrc
-        transceiver.sender._cname = self.__cname
         transceiver._bundled = False
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver
+
+    def __localRtp(self, transceiver):
+        rtp = RTCRtpParameters(
+            codecs=transceiver._codecs,
+            headerExtensions=transceiver._headerExtensions,
+            muxId=transceiver.mid)
+        rtp.rtcp.cname = self.__cname
+        rtp.rtcp.ssrc = transceiver.sender._ssrc
+        rtp.rtcp.mux = True
+        return rtp
 
     def __setSignalingState(self, state):
         self.__signalingState = state
