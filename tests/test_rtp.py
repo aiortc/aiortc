@@ -4,7 +4,8 @@ from unittest import TestCase
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpRrPacket,
                         RtcpSdesPacket, RtcpSrPacket, RtpPacket,
                         clamp_packets_lost, datetime_from_ntp, datetime_to_ntp,
-                        pack_packets_lost, seq_gt, seq_plus_one,
+                        get_header_extensions, pack_packets_lost, seq_gt,
+                        seq_plus_one, set_header_extensions,
                         unpack_packets_lost)
 
 from .utils import load
@@ -237,3 +238,32 @@ class RtpUtilTest(TestCase):
         self.assertEqual(unpack_packets_lost(b'\x00\x00\x00'), 0)
         self.assertEqual(unpack_packets_lost(b'\x00\x00\x01'), 1)
         self.assertEqual(unpack_packets_lost(b'\x7f\xff\xff'), 8388607)
+
+    def test_get_header_extensions(self):
+        packet = RtpPacket()
+        packet.extension_profile = 0xBEDE
+
+        packet.extension_value = b'\x900\x00\x00'
+        self.assertEqual(get_header_extensions(packet), {
+            9: b'0',
+        })
+
+        packet.extension_value = b'\x10\xc18sdparta_0'
+        self.assertEqual(get_header_extensions(packet), {
+            1: b'\xc1',
+            3: b'sdparta_0',
+        })
+
+    def test_set_header_extensions(self):
+        packet = RtpPacket()
+
+        set_header_extensions(packet, {9: b'0'})
+        self.assertEqual(packet.extension_profile, 0xBEDE)
+        self.assertEqual(packet.extension_value, b'\x900\x00\x00')
+
+        set_header_extensions(packet, {
+            1: b'\xc1',
+            3: b'sdparta_0',
+        })
+        self.assertEqual(packet.extension_profile, 0xBEDE)
+        self.assertEqual(packet.extension_value, b'\x10\xc18sdparta_0')

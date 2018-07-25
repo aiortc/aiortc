@@ -63,6 +63,13 @@ def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
+def padl(l):
+    """
+    Return amount of padding needed for a 4-byte multiple.
+    """
+    return 4 * ((l + 3) // 4) - l
+
+
 def seq_gt(a, b):
     half_mod = (1 << 15)
     return (((a < b) and ((b - a) > half_mod)) or
@@ -75,6 +82,42 @@ def seq_plus_one(a):
 
 def utcnow():
     return datetime.datetime.now(datetime.timezone.utc)
+
+
+def get_header_extensions(packet):
+    """
+    Parse header extensions according to RFC5285.
+    """
+    extensions = {}
+    if packet.extension_profile == 0xBEDE:
+        pos = 0
+        while pos < len(packet.extension_value):
+            if packet.extension_value[pos] == 0:
+                pos += 1
+                continue
+
+            x_id = (packet.extension_value[pos] & 0xf0) >> 4
+            x_length = (packet.extension_value[pos] & 0x0f) + 1
+            pos += 1
+
+            x_value = packet.extension_value[pos:pos + x_length]
+            extensions[x_id] = x_value
+            pos += x_length
+    return extensions
+
+
+def set_header_extensions(packet, extensions):
+    """
+    Serialize header extensions according to RFC5285.
+    """
+    packet.extension_profile = 0xBEDE
+    packet.extension_value = b''
+    for x_id, x_value in extensions.items():
+        x_length = len(x_value)
+        assert x_length > 0
+        packet.extension_value += pack('!B', (x_id << 4) | (x_length - 1))
+        packet.extension_value += x_value
+    packet.extension_value += b'\x00' * padl(len(packet.extension_value))
 
 
 @attr.s
