@@ -243,29 +243,29 @@ class RtpUtilTest(TestCase):
         packet = RtpPacket()
 
         # none
-        self.assertEqual(get_header_extensions(packet), {})
+        self.assertEqual(get_header_extensions(packet), [])
 
         # one-byte, single value
         packet.extension_profile = 0xBEDE
         packet.extension_value = b'\x900\x00\x00'
-        self.assertEqual(get_header_extensions(packet), {
-            9: b'0',
-        })
+        self.assertEqual(get_header_extensions(packet), [
+            (9, b'0'),
+        ])
 
         # one-byte, two values
         packet.extension_profile = 0xBEDE
         packet.extension_value = b'\x10\xc18sdparta_0'
-        self.assertEqual(get_header_extensions(packet), {
-            1: b'\xc1',
-            3: b'sdparta_0',
-        })
+        self.assertEqual(get_header_extensions(packet), [
+            (1, b'\xc1'),
+            (3, b'sdparta_0'),
+        ])
 
         # two-byte, single value
         packet.extension_profile = 0x1000
         packet.extension_value = b'\xff\x010\x00'
-        self.assertEqual(get_header_extensions(packet), {
-            255: b'0',
-        })
+        self.assertEqual(get_header_extensions(packet), [
+            (255, b'0'),
+        ])
 
     def test_set_header_extensions(self):
         packet = RtpPacket()
@@ -276,21 +276,23 @@ class RtpUtilTest(TestCase):
         self.assertEqual(packet.extension_value, None)
 
         # one-byte, single value
-        set_header_extensions(packet, {9: b'0'})
+        set_header_extensions(packet, [
+            (9, b'0'),
+        ])
         self.assertEqual(packet.extension_profile, 0xBEDE)
         self.assertEqual(packet.extension_value, b'\x900\x00\x00')
 
         # one-byte, two values
-        set_header_extensions(packet, {
-            1: b'\xc1',
-            3: b'sdparta_0',
-        })
+        set_header_extensions(packet, [
+            (1, b'\xc1'),
+            (3, b'sdparta_0'),
+        ])
         self.assertEqual(packet.extension_profile, 0xBEDE)
         self.assertEqual(packet.extension_value, b'\x10\xc18sdparta_0')
 
         # two-byte, single value
-        set_header_extensions(packet, {
-            255: b'0',
-        })
+        set_header_extensions(packet, [
+            (255, b'0'),
+        ])
         self.assertEqual(packet.extension_profile, 0x1000)
         self.assertEqual(packet.extension_value, b'\xff\x010\x00')

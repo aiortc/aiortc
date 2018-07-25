@@ -88,7 +88,7 @@ def get_header_extensions(packet):
     """
     Parse header extensions according to RFC5285.
     """
-    extensions = {}
+    extensions = []
     pos = 0
 
     if packet.extension_profile == 0xBEDE:
@@ -103,7 +103,7 @@ def get_header_extensions(packet):
             pos += 1
 
             x_value = packet.extension_value[pos:pos + x_length]
-            extensions[x_id] = x_value
+            extensions.append((x_id,  x_value))
             pos += x_length
     elif packet.extension_profile == 0x1000:
         # Two-Byte Header
@@ -116,7 +116,7 @@ def get_header_extensions(packet):
             pos += 2
 
             x_value = packet.extension_value[pos:pos + x_length]
-            extensions[x_id] = x_value
+            extensions.append((x_id,  x_value))
             pos += x_length
 
     return extensions
@@ -132,7 +132,7 @@ def set_header_extensions(packet, extensions):
         return
 
     one_byte = True
-    for x_id, x_value in extensions.items():
+    for x_id, x_value in extensions:
         x_length = len(x_value)
         assert x_id > 0 and x_id < 256
         assert x_length >= 0 and x_length < 256
@@ -143,7 +143,7 @@ def set_header_extensions(packet, extensions):
         # One-Byte Header
         packet.extension_profile = 0xBEDE
         packet.extension_value = b''
-        for x_id, x_value in extensions.items():
+        for x_id, x_value in extensions:
             x_length = len(x_value)
             packet.extension_value += pack('!B', (x_id << 4) | (x_length - 1))
             packet.extension_value += x_value
@@ -151,7 +151,7 @@ def set_header_extensions(packet, extensions):
         # Two-Byte Header
         packet.extension_profile = 0x1000
         packet.extension_value = b''
-        for x_id, x_value in extensions.items():
+        for x_id, x_value in extensions:
             x_length = len(x_value)
             packet.extension_value += pack('!BB', x_id, x_length)
             packet.extension_value += x_value
