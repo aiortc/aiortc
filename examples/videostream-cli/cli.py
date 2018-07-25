@@ -68,11 +68,18 @@ async def run_answer(pc, signaling):
     await pc.setLocalDescription(await pc.createAnswer())
     await signaling.send(pc.localDescription)
 
-    print('Receiving video, press CTRL-C to stop')
+    print('Receiving video')
     while True:
-        frame = await remote_track.recv()
-        data_bgr = frame_to_bgr(frame)
-        cv2.imwrite(OUTPUT_PATH, data_bgr)
+        done, pending = await asyncio.wait([remote_track.recv()], timeout=5)
+        for task in pending:
+            task.cancel()
+        if done:
+            frame = list(done)[0].result()
+            data_bgr = frame_to_bgr(frame)
+            cv2.imwrite(OUTPUT_PATH, data_bgr)
+        else:
+            print('No video for 5s, stopping')
+            break
 
 
 async def run_offer(pc, signaling):
