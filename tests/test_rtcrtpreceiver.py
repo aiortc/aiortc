@@ -4,7 +4,7 @@ from unittest.mock import patch
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioFrame
-from aiortc.rtcrtpparameters import RTCRtpParameters
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (RemoteStreamTrack, RTCRtpReceiver,
                                    StreamStatistics)
 from aiortc.rtp import RTP_SEQ_MODULO, RtcpPacket, RtpPacket
@@ -165,6 +165,21 @@ class RTCRtpReceiverTest(TestCase):
 
         # shutdown
         run(receiver.stop())
+
+    def test_rtp_empty_video_packet(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        receiver = RTCRtpReceiver('video', transport)
+        self.assertEqual(receiver.transport, transport)
+
+        receiver._track = RemoteStreamTrack(kind='audio')
+        run(receiver.receive(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTP with empty payload
+        packet = RtpPacket(payload_type=100)
+        run(receiver._handle_rtp_packet(packet))
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
