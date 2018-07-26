@@ -18,7 +18,7 @@ from OpenSSL import crypto
 from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
-from .rtp import RtcpPacket, RtpPacket, is_rtcp
+from .rtp import RtcpPacket, RtpPacket, get_header_extensions, is_rtcp
 from .utils import first_completed
 
 binding = Binding()
@@ -204,13 +204,16 @@ class RTCDtlsParameters:
 
 class RtpRouter:
     def __init__(self):
+        self.mid_table = {}
         self.ssrc_table = {}
 
     def register(self, receiver, parameters):
+        if parameters.muxId:
+            self.mid_table[parameters.muxId] = receiver
         if parameters.rtcp.ssrc:
             self.ssrc_table[parameters.rtcp.ssrc] = receiver
 
-    def route(self, ssrc):
+    def route(self, ssrc, mid=None):
         return self.ssrc_table.get(ssrc)
 
 
@@ -230,6 +233,7 @@ class RTCDtlsTransport(EventEmitter):
         self.closed = asyncio.Event()
         self.encrypted = False
         self._role = 'auto'
+        self._rtp_mid_header_id = None
         self._rtp_router = RtpRouter()
         self._start = None
         self._state = State.NEW
@@ -426,11 +430,25 @@ class RTCDtlsTransport(EventEmitter):
             else:
                 data = self._rx_srtp.unprotect(data)
                 packet = RtpPacket.parse(data)
-                receiver = self._rtp_router.route(packet.ssrc)
+
+                # get muxId from RTP header extensions
+                mid = None
+                for x_id, x_value in get_header_extensions(packet):
+                    if x_id == self._rtp_mid_header_id:
+                        mid = x_value.decode('utf8')
+                        break
+
+                # route RTP packet
+                receiver = self._rtp_router.route(packet.ssrc, mid=mid)
                 if receiver is not None:
                     await receiver._handle_rtp_packet(packet)
 
     def _register_rtp_receiver(self, receiver, parameters):
+        # make note of the RTP header extension used for muxId
+        for ext in parameters.headerExtensions:
+            if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
+                self._rtp_mid_header_id = ext.id
+
         self._rtp_router.register(receiver, parameters)
 
     async def _send_data(self, data):
