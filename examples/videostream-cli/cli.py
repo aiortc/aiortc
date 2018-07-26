@@ -33,7 +33,7 @@ class ColorVideoStreamTrack(VideoStreamTrack):
     def __init__(self, width, height, color):
         data_bgr = numpy.zeros((height, width, 3), numpy.uint8)
         data_bgr[:, :] = color
-        self.frame = frame_from_bgr(data_bgr=data_bgr)
+        self.frame = frame_from_bgr(data_bgr)
 
     async def recv(self):
         return self.frame
