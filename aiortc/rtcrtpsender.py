@@ -6,7 +6,7 @@ from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
                   RtcpSourceInfo, RtcpSrPacket, RtpPacket, datetime_to_ntp,
-                  seq_plus_one, utcnow)
+                  seq_plus_one, set_header_extensions, utcnow)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -34,6 +34,8 @@ class RTCRtpSender:
             self._track = None
         self.__cname = None
         self._ssrc = random32()
+        self.__mid = None
+        self.__rtp_mid_header_id = None
         self.__rtp_exited = asyncio.Event()
         self.__rtcp_exited = asyncio.Event()
         self.__started = False
@@ -79,6 +81,13 @@ class RTCRtpSender:
         """
         if not self.__started:
             self.__cname = parameters.rtcp.cname
+            self.__mid = parameters.muxId
+
+            # make note of the RTP header extension used for muxId
+            for ext in parameters.headerExtensions:
+                if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
+                    self.__rtp_mid_header_id = ext.id
+
             asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             asyncio.ensure_future(self._run_rtcp())
             self.__started = True
@@ -105,6 +114,13 @@ class RTCRtpSender:
                 if frame is True:
                     break
                 packet.ssrc = self._ssrc
+
+                # set muxId in RTP header extensions
+                if self.__mid and self.__rtp_mid_header_id:
+                    set_header_extensions(packet, [
+                        (self.__rtp_mid_header_id, self.__mid.encode('utf8')),
+                    ])
+
                 payloads = await loop.run_in_executor(None, encoder.encode, frame)
                 if not isinstance(payloads, list):
                     payloads = [payloads]
