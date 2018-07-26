@@ -18,6 +18,9 @@ class ClosedDtlsTransport:
 
 
 class StreamStatisticsTest(TestCase):
+    def create_counter(self):
+        return StreamStatistics(clockrate=8000, ssrc=0)
+
     def create_packets(self, count, seq=0):
         packets = []
         for i in range(count):
@@ -28,7 +31,7 @@ class StreamStatisticsTest(TestCase):
         return packets
 
     def test_no_loss(self):
-        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        counter = self.create_counter()
         packets = self.create_packets(20, 0)
 
         # receive 10 packets
@@ -50,7 +53,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.fraction_lost, 0)
 
     def test_no_loss_cycle(self):
-        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        counter = self.create_counter()
 
         # receive 10 packets (with sequence cycle)
         for packet in self.create_packets(10, 65530):
@@ -62,7 +65,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.fraction_lost, 0)
 
     def test_with_loss(self):
-        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        counter = self.create_counter()
         packets = self.create_packets(20, 0)
         packets.pop(1)
 
@@ -86,7 +89,7 @@ class StreamStatisticsTest(TestCase):
 
     @patch('time.time')
     def test_no_jitter(self, mock_time):
-        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        counter = self.create_counter()
         packets = self.create_packets(3, 0)
 
         mock_time.return_value = 1531562330.00
@@ -106,7 +109,7 @@ class StreamStatisticsTest(TestCase):
 
     @patch('time.time')
     def test_with_jitter(self, mock_time):
-        counter = StreamStatistics(ssrc=0, clockrate=8000)
+        counter = self.create_counter()
         packets = self.create_packets(3, 0)
 
         mock_time.return_value = 1531562330.00
