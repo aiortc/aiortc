@@ -11,9 +11,8 @@ import cv2
 import numpy
 from aiohttp import web
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
-                                 VideoStreamTrack)
+from aiortc import (AudioFrame, AudioStreamTrack, RTCPeerConnection,
+                    RTCSessionDescription, VideoFrame, VideoStreamTrack)
 
 ROOT = os.path.dirname(__file__)
 AUDIO_OUTPUT_PATH = os.path.join(ROOT, 'output.wav')
