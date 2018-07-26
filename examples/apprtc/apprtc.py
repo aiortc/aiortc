@@ -2,14 +2,20 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import random
+import time
 
 import aiohttp
-
+import cv2
 import websockets
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+                    VideoFrame, VideoStreamTrack)
 from aiortc.sdp import candidate_from_sdp
+
+ROOT = os.path.dirname(__file__)
+PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
+VIDEO_PTIME = 1 / 30
 
 
 def description_to_dict(description):
@@ -17,6 +23,11 @@ def description_to_dict(description):
         'sdp': description.sdp,
         'type': description.type
     }
+
+
+def frame_from_bgr(data_bgr):
+    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
+    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
 
 
 class Signaling:
@@ -38,6 +49,30 @@ class Signaling:
             'cmd': 'send',
             'msg': json.dumps(message)
         })
+
+
+class VideoImageTrack(VideoStreamTrack):
+    def __init__(self):
+        self.counter = 0
+        self.img = cv2.imread(PHOTO_PATH)
+        self.last = None
+
+    async def recv(self):
+        # rotate image
+        rows, cols, _ = self.img.shape
+        M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter / 2, 1)
+        rotated = cv2.warpAffine(self.img, M, (cols, rows))
+        frame = frame_from_bgr(rotated)
+        self.counter += 1
+
+        # sleep
+        if self.last:
+            delta = self.last + VIDEO_PTIME - time.time()
+            if delta > 0:
+                await asyncio.sleep(delta)
+        self.last = time.time()
+
+        return frame
 
 
 async def consume_signaling(signaling, pc, params):
@@ -102,7 +137,7 @@ async def join_room(room):
     # create peer conection
     pc = RTCPeerConnection()
     pc.addTrack(AudioStreamTrack())
-    pc.addTrack(VideoStreamTrack())
+    pc.addTrack(VideoImageTrack())
 
     @pc.on('track')
     def on_track(track):
