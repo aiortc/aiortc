@@ -1,3 +1,4 @@
+import asyncio
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -134,9 +135,18 @@ class RTCRtpReceiverTest(TestCase):
         receiver = RTCRtpReceiver('audio', transport)
         self.assertEqual(receiver.transport, transport)
 
+        receiver._track = RemoteStreamTrack(kind='audio')
+        receiver._ssrc = 1234
         run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
+        # receive a packet to prime RTCP
+        packet = RtpPacket.parse(load('rtp.bin'))
+        run(receiver._handle_rtp_packet(packet))
+
         run(transport.close())
+
+        # give RTCP time to send a report
+        run(asyncio.sleep(2))
 
     def test_rtp_and_rtcp(self):
         transport, remote = dummy_dtls_transport_pair()
