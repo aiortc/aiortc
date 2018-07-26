@@ -21,6 +21,10 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
 from .utils import dummy_dtls_transport_pair, load, run
 
 
+def queued_tsns(client):
+    return [chunk.tsn for chunk in client._outbound_queue]
+
+
 def track_channels(transport):
         channels = []
 
@@ -506,6 +510,44 @@ class SctpUtilTest(TestCase):
 
 
 class RTCSctpTransportTest(TestCase):
+    def assertTimerPreserved(self, client):
+        test = self
+
+        class Ctx:
+            def __enter__(self):
+                self.previous_timer = client._t3_handle
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                test.assertIsNotNone(client._t3_handle)
+                test.assertEqual(client._t3_handle, self.previous_timer)
+
+        return Ctx()
+
+    def assertTimerRestarted(self, client):
+        test = self
+
+        class Ctx:
+            def __enter__(self):
+                self.previous_timer = client._t3_handle
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                test.assertIsNotNone(client._t3_handle)
+                test.assertNotEqual(client._t3_handle, self.previous_timer)
+
+        return Ctx()
+
+    def assertTimerStopped(self, client):
+        test = self
+
+        class Ctx:
+            def __enter__(self):
+                pass
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                test.assertIsNone(client._t3_handle)
+
+        return Ctx()
+
     def test_construct(self):
         dtlsTransport, _ = dummy_dtls_transport_pair()
         sctpTransport = RTCSctpTransport(dtlsTransport)
@@ -1146,9 +1188,6 @@ class RTCSctpTransportTest(TestCase):
     def test_send_data_congestion_control(self):
         sent_tsns = []
 
-        def queued_tsns():
-            return [chunk.tsn for chunk in client._outbound_queue]
-
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
@@ -1164,7 +1203,8 @@ class RTCSctpTransportTest(TestCase):
         run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 16))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3])
-        self.assertEqual(queued_tsns(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 4800)
         self.assertEqual(client._outbound_queue_pos, 4)
 
@@ -1174,7 +1214,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(sack))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(queued_tsns(), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 6000)
         self.assertEqual(client._outbound_queue_pos, 5)
 
@@ -1184,7 +1224,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(sack))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8])
-        self.assertEqual(queued_tsns(), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 6000)
         self.assertEqual(client._outbound_queue_pos, 5)
 
@@ -1194,7 +1234,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(sack))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-        self.assertEqual(queued_tsns(), [6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 6000)
         self.assertEqual(client._outbound_queue_pos, 5)
 
@@ -1204,7 +1244,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(sack))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-        self.assertEqual(queued_tsns(), [8, 9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [8, 9, 10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 7200)
         self.assertEqual(client._outbound_queue_pos, 6)
 
@@ -1214,16 +1254,13 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(sack))
 
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-        self.assertEqual(queued_tsns(), [10, 11, 12, 13, 14, 15])
+        self.assertEqual(queued_tsns(client), [10, 11, 12, 13, 14, 15])
         self.assertEqual(client._cwnd, 7200)
         self.assertEqual(client._outbound_queue_pos, 6)
 
     def test_send_data_slow_start(self):
         sent_tsns = []
 
-        def queued_tsns():
-            return [chunk.tsn for chunk in client._outbound_queue]
-
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
@@ -1235,81 +1272,61 @@ class RTCSctpTransportTest(TestCase):
         client._send_chunk = mock_send_chunk
 
         # queue 8 chunks, but cwnd only allows 3
-        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
+        with self.assertTimerRestarted(client):
+            run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
 
-        # T3 timer was started
         self.assertEqual(client._cwnd, 3600)
-        self.assertIsNotNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(queued_tsns(), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 3)
 
         # SACK comes in acknowledging 2 chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 1
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 4800)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(queued_tsns(), [2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 4)
 
         # SACK sack comes in acknowledging 2 more chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 3
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 6000)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 4)
 
         # SACK comes in acknowledging 2 more chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 5
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 7200)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [6, 7])
+        self.assertEqual(queued_tsns(client), [6, 7])
         self.assertEqual(client._outbound_queue_pos, 2)
 
         # SACK comes in acknowledging final chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 7
-        run(client._receive_chunk(sack))
+        with self.assertTimerStopped(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was stopped
         self.assertEqual(client._cwnd, 8400)
-        self.assertIsNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [])
+        self.assertEqual(queued_tsns(client), [])
         self.assertEqual(client._outbound_queue_pos, 0)
 
     def test_send_data_with_gap(self):
         sent_tsns = []
 
-        def queued_tsns():
-            return [chunk.tsn for chunk in client._outbound_queue]
-
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
@@ -1321,81 +1338,61 @@ class RTCSctpTransportTest(TestCase):
         client._send_chunk = mock_send_chunk
 
         # queue 8 chunks, but cwnd only allows 3
-        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
+        with self.assertTimerRestarted(client):
+            run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
 
-        # T3 timer was started
         self.assertEqual(client._cwnd, 3600)
-        self.assertIsNotNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(queued_tsns(), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 3)
 
         # SACK comes in acknowledging chunks 0 and 2
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 0
         sack.gaps = [(2, 2)]  # TSN 1 is missing
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 4800)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(queued_tsns(), [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 5)
 
         # SACK comes in acknowledging chunks 1 and 3
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 3
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 6000)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 4)
 
         # SACK comes in acknowledging 2 more chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 5
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 7200)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [6, 7])
+        self.assertEqual(queued_tsns(client), [6, 7])
         self.assertEqual(client._outbound_queue_pos, 2)
 
         # SACK comes in acknowledging final chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 7
-        run(client._receive_chunk(sack))
+        with self.assertTimerStopped(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was stopped
         self.assertEqual(client._cwnd, 8400)
-        self.assertIsNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [])
+        self.assertEqual(queued_tsns(client), [])
         self.assertEqual(client._outbound_queue_pos, 0)
 
-    def test_send_data_with_gap_retransmit(self):
+    def test_send_data_with_gap_1_retransmit(self):
         sent_tsns = []
-
-        def queued_tsns():
-            return [chunk.tsn for chunk in client._outbound_queue]
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
@@ -1408,75 +1405,234 @@ class RTCSctpTransportTest(TestCase):
         client._send_chunk = mock_send_chunk
 
         # queue 8 chunks, but cwnd only allows 3
-        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
+        with self.assertTimerRestarted(client):
+            run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
 
-        # T3 timer was started
         self.assertEqual(client._cwnd, 3600)
-        self.assertIsNotNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(queued_tsns(), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 3)
 
         # SACK comes in acknowledging chunks 0 and 2
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 0
         sack.gaps = [(2, 2)]  # TSN 1 is missing
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 4800)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(queued_tsns(), [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 5)
 
         # SACK comes in acknowledging chunks 3 and 4
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 0
         sack.gaps = [(2, 4)]  # TSN 1 is missing
-        run(client._receive_chunk(sack))
+        with self.assertTimerPreserved(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was not restarted
         self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(), [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 7)
 
         # SACK comes in acknowledging 2 more chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 0
         sack.gaps = [(2, 6)]  # TSN 1 is missing
-        run(client._receive_chunk(sack))
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was restarted
         self.assertEqual(client._cwnd, 4800)
-        self.assertIsNotNone(client._t3_handle)
-        self.assertNotEqual(client._t3_handle, previous_timer)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
-        self.assertEqual(queued_tsns(), [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(client._outbound_queue_pos, 7)
 
         # SACK comes in acknowledging final chunks
-        previous_timer = client._t3_handle
         sack = SackChunk()
         sack.cumulative_tsn = 7
-        run(client._receive_chunk(sack))
+        with self.assertTimerStopped(client):
+            run(client._receive_chunk(sack))
 
-        # T3 timer was stopped
         self.assertEqual(client._cwnd, 4800)
-        self.assertIsNone(client._t3_handle)
-
         self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
-        self.assertEqual(queued_tsns(), [])
+        self.assertEqual(queued_tsns(client), [])
+        self.assertEqual(client._outbound_queue_pos, 0)
+
+    def test_send_data_with_gap_2_retransmit(self):
+        sent_tsns = []
+
+        async def mock_send_chunk(chunk):
+            sent_tsns.append(chunk.tsn)
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_sacked_tsn = 4294967295
+        client._local_tsn = 0
+        client._ssthresh = 131072
+        client._send_chunk = mock_send_chunk
+
+        # queue 8 chunks, but cwnd only allows 3
+        with self.assertTimerRestarted(client):
+            run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
+
+        self.assertEqual(client._cwnd, 3600)
+        self.assertEqual(sent_tsns, [0, 1, 2])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 3)
+
+        # SACK comes in acknowledging chunk 2
+        sack = SackChunk()
+        sack.cumulative_tsn = 4294967295
+        sack.gaps = [(3, 3)]  # TSN 0 and 1 are missing
+        with self.assertTimerPreserved(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 3600)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 4)
+
+        # SACK comes in acknowledging chunk 3
+        sack = SackChunk()
+        sack.cumulative_tsn = 4294967295
+        sack.gaps = [(3, 4)]  # TSN 0 and 1 are missing
+        with self.assertTimerPreserved(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 3600)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 5)
+
+        # SACK comes in acknowledging chunk 4
+        sack = SackChunk()
+        sack.cumulative_tsn = 4294967295
+        sack.gaps = [(3, 5)]  # TSN 0 and 1 are missing
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 7)
+
+        # SACK comes in acknowledging all chunks up to 6
+        sack = SackChunk()
+        sack.cumulative_tsn = 6
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [7])
+        self.assertEqual(client._outbound_queue_pos, 1)
+
+        # SACK comes in acknowledging final chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 7
+        with self.assertTimerStopped(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 6000)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [])
+        self.assertEqual(client._outbound_queue_pos, 0)
+
+    def test_send_data_with_gap_3_retransmit(self):
+        sent_tsns = []
+
+        async def mock_send_chunk(chunk):
+            sent_tsns.append(chunk.tsn)
+
+        client_transport = DummyDtlsTransport()
+        client = RTCSctpTransport(client_transport)
+        client._last_sacked_tsn = 4294967295
+        client._local_tsn = 0
+        client._ssthresh = 131072
+        client._send_chunk = mock_send_chunk
+
+        # queue 8 chunks, but cwnd only allows 3
+        with self.assertTimerRestarted(client):
+            run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 8))
+
+        self.assertEqual(client._cwnd, 3600)
+        self.assertEqual(sent_tsns, [0, 1, 2])
+        self.assertEqual(queued_tsns(client), [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 3)
+
+        # SACK comes in acknowledging chunks 0 and 1
+        sack = SackChunk()
+        sack.cumulative_tsn = 1
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 4)
+
+        # SACK comes in acknowledging chunk 5
+        sack = SackChunk()
+        sack.cumulative_tsn = 1
+        sack.gaps = [(4, 4)]  # TSN 2, 3 and 4 are missing
+        with self.assertTimerPreserved(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 5)
+
+        # SACK comes in acknowledging chunk 6
+        sack = SackChunk()
+        sack.cumulative_tsn = 1
+        sack.gaps = [(4, 5)]  # TSN 2, 3 and 4 are missing
+        with self.assertTimerPreserved(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 6)
+
+        # artificially raise flight size to hit cwnd
+        client._flight_size += 2400
+
+        # SACK comes in acknowledging chunk 7
+        sack = SackChunk()
+        sack.cumulative_tsn = 1
+        sack.gaps = [(4, 6)]  # TSN 2, 3 and 4 are missing
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3])
+        self.assertEqual(queued_tsns(client), [2, 3, 4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 6)
+
+        # SACK comes in acknowledging all chunks up to 3, and 5, 6, 7
+        sack = SackChunk()
+        sack.cumulative_tsn = 3
+        sack.gaps = [(2, 4)]  # TSN 4 is missing
+        with self.assertTimerRestarted(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
+        self.assertEqual(queued_tsns(client), [4, 5, 6, 7])
+        self.assertEqual(client._outbound_queue_pos, 4)
+
+        # SACK comes in ackowledging all chunks
+        sack = SackChunk()
+        sack.cumulative_tsn = 7
+        with self.assertTimerStopped(client):
+            run(client._receive_chunk(sack))
+
+        self.assertEqual(client._cwnd, 4800)
+        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
+        self.assertEqual(queued_tsns(client), [])
         self.assertEqual(client._outbound_queue_pos, 0)
 
     def test_t2_expired_when_shutdown_ack_sent(self):
