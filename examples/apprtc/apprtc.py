@@ -50,8 +50,7 @@ class Signaling:
 class VideoImageTrack(VideoStreamTrack):
     def __init__(self):
         self.counter = 0
-        self.img = cv2.cvtColor(cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR),
-                                cv2.COLOR_RGB2BGR)
+        self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
         self.last = None
 
     async def recv(self):
