@@ -131,6 +131,9 @@ class UnixSocketSignaling:
 
 
 def add_signaling_arguments(parser):
+    """
+    Add signaling method arguments to an argparse.ArgumentParser.
+    """
     parser.add_argument('--signaling', '-s', choices=[
         'copy-and-paste', 'tcp-socket', 'unix-socket'])
     parser.add_argument('--signaling-host', default='127.0.0.1',
@@ -142,6 +145,9 @@ def add_signaling_arguments(parser):
 
 
 def create_signaling(args):
+    """
+    Create a signaling method based on command-line arguments.
+    """
     if args.signaling == 'tcp-socket':
         return TcpSocketSignaling(args.signaling_host, args.signaling_port)
     elif args.signaling == 'unix-socket':

@@ -53,6 +53,9 @@ class AudioFileTrack(AudioStreamTrack):
 
 
 class VideoFileTrack(VideoStreamTrack):
+    """
+    A VideoStreamTrack subclass for reading video from a file.
+    """
     def __init__(self, path):
         self.cap = cv2.VideoCapture(path)
         self.last = None
