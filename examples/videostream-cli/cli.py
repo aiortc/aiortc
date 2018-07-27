@@ -7,8 +7,7 @@ import os
 import cv2
 import numpy
 
-from aiortc import RTCPeerConnection
-from aiortc.mediastreams import VideoFrame, VideoStreamTrack
+from aiortc import RTCPeerConnection, VideoFrame, VideoStreamTrack
 from signaling import add_signaling_arguments, create_signaling
 
 BLUE = (255, 0, 0)
