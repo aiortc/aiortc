@@ -10,7 +10,8 @@ import aiohttp
 import cv2
 import websockets
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
-                    VideoFrame, VideoStreamTrack)
+                    VideoStreamTrack)
+from aiortc.contrib.media import frame_from_bgr
 from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
@@ -23,11 +24,6 @@ def description_to_dict(description):
         'sdp': description.sdp,
         'type': description.type
     }
-
-
-def frame_from_bgr(data_bgr):
-    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_YV12)
-    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
 
 
 class Signaling:
