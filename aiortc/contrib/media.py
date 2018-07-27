@@ -6,9 +6,11 @@ import wave
 import cv2
 import numpy
 
-from ..mediastreams import AudioFrame, AudioStreamTrack, VideoFrame
+from ..mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
+                            VideoStreamTrack)
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
+VIDEO_PTIME = 1 / 30  # 30fps video
 
 
 def frame_from_bgr(data_bgr):
@@ -49,3 +51,20 @@ class AudioFileTrack(AudioStreamTrack):
             channels=self.reader.getnchannels(),
             data=self.reader.readframes(self.frames_per_packet),
             sample_rate=self.reader.getframerate())
+
+
+class VideoFileTrack(VideoStreamTrack):
+    def __init__(self, path):
+        self.cap = cv2.VideoCapture(path)
+        self.last = None
+
+    async def recv(self):
+        # as we are reading audio from a file and not using a "live" source,
+        # we need to control the rate at which audio is sent
+        if self.last:
+            now = time.time()
+            await asyncio.sleep(self.last + VIDEO_PTIME - now)
+        self.last = time.time()
+
+        ret, frame = self.cap.read()
+        return frame_from_bgr(frame)
