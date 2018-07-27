@@ -8,7 +8,7 @@ import numpy
 
 from aiortc import RTCPeerConnection, VideoStreamTrack
 from aiortc.contrib.media import frame_from_bgr, frame_to_bgr
-from signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)

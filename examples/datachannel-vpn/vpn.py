@@ -5,7 +5,7 @@ import logging
 
 import tuntap
 from aiortc import RTCPeerConnection
-from signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 logger = logging.Logger('vpn')
 

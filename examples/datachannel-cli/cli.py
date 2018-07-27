@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from aiortc import RTCPeerConnection
-from signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 
 def channel_log(channel, t, message):

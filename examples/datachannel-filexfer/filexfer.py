@@ -5,7 +5,7 @@ import time
 
 import uvloop
 from aiortc import RTCPeerConnection
-from signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 
 async def run_answer(pc, signaling, filename):
