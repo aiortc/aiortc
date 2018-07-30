@@ -38,7 +38,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.7',
     ],
     cffi_modules=cffi_modules,
-    packages=['aiortc', 'aiortc.codecs'],
+    packages=['aiortc', 'aiortc.codecs', 'aiortc.contrib'],
     setup_requires=['cffi'],
     install_requires=['aioice>=0.6.0,<0.7.0', 'attrs', 'crcmod', 'cryptography>=2.2', 'opencv-python', 'pyee', 'pylibsrtp>=0.5.0', 'pyopenssl'],
 )
