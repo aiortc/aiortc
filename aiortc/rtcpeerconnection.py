@@ -203,7 +203,6 @@ class RTCPeerConnection(EventEmitter):
                     raise InternalError('Only a single %s track is supported for now' % track.kind)
 
         transceiver = self.__createTransceiver(kind=track.kind, sender_track=track)
-        transceiver.mid = track.kind
         return transceiver.sender
 
     async def close(self):
@@ -255,7 +254,6 @@ class RTCPeerConnection(EventEmitter):
         """
         if not self.__sctp:
             self.__createSctpTransport()
-            self.__sctp.mid = 'data'
 
         parameters = RTCDataChannelParameters(label=label, ordered=ordered, protocol=protocol)
         return RTCDataChannel(self.__sctp, parameters)
@@ -285,6 +283,13 @@ class RTCPeerConnection(EventEmitter):
                 codecs.append(codec)
             transceiver._codecs = codecs
             transceiver._headerExtensions = HEADER_EXTENSIONS[:]
+
+        # assign MIDs
+        for transceiver in self.__transceivers:
+            if transceiver.mid is None:
+                transceiver.mid = transceiver.kind
+        if self.__sctp and self.__sctp.mid is None:
+            self.__sctp.mid = 'data'
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -369,7 +374,7 @@ class RTCPeerConnection(EventEmitter):
                         transceiver = t
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
-                if not self.__initialOfferer:
+                if transceiver.mid is None:
                     transceiver.mid = media.rtp.muxId
 
                 # negotiate codecs
@@ -393,7 +398,7 @@ class RTCPeerConnection(EventEmitter):
             elif media.kind == 'application':
                 if not self.__sctp:
                     self.__createSctpTransport()
-                if not self.__initialOfferer:
+                if self.__sctp.mid is None:
                     self.__sctp.mid = media.rtp.muxId
 
                 # configure sctp
@@ -496,6 +501,7 @@ class RTCPeerConnection(EventEmitter):
     def __createSctpTransport(self):
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
         self.__sctp._bundled = False
+        self.__sctp.mid = None
 
         @self.__sctp.on('datachannel')
         def on_datachannel(channel):

@@ -11,6 +11,7 @@ class RTCRtpTransceiver:
     """
 
     def __init__(self, kind, receiver, sender):
+        self.mid = None
         self.__kind = kind
         self.__receiver = receiver
         self.__sender = sender
