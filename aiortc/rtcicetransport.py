@@ -73,8 +73,8 @@ def connection_kwargs(servers):
                 if 'turn_server' in kwargs:
                     continue
 
-                # only 'udp' transport is supported
-                if parsed['transport'] != 'udp':
+                # only 'udp' and 'tcp' transports are supported
+                if parsed['transport'] not in ['udp', 'tcp']:
                     continue
 
                 # only 'password' credentialType is supported
@@ -82,6 +82,7 @@ def connection_kwargs(servers):
                     continue
 
                 kwargs['turn_server'] = (parsed['host'], parsed['port'])
+                kwargs['turn_transport'] = parsed['transport']
                 kwargs['turn_username'] = server.username
                 kwargs['turn_password'] = server.credential
 

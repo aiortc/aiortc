@@ -43,6 +43,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_transport': 'udp',
             'turn_username': None,
         })
 
@@ -53,6 +54,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_transport': 'udp',
             'turn_username': None,
         })
 
@@ -65,13 +67,24 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn1.example.com', 3478),
+            'turn_transport': 'udp',
             'turn_username': None,
         })
+
+    def test_turn_over_bogus(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turn:turn.example.com?transport=bogus'),
+        ]), {})
 
     def test_turn_over_tcp(self):
         self.assertEqual(connection_kwargs([
             RTCIceServer('turn:turn.example.com?transport=tcp'),
-        ]), {})
+        ]), {
+            'turn_password': None,
+            'turn_server': ('turn.example.com', 3478),
+            'turn_transport': 'tcp',
+            'turn_username': None,
+        })
 
     def test_turn_with_password(self):
         self.assertEqual(connection_kwargs([
@@ -83,6 +96,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': 'bar',
             'turn_server': ('turn.example.com', 3478),
+            'turn_transport': 'udp',
             'turn_username': 'foo',
         })
 
