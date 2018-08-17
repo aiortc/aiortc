@@ -5,7 +5,10 @@ from unittest import TestCase
 import cv2
 import numpy
 
-from aiortc.contrib.media import AudioFileTrack, VideoFileTrack
+from aiortc import VideoFrame
+from aiortc.contrib.media import (AudioFileTrack, VideoFileTrack,
+                                  frame_from_bgr, frame_from_gray,
+                                  frame_to_bgr)
 
 from .utils import run
 
@@ -68,5 +71,27 @@ class FileTrackTest(TestCase):
         # read enough frames to loop once
         for i in range(21):
             frame = run(track.recv())
+            self.assertEqual(len(frame.data), 460800)
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
+
+
+class VideoFrameTest(TestCase):
+    def test_frame_from_bgr(self):
+        image = numpy.full((480, 640, 3), (0, 0, 0), numpy.uint8)
+        frame = frame_from_bgr(image)
+        self.assertEqual(len(frame.data), 460800)
+        self.assertEqual(frame.width, 640)
+        self.assertEqual(frame.height, 480)
+
+    def test_frame_from_gray(self):
+        image = numpy.full((480, 640), 0, numpy.uint8)
+        frame = frame_from_gray(image)
+        self.assertEqual(len(frame.data), 460800)
+        self.assertEqual(frame.width, 640)
+        self.assertEqual(frame.height, 480)
+
+    def test_frame_to_bgr(self):
+        frame = VideoFrame(width=640, height=480)
+        image = frame_to_bgr(frame)
+        self.assertEqual(image.shape, (480, 640, 3))
