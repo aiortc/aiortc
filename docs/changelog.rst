@@ -1,6 +1,23 @@
 Changelog
 =========
 
+0.9.4
+-----
+
+Peer connection
+...............
+
+  * Add support for TURN over TCP.
+
+Examples
+........
+
+  * Add media and signaling helpers in `aiortc.contrib`.
+
+  * Fix colorspace OpenCV colorspace conversions.
+
+  * `apprtc` : send rotating image on video track.
+
 0.9.3
 -----
 
@@ -8,7 +25,9 @@ Media
 .....
 
   * Set PictureID attribute on outgoing VP8 frames.
+
   * Negotiate and send SDES MID header extension for RTP packets.
+
   * Fix negative packets_lost encoding for RTCP reports.
 
 0.9.2
