@@ -231,7 +231,6 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -239,7 +238,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
-        self.assertEqual(mids(pc2), ['audio'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -257,7 +256,6 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=recvonly' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -318,14 +316,13 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['audio'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -333,7 +330,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
-        self.assertEqual(mids(pc2), ['audio'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         pc2.addTrack(AudioStreamTrack())
@@ -346,14 +343,13 @@ class RTCPeerConnectionTest(TestCase):
         run(pc2.setLocalDescription(answer))
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc2), ['audio'])
+        self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -414,14 +410,13 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['audio'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc1.localDescription.sdp)
 
         # strip out candidates
         desc1 = strip_candidates(pc1.localDescription)
@@ -432,7 +427,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
-        self.assertEqual(mids(pc2), ['audio'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         pc2.addTrack(AudioStreamTrack())
@@ -445,14 +440,13 @@ class RTCPeerConnectionTest(TestCase):
         run(pc2.setLocalDescription(answer))
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc2), ['audio'])
+        self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
-        self.assertTrue('a=mid:audio' in pc2.localDescription.sdp)
 
         # strip out candidates
         desc2 = strip_candidates(pc2.localDescription)
@@ -627,7 +621,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['audio', 'video'])
+        self.assertEqual(mids(pc1), ['0', '1'])
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -635,7 +629,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 2)
         self.assertEqual(len(pc2.getSenders()), 2)
         self.assertEqual(len(pc2.getTransceivers()), 2)
-        self.assertEqual(mids(pc2), ['audio', 'video'])
+        self.assertEqual(mids(pc2), ['0', '1'])
 
         # create answer
         pc2.addTrack(AudioStreamTrack())
@@ -716,7 +710,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['audio', 'video', 'data'])
+        self.assertEqual(mids(pc1), ['0', '1', '2'])
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -724,7 +718,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 2)
         self.assertEqual(len(pc2.getSenders()), 2)
         self.assertEqual(len(pc2.getTransceivers()), 2)
-        self.assertEqual(mids(pc2), ['audio', 'video', 'data'])
+        self.assertEqual(mids(pc2), ['0', '1', '2'])
 
         # create answer
         pc2.addTrack(AudioStreamTrack())
@@ -805,14 +799,13 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['video'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=video ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
-        self.assertTrue('a=mid:video' in pc1.localDescription.sdp)
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -820,7 +813,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
-        self.assertEqual(mids(pc2), ['video'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         pc2.addTrack(VideoStreamTrack())
@@ -839,7 +832,6 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
-        self.assertTrue('a=mid:video' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -927,7 +919,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['data'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
@@ -941,7 +933,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 0)
         self.assertEqual(len(pc2.getSenders()), 0)
         self.assertEqual(len(pc2.getTransceivers()), 0)
-        self.assertEqual(mids(pc2), ['data'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -1068,7 +1060,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['data'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
@@ -1082,7 +1074,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 0)
         self.assertEqual(len(pc2.getSenders()), 0)
         self.assertEqual(len(pc2.getTransceivers()), 0)
-        self.assertEqual(mids(pc2), ['data'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -1206,7 +1198,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['data'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
@@ -1223,7 +1215,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 0)
         self.assertEqual(len(pc2.getSenders()), 0)
         self.assertEqual(len(pc2.getTransceivers()), 0)
-        self.assertEqual(mids(pc2), ['data'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         answer = run(pc2.createAnswer())
@@ -1359,7 +1351,7 @@ class RTCPeerConnectionTest(TestCase):
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
-        self.assertEqual(mids(pc1), ['data'])
+        self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
@@ -1376,7 +1368,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc2.getReceivers()), 0)
         self.assertEqual(len(pc2.getSenders()), 0)
         self.assertEqual(len(pc2.getTransceivers()), 0)
-        self.assertEqual(mids(pc2), ['data'])
+        self.assertEqual(mids(pc2), ['0'])
 
         # create answer
         answer = run(pc2.createAnswer())

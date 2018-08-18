@@ -107,6 +107,7 @@ class RTCPeerConnection(EventEmitter):
         self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports = set()
         self.__initialOfferer = None
+        self.__midCounter = 0
         self.__remoteDtls = {}
         self.__remoteIce = {}
         self.__remoteRtp = {}
@@ -287,9 +288,9 @@ class RTCPeerConnection(EventEmitter):
         # assign MIDs
         for transceiver in self.__transceivers:
             if transceiver.mid is None:
-                transceiver.mid = transceiver.kind
+                transceiver.mid = self.__nextAvailableMid()
         if self.__sctp and self.__sctp.mid is None:
-            self.__sctp.mid = 'data'
+            self.__sctp.mid = self.__nextAvailableMid()
 
         return RTCSessionDescription(
             sdp=self.__createSdp(),
@@ -584,6 +585,22 @@ class RTCPeerConnection(EventEmitter):
         rtp.rtcp.ssrc = transceiver.sender._ssrc
         rtp.rtcp.mux = True
         return rtp
+
+    def __nextAvailableMid(self):
+        # collect existing MIDs
+        mids = set()
+        for transceiver in self.__transceivers:
+            if transceiver.mid is not None:
+                mids.add(transceiver.mid)
+        if self.__sctp and self.__sctp.mid is not None:
+            mids.add(self.__sctp.mid)
+
+        # find an available MID
+        while True:
+            mid = str(self.__midCounter)
+            self.__midCounter += 1
+            if mid not in mids:
+                return mid
 
     def __setSignalingState(self, state):
         self.__signalingState = state
