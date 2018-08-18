@@ -58,6 +58,8 @@ async def consume_audio(track):
     try:
         while True:
             frame = await track.recv()
+
+            # write to file
             if args.write_audio:
                 if writer is None:
                     writer = wave.open(args.write_audio, 'wb')
@@ -72,24 +74,38 @@ async def consume_audio(track):
 
 async def consume_video(track, local_video):
     """
-    Drain incoming video, and echo it back.
+    Receive incoming video.
+
+    The video can optionally be written to a file.
     """
     last_size = None
+    writer = None
 
-    while True:
-        frame = await track.recv()
+    try:
+        while True:
+            frame = await track.recv()
 
-        # print frame size
-        frame_size = (frame.width, frame.height)
-        if frame_size != last_size:
-            print('Received frame size', frame_size)
-            last_size = frame_size
+            # print frame size
+            frame_size = (frame.width, frame.height)
+            if frame_size != last_size:
+                print('Received frame size', frame_size)
+                last_size = frame_size
 
-        # we are only interested in the latest frame
-        if local_video.received.full():
-            await local_video.received.get()
+            # write to file
+            if args.write_video:
+                if writer is None:
+                    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                    writer = cv2.VideoWriter(args.write_video, fourcc, 30, frame_size)
+                writer.write(frame_to_bgr(frame))
 
-        await local_video.received.put(frame)
+            # we are only interested in the latest frame
+            if local_video.received.full():
+                await local_video.received.get()
+
+            await local_video.received.put(frame)
+    finally:
+        if writer is not None:
+            writer.release()
 
 
 async def index(request):
@@ -162,7 +178,8 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080,
                         help='Port for HTTP server (default: 8080)')
     parser.add_argument('--verbose', '-v', action='count')
-    parser.add_argument('--write-audio', help='Write received audio to a WAV file')
+    parser.add_argument('--write-audio', help='Write received audio to a file (WAV)')
+    parser.add_argument('--write-video', help='Write received video to a file (AVI)')
     args = parser.parse_args()
 
     if args.verbose:
