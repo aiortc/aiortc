@@ -14,7 +14,6 @@ from aiortc.contrib.media import (AudioFileTrack, frame_from_bgr,
                                   frame_from_gray, frame_to_bgr)
 
 ROOT = os.path.dirname(__file__)
-AUDIO_OUTPUT_PATH = os.path.join(ROOT, 'output.wav')
 
 
 class VideoTransformTrack(VideoStreamTrack):
@@ -50,19 +49,22 @@ class VideoTransformTrack(VideoStreamTrack):
 
 async def consume_audio(track):
     """
-    Drain incoming audio and write it to a file.
+    Receive incoming audio.
+
+    The audio can optionally be written to a file.
     """
     writer = None
 
     try:
         while True:
             frame = await track.recv()
-            if writer is None:
-                writer = wave.open(AUDIO_OUTPUT_PATH, 'wb')
-                writer.setnchannels(frame.channels)
-                writer.setframerate(frame.sample_rate)
-                writer.setsampwidth(frame.sample_width)
-            writer.writeframes(frame.data)
+            if args.write_audio:
+                if writer is None:
+                    writer = wave.open(args.write_audio, 'wb')
+                    writer.setnchannels(frame.channels)
+                    writer.setframerate(frame.sample_rate)
+                    writer.setsampwidth(frame.sample_width)
+                writer.writeframes(frame.data)
     finally:
         if writer is not None:
             writer.close()
@@ -160,6 +162,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080,
                         help='Port for HTTP server (default: 8080)')
     parser.add_argument('--verbose', '-v', action='count')
+    parser.add_argument('--write-audio', help='Write received audio to a WAV file')
     args = parser.parse_args()
 
     if args.verbose:
