@@ -124,22 +124,25 @@ class RTCPeerConnectionTest(TestCase):
         pc = RTCPeerConnection()
 
         # add audio track
-        track = AudioStreamTrack()
-        sender = pc.addTrack(track)
-        self.assertIsNotNone(sender)
-        self.assertEqual(sender.track, track)
-        self.assertEqual(pc.getSenders(), [sender])
+        track1 = AudioStreamTrack()
+        sender1 = pc.addTrack(track1)
+        self.assertIsNotNone(sender1)
+        self.assertEqual(sender1.track, track1)
+        self.assertEqual(pc.getSenders(), [sender1])
         self.assertEqual(len(pc.getTransceivers()), 1)
 
         # try to add same track again
         with self.assertRaises(InvalidAccessError) as cm:
-            pc.addTrack(track)
+            pc.addTrack(track1)
         self.assertEqual(str(cm.exception), 'Track already has a sender')
 
-        # try adding another audio track
-        with self.assertRaises(InternalError) as cm:
-            pc.addTrack(AudioStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single audio track is supported for now')
+        # add another audio track
+        track2 = AudioStreamTrack()
+        sender2 = pc.addTrack(track2)
+        self.assertIsNotNone(sender2)
+        self.assertEqual(sender2.track, track2)
+        self.assertEqual(pc.getSenders(), [sender1, sender2])
+        self.assertEqual(len(pc.getTransceivers()), 2)
 
     def test_addTrack_bogus(self):
         pc = RTCPeerConnection()
@@ -153,30 +156,33 @@ class RTCPeerConnectionTest(TestCase):
         pc = RTCPeerConnection()
 
         # add video track
-        video_track = VideoStreamTrack()
-        video_sender = pc.addTrack(video_track)
-        self.assertIsNotNone(video_sender)
-        self.assertEqual(video_sender.track, video_track)
-        self.assertEqual(pc.getSenders(), [video_sender])
+        video_track1 = VideoStreamTrack()
+        video_sender1 = pc.addTrack(video_track1)
+        self.assertIsNotNone(video_sender1)
+        self.assertEqual(video_sender1.track, video_track1)
+        self.assertEqual(pc.getSenders(), [video_sender1])
         self.assertEqual(len(pc.getTransceivers()), 1)
 
         # try to add same track again
         with self.assertRaises(InvalidAccessError) as cm:
-            pc.addTrack(video_track)
+            pc.addTrack(video_track1)
         self.assertEqual(str(cm.exception), 'Track already has a sender')
 
-        # try adding another video track
-        with self.assertRaises(InternalError) as cm:
-            pc.addTrack(VideoStreamTrack())
-        self.assertEqual(str(cm.exception), 'Only a single video track is supported for now')
+        # add another video track
+        video_track2 = VideoStreamTrack()
+        video_sender2 = pc.addTrack(video_track2)
+        self.assertIsNotNone(video_sender2)
+        self.assertEqual(video_sender2.track, video_track2)
+        self.assertEqual(pc.getSenders(), [video_sender1, video_sender2])
+        self.assertEqual(len(pc.getTransceivers()), 2)
 
         # add audio track
         audio_track = AudioStreamTrack()
         audio_sender = pc.addTrack(audio_track)
         self.assertIsNotNone(audio_sender)
         self.assertEqual(audio_sender.track, audio_track)
-        self.assertEqual(pc.getSenders(), [video_sender, audio_sender])
-        self.assertEqual(len(pc.getTransceivers()), 2)
+        self.assertEqual(pc.getSenders(), [video_sender1, video_sender2, audio_sender])
+        self.assertEqual(len(pc.getTransceivers()), 3)
 
     def test_addTrack_closed(self):
         pc = RTCPeerConnection()
@@ -561,6 +567,101 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
         self.assertTrue('a=mid:sdparta_0' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_audio_two_tracks(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0', '1'])
+        self.assertTrue('m=audio ' in pc1.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 2)
+        self.assertEqual(len(pc2.getSenders()), 2)
+        self.assertEqual(len(pc2.getTransceivers()), 2)
+        self.assertEqual(mids(pc2), ['0', '1'])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc2), ['0', '1'])
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

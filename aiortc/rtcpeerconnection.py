@@ -200,8 +200,6 @@ class RTCPeerConnection(EventEmitter):
                 if transceiver.sender.track is None:
                     transceiver.sender.replaceTrack(track)
                     return transceiver.sender
-                else:
-                    raise InternalError('Only a single %s track is supported for now' % track.kind)
 
         transceiver = self.__createTransceiver(kind=track.kind, sender_track=track)
         return transceiver.sender
@@ -371,7 +369,7 @@ class RTCPeerConnection(EventEmitter):
                 # find transceiver
                 transceiver = None
                 for t in self.__transceivers:
-                    if t.kind == media.kind:
+                    if t.kind == media.kind and t.mid in [None, media.rtp.muxId]:
                         transceiver = t
                 if transceiver is None:
                     transceiver = self.__createTransceiver(kind=media.kind)
