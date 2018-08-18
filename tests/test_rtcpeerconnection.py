@@ -107,7 +107,7 @@ class RTCPeerConnectionTest(TestCase):
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
 
-    def test_addIceCandidate_no_sdpMid(self):
+    def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
             pc.addIceCandidate(RTCIceCandidate(
@@ -117,23 +117,8 @@ class RTCPeerConnectionTest(TestCase):
                 port=33543,
                 priority=2122252543,
                 protocol='UDP',
-                sdpMLineIndex=0,
                 type='host'))
-        self.assertEqual(str(cm.exception), 'Candidate must have both sdpMid and sdpMLineIndex')
-
-    def test_addIceCandidate_no_sdpMLineIndex(self):
-        pc = RTCPeerConnection()
-        with self.assertRaises(ValueError) as cm:
-            pc.addIceCandidate(RTCIceCandidate(
-                component=1,
-                foundation='0',
-                ip='192.168.99.7',
-                port=33543,
-                priority=2122252543,
-                protocol='UDP',
-                sdpMid='audio',
-                type='host'))
-        self.assertEqual(str(cm.exception), 'Candidate must have both sdpMid and sdpMLineIndex')
+        self.assertEqual(str(cm.exception), 'Candidate must have either sdpMid or sdpMLineIndex')
 
     def test_addTrack_audio(self):
         pc = RTCPeerConnection()
@@ -478,17 +463,15 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # trickle candidates
-        for sender in pc2.getSenders():
-            for candidate in sender.transport.transport.iceGatherer.getLocalCandidates():
-                # FIXME: how is a real app supposed to get these?
-                candidate.sdpMid = 'audio'
-                candidate.sdpMLineIndex = 0
+        for transceiver in pc2.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                candidate.sdpMid = transceiver.mid
                 pc1.addIceCandidate(candidate)
-        for sender in pc1.getSenders():
-            for candidate in sender.transport.transport.iceGatherer.getLocalCandidates():
-                # FIXME: how is a real app supposed to get these?
-                candidate.sdpMid = 'audio'
-                candidate.sdpMLineIndex = 0
+        for transceiver in pc1.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                candidate.sdpMid = transceiver.mid
                 pc2.addIceCandidate(candidate)
 
         # check outcome
@@ -1422,14 +1405,10 @@ class RTCPeerConnectionTest(TestCase):
 
         # trickle candidates
         for candidate in pc2.sctp.transport.transport.iceGatherer.getLocalCandidates():
-            # FIXME: how is a real app supposed to get these?
-            candidate.sdpMid = 'data'
-            candidate.sdpMLineIndex = 0
+            candidate.sdpMid = pc2.sctp.mid
             pc1.addIceCandidate(candidate)
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
-            # FIXME: how is a real app supposed to get these?
-            candidate.sdpMid = 'data'
-            candidate.sdpMLineIndex = 0
+            candidate.sdpMid = pc1.sctp.mid
             pc2.addIceCandidate(candidate)
 
         # check outcome

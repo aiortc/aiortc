@@ -164,10 +164,10 @@ class RTCPeerConnection(EventEmitter):
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
 
-        The specified candidate must have a value for both `sdpMid` and `sdpMLineIndex`.
+        The specified candidate must have a value for either `sdpMid` or `sdpMLineIndex`.
         """
-        if candidate.sdpMid is None or candidate.sdpMLineIndex is None:
-            raise ValueError('Candidate must have both sdpMid and sdpMLineIndex')
+        if candidate.sdpMid is None and candidate.sdpMLineIndex is None:
+            raise ValueError('Candidate must have either sdpMid or sdpMLineIndex')
 
         for transceiver in self.__transceivers:
             if candidate.sdpMid == transceiver.mid and not transceiver._bundled:
