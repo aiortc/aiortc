@@ -51,19 +51,13 @@ class FileTrackTest(TestCase):
     def test_audio_file_track(self):
         track = AudioFileTrack(path=self.audio_path)
 
-        # read first frame
-        frame = run(track.recv())
-        self.assertEqual(frame.channels, 1)
-        self.assertEqual(len(frame.data), 320)
-        self.assertEqual(frame.sample_rate, 8000)
-        self.assertEqual(frame.sample_width, 2)
-
-        # read another frame
-        frame = run(track.recv())
-        self.assertEqual(frame.channels, 1)
-        self.assertEqual(len(frame.data), 320)
-        self.assertEqual(frame.sample_rate, 8000)
-        self.assertEqual(frame.sample_width, 2)
+        # read enough frames to loop once
+        for i in range(51):
+            frame = run(track.recv())
+            self.assertEqual(frame.channels, 1)
+            self.assertEqual(len(frame.data), 320)
+            self.assertEqual(frame.sample_rate, 8000)
+            self.assertEqual(frame.sample_width, 2)
 
     def test_video_file_track(self):
         track = VideoFileTrack(path=self.video_path)

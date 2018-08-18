@@ -36,6 +36,7 @@ class AudioFileTrack(AudioStreamTrack):
     def __init__(self, path):
         self.last = None
         self.reader = wave.open(path, 'rb')
+        assert self.reader.getsampwidth() == 2, 'Only 16-bit samples are supported'
         self.frames_per_packet = int(self.reader.getframerate() * AUDIO_PTIME)
 
     async def recv(self):
@@ -46,9 +47,16 @@ class AudioFileTrack(AudioStreamTrack):
             await asyncio.sleep(self.last + AUDIO_PTIME - now)
         self.last = time.time()
 
+        data = self.reader.readframes(self.frames_per_packet)
+        frames = len(data) // (self.reader.getnchannels() * self.reader.getsampwidth())
+        missing = self.frames_per_packet - frames
+        if missing:
+            self.reader.rewind()
+            data += self.reader.readframes(missing)
+
         return AudioFrame(
             channels=self.reader.getnchannels(),
-            data=self.reader.readframes(self.frames_per_packet),
+            data=data,
             sample_rate=self.reader.getframerate())
 
 
