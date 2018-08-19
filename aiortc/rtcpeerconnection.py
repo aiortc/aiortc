@@ -570,6 +570,7 @@ class RTCPeerConnection(EventEmitter):
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))
         transceiver.receiver._ssrc = transceiver.sender._ssrc
+        transceiver.receiver._set_sender(transceiver.sender)
         transceiver._bundled = False
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)

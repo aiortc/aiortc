@@ -2,6 +2,8 @@ import asyncio
 import logging
 import random
 
+import pylibsrtp
+
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
@@ -10,6 +12,8 @@ from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
+
+RTP_HISTORY_SIZE = 32
 
 
 class RTCRtpSender:
@@ -37,6 +41,7 @@ class RTCRtpSender:
         self.__mid = None
         self.__rtp_mid_header_id = None
         self.__rtp_exited = asyncio.Event()
+        self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
         self.__started = False
         self.__stopped = asyncio.Event()
@@ -102,6 +107,18 @@ class RTCRtpSender:
                 self.__rtp_exited.wait(),
                 self.__rtcp_exited.wait())
 
+    async def _retransmit(self, sequence_number):
+        """
+        Retransmit an RTP packet which was reported as lost.
+        """
+        cache = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
+        if cache and cache[0] == sequence_number:
+            try:
+                await self.transport._send_rtp(cache[1])
+            except pylibsrtp.Error:
+                # FIXME: why do we get a replay error?
+                pass
+
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
         loop = asyncio.get_event_loop()
@@ -129,7 +146,10 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
                     try:
                         self.__log_debug('> %s', packet)
-                        await self.transport._send_rtp(bytes(packet))
+                        packet_bytes = bytes(packet)
+                        self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
+                            packet.sequence_number, packet_bytes)
+                        await self.transport._send_rtp(packet_bytes)
                     except ConnectionError:
                         self.__stopped.set()
                         break

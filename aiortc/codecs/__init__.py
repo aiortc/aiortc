@@ -1,4 +1,4 @@
-from ..rtcrtpparameters import RTCRtpCodecParameters
+from ..rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import VpxDecoder, VpxEncoder
@@ -13,7 +13,9 @@ MEDIA_CODECS = {
         PCMA_CODEC,
     ],
     'video': [
-        RTCRtpCodecParameters(name='VP8', clockRate=90000),
+        RTCRtpCodecParameters(name='VP8', clockRate=90000, rtcpFeedback=[
+            RTCRtcpFeedback(type='nack'),
+        ])
     ]
 }
 

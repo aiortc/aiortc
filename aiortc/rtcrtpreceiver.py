@@ -8,8 +8,9 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import (RTP_SEQ_MODULO, RtcpReceiverInfo, RtcpRrPacket, RtcpSrPacket,
-                  clamp_packets_lost, datetime_from_ntp, seq_gt)
+from .rtp import (RTP_SEQ_MODULO, RtcpReceiverInfo, RtcpRrPacket,
+                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
+                  datetime_from_ntp, seq_gt)
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 from .utils import first_completed
@@ -109,6 +110,7 @@ class RTCRtpReceiver:
         self._jitter_buffer = JitterBuffer(capacity=128)
         self._track = None
         self.__rtcp_exited = asyncio.Event()
+        self.__sender = None
         self.__started = False
         self._stats = {}
         self.__stopped = asyncio.Event()
@@ -199,6 +201,10 @@ class RTCRtpReceiver:
                 )
                 self._stats[stats.type] = stats
 
+        if isinstance(packet, RtcpRtpfbPacket) and self.__sender:
+            for seq in packet.lost:
+                await self.__sender._retransmit(seq)
+
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
         if packet.payload_type in self.__decoders:
@@ -275,6 +281,9 @@ class RTCRtpReceiver:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
             pass
+
+    def _set_sender(self, sender):
+        self.__sender = sender
 
     def __log_debug(self, msg, *args):
         logger.debug('receiver(%s) ' + msg, self._kind, *args)
