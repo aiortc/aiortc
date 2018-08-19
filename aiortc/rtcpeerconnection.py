@@ -41,6 +41,7 @@ def find_common_codecs(local_codecs, remote_codecs):
                 codec = copy.deepcopy(codec)
                 if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
                     codec.payloadType = c.payloadType
+                codec.rtcpFeedback = list(filter(lambda x: x in c.rtcpFeedback, codec.rtcpFeedback))
                 common.append(codec)
                 break
     return common

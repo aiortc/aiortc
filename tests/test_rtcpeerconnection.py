@@ -7,8 +7,8 @@ from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
-from aiortc.rtcpeerconnection import MEDIA_CODECS, find_common_codecs
-from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from aiortc.rtcpeerconnection import find_common_codecs
+from aiortc.rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 
 from .utils import run
 
@@ -66,7 +66,11 @@ def track_states(pc):
 
 class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
-        local_codecs = MEDIA_CODECS['audio'][:]
+        local_codecs = [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
+        ]
         remote_codecs = [
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
             RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
@@ -81,7 +85,11 @@ class RTCRtpCodecParametersTest(TestCase):
         self.assertEqual(common[1].payloadType, 0)
 
     def test_common_dynamic(self):
-        local_codecs = MEDIA_CODECS['audio'][:]
+        local_codecs = [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
+        ]
         remote_codecs = [
             RTCRtpCodecParameters(name='opus', clockRate=48000, payloadType=100),
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
@@ -94,6 +102,37 @@ class RTCRtpCodecParametersTest(TestCase):
         self.assertEqual(common[1].clockRate, 8000)
         self.assertEqual(common[1].name, 'PCMA')
         self.assertEqual(common[1].payloadType, 8)
+
+    def test_common_feedback(self):
+        local_codecs = [
+            RTCRtpCodecParameters(
+                name='VP8',
+                clockRate=90000,
+                rtcpFeedback=[
+                    RTCRtcpFeedback(type='nack'),
+                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                ]
+            )
+        ]
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                name='VP8',
+                clockRate=90000,
+                payloadType=120,
+                rtcpFeedback=[
+                    RTCRtcpFeedback(type='nack'),
+                    RTCRtcpFeedback(type='nack', parameter='sli'),
+                ]
+            )
+        ]
+        common = find_common_codecs(local_codecs, remote_codecs)
+        self.assertEqual(len(common), 1)
+        self.assertEqual(common[0].clockRate, 90000)
+        self.assertEqual(common[0].name, 'VP8')
+        self.assertEqual(common[0].payloadType, 120)
+        self.assertEqual(common[0].rtcpFeedback, [
+            RTCRtcpFeedback(type='nack'),
+        ])
 
 
 class RTCPeerConnectionTest(TestCase):
