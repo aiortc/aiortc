@@ -74,7 +74,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.reports[0].jitter, 127)
         self.assertEqual(packet.reports[0].lsr, 0)
         self.assertEqual(packet.reports[0].dlsr, 0)
-        self.assertEqual(bytes(packet), data[0:52])
+        self.assertEqual(bytes(packet), data)
 
     def test_rtpfb(self):
         data = load('rtcp_rtpfb.bin')
