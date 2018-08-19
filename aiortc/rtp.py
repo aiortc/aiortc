@@ -18,6 +18,8 @@ RTCP_SR = 200
 RTCP_RR = 201
 RTCP_SDES = 202
 RTCP_BYE = 203
+RTCP_RTPFB = 205
+RTCP_PSFB = 206
 
 NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
 
@@ -250,6 +252,8 @@ class RtcpPacket:
                 packets.append(RtcpSrPacket.parse(payload, count))
             elif packet_type == RTCP_RR:
                 packets.append(RtcpRrPacket.parse(payload, count))
+            elif packet_type == RTCP_RTPFB:
+                packets.append(RtcpRtpfbPacket.parse(payload, count))
 
         return packets
 
@@ -288,6 +292,44 @@ class RtcpRrPacket:
             reports.append(RtcpReceiverInfo.parse(data[pos:pos + 24]))
             pos += 24
         return cls(ssrc=ssrc, reports=reports)
+
+
+@attr.s
+class RtcpRtpfbPacket:
+    fmt = attr.ib()
+    ssrc = attr.ib()
+    media_ssrc = attr.ib()
+
+    # generick NACK
+    lost = attr.ib(default=attr.Factory(list))
+
+    def __bytes__(self):
+        payload = pack('!LL', self.ssrc, self.media_ssrc)
+        if self.lost:
+            pid = self.lost[0]
+            blp = 0
+            for p in self.lost[1:]:
+                d = p - pid - 1
+                if d < 16:
+                    blp |= (1 << d)
+                else:
+                    payload += pack('!HH', pid, blp)
+                    pid = p
+                    blp = 0
+            payload += pack('!HH', pid, blp)
+        return pack_rtcp_packet(RTCP_RTPFB, self.fmt, payload)
+
+    @classmethod
+    def parse(cls, data, fmt):
+        ssrc, media_ssrc = unpack('!LL', data[0:8])
+        lost = []
+        for pos in range(8, len(data), 4):
+            pid, blp = unpack('!HH', data[pos:pos + 4])
+            lost.append(pid)
+            for d in range(0, 16):
+                if (blp >> d) & 1:
+                    lost.append(pid + d + 1)
+        return cls(fmt=fmt, ssrc=ssrc, media_ssrc=media_ssrc, lost=lost)
 
 
 @attr.s

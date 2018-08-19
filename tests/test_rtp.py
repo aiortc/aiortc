@@ -2,11 +2,11 @@ import datetime
 from unittest import TestCase
 
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpRrPacket,
-                        RtcpSdesPacket, RtcpSrPacket, RtpPacket,
-                        clamp_packets_lost, datetime_from_ntp, datetime_to_ntp,
-                        get_header_extensions, pack_packets_lost, seq_gt,
-                        seq_plus_one, set_header_extensions,
-                        unpack_packets_lost)
+                        RtcpRtpfbPacket, RtcpSdesPacket, RtcpSrPacket,
+                        RtpPacket, clamp_packets_lost, datetime_from_ntp,
+                        datetime_to_ntp, get_header_extensions,
+                        pack_packets_lost, seq_gt, seq_plus_one,
+                        set_header_extensions, unpack_packets_lost)
 
 from .utils import load
 
@@ -75,6 +75,20 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.reports[0].lsr, 0)
         self.assertEqual(packet.reports[0].dlsr, 0)
         self.assertEqual(bytes(packet), data[0:52])
+
+    def test_rtpfb(self):
+        data = load('rtcp_rtpfb.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertTrue(isinstance(packet, RtcpRtpfbPacket))
+        self.assertEqual(packet.fmt, 1)
+        self.assertEqual(packet.ssrc, 2336520123)
+        self.assertEqual(packet.media_ssrc, 4145934052)
+        self.assertEqual(packet.lost,
+                         [12, 32, 39, 54, 76, 110, 123, 142, 183, 187, 223, 236, 271, 292])
+        self.assertEqual(bytes(packet), data)
 
     def test_compound(self):
         data = load('rtcp_sr.bin') + load('rtcp_sdes.bin')
