@@ -192,7 +192,7 @@ class VpxEncoder:
         if self.codec:
             lib.vpx_codec_destroy(self.codec)
 
-    def encode(self, frame):
+    def encode(self, frame, force_keyframe=False):
         image = ffi.new('vpx_image_t *')
 
         lib.vpx_img_wrap(image, lib.VPX_IMG_FMT_I420,
@@ -226,8 +226,11 @@ class VpxEncoder:
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
         duration = 90000 // MAX_FRAME_RATE
+        flags = 0
+        if force_keyframe:
+            flags |= lib.VPX_EFLAG_FORCE_KF
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, self.timestamp, duration,  0, lib.VPX_DL_REALTIME))
+            self.codec, image, self.timestamp, duration, flags, lib.VPX_DL_REALTIME))
         self.timestamp += duration
 
         it = ffi.new('vpx_codec_iter_t *')

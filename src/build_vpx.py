@@ -30,6 +30,7 @@ vpx_codec_err_t vpx_codec_enc_init(vpx_codec_ctx_t *ctx,
 
 ffibuilder.cdef("""
 #define VPX_DL_REALTIME 1
+#define VPX_EFLAG_FORCE_KF 1
 
 #define VPX_PLANE_PACKED 0
 #define VPX_PLANE_Y 0

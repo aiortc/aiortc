@@ -143,8 +143,21 @@ class Vp8Test(TestCase):
         encoder = get_encoder(VP8_CODEC)
         self.assertTrue(isinstance(encoder, VpxEncoder))
 
+        # first keyframe
         frame = VideoFrame(width=2560, height=1920)
         payloads = encoder.encode(frame)
+        self.assertEqual(len(payloads), 7)
+        self.assertEqual(len(payloads[0]), 1300)
+
+        # delta frame
+        frame = VideoFrame(width=2560, height=1920)
+        payloads = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+
+        # force keyframe
+        frame = VideoFrame(width=2560, height=1920)
+        payloads = encoder.encode(frame, force_keyframe=True)
         self.assertEqual(len(payloads), 7)
         self.assertEqual(len(payloads[0]), 1300)
 

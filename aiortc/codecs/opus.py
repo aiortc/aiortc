@@ -48,7 +48,7 @@ class OpusEncoder:
     def __del__(self):
         lib.opus_encoder_destroy(self.encoder)
 
-    def encode(self, frame):
+    def encode(self, frame, force_keyframe=False):
         data = frame.data
 
         # resample at 48 kHz
