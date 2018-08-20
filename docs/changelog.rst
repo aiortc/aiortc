@@ -1,6 +1,23 @@
 Changelog
 =========
 
+0.9.5 (under development)
+-------------------------
+
+Media
+.....
+
+  * Make it possible to add multiple audio or video streams.
+
+  * Implement basic RTP video packet loss detection / retransmission using RTCP NACK feedback.
+
+  * Use shorter MID values to reduce RTP header extension overhead.
+
+Examples
+........
+
+  * `server` : make it possible to save received video to an AVI file.
+
 0.9.4
 -----
 
