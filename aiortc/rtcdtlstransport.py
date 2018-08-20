@@ -376,6 +376,37 @@ class RTCDtlsTransport(EventEmitter):
             self._set_state(State.CLOSED)
             self.closed.set()
 
+    async def _handle_rtcp_data(self, data):
+        packets = RtcpPacket.parse(data)
+        for packet in packets:
+            receiver = None
+            if hasattr(packet, 'ssrc'):
+                # SR and RR
+                receiver = self._rtp_router.route(packet.ssrc)
+            elif getattr(packet, 'chunks', None):
+                # SDES
+                receiver = self._rtp_router.route(packet.chunks[0].ssrc)
+            elif getattr(packet, 'sources', None):
+                # BYE
+                receiver = self._rtp_router.route(packet.sources[0])
+            if receiver is not None:
+                await receiver._handle_rtcp_packet(packet)
+
+    async def _handle_rtp_data(self, data):
+        packet = RtpPacket.parse(data)
+
+        # get muxId from RTP header extensions
+        mid = None
+        for x_id, x_value in get_header_extensions(packet):
+            if x_id == self._rtp_mid_header_id:
+                mid = x_value.decode('utf8')
+                break
+
+        # route RTP packet
+        receiver = self._rtp_router.route(packet.ssrc, mid=mid)
+        if receiver is not None:
+            await receiver._handle_rtp_packet(packet)
+
     async def _recv_next(self):
         # get timeout
         ptv_sec = ffi.new('time_t *')
@@ -413,35 +444,10 @@ class RTCDtlsTransport(EventEmitter):
             # SRTP / SRTCP
             if is_rtcp(data):
                 data = self._rx_srtp.unprotect_rtcp(data)
-                packets = RtcpPacket.parse(data)
-                for packet in packets:
-                    receiver = None
-                    if hasattr(packet, 'ssrc'):
-                        # SR and RR
-                        receiver = self._rtp_router.route(packet.ssrc)
-                    elif getattr(packet, 'chunks', None):
-                        # SDES
-                        receiver = self._rtp_router.route(packet.chunks[0].ssrc)
-                    elif getattr(packet, 'sources', None):
-                        # BYE
-                        receiver = self._rtp_router.route(packet.sources[0])
-                    if receiver is not None:
-                        await receiver._handle_rtcp_packet(packet)
+                await self._handle_rtcp_data(data)
             else:
                 data = self._rx_srtp.unprotect(data)
-                packet = RtpPacket.parse(data)
-
-                # get muxId from RTP header extensions
-                mid = None
-                for x_id, x_value in get_header_extensions(packet):
-                    if x_id == self._rtp_mid_header_id:
-                        mid = x_value.decode('utf8')
-                        break
-
-                # route RTP packet
-                receiver = self._rtp_router.route(packet.ssrc, mid=mid)
-                if receiver is not None:
-                    await receiver._handle_rtp_packet(packet)
+                await self._handle_rtp_data(data)
 
     def _register_rtp_receiver(self, receiver, parameters):
         # make note of the RTP header extension used for muxId
