@@ -6,33 +6,74 @@ from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
-from aiortc.rtcrtpreceiver import (RemoteStreamTrack, RTCRtpReceiver,
-                                   StreamStatistics)
+from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
+                                   RTCRtpReceiver, StreamStatistics)
 from aiortc.rtp import RTP_SEQ_MODULO, RtcpPacket, RtcpRtpfbPacket, RtpPacket
 
 from .utils import dummy_dtls_transport_pair, load, run
+
+
+def create_rtp_packets(count, seq=0):
+    packets = []
+    for i in range(count):
+        packets.append(RtpPacket(
+            payload_type=0,
+            sequence_number=(seq + i) % RTP_SEQ_MODULO,
+            ssrc=1234,
+            timestamp=i * 160))
+    return packets
 
 
 class ClosedDtlsTransport:
     state = 'closed'
 
 
+class NackGeneratorTest(TestCase):
+    def create_generator(self):
+        calls = []
+
+        async def callback(ssrc, lost):
+            calls.append((ssrc, lost))
+
+        return NackGenerator(callback), calls
+
+    def test_no_loss(self):
+        generator, calls = self.create_generator()
+
+        for packet in create_rtp_packets(20, 0):
+            run(generator.add(packet))
+
+        self.assertEqual(calls, [])
+        self.assertEqual(generator.missing, set())
+
+    def test_with_loss(self):
+        generator, calls = self.create_generator()
+
+        # receive packets: 0, <1 missing>, 2
+        packets = create_rtp_packets(3, 0)
+        missing = packets.pop(1)
+        for packet in packets:
+            run(generator.add(packet))
+
+        self.assertEqual(calls, [
+            (1234, [1]),
+        ])
+        self.assertEqual(generator.missing, set([1]))
+        calls.clear()
+
+        # late arrival
+        run(generator.add(missing))
+        self.assertEqual(calls, [])
+        self.assertEqual(generator.missing, set())
+
+
 class StreamStatisticsTest(TestCase):
     def create_counter(self):
         return StreamStatistics(clockrate=8000, ssrc=0)
 
-    def create_packets(self, count, seq=0):
-        packets = []
-        for i in range(count):
-            packets.append(RtpPacket(
-                payload_type=0,
-                sequence_number=(seq + i) % RTP_SEQ_MODULO,
-                timestamp=i * 160))
-        return packets
-
     def test_no_loss(self):
         counter = self.create_counter()
-        packets = self.create_packets(20, 0)
+        packets = create_rtp_packets(20, 0)
 
         # receive 10 packets
         for packet in packets[0:10]:
@@ -56,7 +97,7 @@ class StreamStatisticsTest(TestCase):
         counter = self.create_counter()
 
         # receive 10 packets (with sequence cycle)
-        for packet in self.create_packets(10, 65530):
+        for packet in create_rtp_packets(10, 65530):
             counter.add(packet)
 
         self.assertEqual(counter.max_seq, 3)
@@ -66,7 +107,7 @@ class StreamStatisticsTest(TestCase):
 
     def test_with_loss(self):
         counter = self.create_counter()
-        packets = self.create_packets(20, 0)
+        packets = create_rtp_packets(20, 0)
         packets.pop(1)
 
         # receive 9 packets (one missing)
@@ -90,7 +131,7 @@ class StreamStatisticsTest(TestCase):
     @patch('time.time')
     def test_no_jitter(self, mock_time):
         counter = self.create_counter()
-        packets = self.create_packets(3, 0)
+        packets = create_rtp_packets(3, 0)
 
         mock_time.return_value = 1531562330.00
         counter.add(packets[0])
@@ -110,7 +151,7 @@ class StreamStatisticsTest(TestCase):
     @patch('time.time')
     def test_with_jitter(self, mock_time):
         counter = self.create_counter()
-        packets = self.create_packets(3, 0)
+        packets = create_rtp_packets(3, 0)
 
         mock_time.return_value = 1531562330.00
         counter.add(packets[0])
@@ -185,7 +226,7 @@ class RTCRtpReceiverTest(TestCase):
         receiver = RTCRtpReceiver('video', transport)
         self.assertEqual(receiver.transport, transport)
 
-        receiver._track = RemoteStreamTrack(kind='audio')
+        receiver._track = RemoteStreamTrack(kind='video')
         run(receiver.receive(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
         ])))
@@ -220,6 +261,20 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver._handle_rtcp_packet(packet))
 
         self.assertEqual(sender.rtx, [7654])
+
+    def test_send_rtcp_nack(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        receiver = RTCRtpReceiver('video', transport)
+        receiver._ssrc = 1234
+        receiver._track = RemoteStreamTrack(kind='video')
+
+        run(receiver.receive(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # send RTCP feedback NACK
+        run(receiver._send_rtcp_nack(5678, [7654]))
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()

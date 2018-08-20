@@ -10,12 +10,43 @@ from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rtp import (RTP_SEQ_MODULO, RtcpReceiverInfo, RtcpRrPacket,
                   RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
-                  datetime_from_ntp, seq_gt)
+                  datetime_from_ntp, seq_gt, seq_plus_one)
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 from .utils import first_completed
 
 logger = logging.getLogger('rtp')
+
+
+class NackGenerator:
+    def __init__(self, callback):
+        self.callback = callback
+        self.max_seq = None
+        self.missing = None
+        self.ssrc = None
+
+    async def add(self, packet):
+        if packet.ssrc != self.ssrc:
+            self.max_seq = packet.sequence_number
+            self.missing = set()
+            self.ssrc = packet.ssrc
+            return
+
+        if seq_gt(packet.sequence_number, self.max_seq):
+            # mark missing packets
+            missed = 0
+            seq = seq_plus_one(self.max_seq)
+            while seq_gt(packet.sequence_number, seq):
+                self.missing.add(seq)
+                missed += 1
+                seq = seq_plus_one(seq)
+            self.max_seq = packet.sequence_number
+
+            # trigger a NACK if needed
+            if missed:
+                await self.callback(self.ssrc, sorted(self.missing))
+        else:
+            self.missing.discard(packet.sequence_number)
 
 
 class StreamStatistics:
@@ -108,6 +139,7 @@ class RTCRtpReceiver:
         self.__decoders = {}
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=128)
+        self.__nack_generator = NackGenerator(self._send_rtcp_nack)
         self._track = None
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
@@ -231,6 +263,9 @@ class RTCRtpReceiver:
                     packet._first_in_frame = False
                     packet._picture_id = None
 
+                # check if we are missing any packets
+                await self.__nack_generator.add(packet)
+
                 # check if we have a complete video frame
                 encoded_frame = self._jitter_buffer.add(packet)
                 if encoded_frame is not None:
@@ -281,6 +316,12 @@ class RTCRtpReceiver:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
             pass
+
+    async def _send_rtcp_nack(self, media_ssrc, lost):
+        if self._ssrc is not None:
+            packet = RtcpRtpfbPacket(fmt=1, ssrc=self._ssrc, media_ssrc=media_ssrc)
+            packet.lost = lost
+            await self._send_rtcp(packet)
 
     def _set_sender(self, sender):
         self.__sender = sender
