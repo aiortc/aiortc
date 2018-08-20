@@ -2,8 +2,6 @@ import asyncio
 import logging
 import random
 
-import pylibsrtp
-
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
@@ -113,11 +111,7 @@ class RTCRtpSender:
         """
         cache = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
         if cache and cache[0] == sequence_number:
-            try:
-                await self.transport._send_rtp(cache[1])
-            except pylibsrtp.Error:
-                # FIXME: why do we get a replay error?
-                pass
+            await self.transport._send_rtp(cache[1])
 
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
