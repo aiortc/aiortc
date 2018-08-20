@@ -15,6 +15,7 @@ MEDIA_CODECS = {
     'video': [
         RTCRtpCodecParameters(name='VP8', clockRate=90000, rtcpFeedback=[
             RTCRtcpFeedback(type='nack'),
+            RTCRtcpFeedback(type='nack pli'),
         ])
     ]
 }

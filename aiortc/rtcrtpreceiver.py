@@ -8,9 +8,10 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import (RTP_SEQ_MODULO, RtcpReceiverInfo, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
-                  datetime_from_ntp, seq_gt, seq_plus_one)
+from .rtp import (RTCP_PSFB_PLI, RTP_SEQ_MODULO, RtcpPsfbPacket,
+                  RtcpReceiverInfo, RtcpRrPacket, RtcpRtpfbPacket,
+                  RtcpSrPacket, clamp_packets_lost, datetime_from_ntp, seq_gt,
+                  seq_plus_one)
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
 from .utils import first_completed
@@ -236,6 +237,8 @@ class RTCRtpReceiver:
         if isinstance(packet, RtcpRtpfbPacket) and self.__sender:
             for seq in packet.lost:
                 await self.__sender._retransmit(seq)
+        elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI and self.__sender:
+            self.__sender._send_keyframe()
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)

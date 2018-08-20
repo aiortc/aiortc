@@ -8,7 +8,8 @@ from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
                                    RTCRtpReceiver, StreamStatistics)
-from aiortc.rtp import RTP_SEQ_MODULO, RtcpPacket, RtcpRtpfbPacket, RtpPacket
+from aiortc.rtp import (RTCP_PSFB_PLI, RTP_SEQ_MODULO, RtcpPacket,
+                        RtcpPsfbPacket, RtcpRtpfbPacket, RtpPacket)
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -261,6 +262,32 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver._handle_rtcp_packet(packet))
 
         self.assertEqual(sender.rtx, [7654])
+
+    def test_rtcp_pli(self):
+        class DummySender:
+            kf = 0
+
+            def _send_keyframe(self):
+                self.kf += 1
+
+        transport, remote = dummy_dtls_transport_pair()
+
+        receiver = RTCRtpReceiver('video', transport)
+        self.assertEqual(receiver.transport, transport)
+
+        sender = DummySender()
+        receiver._set_sender(sender)
+
+        receiver._track = RemoteStreamTrack(kind='audio')
+        run(receiver.receive(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTCP feedback NACK
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=5678)
+        run(receiver._handle_rtcp_packet(packet))
+
+        self.assertEqual(sender.kf, 1)
 
     def test_send_rtcp_nack(self):
         transport, remote = dummy_dtls_transport_pair()

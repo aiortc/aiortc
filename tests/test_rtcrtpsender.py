@@ -3,10 +3,10 @@ from unittest import TestCase
 
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
-from aiortc.mediastreams import AudioStreamTrack
-from aiortc.rtcrtpparameters import RTCRtpParameters
+from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpsender import RTCRtpSender
-from aiortc.rtp import RtpPacket, is_rtcp
+from aiortc.rtp import RtpPacket, is_rtcp, seq_plus_one
 
 from .utils import dummy_dtls_transport_pair, run
 
@@ -53,17 +53,44 @@ class RTCRtpSenderTest(TestCase):
 
         run(transport.close())
 
+    def test_send_keyframe(self):
+        """
+        Ask for a keyframe.
+        """
+        transport = FakeDtlsTransport()
+
+        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'video')
+        self.assertEqual(sender.transport, transport)
+
+        run(sender.send(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # wait for one packet to be transmitted, and ask for keyframe
+        packet = run(transport.queue.get())
+        sender._send_keyframe()
+
+        # wait for packet to be transmitted
+        rtx_packet = run(transport.queue.get())
+        self.assertEqual(rtx_packet.sequence_number, seq_plus_one(packet.sequence_number))
+
+        # clean shutdown
+        run(sender.stop())
+
     def test_retransmit(self):
         """
         Ask for an RTP packet retransmission.
         """
         transport = FakeDtlsTransport()
 
-        sender = RTCRtpSender(AudioStreamTrack(), transport)
-        self.assertEqual(sender.kind, 'audio')
+        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'video')
         self.assertEqual(sender.transport, transport)
 
-        run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
+        run(sender.send(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
 
         # wait for one packet to be transmitted, and ask to retransmit
         packet = run(transport.queue.get())

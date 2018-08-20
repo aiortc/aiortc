@@ -36,6 +36,7 @@ class RTCRtpSender:
             self._track = None
         self.__cname = None
         self._ssrc = random32()
+        self.__force_keyframe = False
         self.__mid = None
         self.__rtp_mid_header_id = None
         self.__rtp_exited = asyncio.Event()
@@ -113,6 +114,12 @@ class RTCRtpSender:
         if cache and cache[0] == sequence_number:
             await self.transport._send_rtp(cache[1])
 
+    def _send_keyframe(self):
+        """
+        Request the next frame to be a keyframe.
+        """
+        self.__force_keyframe = True
+
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
         loop = asyncio.get_event_loop()
@@ -132,7 +139,10 @@ class RTCRtpSender:
                         (self.__rtp_mid_header_id, self.__mid.encode('utf8')),
                     ])
 
-                payloads = await loop.run_in_executor(None, encoder.encode, frame)
+                payloads = await loop.run_in_executor(None, encoder.encode, frame,
+                                                      self.__force_keyframe)
+                self.__force_keyframe = False
+
                 if not isinstance(payloads, list):
                     payloads = [payloads]
                 for i, payload in enumerate(payloads):
