@@ -151,6 +151,37 @@ class RTCDtlsTransportTest(TestCase):
         with self.assertRaises(ConnectionError):
             run(session1._send_rtp(RTP))
 
+    def test_srtp_unprotect_error(self):
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+        receiver1 = DummyRtpReceiver()
+        session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+            rtcp=RTCRtcpParameters(ssrc=1831097322)))
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+        receiver2 = DummyRtpReceiver()
+        session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+            rtcp=RTCRtcpParameters(ssrc=4028317929)))
+
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
+
+        # send same RTP twice, to trigger error on the receiver side:
+        # "replay check failed (bad index)"
+        run(session1._send_rtp(RTP))
+        run(session1._send_rtp(RTP))
+        run(asyncio.sleep(0.5))
+        self.assertEqual(len(receiver2.rtcp_packets), 0)
+        self.assertEqual(len(receiver2.rtp_packets), 1)
+
+        # shutdown
+        run(session1.stop())
+        run(session2.stop())
+
     def test_abrupt_disconnect(self):
         transport1, transport2 = dummy_ice_transport_pair()
 

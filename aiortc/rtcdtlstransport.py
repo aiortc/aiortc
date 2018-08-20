@@ -8,6 +8,7 @@ import os
 import struct
 
 import attr
+import pylibsrtp
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.bindings.openssl.binding import Binding
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -447,12 +448,15 @@ class RTCDtlsTransport(EventEmitter):
                 await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
         elif first_byte > 127 and first_byte < 192:
             # SRTP / SRTCP
-            if is_rtcp(data):
-                data = self._rx_srtp.unprotect_rtcp(data)
-                await self._handle_rtcp_data(data)
-            else:
-                data = self._rx_srtp.unprotect(data)
-                await self._handle_rtp_data(data)
+            try:
+                if is_rtcp(data):
+                    data = self._rx_srtp.unprotect_rtcp(data)
+                    await self._handle_rtcp_data(data)
+                else:
+                    data = self._rx_srtp.unprotect(data)
+                    await self._handle_rtp_data(data)
+            except pylibsrtp.Error as exc:
+                self.__log_debug('x SRTP unprotect failed: %s', exc)
 
     def _register_rtp_receiver(self, receiver, parameters):
         # make note of the RTP header extension used for muxId
