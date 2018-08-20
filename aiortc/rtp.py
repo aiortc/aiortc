@@ -21,6 +21,10 @@ RTCP_BYE = 203
 RTCP_RTPFB = 205
 RTCP_PSFB = 206
 
+RTCP_PSFB_PLI = 1
+RTCP_PSFB_SLI = 2
+RTCP_PSFB_RPSI = 3
+
 NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
 
 
@@ -254,6 +258,8 @@ class RtcpPacket:
                 packets.append(RtcpRrPacket.parse(payload, count))
             elif packet_type == RTCP_RTPFB:
                 packets.append(RtcpRtpfbPacket.parse(payload, count))
+            elif packet_type == RTCP_PSFB:
+                packets.append(RtcpPsfbPacket.parse(payload, count))
 
         return packets
 
@@ -270,6 +276,27 @@ class RtcpByePacket:
     def parse(cls, data, count):
         sources = list(unpack('!' + ('L' * count), data))
         return cls(sources=sources)
+
+
+@attr.s
+class RtcpPsfbPacket:
+    """"
+    Payload-Specific Feedback Message (RFC 4585).
+    """
+    fmt = attr.ib()
+    ssrc = attr.ib()
+    media_ssrc = attr.ib()
+    fci = attr.ib(default=b'')
+
+    def __bytes__(self):
+        payload = pack('!LL', self.ssrc, self.media_ssrc) + self.fci
+        return pack_rtcp_packet(RTCP_PSFB, self.fmt, payload)
+
+    @classmethod
+    def parse(cls, data, fmt):
+        ssrc, media_ssrc = unpack('!LL', data[0:8])
+        fci = data[8:]
+        return cls(fmt=fmt, ssrc=ssrc, media_ssrc=media_ssrc, fci=fci)
 
 
 @attr.s
@@ -296,6 +323,9 @@ class RtcpRrPacket:
 
 @attr.s
 class RtcpRtpfbPacket:
+    """
+    Generic RTP Feedback Message (RFC 4585).
+    """
     fmt = attr.ib()
     ssrc = attr.ib()
     media_ssrc = attr.ib()
