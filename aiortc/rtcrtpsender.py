@@ -11,7 +11,7 @@ from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
 
-RTP_HISTORY_SIZE = 32
+RTP_HISTORY_SIZE = 128
 
 
 class RTCRtpSender:
