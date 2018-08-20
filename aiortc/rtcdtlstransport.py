@@ -346,8 +346,13 @@ class RTCDtlsTransport(EventEmitter):
             srtp_rx_key = get_srtp_key_salt(view, 1)
 
         rx_policy = Policy(key=srtp_rx_key, ssrc_type=Policy.SSRC_ANY_INBOUND)
+        rx_policy.allow_repeat_tx = True
+        rx_policy.window_size = 1024
         self._rx_srtp = Session(rx_policy)
+
         tx_policy = Policy(key=srtp_tx_key, ssrc_type=Policy.SSRC_ANY_OUTBOUND)
+        tx_policy.allow_repeat_tx = True
+        tx_policy.window_size = 1024
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
