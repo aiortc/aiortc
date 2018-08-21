@@ -1,16 +1,16 @@
 import asyncio
-import datetime
 import logging
 import random
 import time
 
+from .clock import current_datetime, datetime_from_ntp
 from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rtp import (RTCP_PSFB_PLI, RTP_SEQ_MODULO, RtcpPsfbPacket,
                   RtcpReceiverInfo, RtcpRrPacket, RtcpRtpfbPacket,
-                  RtcpSrPacket, clamp_packets_lost, datetime_from_ntp, seq_gt,
+                  RtcpSrPacket, clamp_packets_lost, seq_gt,
                   seq_plus_one)
 from .stats import (RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats)
@@ -194,7 +194,7 @@ class RTCRtpReceiver:
         if isinstance(packet, RtcpSrPacket):
             stats = RTCRemoteOutboundRtpStreamStats(
                 # RTCStats
-                timestamp=datetime.datetime.now(),
+                timestamp=current_datetime(),
                 type='remote-outbound-rtp',
                 id=str(id(self)),
                 # RTCStreamStats
@@ -216,7 +216,7 @@ class RTCRtpReceiver:
             for report in packet.reports:
                 stats = RTCRemoteInboundRtpStreamStats(
                     # RTCStats
-                    timestamp=datetime.datetime.now(),
+                    timestamp=current_datetime(),
                     type='remote-inbound-rtp',
                     id=str(id(self)),
                     # RTCStreamStats

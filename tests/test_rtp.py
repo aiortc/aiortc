@@ -1,10 +1,8 @@
-import datetime
 from unittest import TestCase
 
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
-                        datetime_from_ntp, datetime_to_ntp,
                         get_header_extensions, pack_packets_lost, seq_gt,
                         seq_plus_one, set_header_extensions,
                         unpack_packets_lost)
@@ -231,14 +229,6 @@ class RtpUtilTest(TestCase):
         self.assertEqual(clamp_packets_lost(0), 0)
         self.assertEqual(clamp_packets_lost(8388607), 8388607)
         self.assertEqual(clamp_packets_lost(8388608), 8388607)
-
-    def test_datetime_from_ntp(self):
-        dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
-        self.assertEqual(datetime_from_ntp(16059593044731306503), dt)
-
-    def test_datetime_to_ntp(self):
-        dt = datetime.datetime(2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc)
-        self.assertEqual(datetime_to_ntp(dt), 16059593044731306503)
 
     def test_pack_packets_lost(self):
         self.assertEqual(pack_packets_lost(-8388608), b'\x80\x00\x00')

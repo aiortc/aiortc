@@ -2,11 +2,12 @@ import asyncio
 import logging
 import random
 
+from . import clock
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
-                  RtcpSourceInfo, RtcpSrPacket, RtpPacket, datetime_to_ntp,
-                  seq_plus_one, set_header_extensions, utcnow)
+                  RtcpSourceInfo, RtcpSrPacket, RtpPacket, seq_plus_one,
+                  set_header_extensions)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -157,7 +158,7 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
-                    self.__ntp_timestamp = datetime_to_ntp(utcnow())
+                    self.__ntp_timestamp = clock.current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1

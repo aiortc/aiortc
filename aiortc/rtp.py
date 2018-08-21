@@ -1,4 +1,3 @@
-import datetime
 from struct import pack, unpack
 
 import attr
@@ -25,8 +24,6 @@ RTCP_PSFB_PLI = 1
 RTCP_PSFB_SLI = 2
 RTCP_PSFB_RPSI = 3
 
-NTP_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
-
 
 def clamp_packets_lost(count):
     return max(PACKETS_LOST_MIN, min(count, PACKETS_LOST_MAX))
@@ -52,19 +49,6 @@ def pack_rtcp_packet(packet_type, count, payload):
                 len(payload) // 4) + payload
 
 
-def datetime_from_ntp(ntp):
-    seconds = (ntp >> 32)
-    microseconds = ((ntp & 0xffffffff) * 1000000) / (1 << 32)
-    return NTP_EPOCH + datetime.timedelta(seconds=seconds, microseconds=microseconds)
-
-
-def datetime_to_ntp(dt):
-    delta = dt - NTP_EPOCH
-    high = int(delta.total_seconds())
-    low = round((delta.microseconds * (1 << 32)) // 1000000)
-    return (high << 32) | low
-
-
 def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
@@ -84,10 +68,6 @@ def seq_gt(a, b):
 
 def seq_plus_one(a):
     return (a + 1) % RTP_SEQ_MODULO
-
-
-def utcnow():
-    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def get_header_extensions(packet):

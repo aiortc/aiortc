@@ -1,11 +1,10 @@
 import asyncio
 import copy
-import datetime
 import uuid
 
 from pyee import EventEmitter
 
-from . import rtp, sdp
+from . import clock, rtp, sdp
 from .codecs import MEDIA_CODECS
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
@@ -54,12 +53,6 @@ def find_common_header_extensions(local_extensions, remote_extensions):
             if lx.uri == rx.uri:
                 common.append(rx)
     return common
-
-
-def get_ntp_seconds():
-    return int((
-        datetime.datetime.utcnow() - datetime.datetime(1900, 1, 1, 0, 0, 0)
-    ).total_seconds())
 
 
 def add_transport_description(media, iceTransport, dtlsTransport):
@@ -509,7 +502,7 @@ class RTCPeerConnection(EventEmitter):
             self.emit('datachannel', channel)
 
     def __createSdp(self):
-        ntp_seconds = get_ntp_seconds()
+        ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
         description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
 
