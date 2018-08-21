@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import time
 
 from aiortc import RTCPeerConnection
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
@@ -10,21 +11,9 @@ def channel_log(channel, t, message):
     print('channel(%s) %s %s' % (channel.label, t, message))
 
 
-def channel_watch(channel):
-    @channel.on('message')
-    def on_message(message):
-        channel_log(channel, '<', message)
-
-
-def create_pc():
-    pc = RTCPeerConnection()
-
-    @pc.on('datachannel')
-    def on_datachannel(channel):
-        channel_log(channel, '-', 'created by remote party')
-        channel_watch(channel)
-
-    return pc
+def channel_send(channel, message):
+    channel_log(channel, '>', message)
+    channel.send(message)
 
 
 async def run_answer(pc, signaling):
@@ -32,15 +21,21 @@ async def run_answer(pc, signaling):
 
     @pc.on('datachannel')
     def on_datachannel(channel):
+        channel_log(channel, '-', 'created by remote party')
+
         @channel.on('message')
         def on_message(message):
-            # reply
-            message = 'pong'
-            channel_log(channel, '>', message)
-            channel.send(message)
+            channel_log(channel, '<', message)
 
-            # quit
-            done.set()
+            if message == 'ping':
+                # reply
+                channel_send(channel, 'pong')
+            elif message == 'quit':
+                # reply
+                channel_send(channel, 'quit')
+
+                # quit
+                done.set()
 
     # receive offer
     offer = await signaling.receive()
@@ -54,16 +49,25 @@ async def run_answer(pc, signaling):
 
 
 async def run_offer(pc, signaling):
+    ready = asyncio.Event()
     done = asyncio.Event()
 
     channel = pc.createDataChannel('chat')
     channel_log(channel, '-', 'created by local party')
-    channel_watch(channel)
+
+    @channel.on('open')
+    def on_open():
+        ready.set()
 
     @channel.on('message')
     def on_message(message):
-        # quit
-        done.set()
+        channel_log(channel, '<', message)
+
+        if message == 'pong':
+            elapsed_ms = (time.time() - start) * 1000
+            print(' RTT %.2f ms' % elapsed_ms)
+        if message == 'quit':
+            done.set()
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
@@ -73,11 +77,16 @@ async def run_offer(pc, signaling):
     answer = await signaling.receive()
     await pc.setRemoteDescription(answer)
 
-    # send message
-    message = 'ping'
-    channel_log(channel, '>', message)
-    channel.send(message)
+    # wait for channel to be ready
+    await ready.wait()
 
+    # send 10 pings
+    for i in range(0, 10):
+        start = time.time()
+        channel_send(channel, 'ping')
+        await asyncio.sleep(1)
+
+    channel_send(channel, 'quit')
     await done.wait()
 
 
@@ -93,7 +102,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     signaling = create_signaling(args)
-    pc = create_pc()
+    pc = RTCPeerConnection()
     if args.role == 'offer':
         coro = run_offer(pc, signaling)
     else:
