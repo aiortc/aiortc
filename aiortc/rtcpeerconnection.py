@@ -591,9 +591,8 @@ class RTCPeerConnection(EventEmitter):
         # collect existing MIDs
         mids = set()
         for transceiver in self.__transceivers:
-            if transceiver.mid is not None:
-                mids.add(transceiver.mid)
-        if self.__sctp and self.__sctp.mid is not None:
+            mids.add(transceiver.mid)
+        if self.__sctp:
             mids.add(self.__sctp.mid)
 
         # find an available MID
