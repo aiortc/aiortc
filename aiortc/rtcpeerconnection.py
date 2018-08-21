@@ -443,10 +443,11 @@ class RTCPeerConnection(EventEmitter):
                 self.__sctp.setTransport(masterTransport)
                 self.__sctp._bundled = True
 
-            # discard old ICE transports
-            oldIceTransports = set([x.transport for x in oldTransports])
-            self.__iceTransports = list(filter(
-                lambda x: x not in oldIceTransports, self.__iceTransports))
+            # stop and discard old ICE transports
+            for dtlsTransport in oldTransports:
+                await dtlsTransport.stop()
+                await dtlsTransport.transport.stop()
+                self.__iceTransports.discard(dtlsTransport.transport)
 
         # connect
         asyncio.ensure_future(self.__connect())
