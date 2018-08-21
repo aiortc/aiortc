@@ -11,7 +11,11 @@ Media
 
   * Implement basic RTP video packet loss detection / retransmission using RTCP NACK feedback.
 
+  * Respond to Picture Loss Indications (PLI) by sending a keyframe.
+
   * Use shorter MID values to reduce RTP header extension overhead.
+
+  * Correctly shutdown and discard unused transports when using BUNDLE.
 
 Examples
 ........
