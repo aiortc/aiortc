@@ -406,6 +406,9 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
 
+        # allow media to flow long enough to collect stats
+        run(asyncio.sleep(2))
+
         # close
         run(pc1.close())
         run(pc2.close())
