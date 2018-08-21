@@ -31,24 +31,32 @@ class ClosedDtlsTransport:
 
 class NackGeneratorTest(TestCase):
     def create_generator(self):
-        calls = []
+        class FakeReceiver:
+            def __init__(self):
+                self.nack = []
+                self.pli = []
 
-        async def callback(ssrc, lost):
-            calls.append((ssrc, lost))
+            async def _send_rtcp_nack(self, media_ssrc, lost):
+                self.nack.append((media_ssrc, lost))
 
-        return NackGenerator(callback), calls
+            async def _send_rtcp_pli(self, media_ssrc, lost):
+                self.pli.append(media_ssrc)
+
+        receiver = FakeReceiver()
+        return NackGenerator(receiver), receiver
 
     def test_no_loss(self):
-        generator, calls = self.create_generator()
+        generator, receiver = self.create_generator()
 
         for packet in create_rtp_packets(20, 0):
             run(generator.add(packet))
 
-        self.assertEqual(calls, [])
+        self.assertEqual(receiver.nack, [])
+        self.assertEqual(receiver.pli, [])
         self.assertEqual(generator.missing, set())
 
     def test_with_loss(self):
-        generator, calls = self.create_generator()
+        generator, receiver = self.create_generator()
 
         # receive packets: 0, <1 missing>, 2
         packets = create_rtp_packets(3, 0)
@@ -56,15 +64,15 @@ class NackGeneratorTest(TestCase):
         for packet in packets:
             run(generator.add(packet))
 
-        self.assertEqual(calls, [
-            (1234, [1]),
-        ])
+        self.assertEqual(receiver.nack, [(1234, [1])])
+        self.assertEqual(receiver.pli, [])
         self.assertEqual(generator.missing, set([1]))
-        calls.clear()
+        receiver.nack.clear()
 
         # late arrival
         run(generator.add(missing))
-        self.assertEqual(calls, [])
+        self.assertEqual(receiver.nack, [])
+        self.assertEqual(receiver.pli, [])
         self.assertEqual(generator.missing, set())
 
 
@@ -302,6 +310,20 @@ class RTCRtpReceiverTest(TestCase):
 
         # send RTCP feedback NACK
         run(receiver._send_rtcp_nack(5678, [7654]))
+
+    def test_send_rtcp_pli(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        receiver = RTCRtpReceiver('video', transport)
+        receiver._ssrc = 1234
+        receiver._track = RemoteStreamTrack(kind='video')
+
+        run(receiver.receive(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # send RTCP feedback PLI
+        run(receiver._send_rtcp_pli(5678))
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()

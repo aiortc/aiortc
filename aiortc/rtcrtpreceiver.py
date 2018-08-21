@@ -20,8 +20,8 @@ logger = logging.getLogger('rtp')
 
 
 class NackGenerator:
-    def __init__(self, callback):
-        self.callback = callback
+    def __init__(self, receiver):
+        self.receiver = receiver
         self.max_seq = None
         self.missing = None
         self.ssrc = None
@@ -45,7 +45,7 @@ class NackGenerator:
 
             # trigger a NACK if needed
             if missed:
-                await self.callback(self.ssrc, sorted(self.missing))
+                await self.receiver._send_rtcp_nack(self.ssrc, sorted(self.missing))
         else:
             self.missing.discard(packet.sequence_number)
 
@@ -140,7 +140,7 @@ class RTCRtpReceiver:
         self.__decoders = {}
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=128)
-        self.__nack_generator = NackGenerator(self._send_rtcp_nack)
+        self.__nack_generator = NackGenerator(self)
         self._track = None
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
@@ -321,9 +321,20 @@ class RTCRtpReceiver:
             pass
 
     async def _send_rtcp_nack(self, media_ssrc, lost):
+        """
+        Send an RTCP packet to report missing RTP packets.
+        """
         if self._ssrc is not None:
             packet = RtcpRtpfbPacket(fmt=1, ssrc=self._ssrc, media_ssrc=media_ssrc)
             packet.lost = lost
+            await self._send_rtcp(packet)
+
+    async def _send_rtcp_pli(self, media_ssrc):
+        """
+        Send an RTCP packet to report picture loss.
+        """
+        if self._ssrc is not None:
+            packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=self._ssrc, media_ssrc=media_ssrc)
             await self._send_rtcp(packet)
 
     def _set_sender(self, sender):
