@@ -245,6 +245,9 @@ class RTCRtpReceiverTest(TestCase):
         packet = RtpPacket(payload_type=100)
         run(receiver._handle_rtp_packet(packet))
 
+        # shutdown
+        run(receiver.stop())
+
     def test_send_rtcp_nack(self):
         transport, remote = dummy_dtls_transport_pair()
 
@@ -259,6 +262,9 @@ class RTCRtpReceiverTest(TestCase):
         # send RTCP feedback NACK
         run(receiver._send_rtcp_nack(5678, [7654]))
 
+        # shutdown
+        run(receiver.stop())
+
     def test_send_rtcp_pli(self):
         transport, remote = dummy_dtls_transport_pair()
 
@@ -272,6 +278,9 @@ class RTCRtpReceiverTest(TestCase):
 
         # send RTCP feedback PLI
         run(receiver._send_rtcp_pli(5678))
+
+        # shutdown
+        run(receiver.stop())
 
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
