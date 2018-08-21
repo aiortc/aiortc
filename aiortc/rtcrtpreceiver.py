@@ -152,7 +152,7 @@ class RTCRtpReceiver:
         # RTCP
         self._ssrc = None
         self.__lsr = None
-        self.__lsr_stamp = None
+        self.__lsr_time = None
         self.__remote_counter = None
 
     @property
@@ -236,7 +236,7 @@ class RTCRtpReceiver:
 
         # FIXME: could this be done at the DTLS level?
         if self.__sender:
-            self.__sender._handle_rtcp_packet(packet)
+            await self.__sender._handle_rtcp_packet(packet)
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
