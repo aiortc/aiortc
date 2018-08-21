@@ -39,3 +39,7 @@ class RTCRemoteInboundRtpStreamStats(RTCReceivedRtpStreamStats):
 class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
     localId = attr.ib(type=str)
     remoteTimestamp = attr.ib(default=None)
+
+
+class RTCStatsReport(dict):
+    pass

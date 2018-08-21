@@ -6,9 +6,12 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpsender import RTCRtpSender
-from aiortc.rtp import RtpPacket, is_rtcp, seq_plus_one
+from aiortc.rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpPacket,
+                        RtcpPsfbPacket, RtcpRtpfbPacket, RtpPacket, is_rtcp,
+                        seq_plus_one)
+from aiortc.stats import RTCStatsReport
 
-from .utils import dummy_dtls_transport_pair, run
+from .utils import dummy_dtls_transport_pair, load, run
 
 
 class ClosedDtlsTransport:
@@ -52,6 +55,66 @@ class RTCRtpSenderTest(TestCase):
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         run(transport.close())
+
+    def test_handle_rtcp_nack(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'video')
+        self.assertEqual(sender.transport, transport)
+
+        run(sender.send(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTCP feedback NACK
+        packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=5678)
+        packet.lost.append(7654)
+        run(sender._handle_rtcp_packet(packet))
+
+        # clean shutdown
+        run(sender.stop())
+
+    def test_handle_rtcp_pli(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'video')
+        self.assertEqual(sender.transport, transport)
+
+        run(sender.send(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTCP feedback NACK
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=5678)
+        run(sender._handle_rtcp_packet(packet))
+
+        # clean shutdown
+        run(sender.stop())
+
+    def test_handle_rtcp_rr(self):
+        transport, remote = dummy_dtls_transport_pair()
+
+        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        self.assertEqual(sender.kind, 'video')
+        self.assertEqual(sender.transport, transport)
+
+        run(sender.send(RTCRtpParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTCP RR
+        for packet in RtcpPacket.parse(load('rtcp_rr.bin')):
+            run(sender._handle_rtcp_packet(packet))
+
+        # check stats
+        report = run(sender.getStats())
+        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertEqual(sorted(report.keys()), ['remote-inbound-rtp'])
+
+        # clean shutdown
+        run(sender.stop())
 
     def test_send_keyframe(self):
         """

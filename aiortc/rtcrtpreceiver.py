@@ -8,12 +8,11 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import (RTCP_PSFB_PLI, RTP_SEQ_MODULO, RtcpPsfbPacket,
-                  RtcpReceiverInfo, RtcpRrPacket, RtcpRtpfbPacket,
-                  RtcpSrPacket, clamp_packets_lost, seq_gt,
+from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RTP_SEQ_MODULO,
+                  RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
+                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost, seq_gt,
                   seq_plus_one)
-from .stats import (RTCRemoteInboundRtpStreamStats,
-                    RTCRemoteOutboundRtpStreamStats)
+from .stats import RTCRemoteOutboundRtpStreamStats, RTCStatsReport
 from .utils import first_completed
 
 logger = logging.getLogger('rtp')
@@ -145,7 +144,7 @@ class RTCRtpReceiver:
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
         self.__started = False
-        self._stats = {}
+        self.__stats = RTCStatsReport()
         self.__stopped = asyncio.Event()
         self.__transport = transport
 
@@ -162,6 +161,9 @@ class RTCRtpReceiver:
         track is received.
         """
         return self.__transport
+
+    async def getStats(self):
+        return self.__stats
 
     async def receive(self, parameters):
         """
@@ -208,37 +210,13 @@ class RTCRtpReceiver:
                 localId='TODO',
                 remoteTimestamp=datetime_from_ntp(packet.sender_info.ntp_timestamp)
             )
-            self._stats[stats.type] = stats
+            self.__stats[stats.type] = stats
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
 
-        if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
-            for report in packet.reports:
-                stats = RTCRemoteInboundRtpStreamStats(
-                    # RTCStats
-                    timestamp=current_datetime(),
-                    type='remote-inbound-rtp',
-                    id=str(id(self)),
-                    # RTCStreamStats
-                    ssrc=packet.ssrc,
-                    kind=self._kind,
-                    transportId=str(id(self.transport)),
-                    # RTCReceivedRtpStreamStats
-                    packetsReceived=0,  # FIXME: where do we get this?
-                    packetsLost=report.packets_lost,
-                    jitter=report.jitter,
-                    # RTCRemoteInboundRtpStreamStats
-                    localId='TODO',
-                    roundTripTime=0,  # FIXME: where do we get this?
-                    fractionLost=report.fraction_lost
-                )
-                self._stats[stats.type] = stats
-
-        if isinstance(packet, RtcpRtpfbPacket) and self.__sender:
-            for seq in packet.lost:
-                await self.__sender._retransmit(seq)
-        elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI and self.__sender:
-            self.__sender._send_keyframe()
+        # FIXME: could this be done at the DTLS level?
+        if self.__sender:
+            self.__sender._handle_rtcp_packet(packet)
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
@@ -325,7 +303,7 @@ class RTCRtpReceiver:
         Send an RTCP packet to report missing RTP packets.
         """
         if self._ssrc is not None:
-            packet = RtcpRtpfbPacket(fmt=1, ssrc=self._ssrc, media_ssrc=media_ssrc)
+            packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=self._ssrc, media_ssrc=media_ssrc)
             packet.lost = lost
             await self._send_rtcp(packet)
 

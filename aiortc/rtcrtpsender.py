@@ -2,12 +2,14 @@ import asyncio
 import logging
 import random
 
-from . import clock
+from .clock import current_datetime, current_ntp_time
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import (RtcpByePacket, RtcpSdesPacket, RtcpSenderInfo,
-                  RtcpSourceInfo, RtcpSrPacket, RtpPacket, seq_plus_one,
-                  set_header_extensions)
+from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
+                  RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
+                  RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
+                  RtpPacket, seq_plus_one, set_header_extensions)
+from .stats import RTCRemoteInboundRtpStreamStats, RTCStatsReport
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -44,6 +46,7 @@ class RTCRtpSender:
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
         self.__started = False
+        self.__stats = RTCStatsReport()
         self.__stopped = asyncio.Event()
         self.__transport = transport
 
@@ -71,6 +74,9 @@ class RTCRtpSender:
         transmitted.
         """
         return self.__transport
+
+    async def getStats(self):
+        return self.__stats
 
     def replaceTrack(self, track):
         self._track = track
@@ -106,6 +112,34 @@ class RTCRtpSender:
             await asyncio.gather(
                 self.__rtp_exited.wait(),
                 self.__rtcp_exited.wait())
+
+    async def _handle_rtcp_packet(self, packet):
+        if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
+            for report in packet.reports:
+                stats = RTCRemoteInboundRtpStreamStats(
+                    # RTCStats
+                    timestamp=current_datetime(),
+                    type='remote-inbound-rtp',
+                    id=str(id(self)),
+                    # RTCStreamStats
+                    ssrc=packet.ssrc,
+                    kind=self._kind,
+                    transportId=str(id(self.transport)),
+                    # RTCReceivedRtpStreamStats
+                    packetsReceived=self.__packet_count - report.packets_lost,
+                    packetsLost=report.packets_lost,
+                    jitter=report.jitter,
+                    # RTCRemoteInboundRtpStreamStats
+                    localId='TODO',
+                    roundTripTime=0,  # FIXME: where do we get this?
+                    fractionLost=report.fraction_lost
+                )
+                self.__stats[stats.type] = stats
+        elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
+            for seq in packet.lost:
+                await self._retransmit(seq)
+        elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
+            self._send_keyframe()
 
     async def _retransmit(self, sequence_number):
         """
@@ -158,7 +192,7 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
-                    self.__ntp_timestamp = clock.current_ntp_time()
+                    self.__ntp_timestamp = current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
