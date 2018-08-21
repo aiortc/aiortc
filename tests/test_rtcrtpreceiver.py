@@ -221,7 +221,7 @@ class RTCRtpReceiverTest(TestCase):
         # check stats
         report = run(receiver.getStats())
         self.assertTrue(isinstance(report, RTCStatsReport))
-        self.assertEqual(sorted(report.keys()), ['remote-outbound-rtp'])
+        self.assertEqual(sorted(report.keys()), ['inbound-rtp', 'remote-outbound-rtp'])
 
         # check remote track
         frame = run(receiver._track.recv())

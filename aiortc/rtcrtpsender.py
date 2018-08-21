@@ -9,7 +9,8 @@ from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
                   RtpPacket, seq_plus_one, set_header_extensions)
-from .stats import RTCRemoteInboundRtpStreamStats, RTCStatsReport
+from .stats import (RTCOutboundRtpStreamStats,
+                    RTCRemoteInboundRtpStreamStats, RTCStatsReport)
 from .utils import first_completed, random32
 
 logger = logging.getLogger('rtp')
@@ -76,6 +77,25 @@ class RTCRtpSender:
         return self.__transport
 
     async def getStats(self):
+        """
+        Returns a :class:`RTCStatsReport` containing :class:`RTCOutboundRtpStreamStats`
+        and :class:`RTCRemoteInboundRtpStreamStats`.
+        """
+        self.__stats['outbound-rtp'] = RTCOutboundRtpStreamStats(
+            # RTCStats
+            timestamp=current_datetime(),
+            type='outbound-rtp',
+            id=str(id(self)),
+            # RTCStreamStats
+            ssrc=self._ssrc,
+            kind=self._kind,
+            transportId=str(id(self.transport)),
+            # RTCSentRtpStreamStats
+            packetsSent=self.__packet_count,
+            bytesSent=self.__octet_count,
+            # RTCOutboundRtpStreamStats
+            trackId=str(id(self.track)),
+        )
         return self.__stats
 
     def replaceTrack(self, track):
@@ -130,7 +150,6 @@ class RTCRtpSender:
                     packetsLost=report.packets_lost,
                     jitter=report.jitter,
                     # RTCRemoteInboundRtpStreamStats
-                    localId='TODO',
                     roundTripTime=0,  # FIXME: where do we get this?
                     fractionLost=report.fraction_lost
                 )

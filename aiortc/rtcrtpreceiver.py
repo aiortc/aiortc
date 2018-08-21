@@ -12,7 +12,8 @@ from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RTP_SEQ_MODULO,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
                   RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost, seq_gt,
                   seq_plus_one)
-from .stats import RTCRemoteOutboundRtpStreamStats, RTCStatsReport
+from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
+                    RTCStatsReport)
 from .utils import first_completed
 
 logger = logging.getLogger('rtp')
@@ -163,6 +164,26 @@ class RTCRtpReceiver:
         return self.__transport
 
     async def getStats(self):
+        """
+        Returns a :class:`RTCStatsReport` containing :class:`RTCInboundRtpStreamStats`
+        and :class:`RTCRemoteOutboundRtpStreamStats`.
+        """
+        if self.__remote_counter is not None:
+            self.__stats['inbound-rtp'] = RTCInboundRtpStreamStats(
+                # RTCStats
+                timestamp=current_datetime(),
+                type='inbound-rtp',
+                id=str(id(self)),
+                # RTCStreamStats
+                ssrc=self.__remote_counter.ssrc,
+                kind=self._kind,
+                transportId=str(id(self.transport)),
+                # RTCReceivedRtpStreamStats
+                packetsReceived=self.__remote_counter.packets_received,
+                packetsLost=self.__remote_counter.packets_lost,
+                jitter=self.__remote_counter.jitter,
+                # RTPInboundRtpStreamStats
+            )
         return self.__stats
 
     async def receive(self, parameters):
@@ -207,7 +228,6 @@ class RTCRtpReceiver:
                 packetsSent=packet.sender_info.packet_count,
                 bytesSent=packet.sender_info.octet_count,
                 # RTCRemoteOutboundRtpStreamStats
-                localId='TODO',
                 remoteTimestamp=datetime_from_ntp(packet.sender_info.ntp_timestamp)
             )
             self.__stats[stats.type] = stats

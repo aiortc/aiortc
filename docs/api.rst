@@ -83,3 +83,18 @@ Data channels
 
    .. autoclass:: RTCDataChannelParameters()
       :members:
+
+Statistics
+----------
+
+   .. autoclass:: RTCInboundRtpStreamStats()
+      :members:
+
+   .. autoclass:: RTCOutboundRtpStreamStats()
+      :members:
+
+   .. autoclass:: RTCRemoteInboundRtpStreamStats()
+      :members:
+
+   .. autoclass:: RTCRemoteOutboundRtpStreamStats()
+      :members:

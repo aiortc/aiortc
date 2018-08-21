@@ -111,7 +111,7 @@ class RTCRtpSenderTest(TestCase):
         # check stats
         report = run(sender.getStats())
         self.assertTrue(isinstance(report, RTCStatsReport))
-        self.assertEqual(sorted(report.keys()), ['remote-inbound-rtp'])
+        self.assertEqual(sorted(report.keys()), ['outbound-rtp', 'remote-inbound-rtp'])
 
         # clean shutdown
         run(sender.stop())

@@ -4,6 +4,7 @@ import attr
 @attr.s
 class RTCStats:
     timestamp = attr.ib()
+    "The timestamp associated with this object."
     type = attr.ib()
     id = attr.ib()
 
@@ -25,19 +26,45 @@ class RTCReceivedRtpStreamStats(RTCRtpStreamStats):
 @attr.s
 class RTCSentRtpStreamStats(RTCRtpStreamStats):
     packetsSent = attr.ib()
+    "Total number of RTP packets sent for this SSRC."
     bytesSent = attr.ib()
+    "Total number of bytes sent for this SSRC."
+
+
+@attr.s
+class RTCInboundRtpStreamStats(RTCReceivedRtpStreamStats):
+    """
+    The :class:`RTCInboundRtpStreamStats` dictionary represents the measurement
+    metrics for the incoming RTP media stream.
+    """
+    pass
 
 
 @attr.s
 class RTCRemoteInboundRtpStreamStats(RTCReceivedRtpStreamStats):
-    localId = attr.ib()
+    """
+    The :class:`RTCRemoteInboundRtpStreamStats` dictionary represents the remote
+    endpoint's measurement metrics for a particular incoming RTP stream.
+    """
     roundTripTime = attr.ib()
     fractionLost = attr.ib()
 
 
 @attr.s
+class RTCOutboundRtpStreamStats(RTCSentRtpStreamStats):
+    """
+    The :class:`RTCOutboundRtpStreamStats` dictionary represents the measurement
+    metrics for the outgoing RTP stream.
+    """
+    trackId = attr.ib(type=str)
+
+
+@attr.s
 class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
-    localId = attr.ib(type=str)
+    """
+    The RTCRemoteOutboundRtpStreamStats dictionary represents the remote
+    endpoint's measurement metrics for its outgoing RTP stream.
+    """
     remoteTimestamp = attr.ib(default=None)
 
 

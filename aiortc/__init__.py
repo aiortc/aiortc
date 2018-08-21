@@ -15,3 +15,8 @@ from .rtcrtpsender import RTCRtpSender  # noqa
 from .rtcrtptransceiver import RTCRtpTransceiver  # noqa
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport  # noqa
 from .rtcsessiondescription import RTCSessionDescription  # noqa
+from .stats import (RTCInboundRtpStreamStats,  # noqa
+                    RTCOutboundRtpStreamStats,
+                    RTCRemoteInboundRtpStreamStats,
+                    RTCRemoteOutboundRtpStreamStats,
+                    RTCStatsReport)
