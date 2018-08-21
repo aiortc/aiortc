@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import time
 
 from .clock import current_datetime, current_ntp_time
 from .codecs import get_encoder
@@ -16,6 +17,7 @@ from .utils import first_completed, random32
 logger = logging.getLogger('rtp')
 
 RTP_HISTORY_SIZE = 128
+RTT_ALPHA = 0.85
 
 
 class RTCRtpSender:
@@ -52,10 +54,13 @@ class RTCRtpSender:
         self.__transport = transport
 
         # stats
+        self.__lsr = None
+        self.__lsr_time = None
         self.__ntp_timestamp = 0
         self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
+        self.__rtt = None
 
     @property
     def kind(self):
@@ -136,6 +141,14 @@ class RTCRtpSender:
     async def _handle_rtcp_packet(self, packet):
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in packet.reports:
+                # estimate round-trip time
+                if self.__lsr == report.lsr and report.dlsr:
+                    rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
+                    if self.__rtt is None:
+                        self.__rtt = rtt
+                    else:
+                        self.__rtt = RTT_ALPHA * self.__rtt + (1 - RTT_ALPHA) * rtt
+
                 stats = RTCRemoteInboundRtpStreamStats(
                     # RTCStats
                     timestamp=current_datetime(),
@@ -150,7 +163,7 @@ class RTCRtpSender:
                     packetsLost=report.packets_lost,
                     jitter=report.jitter,
                     # RTCRemoteInboundRtpStreamStats
-                    roundTripTime=0,  # FIXME: where do we get this?
+                    roundTripTime=self.__rtt,
                     fractionLost=report.fraction_lost
                 )
                 self.__stats[stats.type] = stats
@@ -242,6 +255,8 @@ class RTCRtpSender:
                     rtp_timestamp=self.__rtp_timestamp,
                     packet_count=self.__packet_count,
                     octet_count=self.__octet_count))]
+            self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xffffffff
+            self.__lsr_time = time.time()
 
             # RTCP SDES
             if self.__cname is not None:
