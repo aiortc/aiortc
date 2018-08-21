@@ -195,6 +195,31 @@ class RTCDtlsTransportTest(TestCase):
             session1.start(session2.getLocalParameters()),
             session2.start(session1.getLocalParameters())))
 
+        # break connections
+        run(transport1.stop())
+        run(transport2.stop())
+
+        # close DTLS -> raises ConnectionError
+        run(session1.stop())
+        run(session2.stop())
+
+        # check outcome
+        self.assertEqual(session1.state, 'closed')
+        self.assertEqual(session2.state, 'closed')
+
+    def test_abrupt_disconnect_during_recv(self):
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
+
         # break one connection
         with self.assertRaises(ConnectionError):
             run(asyncio.gather(session1.data.recv(), transport1.stop()))

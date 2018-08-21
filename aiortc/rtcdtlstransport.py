@@ -368,7 +368,10 @@ class RTCDtlsTransport(EventEmitter):
         """
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
-            await self._write_ssl()
+            try:
+                await self._write_ssl()
+            except ConnectionError:
+                pass
             self.__log_debug('- DTLS shutdown complete')
             self.closed.set()
 
