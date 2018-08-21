@@ -196,10 +196,14 @@ class RTCRtpReceiverTest(TestCase):
         packet = RtpPacket.parse(load('rtp.bin'))
         run(receiver._handle_rtp_packet(packet))
 
+        # break connection
         run(transport.close())
 
         # give RTCP time to send a report
         run(asyncio.sleep(2))
+
+        # shutdown
+        run(receiver.stop())
 
     def test_rtp_and_rtcp(self):
         transport, remote = dummy_dtls_transport_pair()
