@@ -3,6 +3,7 @@ import asyncio
 import logging
 import time
 
+import uvloop
 from aiortc import RTCPeerConnection
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
@@ -101,6 +102,7 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
     if args.role == 'offer':
