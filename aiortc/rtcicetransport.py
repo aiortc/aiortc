@@ -68,13 +68,15 @@ def connection_kwargs(servers):
                     continue
 
                 kwargs['stun_server'] = (parsed['host'], parsed['port'])
-            elif parsed['scheme'] == 'turn':
+            elif parsed['scheme'] in ['turn', 'turns']:
                 # only a single TURN server is supported
                 if 'turn_server' in kwargs:
                     continue
 
                 # only 'udp' and 'tcp' transports are supported
-                if parsed['transport'] not in ['udp', 'tcp']:
+                if parsed['scheme'] == 'turn' and parsed['transport'] not in ['udp', 'tcp']:
+                    continue
+                elif parsed['scheme'] == 'turns' and parsed['transport'] != 'tcp':
                     continue
 
                 # only 'password' credentialType is supported
@@ -82,6 +84,7 @@ def connection_kwargs(servers):
                     continue
 
                 kwargs['turn_server'] = (parsed['host'], parsed['port'])
+                kwargs['turn_ssl'] = (parsed['scheme'] == 'turns')
                 kwargs['turn_transport'] = parsed['transport']
                 kwargs['turn_username'] = server.username
                 kwargs['turn_password'] = server.credential

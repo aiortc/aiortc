@@ -43,6 +43,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_ssl': False,
             'turn_transport': 'udp',
             'turn_username': None,
         })
@@ -54,6 +55,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_ssl': False,
             'turn_transport': 'udp',
             'turn_username': None,
         })
@@ -67,6 +69,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn1.example.com', 3478),
+            'turn_ssl': False,
             'turn_transport': 'udp',
             'turn_username': None,
         })
@@ -82,6 +85,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': None,
             'turn_server': ('turn.example.com', 3478),
+            'turn_ssl': False,
             'turn_transport': 'tcp',
             'turn_username': None,
         })
@@ -96,6 +100,7 @@ class ConnectionKwargsTest(TestCase):
         ]), {
             'turn_password': 'bar',
             'turn_server': ('turn.example.com', 3478),
+            'turn_ssl': False,
             'turn_transport': 'udp',
             'turn_username': 'foo',
         })
@@ -108,6 +113,22 @@ class ConnectionKwargsTest(TestCase):
                 credential='bar',
                 credentialType='token',
             ),
+        ]), {})
+
+    def test_turns(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turns:turn.example.com'),
+        ]), {
+            'turn_password': None,
+            'turn_server': ('turn.example.com', 5349),
+            'turn_ssl': True,
+            'turn_transport': 'tcp',
+            'turn_username': None,
+        })
+
+    def test_turns_over_udp(self):
+        self.assertEqual(connection_kwargs([
+            RTCIceServer('turns:turn.example.com?transport=udp'),
         ]), {})
 
 
