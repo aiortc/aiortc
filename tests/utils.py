@@ -49,10 +49,16 @@ class DummyDtlsTransport:
         self.data = transport._connection
         self.state = state
         self.transport = transport
+        self._data_handle = None
+        self._data_receiver = None
 
     async def stop(self):
         await self.transport.stop()
         self.state = 'closed'
+
+    def _register_data_receiver(self, receiver):
+        self._data_receiver = receiver
+        self._data_handle = asyncio.ensure_future(self.__run())
 
     def _register_rtp_receiver(self, receiver, parameters):
         pass
@@ -62,6 +68,20 @@ class DummyDtlsTransport:
 
     async def _send_rtp(self, data):
         await self.transport._connection.send(data)
+
+    def _unregister_data_receiver(self):
+        if self._data_handle:
+            self._data_receiver = None
+            self._data_handle.cancel()
+            self._data_handle = None
+
+    async def __run(self):
+        while True:
+            try:
+                data = await self.transport._connection.recv()
+            except ConnectionError:
+                break
+            await self._data_receiver._handle_data(data)
 
 
 def dummy_connection_pair(loss=None):

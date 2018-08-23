@@ -115,18 +115,6 @@ def create_ssl_context(certificate):
     return ctx
 
 
-class Channel:
-    def __init__(self, closed, queue):
-        self.closed = closed
-        self.queue = queue
-
-    async def recv(self):
-        data = await first_completed(self.queue.get(), self.closed.wait())
-        if data is True:
-            raise ConnectionError
-        return data
-
-
 class State(enum.Enum):
     NEW = 0
     CONNECTING = 1
@@ -232,17 +220,13 @@ class RTCDtlsTransport(EventEmitter):
         super().__init__()
         self.closed = asyncio.Event()
         self.encrypted = False
+        self._data_receiver = None
         self._role = 'auto'
         self._rtp_mid_header_id = None
         self._rtp_router = RtpRouter()
         self._start = None
         self._state = State.NEW
         self._transport = transport
-
-        self.data_queue = asyncio.Queue()
-        self.data = Channel(
-            closed=self.closed,
-            queue=self.data_queue)
 
         # SSL init
         self.__ctx = create_ssl_context(certificate)
@@ -383,6 +367,10 @@ class RTCDtlsTransport(EventEmitter):
             self._set_state(State.CLOSED)
             self.closed.set()
 
+    async def _handle_data(self, data):
+        if self._data_receiver:
+            await self._data_receiver._handle_data(data)
+
     async def _handle_rtcp_data(self, data):
         packets = RtcpPacket.parse(data)
         for packet in packets:
@@ -446,7 +434,8 @@ class RTCDtlsTransport(EventEmitter):
                 self.__log_debug('- DTLS shutdown by remote party')
                 raise ConnectionError
             elif result > 0:
-                await self.data_queue.put(ffi.buffer(self.read_cdata)[0:result])
+                data = ffi.buffer(self.read_cdata)[0:result]
+                await self._handle_data(data)
         elif first_byte > 127 and first_byte < 192:
             # SRTP / SRTCP
             try:
@@ -458,6 +447,10 @@ class RTCDtlsTransport(EventEmitter):
                     await self._handle_rtp_data(data)
             except pylibsrtp.Error as exc:
                 self.__log_debug('x SRTP unprotect failed: %s', exc)
+
+    def _register_data_receiver(self, receiver):
+        assert self._data_receiver is None
+        self._data_receiver = receiver
 
     def _register_rtp_receiver(self, receiver, parameters):
         # make note of the RTP header extension used for muxId
@@ -489,6 +482,9 @@ class RTCDtlsTransport(EventEmitter):
             self.__log_debug('- %s -> %s', self._state, state)
             self._state = state
             self.emit('statechange')
+
+    def _unregister_data_receiver(self):
+        self._data_receiver = None
 
     async def _write_ssl(self):
         """

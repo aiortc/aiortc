@@ -14,6 +14,14 @@ RTP = load('rtp.bin')
 RTCP = load('rtcp_sr.bin')
 
 
+class DummyDataReceiver:
+    def __init__(self):
+        self.data = []
+
+    async def _handle_data(self, data):
+        self.data.append(data)
+
+
 class DummyRtpReceiver:
     def __init__(self):
         self.rtp_packets = []
@@ -54,9 +62,13 @@ class RTCDtlsTransportTest(TestCase):
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
+        receiver1 = DummyDataReceiver()
+        session1._register_data_receiver(receiver1)
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
+        receiver2 = DummyDataReceiver()
+        session2._register_data_receiver(receiver2)
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
@@ -64,12 +76,12 @@ class RTCDtlsTransportTest(TestCase):
 
         # send encypted data
         run(session1._send_data(b'ping'))
-        data = run(session2.data.recv())
-        self.assertEqual(data, b'ping')
+        run(asyncio.sleep(0.1))
+        self.assertEqual(receiver2.data, [b'ping'])
 
         run(session2._send_data(b'pong'))
-        data = run(session1.data.recv())
-        self.assertEqual(data, b'pong')
+        run(asyncio.sleep(0.1))
+        self.assertEqual(receiver1.data, [b'pong'])
 
         # shutdown
         run(session1.stop())
@@ -80,10 +92,6 @@ class RTCDtlsTransportTest(TestCase):
         # try closing again
         run(session1.stop())
         run(session2.stop())
-
-        # try receving after close
-        with self.assertRaises(ConnectionError):
-            run(session1.data.recv())
 
         # try sending after close
         with self.assertRaises(ConnectionError):
@@ -189,33 +197,6 @@ class RTCDtlsTransportTest(TestCase):
         # check outcome
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
-
-    def test_abrupt_disconnect_during_recv(self):
-        transport1, transport2 = dummy_ice_transport_pair()
-
-        certificate1 = RTCCertificate.generateCertificate()
-        session1 = RTCDtlsTransport(transport1, [certificate1])
-
-        certificate2 = RTCCertificate.generateCertificate()
-        session2 = RTCDtlsTransport(transport2, [certificate2])
-
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
-
-        # break one connection
-        with self.assertRaises(ConnectionError):
-            run(asyncio.gather(session1.data.recv(), transport1.stop()))
-        self.assertEqual(session1.state, 'closed')
-
-        # break other connection
-        with self.assertRaises(ConnectionError):
-            run(asyncio.gather(session2.data.recv(), transport2.stop()))
-        self.assertEqual(session2.state, 'closed')
-
-        # try closing again
-        run(session1.stop())
-        run(session2.stop())
 
     def test_bad_client_fingerprint(self):
         transport1, transport2 = dummy_ice_transport_pair()

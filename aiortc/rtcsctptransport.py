@@ -13,7 +13,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .utils import first_completed, random32
+from .utils import random32
 
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
@@ -548,7 +548,6 @@ class RTCSctpTransport(EventEmitter):
         super().__init__()
         self.state = self.State.CLOSED
         self.__transport = transport
-        self.closed = asyncio.Event()
         self._started = False
 
         self._loop = asyncio.get_event_loop()
@@ -642,18 +641,26 @@ class RTCSctpTransport(EventEmitter):
         Start the transport.
         """
         if not self._started:
-            self._remote_port = remotePort
-            asyncio.ensure_future(self.__run())
             self._started = True
+            self._remote_port = remotePort
+
+            # initialise local channel ID counter
+            if self.is_server:
+                self._data_channel_id = 0
+            else:
+                self._data_channel_id = 1
+
+            self.__transport._register_data_receiver(self)
+            if not self.is_server:
+                asyncio.ensure_future(self._init())
 
     async def stop(self):
         """
         Stop the transport.
         """
-        if self.state == self.State.CLOSED:
-            self.closed.set()
-        else:
+        if self.state != self.State.CLOSED:
             await self._abort()
+        self.__transport._unregister_data_receiver()
 
     async def _abort(self):
         """
@@ -666,68 +673,22 @@ class RTCSctpTransport(EventEmitter):
             pass
         self._set_state(self.State.CLOSED)
 
-    async def __run(self):
+    async def _init(self):
         """
-        The main reception loop.
-
-        It runs until the association reaches the CLOSED state.
+        Initialize the association.
         """
-        # initialise local channel ID counter
-        if self.is_server:
-            self._data_channel_id = 0
-        else:
-            self._data_channel_id = 1
+        chunk = InitChunk()
+        chunk.initiate_tag = self._local_verification_tag
+        chunk.advertised_rwnd = self._advertised_rwnd
+        chunk.outbound_streams = self.outbound_streams
+        chunk.inbound_streams = self.inbound_streams_max
+        chunk.initial_tsn = self._local_tsn
+        self._set_extensions(chunk.params)
+        await self._send_chunk(chunk)
 
-        if not self.is_server:
-            chunk = InitChunk()
-            chunk.initiate_tag = self._local_verification_tag
-            chunk.advertised_rwnd = self._advertised_rwnd
-            chunk.outbound_streams = self.outbound_streams
-            chunk.inbound_streams = self.inbound_streams_max
-            chunk.initial_tsn = self._local_tsn
-            self._set_extensions(chunk.params)
-            await self._send_chunk(chunk)
-
-            # start T1 timer and enter COOKIE-WAIT state
-            self._t1_start(chunk)
-            self._set_state(self.State.COOKIE_WAIT)
-
-        while True:
-            try:
-                data = await first_completed(self.transport.data.recv(), self.closed.wait())
-            except ConnectionError:
-                self.__log_debug('x Underlying connection closed while reading')
-                self._set_state(self.State.CLOSED)
-                break
-            if data is True:
-                break
-
-            try:
-                packet = Packet.parse(data)
-            except ValueError:
-                continue
-
-            # is this an init?
-            init_chunk = len([x for x in packet.chunks if isinstance(x, InitChunk)])
-            if init_chunk:
-                assert len(packet.chunks) == 1
-                expected_tag = 0
-            else:
-                expected_tag = self._local_verification_tag
-
-            # verify tag
-            if packet.verification_tag != expected_tag:
-                self.__log_debug('Bad verification tag %d vs %d',
-                                 packet.verification_tag, expected_tag)
-                continue
-
-            # handle chunks
-            for chunk in packet.chunks:
-                await self._receive_chunk(chunk)
-
-            # send SACK if needed
-            if self._sack_needed:
-                await self._send_sack()
+        # start T1 timer and enter COOKIE-WAIT state
+        self._t1_start(chunk)
+        self._set_state(self.State.COOKIE_WAIT)
 
     def _flight_size_decrease(self, chunk):
         self._flight_size = max(0, self._flight_size - chunk._book_size)
@@ -751,6 +712,37 @@ class RTCSctpTransport(EventEmitter):
 
     def _get_timestamp(self):
         return int(time.time())
+
+    async def _handle_data(self, data):
+        """
+        Handle data received from the network.
+        """
+        try:
+            packet = Packet.parse(data)
+        except ValueError:
+            return
+
+        # is this an init?
+        init_chunk = len([x for x in packet.chunks if isinstance(x, InitChunk)])
+        if init_chunk:
+            assert len(packet.chunks) == 1
+            expected_tag = 0
+        else:
+            expected_tag = self._local_verification_tag
+
+        # verify tag
+        if packet.verification_tag != expected_tag:
+            self.__log_debug('Bad verification tag %d vs %d',
+                             packet.verification_tag, expected_tag)
+            return
+
+        # handle chunks
+        for chunk in packet.chunks:
+            await self._receive_chunk(chunk)
+
+        # send SACK if needed
+        if self._sack_needed:
+            await self._send_sack()
 
     def _mark_received(self, tsn):
         """
@@ -1164,7 +1156,6 @@ class RTCSctpTransport(EventEmitter):
                 self._t1_cancel()
                 self._t2_cancel()
                 self._t3_cancel()
-                self.closed.set()
 
     # timers
 
