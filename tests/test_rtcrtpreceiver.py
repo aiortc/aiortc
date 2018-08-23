@@ -197,7 +197,7 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver._handle_rtp_packet(packet))
 
         # break connection
-        run(transport.close())
+        run(transport.stop())
 
         # give RTCP time to send a report
         run(asyncio.sleep(2))

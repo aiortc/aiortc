@@ -1113,7 +1113,7 @@ class RTCSctpTransport(EventEmitter):
             destination_port=self._remote_port,
             verification_tag=self._remote_verification_tag,
             chunks=[chunk])
-        await self.transport.data.send(bytes(packet))
+        await self.transport._send_data(bytes(packet))
 
     async def _send_reconfig_param(self, param):
         chunk = ReconfigChunk()

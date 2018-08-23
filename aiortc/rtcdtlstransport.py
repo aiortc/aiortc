@@ -116,10 +116,9 @@ def create_ssl_context(certificate):
 
 
 class Channel:
-    def __init__(self, closed, queue, send):
+    def __init__(self, closed, queue):
         self.closed = closed
         self.queue = queue
-        self.send = send
 
     async def recv(self):
         data = await first_completed(self.queue.get(), self.closed.wait())
@@ -243,8 +242,7 @@ class RTCDtlsTransport(EventEmitter):
         self.data_queue = asyncio.Queue()
         self.data = Channel(
             closed=self.closed,
-            queue=self.data_queue,
-            send=self._send_data)
+            queue=self.data_queue)
 
         # SSL init
         self.__ctx = create_ssl_context(certificate)

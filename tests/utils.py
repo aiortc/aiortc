@@ -5,43 +5,7 @@ import os
 from aiortc.utils import first_completed
 
 
-class DummyIceTransport:
-    def __init__(self, role):
-        self.role = role
-
-
-def dummy_register_rtp_receiver(receiver, parameters):
-    pass
-
-
-def dummy_dtls_transport_pair(loss=None):
-    transport_a, transport_b = dummy_transport_pair(loss=loss)
-
-    transport_a.data = transport_a
-    transport_a.state = 'connected'
-    transport_a.transport = DummyIceTransport(role='controlling')
-    transport_a._register_rtp_receiver = dummy_register_rtp_receiver
-    transport_a._send_rtp = transport_a.send
-
-    transport_b.data = transport_b
-    transport_b.state = 'connected'
-    transport_b.transport = DummyIceTransport(role='controlled')
-    transport_b._register_rtp_receiver = dummy_register_rtp_receiver
-    transport_b._send_rtp = transport_b.send
-
-    return transport_a, transport_b
-
-
-def dummy_transport_pair(loss=None):
-    queue_a = asyncio.Queue()
-    queue_b = asyncio.Queue()
-    return (
-        DummyTransport(rx_queue=queue_a, tx_queue=queue_b, loss=loss),
-        DummyTransport(rx_queue=queue_b, tx_queue=queue_a, loss=loss),
-    )
-
-
-class DummyTransport:
+class DummyConnection:
     def __init__(self, rx_queue, tx_queue, loss):
         self.closed = asyncio.Event()
         self.loss_cursor = 0
@@ -69,6 +33,60 @@ class DummyTransport:
                 return
 
         await self.tx_queue.put(data)
+
+
+class DummyIceTransport:
+    def __init__(self, connection, role):
+        self._connection = connection
+        self.role = role
+
+    async def stop(self):
+        await self._connection.close()
+
+
+class DummyDtlsTransport:
+    def __init__(self, transport, state='connected'):
+        self.data = transport._connection
+        self.state = state
+        self.transport = transport
+
+    async def stop(self):
+        await self.transport.stop()
+        self.state = 'closed'
+
+    def _register_rtp_receiver(self, receiver, parameters):
+        pass
+
+    async def _send_data(self, data):
+        await self.transport._connection.send(data)
+
+    async def _send_rtp(self, data):
+        await self.transport._connection.send(data)
+
+
+def dummy_connection_pair(loss=None):
+    queue_a = asyncio.Queue()
+    queue_b = asyncio.Queue()
+    return (
+        DummyConnection(rx_queue=queue_a, tx_queue=queue_b, loss=loss),
+        DummyConnection(rx_queue=queue_b, tx_queue=queue_a, loss=loss),
+    )
+
+
+def dummy_ice_transport_pair(loss=None):
+    connection_a, connection_b = dummy_connection_pair(loss=loss)
+    return (
+        DummyIceTransport(connection_a, 'controlling'),
+        DummyIceTransport(connection_b, 'controlled')
+    )
+
+
+def dummy_dtls_transport_pair(loss=None):
+    ice_a, ice_b = dummy_ice_transport_pair(loss=loss)
+    return (
+        DummyDtlsTransport(ice_a),
+        DummyDtlsTransport(ice_b)
+    )
 
 
 def load(name):

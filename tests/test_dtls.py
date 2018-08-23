@@ -8,19 +8,10 @@ from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsTransport)
 from aiortc.rtcrtpparameters import RTCRtcpParameters, RTCRtpParameters
 
-from .utils import dummy_transport_pair, load, run
+from .utils import dummy_ice_transport_pair, load, run
 
 RTP = load('rtp.bin')
 RTCP = load('rtcp_sr.bin')
-
-
-class DummyIceTransport:
-    def __init__(self, connection, role):
-        self._connection = connection
-        self.role = role
-
-    async def stop(self):
-        await self._connection.close()
 
 
 class DummyRtpReceiver:
@@ -33,14 +24,6 @@ class DummyRtpReceiver:
 
     async def _handle_rtcp_packet(self, packet):
         self.rtcp_packets.append(packet)
-
-
-def dummy_ice_transport_pair(loss=None):
-    transport1, transport2 = dummy_transport_pair(loss=loss)
-    return (
-        DummyIceTransport(transport1, 'controlling'),
-        DummyIceTransport(transport2, 'controlled')
-    )
 
 
 class RTCCertificateTest(TestCase):
@@ -80,11 +63,11 @@ class RTCDtlsTransportTest(TestCase):
             session2.start(session1.getLocalParameters())))
 
         # send encypted data
-        run(session1.data.send(b'ping'))
+        run(session1._send_data(b'ping'))
         data = run(session2.data.recv())
         self.assertEqual(data, b'ping')
 
-        run(session2.data.send(b'pong'))
+        run(session2._send_data(b'pong'))
         data = run(session1.data.recv())
         self.assertEqual(data, b'pong')
 
@@ -104,7 +87,7 @@ class RTCDtlsTransportTest(TestCase):
 
         # try sending after close
         with self.assertRaises(ConnectionError):
-            run(session1.data.send(b'foo'))
+            run(session1._send_data(b'foo'))
 
     def test_rtp(self):
         transport1, transport2 = dummy_ice_transport_pair()

@@ -54,7 +54,7 @@ class RTCRtpSenderTest(TestCase):
 
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
-        run(transport.close())
+        run(transport.stop())
 
     def test_handle_rtcp_nack(self):
         transport, remote = dummy_dtls_transport_pair()
