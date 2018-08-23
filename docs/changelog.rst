@@ -1,6 +1,25 @@
 Changelog
 =========
 
+0.9.6
+-----
+
+Data channels
+.............
+
+  * Optimize reception for improved latency and throughput.
+
+Media
+.....
+
+  * Add initial `getStats()` API to :class:`aiortc.RTCRtpReceiver` and
+    :class:`aiortc.RTCRtpSender`.
+
+Examples
+........
+
+  * `datachannel-cli`: display ping/pong roundtrip time.
+
 0.9.5
 -----
 
