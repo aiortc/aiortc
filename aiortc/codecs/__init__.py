@@ -47,6 +47,7 @@ def get_decoder(codec):
     elif codec.name == 'H264':
         return H264Decoder()
 
+
 def get_encoder(codec):
     if codec.name == 'opus':
         return OpusEncoder()
