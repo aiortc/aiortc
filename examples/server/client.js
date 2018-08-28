@@ -170,15 +170,15 @@ function sdpFilterCodec(codec, realSpd){
     
     var lines = realSpd.split('\n');
 
-    var test = false;
+    var isVideo = false;
     for(var i = 0; i < lines.length; i++){
         if (lines[i].startsWith('m=video ')) {
-            test = true;
+            isVideo = true;
         } else if (lines[i].startsWith('m=')) {
-            test = false;
+            isVideo = false;
         }
 
-        if (test) {
+        if (isVideo) {
             var match = lines[i].match(codecRegex)
             if (match) {
                 allowed.push(parseInt(match[1]))
@@ -188,14 +188,16 @@ function sdpFilterCodec(codec, realSpd){
 
     var skipRegex = 'a=(fmtp|rtcp-fb|rtpmap):([0-9]+)'
     var sdp = ""
+
+    var isVideo = false;
     for(var i = 0; i < lines.length; i++){
         if (lines[i].startsWith('m=video ')) {
-            test = true;
+            isVideo = true;
         } else if (lines[i].startsWith('m=')) {
-            test = false;
+            isVideo = false;
         }
 
-        if (test) {
+        if (isVideo) {
             var skipMatch = lines[i].match(skipRegex);
             if (skipMatch && !allowed.includes(parseInt(skipMatch[2]))) {
                 continue;

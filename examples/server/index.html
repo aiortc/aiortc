@@ -30,15 +30,15 @@
 
 <h2>Options</h2>
 <div class="option">
-    <input id="use-datachannel" type="checkbox"/>
+    <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
 </div>
 <div class="option">
-    <input id="use-audio" type="checkbox"/>
+    <input id="use-audio" checked="checked" type="checkbox"/>
     <label for="use-audio">Use audio</label>
 </div>
 <div class="option">
-    <input id="use-video" checked="checked" type="checkbox"/>
+    <input id="use-video" type="checkbox"/>
     <label for="use-video">Use video</label>
     <select id="video-resolution">
         <option value="">Default resolution</option>
@@ -54,9 +54,9 @@
         <option value="none">None</option>
     </select>
     <select id="video-codec">
-        <option value="default">Default</option>
+        <option value="default" selected>Default</option>
         <option value="VP8/90000">VP8/90000</option>
-        <option value="H264/90000" selected>H264/90000</option>
+        <option value="H264/90000">H264/90000</option>
     </select>
 </div>
 
