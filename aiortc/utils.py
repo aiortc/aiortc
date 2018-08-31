@@ -3,6 +3,10 @@ import os
 from struct import unpack
 
 
+def random16():
+    return unpack('!H', os.urandom(2))[0]
+
+
 def random32():
     return unpack('!L', os.urandom(4))[0]
 

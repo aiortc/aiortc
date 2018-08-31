@@ -13,7 +13,7 @@ from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   timestamp_plus)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
-from .utils import first_completed, random32
+from .utils import first_completed, random16, random32
 
 logger = logging.getLogger('rtp')
 
@@ -193,7 +193,10 @@ class RTCRtpSender:
         loop = asyncio.get_event_loop()
 
         encoder = get_encoder(codec)
-        packet = RtpPacket(payload_type=codec.payloadType)
+        packet = RtpPacket(
+            payload_type=codec.payloadType,
+            sequence_number=random16(),
+            timestamp=random32())
         while not self.__stopped.is_set():
             if self._track:
                 frame = await first_completed(self._track.recv(), self.__stopped.wait())
