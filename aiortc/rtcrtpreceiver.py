@@ -9,9 +9,9 @@ from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RTP_SEQ_MODULO,
-                  RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost, seq_gt,
-                  seq_plus_one)
+                  RtcpByePacket, RtcpPsfbPacket, RtcpReceiverInfo,
+                  RtcpRrPacket, RtcpRtpfbPacket, RtcpSrPacket,
+                  clamp_packets_lost, seq_gt, seq_plus_one)
 from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import first_completed
@@ -117,6 +117,7 @@ class StreamStatistics:
 
 class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind):
+        super().__init__()
         self.kind = kind
         self._queue = asyncio.Queue()
 
@@ -233,6 +234,8 @@ class RTCRtpReceiver:
             self.__stats[stats.type] = stats
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
+        elif isinstance(packet, RtcpByePacket):
+            self._track.emit('ended')
 
         # FIXME: could this be done at the DTLS level?
         if self.__sender:
