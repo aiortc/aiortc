@@ -4,7 +4,7 @@ from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
                         get_header_extensions, pack_packets_lost, seq_gt,
-                        seq_plus_one, set_header_extensions,
+                        seq_plus_one, set_header_extensions, timestamp_plus,
                         unpack_packets_lost)
 
 from .utils import load
@@ -249,6 +249,11 @@ class RtpUtilTest(TestCase):
         self.assertEqual(seq_plus_one(0), 1)
         self.assertEqual(seq_plus_one(1), 2)
         self.assertEqual(seq_plus_one(65535), 0)
+
+    def test_timestamp_plus(self):
+        self.assertEqual(timestamp_plus(0, 1), 1)
+        self.assertEqual(timestamp_plus(1, 2), 3)
+        self.assertEqual(timestamp_plus(4294967295, 3), 2)
 
     def test_unpack_packets_lost(self):
         self.assertEqual(unpack_packets_lost(b'\x80\x00\x00'), -8388608)
