@@ -119,8 +119,6 @@ async def consume_video(track):
 
 
 async def join_room(room):
-    consumers = []
-
     # fetch room parameters
     async with aiohttp.ClientSession() as session:
         async with session.post('https://appr.tc/join/' + room) as response:
@@ -137,10 +135,17 @@ async def join_room(room):
 
     @pc.on('track')
     def on_track(track):
+        print('Track %s received' % track.kind)
+
         if track.kind == 'audio':
-            consumers.append(asyncio.ensure_future(consume_audio(track)))
+            task = asyncio.ensure_future(consume_audio(track))
         elif track.kind == 'video':
-            consumers.append(asyncio.ensure_future(consume_video(track)))
+            task = asyncio.ensure_future(consume_video(track))
+
+        @track.on('ended')
+        def on_ended():
+            print('Track %s ended' % track.kind)
+            task.cancel()
 
     # connect to websocket and join
     signaling = Signaling()
@@ -166,8 +171,6 @@ async def join_room(room):
     # shutdown
     print('Shutting down')
     await signaling.send_message({'type': 'bye'})
-    for c in consumers:
-        c.cancel()
     await pc.close()
 
 if __name__ == '__main__':
