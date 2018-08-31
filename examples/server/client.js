@@ -140,7 +140,14 @@ function stop() {
         dc.close();
     }
 
-    // close audio / video
+    // close transceivers
+    if (pc.getTransceivers) {
+        pc.getTransceivers().forEach(function(transceiver) {
+            transceiver.stop();
+        });
+    }
+
+    // close local audio / video
     pc.getSenders().forEach(function(sender) {
         sender.track.stop();
     });
