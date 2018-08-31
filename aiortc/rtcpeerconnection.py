@@ -45,10 +45,16 @@ def find_common_codecs(local_codecs, remote_codecs):
             if codec.name == c.name and codec.clockRate == c.clockRate:
                 if codec.name == 'H264':
                     # FIXME: check according to rfc 3184
-                    if c.parameters.get('profile-level-id') != '42001f':
+                    c_profile = c.parameters.get('profile-level-id')
+                    codec_profile = codec.parameters.get('profile-level-id')
+                    if c_profile != codec_profile:
                         continue
-                    if c.parameters.get('packetization-mode') != '1':
+
+                    c_packetization_mode = c.parameters.get('packetization-mode')
+                    codec_packetization_mode = codec.parameters.get('packetization-mode')
+                    if c_packetization_mode != codec_packetization_mode:
                         continue
+
                 codec = copy.deepcopy(codec)
                 if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
                     codec.payloadType = c.payloadType

@@ -1,8 +1,8 @@
 from ..rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+from .h264 import H264Decoder, H264Encoder
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import VpxDecoder, VpxEncoder
-from .h264 import H264Decoder, H264Encoder
 
 PCMU_CODEC = RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0)
 PCMA_CODEC = RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
@@ -29,6 +29,19 @@ MEDIA_CODECS = {
                 'packetization-mode': '1',
                 'level-asymmetry-allowed': '1',
                 'profile-level-id': '42001f',
+            }
+        ),
+        RTCRtpCodecParameters(
+            name='H264',
+            clockRate=90000,
+            rtcpFeedback=[
+                RTCRtcpFeedback(type='nack'),
+                RTCRtcpFeedback(type='nack pli'),
+            ],
+            parameters={
+                'packetization-mode': '1',
+                'level-asymmetry-allowed': '1',
+                'profile-level-id': '42e01f',
             }
         ),
     ]
