@@ -204,6 +204,15 @@ class RtpRouter:
     def route(self, ssrc, mid=None):
         return self.ssrc_table.get(ssrc)
 
+    def unregister(self, receiver):
+        self.__discard(self.mid_table, receiver)
+        self.__discard(self.ssrc_table, receiver)
+
+    def __discard(self, d, value):
+        for k, v in list(d.items()):
+            if v == value:
+                d.pop(k)
+
 
 class RTCDtlsTransport(EventEmitter):
     """
@@ -483,8 +492,12 @@ class RTCDtlsTransport(EventEmitter):
             self._state = state
             self.emit('statechange')
 
-    def _unregister_data_receiver(self):
-        self._data_receiver = None
+    def _unregister_data_receiver(self, receiver):
+        if self._data_receiver == receiver:
+            self._data_receiver = None
+
+    def _unregister_rtp_receiver(self, receiver):
+        self._rtp_router.unregister(receiver)
 
     async def _write_ssl(self):
         """

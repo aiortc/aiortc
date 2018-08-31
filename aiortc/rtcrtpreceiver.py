@@ -209,6 +209,7 @@ class RTCRtpReceiver:
         Irreversibly stop the receiver.
         """
         if self.__started:
+            self.__transport._unregister_rtp_receiver(self)
             self.__stopped.set()
             await self.__rtcp_exited.wait()
 

@@ -660,7 +660,7 @@ class RTCSctpTransport(EventEmitter):
         """
         if self.state != self.State.CLOSED:
             await self._abort()
-        self.__transport._unregister_data_receiver()
+        self.__transport._unregister_data_receiver(self)
 
     async def _abort(self):
         """
