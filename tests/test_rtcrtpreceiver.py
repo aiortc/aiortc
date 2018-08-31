@@ -212,6 +212,7 @@ class RTCRtpReceiverTest(TestCase):
         self.assertEqual(receiver.transport, transport)
 
         receiver._track = RemoteStreamTrack(kind='audio')
+        self.assertEqual(receiver._track.readyState, 'live')
         run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
@@ -233,6 +234,7 @@ class RTCRtpReceiverTest(TestCase):
 
         # shutdown
         run(receiver.stop())
+        self.assertEqual(receiver._track.readyState, 'ended')
 
     def test_rtp_empty_video_packet(self):
         transport, remote = dummy_dtls_transport_pair()
