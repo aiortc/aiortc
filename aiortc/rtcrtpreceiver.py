@@ -119,10 +119,19 @@ class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind):
         super().__init__()
         self.kind = kind
+        self._ended = False
         self._queue = asyncio.Queue()
 
     async def recv(self):
+        """
+        Receive the next frame.
+        """
         return await self._queue.get()
+
+    def _stop(self):
+        if not self._ended:
+            self._ended = True
+            self.emit('ended')
 
 
 class RTCRtpReceiver:
@@ -209,9 +218,13 @@ class RTCRtpReceiver:
         Irreversibly stop the receiver.
         """
         if self.__started:
+            self._track._stop()
             self.__transport._unregister_rtp_receiver(self)
             self.__stopped.set()
             await self.__rtcp_exited.wait()
+
+    def _handle_disconnect(self):
+        self._track._stop()
 
     async def _handle_rtcp_packet(self, packet):
         self.__log_debug('< %s', packet)
@@ -236,7 +249,7 @@ class RTCRtpReceiver:
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
         elif isinstance(packet, RtcpByePacket):
-            self._track.emit('ended')
+            self._track._stop()
 
         # FIXME: could this be done at the DTLS level?
         if self.__sender:

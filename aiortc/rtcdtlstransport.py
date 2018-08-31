@@ -192,10 +192,12 @@ class RTCDtlsParameters:
 
 class RtpRouter:
     def __init__(self):
+        self.receivers = set()
         self.mid_table = {}
         self.ssrc_table = {}
 
     def register(self, receiver, parameters):
+        self.receivers.add(receiver)
         if parameters.muxId:
             self.mid_table[parameters.muxId] = receiver
         if parameters.rtcp.ssrc:
@@ -205,6 +207,7 @@ class RtpRouter:
         return self.ssrc_table.get(ssrc)
 
     def unregister(self, receiver):
+        self.receivers.discard(receiver)
         self.__discard(self.mid_table, receiver)
         self.__discard(self.ssrc_table, receiver)
 
@@ -371,7 +374,8 @@ class RTCDtlsTransport(EventEmitter):
             while True:
                 await self._recv_next()
         except ConnectionError:
-            pass
+            for receiver in self._rtp_router.receivers:
+                receiver._handle_disconnect()
         finally:
             self._set_state(State.CLOSED)
             self.closed.set()

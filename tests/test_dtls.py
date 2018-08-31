@@ -27,6 +27,9 @@ class DummyRtpReceiver:
         self.rtp_packets = []
         self.rtcp_packets = []
 
+    def _handle_disconnect(self):
+        pass
+
     async def _handle_rtp_packet(self, packet):
         self.rtp_packets.append(packet)
 
