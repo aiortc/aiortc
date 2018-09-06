@@ -1,5 +1,4 @@
 import os.path
-import sys
 
 import setuptools
 
@@ -9,9 +8,9 @@ with open(readme_file, encoding='utf-8') as f:
     long_description = f.read()
 
 if os.environ.get('READTHEDOCS') == 'True':
-    cffi_modules=[]
+    cffi_modules = []
 else:
-    cffi_modules=[
+    cffi_modules = [
         'src/build_opus.py:ffibuilder',
         'src/build_vpx.py:ffibuilder',
     ]
@@ -39,6 +38,16 @@ setuptools.setup(
     ],
     cffi_modules=cffi_modules,
     packages=['aiortc', 'aiortc.codecs', 'aiortc.contrib'],
-    setup_requires=['cffi'],
-    install_requires=['aioice>=0.6.7,<0.7.0', 'attrs', 'crcmod', 'cryptography>=2.2', 'opencv-python', 'pyee', 'pylibsrtp>=0.5.6', 'pyopenssl'],
+    setup_requires=['cffi>=1.0.0'],
+    install_requires=[
+        'aioice>=0.6.7,<0.7.0',
+        'attrs',
+        'cffi>=1.0.0',
+        'crcmod',
+        'cryptography>=2.2',
+        'opencv-python',
+        'pyee',
+        'pylibsrtp>=0.5.6',
+        'pyopenssl',
+    ],
 )
