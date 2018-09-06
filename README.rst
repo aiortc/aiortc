@@ -84,13 +84,13 @@ On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libopus-dev libvpx-dev
+    apt install libavdevice-dev libavfilter-dev libopus-dev libvpx-dev
 
 On OS X run:
 
 .. code:: bash
 
-    brew install opus libvpx
+    brew install ffmpeg opus libvpx
 
 License
 -------

@@ -42,6 +42,7 @@ setuptools.setup(
     install_requires=[
         'aioice>=0.6.7,<0.7.0',
         'attrs',
+        'av',
         'cffi>=1.0.0',
         'crcmod',
         'cryptography>=2.2',

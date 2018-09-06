@@ -1,17 +1,19 @@
 addons:
   apt:
     packages:
+    - libavdevice-dev
+    - libavfilter-dev
     - libopus-dev
     - libvpx-dev
 after_success: coveralls
 cache: pip
-dist: trusty
+dist: xenial
 install:
   - |
     if [[ "$(uname -s)" == 'Darwin' ]]; then
       brew update
       brew upgrade python3
-      brew install opus libvpx
+      brew install ffmpeg opus libvpx
     fi
   - pip3 install -U setuptools
   - pip3 install coveralls flake8
@@ -22,12 +24,7 @@ matrix:
     os: osx
   - python: "3.5"
   - python: "3.6"
-  - python: "3.6"
-    dist: xenial
-    sudo: true
   - python: "3.7"
-    dist: xenial
-    sudo: true
   - env: BUILD=sdist
     python: "3.6"
 script:
@@ -42,3 +39,4 @@ script:
       flake8 aiortc examples tests
       coverage run setup.py test
     fi
+sudo: true
