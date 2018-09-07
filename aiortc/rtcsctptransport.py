@@ -636,7 +636,7 @@ class RTCSctpTransport(EventEmitter):
     def setTransport(self, transport):
         self.__transport = transport
 
-    def start(self, remoteCaps, remotePort):
+    async def start(self, remoteCaps, remotePort):
         """
         Start the transport.
         """
@@ -652,7 +652,7 @@ class RTCSctpTransport(EventEmitter):
 
             self.__transport._register_data_receiver(self)
             if not self.is_server:
-                asyncio.ensure_future(self._init())
+                await self._init()
 
     async def stop(self):
         """

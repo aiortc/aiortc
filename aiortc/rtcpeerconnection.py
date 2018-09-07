@@ -468,7 +468,7 @@ class RTCPeerConnection(EventEmitter):
             if iceTransport.iceGatherer.getLocalCandidates() and self.__sctp in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[self.__sctp])
                 await dtlsTransport.start(self.__remoteDtls[self.__sctp])
-                self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
+                await self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):
         coros = map(lambda t: t.iceGatherer.gather(), self.__iceTransports)

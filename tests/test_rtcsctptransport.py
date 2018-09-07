@@ -563,8 +563,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertTrue(server.is_server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -592,8 +592,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertTrue(server.is_server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -630,8 +630,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertTrue(server.is_server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -671,8 +671,8 @@ class RTCSctpTransportTest(TestCase):
         self.assertTrue(server.is_server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -704,8 +704,8 @@ class RTCSctpTransportTest(TestCase):
         server_channels = track_channels(server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -748,8 +748,8 @@ class RTCSctpTransportTest(TestCase):
         server_channels = track_channels(server)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -785,8 +785,8 @@ class RTCSctpTransportTest(TestCase):
         server = RTCSctpTransport(server_transport)
 
         # connect
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(wait_for_outcome(client, server))
@@ -804,7 +804,7 @@ class RTCSctpTransportTest(TestCase):
     def test_garbage(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = RTCSctpTransport(server_transport)
-        server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
+        run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
         asyncio.ensure_future(client_transport._send_data(b'garbage'))
 
         # check outcome
@@ -820,7 +820,7 @@ class RTCSctpTransportTest(TestCase):
 
         client_transport, server_transport = dummy_dtls_transport_pair()
         server = RTCSctpTransport(server_transport)
-        server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
+        run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
         asyncio.ensure_future(client_transport._send_data(data))
 
         # check outcome
@@ -845,8 +845,8 @@ class RTCSctpTransportTest(TestCase):
 
         client._send_chunk = mock_send_chunk
 
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(asyncio.sleep(0.5))
@@ -874,8 +874,8 @@ class RTCSctpTransportTest(TestCase):
         server = RTCSctpTransport(server_transport)
 
         server._get_timestamp = mock_timestamp
-        server.start(client.getCapabilities(), client.port)
-        client.start(server.getCapabilities(), server.port)
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
         run(asyncio.sleep(0.5))
