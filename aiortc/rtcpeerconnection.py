@@ -538,7 +538,7 @@ class RTCPeerConnection(EventEmitter):
                     profile='DTLS/SCTP',
                     fmt=[self.__sctp.port])
                 media.sctpmap[self.__sctp.port] = (
-                    'webrtc-datachannel %d' % self.__sctp.outbound_streams)
+                    'webrtc-datachannel %d' % self.__sctp._outbound_streams_count)
             else:
                 media = sdp.MediaDescription(
                     kind='application',

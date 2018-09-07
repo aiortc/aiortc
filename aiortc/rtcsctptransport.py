@@ -546,16 +546,12 @@ class RTCSctpTransport(EventEmitter):
             raise InvalidStateError
 
         super().__init__()
-        self.state = self.State.CLOSED
+        self._association_state = self.State.CLOSED
         self.__transport = transport
         self._started = False
 
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
-
-        self.inbound_streams = 0
-        self.inbound_streams_max = MAX_STREAMS
-        self.outbound_streams = MAX_STREAMS
 
         self._local_extensions = [RECONFIG_CHUNK]
         self._local_port = port
@@ -568,6 +564,8 @@ class RTCSctpTransport(EventEmitter):
         # inbound
         self._advertised_rwnd = 131072
         self._inbound_streams = {}
+        self._inbound_streams_count = 0
+        self._inbound_streams_max = MAX_STREAMS
         self._last_received_tsn = None
         self._sack_duplicates = []
         self._sack_misordered = set()
@@ -583,6 +581,7 @@ class RTCSctpTransport(EventEmitter):
         self._outbound_queue = []
         self._outbound_queue_pos = 0
         self._outbound_stream_seq = {}
+        self._outbound_streams_count = MAX_STREAMS
         self._partial_bytes_acked = 0
 
         # reconfiguration
@@ -658,7 +657,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Stop the transport.
         """
-        if self.state != self.State.CLOSED:
+        if self._association_state != self.State.CLOSED:
             await self._abort()
         self.__transport._unregister_data_receiver(self)
 
@@ -680,8 +679,8 @@ class RTCSctpTransport(EventEmitter):
         chunk = InitChunk()
         chunk.initiate_tag = self._local_verification_tag
         chunk.advertised_rwnd = self._advertised_rwnd
-        chunk.outbound_streams = self.outbound_streams
-        chunk.inbound_streams = self.inbound_streams_max
+        chunk.outbound_streams = self._outbound_streams_count
+        chunk.inbound_streams = self._inbound_streams_max
         chunk.initial_tsn = self._local_tsn
         self._set_extensions(chunk.params)
         await self._send_chunk(chunk)
@@ -789,14 +788,14 @@ class RTCSctpTransport(EventEmitter):
 
             self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
                              chunk.outbound_streams, chunk.inbound_streams)
-            self.inbound_streams = min(chunk.outbound_streams, self.inbound_streams_max)
-            self.outbound_streams = min(self.outbound_streams, chunk.inbound_streams)
+            self._inbound_streams_count = min(chunk.outbound_streams, self._inbound_streams_max)
+            self._outbound_streams_count = min(self._outbound_streams_count, chunk.inbound_streams)
 
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
             ack.advertised_rwnd = self._advertised_rwnd
-            ack.outbound_streams = self.outbound_streams
-            ack.inbound_streams = self.inbound_streams_max
+            ack.outbound_streams = self._outbound_streams_count
+            ack.inbound_streams = self._inbound_streams_max
             ack.initial_tsn = self._local_tsn
             self._set_extensions(ack.params)
 
@@ -828,7 +827,7 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.ESTABLISHED)
 
         # client
-        elif isinstance(chunk, InitAckChunk) and self.state == self.State.COOKIE_WAIT:
+        elif isinstance(chunk, InitAckChunk) and self._association_state == self.State.COOKIE_WAIT:
             # cancel T1 timer and process chunk
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
@@ -839,8 +838,8 @@ class RTCSctpTransport(EventEmitter):
 
             self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
                              chunk.outbound_streams, chunk.inbound_streams)
-            self.inbound_streams = min(chunk.outbound_streams, self.inbound_streams_max)
-            self.outbound_streams = min(self.outbound_streams, chunk.inbound_streams)
+            self._inbound_streams_count = min(chunk.outbound_streams, self._inbound_streams_max)
+            self._outbound_streams_count = min(self._outbound_streams_count, chunk.inbound_streams)
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
@@ -852,12 +851,12 @@ class RTCSctpTransport(EventEmitter):
             # start T1 timer and enter COOKIE-ECHOED state
             self._t1_start(echo)
             self._set_state(self.State.COOKIE_ECHOED)
-        elif isinstance(chunk, CookieAckChunk) and self.state == self.State.COOKIE_ECHOED:
+        elif isinstance(chunk, CookieAckChunk) and self._association_state == self.State.COOKIE_ECHOED:
             # cancel T1 timer and enter ESTABLISHED state
             self._t1_cancel()
             self._set_state(self.State.ESTABLISHED)
         elif (isinstance(chunk, ErrorChunk) and
-              self.state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
+              self._association_state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
             self._t1_cancel()
             self._set_state(self.State.CLOSED)
             self.__log_debug('x Could not establish association')
@@ -883,10 +882,10 @@ class RTCSctpTransport(EventEmitter):
             self._t2_start(ack)
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
         elif (isinstance(chunk, ShutdownCompleteChunk) and
-              self.state == self.State.SHUTDOWN_ACK_SENT):
+              self._association_state == self.State.SHUTDOWN_ACK_SENT):
             self._t2_cancel()
             self._set_state(self.State.CLOSED)
-        elif (isinstance(chunk, ReconfigChunk) and self.state == self.State.ESTABLISHED):
+        elif (isinstance(chunk, ReconfigChunk) and self._association_state == self.State.ESTABLISHED):
             for param in chunk.params:
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls:
@@ -1035,7 +1034,7 @@ class RTCSctpTransport(EventEmitter):
             await self._send_reconfig_param(response_param)
         elif isinstance(param, StreamAddOutgoingParam):
             # increase inbound streams
-            self.inbound_streams += param.new_streams
+            self._inbound_streams_count += param.new_streams
 
             # send response
             response_param = StreamResetResponseParam(
@@ -1147,9 +1146,9 @@ class RTCSctpTransport(EventEmitter):
         """
         Transition the SCTP association to a new state.
         """
-        if state != self.state:
-            self.__log_debug('- %s -> %s', self.state, state)
-            self.state = state
+        if state != self._association_state:
+            self.__log_debug('- %s -> %s', self._association_state, state)
+            self._association_state = state
             if state == self.State.ESTABLISHED:
                 asyncio.ensure_future(self._data_channel_flush())
             elif state == self.State.CLOSED:
@@ -1314,7 +1313,7 @@ class RTCSctpTransport(EventEmitter):
         whether we are a client or a server to correctly assign an odd/even ID
         to the data channels.
         """
-        if self.state != self.State.ESTABLISHED:
+        if self._association_state != self.State.ESTABLISHED:
             return
 
         while len(self._outbound_queue) < MAX_OUTBOUND_QUEUE and self._data_channel_queue:

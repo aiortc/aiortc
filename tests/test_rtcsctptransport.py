@@ -41,7 +41,7 @@ async def wait_for_outcome(client, server):
         RTCSctpTransport.State.CLOSED,
     ]
     for i in range(100):
-        if client.state in final and server.state in final:
+        if client._association_state in final and server._association_state in final:
             break
         await asyncio.sleep(0.1)
 
@@ -568,14 +568,14 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_lossy_transport(self):
         """
@@ -597,8 +597,8 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
 
         # transmit data
         server_queue = asyncio.Queue()
@@ -617,14 +617,14 @@ class RTCSctpTransportTest(TestCase):
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_client_limits_streams(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = RTCSctpTransport(client_transport)
-        client.inbound_streams_max = 2048
-        client.outbound_streams = 256
+        client._inbound_streams_max = 2048
+        client._outbound_streams_count = 256
         self.assertFalse(client.is_server)
         server = RTCSctpTransport(server_transport)
         self.assertTrue(server.is_server)
@@ -635,13 +635,13 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client.inbound_streams, 2048)
-        self.assertEqual(client.outbound_streams, 256)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 2048)
+        self.assertEqual(client._outbound_streams_count, 256)
         self.assertEqual(client._remote_extensions, [130])
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.inbound_streams, 256)
-        self.assertEqual(server.outbound_streams, 2048)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 256)
+        self.assertEqual(server._outbound_streams_count, 2048)
         self.assertEqual(server._remote_extensions, [130])
 
         # client requests additional outbound streams
@@ -652,22 +652,22 @@ class RTCSctpTransportTest(TestCase):
 
         run(asyncio.sleep(0.5))
 
-        self.assertEqual(server.inbound_streams, 272)
-        self.assertEqual(server.outbound_streams, 2048)
+        self.assertEqual(server._inbound_streams_count, 272)
+        self.assertEqual(server._outbound_streams_count, 2048)
 
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_server_limits_streams(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
         client = RTCSctpTransport(client_transport)
         self.assertFalse(client.is_server)
         server = RTCSctpTransport(server_transport)
-        server.inbound_streams_max = 2048
-        server.outbound_streams = 256
+        server._inbound_streams_max = 2048
+        server._outbound_streams_count = 256
         self.assertTrue(server.is_server)
 
         # connect
@@ -676,13 +676,13 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client.inbound_streams, 256)
-        self.assertEqual(client.outbound_streams, 2048)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 256)
+        self.assertEqual(client._outbound_streams_count, 2048)
         self.assertEqual(client._remote_extensions, [130])
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.inbound_streams, 2048)
-        self.assertEqual(server.outbound_streams, 256)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 2048)
+        self.assertEqual(server._outbound_streams_count, 256)
         self.assertEqual(server._remote_extensions, [130])
 
         run(asyncio.sleep(0.5))
@@ -690,8 +690,8 @@ class RTCSctpTransportTest(TestCase):
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_client_creates_data_channel(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
@@ -709,13 +709,13 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client.inbound_streams, 65535)
-        self.assertEqual(client.outbound_streams, 65535)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
         self.assertEqual(client._remote_extensions, [130])
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.inbound_streams, 65535)
-        self.assertEqual(server.outbound_streams, 65535)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
         self.assertEqual(server._remote_extensions, [130])
 
         # create data channel
@@ -734,8 +734,8 @@ class RTCSctpTransportTest(TestCase):
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_server_creates_data_channel(self):
         client_transport, server_transport = dummy_dtls_transport_pair()
@@ -753,9 +753,9 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._remote_extensions, [130])
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._remote_extensions, [130])
 
         # create data channel
@@ -772,8 +772,8 @@ class RTCSctpTransportTest(TestCase):
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_abrupt_disconnect(self):
         """
@@ -790,8 +790,8 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
-        self.assertEqual(client.state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
 
         # break connection
         run(client_transport.stop())
@@ -809,7 +809,7 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(asyncio.sleep(0.5))
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
         run(server.stop())
@@ -825,7 +825,7 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(asyncio.sleep(0.5))
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
         run(server.stop())
@@ -850,14 +850,14 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(asyncio.sleep(0.5))
-        self.assertEqual(client.state, RTCSctpTransport.State.COOKIE_ECHOED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.COOKIE_ECHOED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_stale_cookie(self):
         def mock_timestamp():
@@ -879,14 +879,14 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(asyncio.sleep(0.5))
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
         run(client.stop())
         run(server.stop())
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_receive_data(self):
         client_transport, _ = dummy_dtls_transport_pair()
@@ -1006,18 +1006,18 @@ class RTCSctpTransportTest(TestCase):
         client = RTCSctpTransport(client_transport)
         client._last_received_tsn = 0
         client._send_chunk = mock_send_chunk
-        client.state = RTCSctpTransport.State.ESTABLISHED
+        client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
         # receive shutdown
         chunk = ShutdownChunk()
         chunk.cumulative_tsn = tsn_minus_one(client._last_sacked_tsn)
         run(client._receive_chunk(chunk))
-        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
 
         # receive shutdown complete
         chunk = ShutdownCompleteChunk()
         run(client._receive_chunk(chunk))
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_mark_received(self):
         client_transport, _ = dummy_dtls_transport_pair()
@@ -1586,25 +1586,25 @@ class RTCSctpTransportTest(TestCase):
         chunk = ShutdownAckChunk()
 
         # fails once
-        client.state = RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+        client._set_state(RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
         client._t2_start(chunk)
         client._t2_expired()
         self.assertEqual(client._t2_failures, 1)
         self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
 
         # fails 10 times
         client._t2_failures = 9
         client._t2_expired()
         self.assertEqual(client._t2_failures, 10)
         self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
 
         # fails 11 times
         client._t2_expired()
         self.assertEqual(client._t2_failures, 11)
         self.assertIsNone(client._t2_handle)
-        self.assertEqual(client.state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
 
         # let async code complete
         run(asyncio.sleep(0))
