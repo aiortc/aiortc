@@ -26,9 +26,15 @@ DUMMY_CANDIDATE = RTCIceCandidate(
     ip='0.0.0.0',
     port=0,
     type='host')
-HEADER_EXTENSIONS = [
-    RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid')
-]
+HEADER_EXTENSIONS = {
+    'audio': [
+        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+    ],
+    'video': [
+        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+        RTCRtpHeaderExtensionParameters(id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+    ]
+}
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -275,7 +281,7 @@ class RTCPeerConnection(EventEmitter):
                     dynamic_pt += 1
                 codecs.append(codec)
             transceiver._codecs = codecs
-            transceiver._headerExtensions = HEADER_EXTENSIONS[:]
+            transceiver._headerExtensions = HEADER_EXTENSIONS[transceiver.kind][:]
 
         # assign MIDs
         for transceiver in self.__transceivers:
@@ -375,7 +381,7 @@ class RTCPeerConnection(EventEmitter):
                 assert len(common)
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(
-                    HEADER_EXTENSIONS, media.rtp.headerExtensions)
+                    HEADER_EXTENSIONS[media.kind], media.rtp.headerExtensions)
 
                 # configure transport
                 iceTransport = transceiver._transport.transport

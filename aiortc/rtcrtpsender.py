@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import struct
 import time
 
 from .clock import current_datetime, current_ntp_time
@@ -46,6 +47,7 @@ class RTCRtpSender:
         self.__force_keyframe = False
         self.__mid = None
         self.__rtp_mid_header_id = None
+        self.__rtp_send_time_header_id = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
@@ -120,10 +122,12 @@ class RTCRtpSender:
             self.__cname = parameters.rtcp.cname
             self.__mid = parameters.muxId
 
-            # make note of the RTP header extension used for muxId
+            # make note of the RTP header extension IDs
             for ext in parameters.headerExtensions:
                 if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
                     self.__rtp_mid_header_id = ext.id
+                elif ext.uri == 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time':
+                    self.__rtp_send_time_header_id = ext.id
 
             asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             asyncio.ensure_future(self._run_rtcp())
@@ -202,23 +206,28 @@ class RTCRtpSender:
                 frame = await first_completed(self._track.recv(), self.__stopped.wait())
                 if frame is True:
                     break
-                packet.ssrc = self._ssrc
 
-                # set muxId in RTP header extensions
-                if self.__mid and self.__rtp_mid_header_id:
-                    set_header_extensions(packet, [
-                        (self.__rtp_mid_header_id, self.__mid.encode('utf8')),
-                    ])
-
+                # encode frame
                 payloads = await loop.run_in_executor(None, encoder.encode, frame,
                                                       self.__force_keyframe)
-                self.__force_keyframe = False
-
                 if not isinstance(payloads, list):
                     payloads = [payloads]
+                self.__force_keyframe = False
+
                 for i, payload in enumerate(payloads):
+                    packet.ssrc = self._ssrc
                     packet.payload = payload
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
+
+                    # set header extensions
+                    header_extensions = []
+                    if self.__mid and self.__rtp_mid_header_id:
+                        header_extensions.append((self.__rtp_mid_header_id, self.__mid.encode('utf8')))
+                    if self.__rtp_send_time_header_id:
+                        send_time = struct.pack('!L', (current_ntp_time() >> 14) & 0x00ffffff)[1:]
+                        header_extensions.append((self.__rtp_send_time_header_id, send_time))
+                    set_header_extensions(packet, header_extensions)
+
                     try:
                         self.__log_debug('> %s', packet)
                         packet_bytes = bytes(packet)
