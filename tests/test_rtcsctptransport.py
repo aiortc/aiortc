@@ -569,13 +569,17 @@ class RTCSctpTransportTest(TestCase):
         # check outcome
         run(wait_for_outcome(client, server))
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client.state, 'closed')
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, 'connecting')
 
         # shutdown
         run(client.stop())
         run(server.stop())
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client.state, 'closed')
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, 'closed')
 
     def test_connect_lossy_transport(self):
         """
@@ -598,7 +602,9 @@ class RTCSctpTransportTest(TestCase):
         # check outcome
         run(wait_for_outcome(client, server))
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client.state, 'connected')
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server.state, 'connected')
 
         # transmit data
         server_queue = asyncio.Queue()
@@ -618,7 +624,9 @@ class RTCSctpTransportTest(TestCase):
         run(client.stop())
         run(server.stop())
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(client.state, 'closed')
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server.state, 'closed')
 
     def test_connect_client_limits_streams(self):
         client_transport, server_transport = dummy_dtls_transport_pair()

@@ -549,6 +549,7 @@ class RTCSctpTransport(EventEmitter):
         self._association_state = self.State.CLOSED
         self.__transport = transport
         self._started = False
+        self.__state = 'new'
 
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
@@ -617,6 +618,13 @@ class RTCSctpTransport(EventEmitter):
         return self._local_port
 
     @property
+    def state(self):
+        """
+        The current state of the SCTP transport.
+        """
+        return self.__state
+
+    @property
     def transport(self):
         """
         The :class:`RTCDtlsTransport` over which SCTP data is transmitted.
@@ -641,6 +649,7 @@ class RTCSctpTransport(EventEmitter):
         """
         if not self._started:
             self._started = True
+            self.__state = 'connecting'
             self._remote_port = remotePort
 
             # initialise local channel ID counter
@@ -659,6 +668,7 @@ class RTCSctpTransport(EventEmitter):
         """
         if self._association_state != self.State.CLOSED:
             await self._abort()
+        self._set_state(self.State.CLOSED)
         self.__transport._unregister_data_receiver(self)
 
     async def _abort(self):
@@ -670,7 +680,6 @@ class RTCSctpTransport(EventEmitter):
             await self._send_chunk(chunk)
         except ConnectionError:
             pass
-        self._set_state(self.State.CLOSED)
 
     async def _init(self):
         """
@@ -1149,12 +1158,15 @@ class RTCSctpTransport(EventEmitter):
         if state != self._association_state:
             self.__log_debug('- %s -> %s', self._association_state, state)
             self._association_state = state
-            if state == self.State.ESTABLISHED:
-                asyncio.ensure_future(self._data_channel_flush())
-            elif state == self.State.CLOSED:
-                self._t1_cancel()
-                self._t2_cancel()
-                self._t3_cancel()
+
+        if state == self.State.ESTABLISHED:
+            self.__state = 'connected'
+            asyncio.ensure_future(self._data_channel_flush())
+        elif state == self.State.CLOSED:
+            self._t1_cancel()
+            self._t2_cancel()
+            self._t3_cancel()
+            self.__state = 'closed'
 
     # timers
 
