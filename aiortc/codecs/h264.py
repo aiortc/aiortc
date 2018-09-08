@@ -246,16 +246,13 @@ class H264Encoder:
         packetized_packages = []
 
         packages_iterator = self._split_bitstream(b''.join(p.to_bytes() for p in packages))
-        package = next(packages_iterator)
+        package = next(packages_iterator, None)
         while package is not None:
-            try:
-                if len(package) > PACKET_MAX:
-                    packetized_packages.extend(self._packetize_fu_a(package))
-                    package = next(packages_iterator)
-                else:
-                    packetized, package = self._packetize_stap_a(package, packages_iterator)
-                    packetized_packages.append(packetized)
-            except StopIteration:
-                break
+            if len(package) > PACKET_MAX:
+                packetized_packages.extend(self._packetize_fu_a(package))
+                package = next(packages_iterator, None)
+            else:
+                packetized, package = self._packetize_stap_a(package, packages_iterator)
+                packetized_packages.append(packetized)
 
         return packetized_packages
