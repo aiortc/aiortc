@@ -47,6 +47,9 @@ products by leveraging the extensive modules available in the Python ecosystem.
 For instance you can build a full server handling both signaling and data
 channels or apply computer vision algorithms to video frames using OpenCV.
 
+Furthermore, a lot of effort has gone into writing an extensive test suite for
+the ``aiortc`` code to ensure best-in-class code quality.
+
 .. toctree::
    :maxdepth: 2
 
