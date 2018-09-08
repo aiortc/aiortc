@@ -48,7 +48,7 @@ class SignalingTest(TestCase):
         res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
         self.assertEqual(res[1], answer)
 
-        asyncio.gather(sig_server.close(), sig_client.close())
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
 
         # restore builtins
         __builtins__['input'] = original_input
@@ -68,7 +68,7 @@ class SignalingTest(TestCase):
         res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
         self.assertEqual(res[1], answer)
 
-        asyncio.gather(sig_server.close(), sig_client.close())
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
 
     def test_unix_socket(self):
         parser = argparse.ArgumentParser()
@@ -84,4 +84,4 @@ class SignalingTest(TestCase):
         res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
         self.assertEqual(res[1], answer)
 
-        asyncio.gather(sig_server.close(), sig_client.close())
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
