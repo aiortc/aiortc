@@ -125,7 +125,11 @@ class H264Encoder:
         self.container = av.open(buffer, format='h264', mode='w')
         self.stream = self.container.add_stream('libx264', rate=25)
         self.stream.pix_fmt = 'yuv420p'
-        self.stream.codec_context.options = {'profile': 'baseline', 'level': '31'}
+        self.stream.codec_context.options = {
+            'profile': 'baseline',
+            'level': '31',
+            'tune': 'zerolatency'
+        }
 
     @staticmethod
     def _packetize_fu_a(data):
