@@ -32,7 +32,8 @@ HEADER_EXTENSIONS = {
     ],
     'video': [
         RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-        RTCRtpHeaderExtensionParameters(id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+        RTCRtpHeaderExtensionParameters(
+            id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
     ]
 }
 MEDIA_KINDS = ['audio', 'video']

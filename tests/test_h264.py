@@ -1,11 +1,12 @@
 import io
-from unittest import TestCase
 from contextlib import redirect_stderr
+from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.h264 import H264PayloadDescriptor, H264Decoder, H264Encoder
+from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+
 from .utils import load
 
 H264_CODEC = RTCRtpCodecParameters(name='H264', clockRate=90000)

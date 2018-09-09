@@ -1,8 +1,8 @@
 import asyncio
 from unittest import TestCase
 
-from aiortc import RTCCertificate, RTCDtlsTransport, RTCIceGatherer, RTCIceTransport, RTCSctpTransport
-from aiortc.rtcrtpparameters import RTCRtcpParameters, RTCRtpParameters
+from aiortc import (RTCCertificate, RTCDtlsTransport, RTCIceGatherer,
+                    RTCIceTransport, RTCSctpTransport)
 
 from .utils import run
 

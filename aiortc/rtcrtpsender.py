@@ -222,7 +222,9 @@ class RTCRtpSender:
                     # set header extensions
                     header_extensions = []
                     if self.__mid and self.__rtp_mid_header_id:
-                        header_extensions.append((self.__rtp_mid_header_id, self.__mid.encode('utf8')))
+                        header_extensions.append(
+                            (self.__rtp_mid_header_id, self.__mid.encode('utf8'))
+                        )
                     if self.__rtp_send_time_header_id:
                         send_time = struct.pack('!L', (current_ntp_time() >> 14) & 0x00ffffff)[1:]
                         header_extensions.append((self.__rtp_send_time_header_id, send_time))

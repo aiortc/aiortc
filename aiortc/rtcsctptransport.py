@@ -860,7 +860,8 @@ class RTCSctpTransport(EventEmitter):
             # start T1 timer and enter COOKIE-ECHOED state
             self._t1_start(echo)
             self._set_state(self.State.COOKIE_ECHOED)
-        elif isinstance(chunk, CookieAckChunk) and self._association_state == self.State.COOKIE_ECHOED:
+        elif (isinstance(chunk, CookieAckChunk) and
+              self._association_state == self.State.COOKIE_ECHOED):
             # cancel T1 timer and enter ESTABLISHED state
             self._t1_cancel()
             self._set_state(self.State.ESTABLISHED)
@@ -894,7 +895,8 @@ class RTCSctpTransport(EventEmitter):
               self._association_state == self.State.SHUTDOWN_ACK_SENT):
             self._t2_cancel()
             self._set_state(self.State.CLOSED)
-        elif (isinstance(chunk, ReconfigChunk) and self._association_state == self.State.ESTABLISHED):
+        elif (isinstance(chunk, ReconfigChunk) and
+              self._association_state == self.State.ESTABLISHED):
             for param in chunk.params:
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls:
