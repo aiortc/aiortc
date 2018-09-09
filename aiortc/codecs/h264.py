@@ -215,8 +215,6 @@ class H264Encoder:
                     return
             if buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0x01:
                 i += 1
-            if buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0x01:
-                return 0  # error, should never happen
             i += 3
             nal_start = i
             while ((buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0)
@@ -231,7 +229,23 @@ class H264Encoder:
             nal_end = i
             yield buf[nal_start:nal_end]
 
-    def encode(self, frame, force_keyframe=False):
+    @classmethod
+    def _packetize(cls, packages):
+        packetized_packages = []
+
+        packages_iterator = iter(packages)
+        package = next(packages_iterator, None)
+        while package is not None:
+            if len(package) > PACKET_MAX:
+                packetized_packages.extend(cls._packetize_fu_a(package))
+                package = next(packages_iterator, None)
+            else:
+                packetized, package = cls._packetize_stap_a(package, packages_iterator)
+                packetized_packages.append(packetized)
+
+        return packetized_packages
+
+    def _encode_frame(self, frame, force_keyframe):
         try:
             # TODO: avoid convert twice
             bgr_frame = frame_to_bgr(frame)
@@ -240,23 +254,10 @@ class H264Encoder:
             self.stream.height = av_frame.height
 
             packages = self.stream.encode(av_frame)
+            yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
         except AVError as e:
             logger.warning('fail to encode, skiping frame: ' + str(e))
-            return []
 
-        if not packages:
-            return []
-
-        packetized_packages = []
-
-        packages_iterator = self._split_bitstream(b''.join(p.to_bytes() for p in packages))
-        package = next(packages_iterator, None)
-        while package is not None:
-            if len(package) > PACKET_MAX:
-                packetized_packages.extend(self._packetize_fu_a(package))
-                package = next(packages_iterator, None)
-            else:
-                packetized, package = self._packetize_stap_a(package, packages_iterator)
-                packetized_packages.append(packetized)
-
-        return packetized_packages
+    def encode(self, frame, force_keyframe=False):
+        packages = self._encode_frame(frame, force_keyframe)
+        return self._packetize(packages)
