@@ -175,7 +175,7 @@ class H264Encoder:
         counter = 0
         avaliable_size = PACKET_MAX - STAP_A_HEADER_SIZE
 
-        stap_header = NAL_TYPE_STAP_A
+        stap_header = NAL_TYPE_STAP_A | (data[0] & 0xe0)
 
         payload = bytes()
         try:
@@ -184,7 +184,7 @@ class H264Encoder:
                 stap_header |= nalu[0] & 0x80
 
                 nri = nalu[0] & 0x60
-                if stap_header & 0x60 > nri:
+                if stap_header & 0x60 < nri:
                     stap_header = (stap_header & 0x9f | nri)
 
                 avaliable_size -= LENGTH_FIELD_SIZE + len(nalu)
