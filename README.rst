@@ -74,7 +74,7 @@ some of its features:
 - Pure Python SCTP implementation
 - Data Channels
 - Sending and receiving audio (Opus / PCMU / PCMA)
-- Sending and receiving video (VP8)
+- Sending and receiving video (VP8 / H.264)
 - Bundling audio / video / data channels
 - RTCP reports, including NACK / PLI to recover from packet loss
 
