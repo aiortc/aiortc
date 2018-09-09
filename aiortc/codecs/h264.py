@@ -115,7 +115,7 @@ class H264Decoder:
 
 
 class H264Encoder:
-    timestamp_increment = 6000
+    timestamp_increment = 3000
 
     def __init__(self):
         # TODO: i think the correct way to go is using CodecContext direct
@@ -123,7 +123,7 @@ class H264Encoder:
 
         buffer = io.BytesIO()
         self.container = av.open(buffer, format='h264', mode='w')
-        self.stream = self.container.add_stream('libx264', rate=25)
+        self.stream = self.container.add_stream('libx264', rate=30)
         self.stream.pix_fmt = 'yuv420p'
         self.stream.codec_context.options = {
             'profile': 'baseline',
