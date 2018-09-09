@@ -9,6 +9,7 @@ from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
 from aiortc.rtcpeerconnection import find_common_codecs
 from aiortc.rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
+from aiortc.sdp import SessionDescription
 
 from .utils import run
 
@@ -953,6 +954,109 @@ class RTCPeerConnectionTest(TestCase):
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
         self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=video ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
+        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_video_h264(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(VideoStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=video ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=video ' in pc1.localDescription.sdp)
+        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
+        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
+        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+
+        # strip out vp8
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        parsed.media[0].rtp.codecs.pop(0)
+        parsed.media[0].fmt.pop(0)
+        desc1 = RTCSessionDescription(
+            sdp=str(parsed),
+            type=pc1.localDescription.type)
+        self.assertFalse('VP8' in desc1.sdp)
+        self.assertTrue('H264' in desc1.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(desc1))
+        self.assertEqual(pc2.remoteDescription, desc1)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
