@@ -8,9 +8,8 @@ import av
 from av import AVError
 from av.codec.context import CodecContext
 from av.packet import Packet
-from av.video.frame import VideoFrame
 
-from ..contrib.media import frame_from_bgr, frame_to_bgr
+from ..mediastreams import VideoFrame
 
 logger = logging.getLogger('codec.h264')
 
@@ -23,6 +22,23 @@ NAL_HEADER_SIZE = 1
 FU_A_HEADER_SIZE = 2
 LENGTH_FIELD_SIZE = 2
 STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
+
+
+def frame_from_avframe(avframe):
+    return VideoFrame(
+        width=avframe.width,
+        height=avframe.height,
+        data=b''.join(p.to_bytes() for p in avframe.planes))
+
+
+def frame_to_avframe(frame):
+    u_start = frame.width * frame.height
+    v_start = 5 * u_start // 4
+    av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
+    av_frame.planes[0].update(frame.data[0:u_start])
+    av_frame.planes[1].update(frame.data[u_start:v_start])
+    av_frame.planes[2].update(frame.data[v_start:])
+    return av_frame
 
 
 def pairwise(iterable):
@@ -99,14 +115,7 @@ class H264Decoder:
             logger.warning('failed to decode, skipping package: ' + str(e))
             return []
 
-        video_frames = []
-        for frame in frames:
-            # TODO: avoid convert twice
-            bgr_frame = frame.to_nd_array(format='bgr24')
-            video_frame = frame_from_bgr(bgr_frame)
-            video_frames.append(video_frame)
-
-        return video_frames
+        return list(map(frame_from_avframe, frames))
 
     def parse(self, packet):
         descriptor, data = H264PayloadDescriptor.parse(packet.payload)
@@ -246,10 +255,8 @@ class H264Encoder:
         return packetized_packages
 
     def _encode_frame(self, frame, force_keyframe):
+        av_frame = frame_to_avframe(frame)
         try:
-            # TODO: avoid convert twice
-            bgr_frame = frame_to_bgr(frame)
-            av_frame = VideoFrame.from_ndarray(bgr_frame, 'bgr24')
             self.stream.width = av_frame.width
             self.stream.height = av_frame.height
 
