@@ -64,6 +64,35 @@ class H264Test(TestCase):
         packages = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
+    def roundtrip(self, width, height):
+        """
+        Round-trip a VideoFrame through encoder then decoder.
+        """
+        encoder = get_encoder(H264_CODEC)
+        decoder = get_decoder(H264_CODEC)
+
+        # encode
+        frame = VideoFrame(width=width, height=height)
+        packages = encoder.encode(frame)
+
+        # depacketize
+        data = b''
+        for package in packages:
+            descriptor, package_data = H264PayloadDescriptor.parse(package)
+            data += package_data
+
+        # decode
+        frames = decoder.decode(data)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0].width, width)
+        self.assertEqual(frames[0].height, height)
+
+    def test_roundtrip_640_480(self):
+        self.roundtrip(640, 480)
+
+    def test_roundtrip_320_240(self):
+        self.roundtrip(320, 240)
+
     def test_split_bitstream(self):
         packages = list(H264Encoder._split_bitstream(b'\00\00\01\ff\00\00\01\ff'))
         self.assertEqual(len(packages), 2)
