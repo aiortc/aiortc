@@ -143,8 +143,7 @@ class H264Test(TestCase):
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)
 
-        with redirect_stderr(io.StringIO()):
-            # should discart corrupted frame
-            frame = VideoFrame(width=320, height=240)
-            packages = list(encoder._encode_frame(frame, False))
-            self.assertGreaterEqual(len(packages), 0)
+        # change resolution
+        frame = VideoFrame(width=320, height=240)
+        packages = list(encoder._encode_frame(frame, False))
+        self.assertGreaterEqual(len(packages), 1)

@@ -127,18 +127,7 @@ class H264Encoder:
     timestamp_increment = 3000
 
     def __init__(self):
-        # TODO: i think the correct way to go is using CodecContext direct
-        # but by now I could not figure out how
-
-        buffer = io.BytesIO()
-        self.container = av.open(buffer, format='h264', mode='w')
-        self.stream = self.container.add_stream('libx264', rate=30)
-        self.stream.pix_fmt = 'yuv420p'
-        self.stream.codec_context.options = {
-            'profile': 'baseline',
-            'level': '31',
-            'tune': 'zerolatency'
-        }
+        self.stream = None
 
     @staticmethod
     def _packetize_fu_a(data):
@@ -255,15 +244,26 @@ class H264Encoder:
         return packetized_packages
 
     def _encode_frame(self, frame, force_keyframe):
-        av_frame = frame_to_avframe(frame)
-        try:
-            self.stream.width = av_frame.width
-            self.stream.height = av_frame.height
+        if self.stream and (frame.width != self.stream.width or frame.height != self.stream.height):
+            self.stream = None
 
-            packages = self.stream.encode(av_frame)
-            yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
-        except AVError as e:
-            logger.warning('failed to encode, skipping frame: ' + str(e))
+        if self.stream is None:
+            # TODO: can we use CodecContext directly?
+            buffer = io.BytesIO()
+            self.container = av.open(buffer, format='h264', mode='w')
+            self.stream = self.container.add_stream('libx264', rate=30)
+            self.stream.width = frame.width
+            self.stream.height = frame.height
+            self.stream.pix_fmt = 'yuv420p'
+            self.stream.codec_context.options = {
+                'profile': 'baseline',
+                'level': '31',
+                'tune': 'zerolatency'
+            }
+
+        av_frame = frame_to_avframe(frame)
+        packages = self.stream.encode(av_frame)
+        yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
 
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)
