@@ -168,7 +168,12 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.extension_profile, 0)
         self.assertEqual(packet.extension_value, None)
         self.assertEqual(len(packet.payload), 0)
-        self.assertEqual(bytes(packet), b'\x80' + data[1:12])
+        self.assertEqual(packet.padding_size, 224)
+
+        serialized = bytes(packet)
+        self.assertEqual(len(serialized), len(data))
+        self.assertEqual(serialized[0:12], data[0:12])
+        self.assertEqual(serialized[-1], data[-1])
 
     def test_padding_too_long(self):
         data = load('rtp_only_padding.bin')[0:12] + b'\x02'

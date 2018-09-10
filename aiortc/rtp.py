@@ -1,3 +1,4 @@
+import os
 from struct import pack, unpack, unpack_from
 
 import attr
@@ -467,12 +468,14 @@ class RtpPacket:
         self.extension_profile = 0
         self.extension_value = None
         self.payload = payload
+        self.padding_size = 0
 
     def __bytes__(self):
         extension = self.extension_value is not None
+        padding = self.padding_size > 0
         data = pack(
             '!BBHLL',
-            (self.version << 6) | (extension << 4) | len(self.csrc),
+            (self.version << 6) | (padding << 5) | (extension << 4) | len(self.csrc),
             (self.marker << 7) | self.payload_type,
             self.sequence_number,
             self.timestamp,
@@ -482,7 +485,11 @@ class RtpPacket:
         if self.extension_value is not None:
             data += pack('!HH', self.extension_profile, len(self.extension_value) >> 2)
             data += self.extension_value
-        return data + self.payload
+        data += self.payload
+        if padding:
+            data += os.urandom(self.padding_size - 1)
+            data += bytes([self.padding_size])
+        return data
 
     def __repr__(self):
         return 'RtpPacket(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)' % (
@@ -523,6 +530,7 @@ class RtpPacket:
             padding_len = data[-1]
             if not padding_len or padding_len > len(data) - pos:
                 raise ValueError('RTP packet padding length is invalid')
+            packet.padding_size = padding_len
             packet.payload = data[pos:-padding_len]
         else:
             packet.payload = data[pos:]
