@@ -6,6 +6,7 @@ from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from aiortc.rtp import RtpPacket
 
 from .utils import load
 
@@ -79,8 +80,9 @@ class H264Test(TestCase):
         # depacketize
         data = b''
         for package in packages:
-            descriptor, package_data = H264PayloadDescriptor.parse(package)
-            data += package_data
+            packet = RtpPacket(payload=package)
+            decoder.parse(packet)
+            data += packet._data
 
         # decode
         frames = decoder.decode(data)
