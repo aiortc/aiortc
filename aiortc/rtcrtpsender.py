@@ -7,11 +7,11 @@ import time
 from .clock import current_datetime, current_ntp_time
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
-from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
+from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
                   RtpPacket, seq_plus_one, set_header_extensions,
-                  timestamp_plus)
+                  timestamp_plus, unpack_remb_fci)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import first_completed, random16, random32
@@ -177,6 +177,12 @@ class RTCRtpSender:
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
             self._send_keyframe()
+        elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
+            try:
+                bitrate, ssrcs = unpack_remb_fci(packet.fci)
+                self.__log_debug('- receiver estimated maximum bitrate %d bps', bitrate)
+            except ValueError:
+                pass
 
     async def _retransmit(self, sequence_number):
         """

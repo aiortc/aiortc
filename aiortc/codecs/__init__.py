@@ -17,6 +17,7 @@ MEDIA_CODECS = {
         RTCRtpCodecParameters(name='VP8', clockRate=90000, rtcpFeedback=[
             RTCRtcpFeedback(type='nack'),
             RTCRtcpFeedback(type='nack', parameter='pli'),
+            RTCRtcpFeedback(type='goog-remb'),
         ]),
         RTCRtpCodecParameters(
             name='H264',
@@ -24,6 +25,7 @@ MEDIA_CODECS = {
             rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
                 RTCRtcpFeedback(type='nack', parameter='pli'),
+                RTCRtcpFeedback(type='goog-remb'),
             ],
             parameters={
                 'packetization-mode': '1',

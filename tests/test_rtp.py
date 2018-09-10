@@ -3,9 +3,10 @@ from unittest import TestCase
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
-                        get_header_extensions, pack_packets_lost, seq_gt,
-                        seq_plus_one, set_header_extensions, timestamp_plus,
-                        unpack_packets_lost)
+                        get_header_extensions, pack_packets_lost,
+                        pack_remb_fci, seq_gt, seq_plus_one,
+                        set_header_extensions, timestamp_plus,
+                        unpack_packets_lost, unpack_remb_fci)
 
 from .utils import load
 
@@ -237,6 +238,26 @@ class RtpUtilTest(TestCase):
         self.assertEqual(pack_packets_lost(1), b'\x00\x00\x01')
         self.assertEqual(pack_packets_lost(8388607), b'\x7f\xff\xff')
 
+    def test_pack_remb_fci(self):
+        # exponent = 0, mantissa = 0
+        data = pack_remb_fci(0, [2529072847])
+        self.assertEqual(data, b'REMB\x01\x00\x00\x00\x96\xbe\x96\xcf')
+
+        # exponent = 0, mantissa = 0x3ffff
+        data = pack_remb_fci(0x3ffff, [2529072847])
+        self.assertEqual(data, b'REMB\x01\x03\xff\xff\x96\xbe\x96\xcf')
+
+        # exponent = 1, mantissa = 0
+        data = pack_remb_fci(0x40000, [2529072847])
+        self.assertEqual(data, b'REMB\x01\x06\x00\x00\x96\xbe\x96\xcf')
+
+        data = pack_remb_fci(4160000, [2529072847])
+        self.assertEqual(data, b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
+
+        # exponent = 63, mantissa = 0x3ffff
+        data = pack_remb_fci(0x3ffff << 63, [2529072847])
+        self.assertEqual(data, b'REMB\x01\xff\xff\xff\x96\xbe\x96\xcf')
+
     def test_seq_gt(self):
         self.assertFalse(seq_gt(0, 1))
         self.assertFalse(seq_gt(1, 1))
@@ -261,6 +282,36 @@ class RtpUtilTest(TestCase):
         self.assertEqual(unpack_packets_lost(b'\x00\x00\x00'), 0)
         self.assertEqual(unpack_packets_lost(b'\x00\x00\x01'), 1)
         self.assertEqual(unpack_packets_lost(b'\x7f\xff\xff'), 8388607)
+
+    def test_unpack_remb_fci(self):
+        # junk
+        with self.assertRaises(ValueError):
+            unpack_remb_fci(b'JUNK')
+
+        # exponent = 0, mantissa = 0
+        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x00\x00\x00\x96\xbe\x96\xcf')
+        self.assertEqual(bitrate, 0)
+        self.assertEqual(ssrcs, [2529072847])
+
+        # exponent = 0, mantissa = 0x3ffff
+        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x03\xff\xff\x96\xbe\x96\xcf')
+        self.assertEqual(bitrate, 0x3ffff)
+        self.assertEqual(ssrcs, [2529072847])
+
+        # exponent = 1, mantissa = 0
+        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x06\x00\x00\x96\xbe\x96\xcf')
+        self.assertEqual(bitrate, 0x40000)
+        self.assertEqual(ssrcs, [2529072847])
+
+        # 4160000 bps
+        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
+        self.assertEqual(bitrate, 4160000)
+        self.assertEqual(ssrcs, [2529072847])
+
+        # exponent = 63, mantissa = 0x3ffff
+        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\xff\xff\xff\x96\xbe\x96\xcf')
+        self.assertEqual(bitrate, 0x3ffff << 63)
+        self.assertEqual(ssrcs, [2529072847])
 
     def test_get_header_extensions(self):
         packet = RtpPacket()

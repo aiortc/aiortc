@@ -1,4 +1,4 @@
-from struct import pack, unpack
+from struct import pack, unpack, unpack_from
 
 import attr
 
@@ -26,6 +26,7 @@ RTCP_RTPFB_NACK = 1
 RTCP_PSFB_PLI = 1
 RTCP_PSFB_SLI = 2
 RTCP_PSFB_RPSI = 3
+RTCP_PSFB_APP = 15
 
 
 def clamp_packets_lost(count):
@@ -50,6 +51,49 @@ def pack_rtcp_packet(packet_type, count, payload):
                 (2 << 6) | count,
                 packet_type,
                 len(payload) // 4) + payload
+
+
+def pack_remb_fci(bitrate, ssrcs):
+    """
+    Pack the FCI for a Receiver Estimated Maximum Bitrate report.
+
+    https://tools.ietf.org/html/draft-alvestrand-rmcat-remb-03
+    """
+    data = b'REMB'
+    exponent = 0
+    mantissa = bitrate
+    while mantissa > 0x3ffff:
+        mantissa >>= 1
+        exponent += 1
+    data += pack('!BBH',
+                 len(ssrcs),
+                 (exponent << 2) | (mantissa >> 16),
+                 (mantissa & 0xffff))
+    for ssrc in ssrcs:
+        data += pack('!L', ssrc)
+    return data
+
+
+def unpack_remb_fci(data):
+    """
+    Unpack the FCI for a Receiver Estimated Maximum Bitrate report.
+
+    https://tools.ietf.org/html/draft-alvestrand-rmcat-remb-03
+    """
+    if len(data) < 8 or data[0:4] != b'REMB':
+        raise ValueError('Invalid REMB prefix')
+
+    exponent = (data[5] & 0xfc) >> 2
+    mantissa = ((data[5] & 0x03) << 16) | (data[6] << 8) | data[7]
+    bitrate = mantissa << exponent
+
+    pos = 8
+    ssrcs = []
+    for r in range(data[4]):
+        ssrcs.append(unpack_from('!L', data, pos)[0])
+        pos += 4
+
+    return (bitrate, ssrcs)
 
 
 def is_rtcp(msg):
