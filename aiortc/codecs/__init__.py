@@ -16,14 +16,14 @@ MEDIA_CODECS = {
     'video': [
         RTCRtpCodecParameters(name='VP8', clockRate=90000, rtcpFeedback=[
             RTCRtcpFeedback(type='nack'),
-            RTCRtcpFeedback(type='nack pli'),
+            RTCRtcpFeedback(type='nack', parameter='pli'),
         ]),
         RTCRtpCodecParameters(
             name='H264',
             clockRate=90000,
             rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack pli'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
             ],
             parameters={
                 'packetization-mode': '1',
