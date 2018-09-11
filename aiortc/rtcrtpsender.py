@@ -46,8 +46,8 @@ class RTCRtpSender:
         self._ssrc = random32()
         self.__force_keyframe = False
         self.__mid = None
-        self.__rtp_mid_header_id = None
-        self.__rtp_send_time_header_id = None
+        self.__rtp_sdes_mid_header_id = None
+        self.__rtp_abs_send_time_header_id = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
@@ -125,9 +125,9 @@ class RTCRtpSender:
             # make note of the RTP header extension IDs
             for ext in parameters.headerExtensions:
                 if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
-                    self.__rtp_mid_header_id = ext.id
+                    self.__rtp_sdes_mid_header_id = ext.id
                 elif ext.uri == 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time':
-                    self.__rtp_send_time_header_id = ext.id
+                    self.__rtp_abs_send_time_header_id = ext.id
 
             asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             asyncio.ensure_future(self._run_rtcp())
@@ -227,13 +227,16 @@ class RTCRtpSender:
 
                     # set header extensions
                     header_extensions = []
-                    if self.__mid and self.__rtp_mid_header_id:
-                        header_extensions.append(
-                            (self.__rtp_mid_header_id, self.__mid.encode('utf8'))
-                        )
-                    if self.__rtp_send_time_header_id:
-                        send_time = struct.pack('!L', (current_ntp_time() >> 14) & 0x00ffffff)[1:]
-                        header_extensions.append((self.__rtp_send_time_header_id, send_time))
+                    if self.__mid and self.__rtp_sdes_mid_header_id:
+                        header_extensions.append((
+                            self.__rtp_sdes_mid_header_id,
+                            self.__mid.encode('utf8')
+                        ))
+                    if self.__rtp_abs_send_time_header_id:
+                        header_extensions.append((
+                            self.__rtp_abs_send_time_header_id,
+                            struct.pack('!L', (current_ntp_time() >> 14) & 0x00ffffff)[1:]
+                        ))
                     set_header_extensions(packet, header_extensions)
 
                     try:

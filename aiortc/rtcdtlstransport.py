@@ -234,7 +234,7 @@ class RTCDtlsTransport(EventEmitter):
         self.encrypted = False
         self._data_receiver = None
         self._role = 'auto'
-        self._rtp_mid_header_id = None
+        self._rtp_sdes_mid_header_id = None
         self._rtp_router = RtpRouter()
         self._start = None
         self._state = State.NEW
@@ -406,7 +406,7 @@ class RTCDtlsTransport(EventEmitter):
         # get muxId from RTP header extensions
         mid = None
         for x_id, x_value in get_header_extensions(packet):
-            if x_id == self._rtp_mid_header_id:
+            if x_id == self._rtp_sdes_mid_header_id:
                 mid = x_value.decode('utf8')
                 break
 
@@ -469,7 +469,7 @@ class RTCDtlsTransport(EventEmitter):
         # make note of the RTP header extension used for muxId
         for ext in parameters.headerExtensions:
             if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
-                self._rtp_mid_header_id = ext.id
+                self._rtp_sdes_mid_header_id = ext.id
 
         self._rtp_router.register(receiver, parameters)
 
