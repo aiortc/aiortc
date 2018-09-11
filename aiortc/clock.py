@@ -7,6 +7,11 @@ def current_datetime():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+def current_ms():
+    delta = current_datetime() - NTP_EPOCH
+    return int(delta.total_seconds() * 1000)
+
+
 def current_ntp_time():
     return datetime_to_ntp(current_datetime())
 
