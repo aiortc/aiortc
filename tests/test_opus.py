@@ -1,14 +1,14 @@
-from unittest import TestCase
-
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.opus import OpusDecoder, OpusEncoder
 from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
+from .codecs import CodecTestCase
+
 OPUS_CODEC = RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2)
 
 
-class OpusTest(TestCase):
+class OpusTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(OPUS_CODEC)
         self.assertTrue(isinstance(decoder, OpusDecoder))
@@ -50,3 +50,6 @@ class OpusTest(TestCase):
             sample_rate=48000)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xfc\xff\xfe')
+
+    def test_roundtrip(self):
+        self.roundtrip_audio(OPUS_CODEC, output_channels=2, output_sample_rate=48000)

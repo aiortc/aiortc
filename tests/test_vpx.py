@@ -6,7 +6,7 @@ from aiortc.codecs.vpx import (Vp8Decoder, Vp8Encoder, VpxPayloadDescriptor,
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
-from .codecs import CodecTestMixin
+from .codecs import CodecTestCase
 
 VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000)
 
@@ -117,7 +117,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(rest, b'')
 
 
-class Vp8Test(CodecTestMixin, TestCase):
+class Vp8Test(CodecTestCase):
     def test_assert(self):
         with self.assertRaises(Exception) as cm:
             _vpx_assert(1)

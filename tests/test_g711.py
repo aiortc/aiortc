@@ -1,12 +1,12 @@
-from unittest import TestCase
-
 from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
 from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
                                 PcmuEncoder)
 from aiortc.mediastreams import AudioFrame
 
+from .codecs import CodecTestCase
 
-class PcmaTest(TestCase):
+
+class PcmaTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(PCMA_CODEC)
         self.assertTrue(isinstance(decoder, PcmaDecoder))
@@ -49,8 +49,11 @@ class PcmaTest(TestCase):
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xd5' * 160)
 
+    def test_roundtrip(self):
+        self.roundtrip_audio(PCMA_CODEC, output_channels=1, output_sample_rate=8000)
 
-class PcmuTest(TestCase):
+
+class PcmuTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(PCMU_CODEC)
         self.assertTrue(isinstance(decoder, PcmuDecoder))
@@ -92,3 +95,6 @@ class PcmuTest(TestCase):
             sample_rate=48000)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xff' * 160)
+
+    def test_roundtrip(self):
+        self.roundtrip_audio(PCMU_CODEC, output_channels=1, output_sample_rate=8000)

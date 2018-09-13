@@ -7,7 +7,7 @@ from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
-from .codecs import CodecTestMixin
+from .codecs import CodecTestCase
 from .utils import load
 
 H264_CODEC = RTCRtpCodecParameters(name='H264', clockRate=90000)
@@ -48,7 +48,7 @@ class H264PayloadDescriptorTest(TestCase):
         self.assertEqual(len(rest), 564)
 
 
-class H264Test(CodecTestMixin, TestCase):
+class H264Test(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(H264_CODEC)
         self.assertTrue(isinstance(decoder, H264Decoder))
