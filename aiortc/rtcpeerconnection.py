@@ -122,7 +122,7 @@ class RTCPeerConnection(EventEmitter):
         self.__remoteIce = {}
         self.__remoteRtp = {}
         self.__sctp = None
-        self.__sctpLegacySdp = True
+        self._sctpLegacySdp = True
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
         self.__transceivers = []
@@ -412,10 +412,10 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure sctp
                 if media.profile == 'DTLS/SCTP':
-                    self.__sctpLegacySdp = True
+                    self._sctpLegacySdp = True
                     self.__sctpRemotePort = int(media.fmt[0])
                 else:
-                    self.__sctpLegacySdp = False
+                    self._sctpLegacySdp = False
                     self.__sctpRemotePort = media.sctp_port
                 self.__sctpRemoteCaps = media.sctpCapabilities
 
@@ -547,7 +547,7 @@ class RTCPeerConnection(EventEmitter):
             iceTransport = dtlsTransport.transport
             default_candidate = get_default_candidate(iceTransport)
 
-            if self.__sctpLegacySdp:
+            if self._sctpLegacySdp:
                 media = sdp.MediaDescription(
                     kind='application',
                     port=default_candidate.port,
