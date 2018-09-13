@@ -6,8 +6,8 @@ from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
-from aiortc.rtp import RtpPacket
 
+from .codecs import CodecTestMixin
 from .utils import load
 
 H264_CODEC = RTCRtpCodecParameters(name='H264', clockRate=90000)
@@ -48,7 +48,7 @@ class H264PayloadDescriptorTest(TestCase):
         self.assertEqual(len(rest), 564)
 
 
-class H264Test(TestCase):
+class H264Test(CodecTestMixin, TestCase):
     def test_decoder(self):
         decoder = get_decoder(H264_CODEC)
         self.assertTrue(isinstance(decoder, H264Decoder))
@@ -66,35 +66,17 @@ class H264Test(TestCase):
         packages = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
-    def roundtrip(self, width, height):
-        """
-        Round-trip a VideoFrame through encoder then decoder.
-        """
-        encoder = get_encoder(H264_CODEC)
-        decoder = get_decoder(H264_CODEC)
+    def test_roundtrip_1280_720(self):
+        self.roundtrip_video(H264_CODEC, 1280, 720)
 
-        # encode
-        frame = VideoFrame(width=width, height=height)
-        packages = encoder.encode(frame)
-
-        # depacketize
-        data = b''
-        for package in packages:
-            packet = RtpPacket(payload=package)
-            decoder.parse(packet)
-            data += packet._data
-
-        # decode
-        frames = decoder.decode(data)
-        self.assertEqual(len(frames), 1)
-        self.assertEqual(frames[0].width, width)
-        self.assertEqual(frames[0].height, height)
+    def test_roundtrip_960_540(self):
+        self.roundtrip_video(H264_CODEC, 960, 540)
 
     def test_roundtrip_640_480(self):
-        self.roundtrip(640, 480)
+        self.roundtrip_video(H264_CODEC, 640, 480)
 
     def test_roundtrip_320_240(self):
-        self.roundtrip(320, 240)
+        self.roundtrip_video(H264_CODEC, 320, 240)
 
     def test_split_bitstream(self):
         packages = list(H264Encoder._split_bitstream(b'\00\00\01\ff\00\00\01\ff'))

@@ -6,6 +6,8 @@ from aiortc.codecs.vpx import (Vp8Decoder, Vp8Encoder, VpxPayloadDescriptor,
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
+from .codecs import CodecTestMixin
+
 VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000)
 
 
@@ -115,7 +117,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(rest, b'')
 
 
-class Vp8Test(TestCase):
+class Vp8Test(CodecTestMixin, TestCase):
     def test_assert(self):
         with self.assertRaises(Exception) as cm:
             _vpx_assert(1)
@@ -166,3 +168,15 @@ class Vp8Test(TestCase):
         self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
         self.assertEqual(number_of_threads(1920 * 1080, 4), 2)
         self.assertEqual(number_of_threads(1920 * 1080, 2), 1)
+
+    def test_roundtrip_1280_720(self):
+        self.roundtrip_video(VP8_CODEC, 1280, 720)
+
+    def test_roundtrip_960_540(self):
+        self.roundtrip_video(VP8_CODEC, 960, 540)
+
+    def test_roundtrip_640_480(self):
+        self.roundtrip_video(VP8_CODEC, 640, 480)
+
+    def test_roundtrip_320_240(self):
+        self.roundtrip_video(VP8_CODEC, 320, 240)
