@@ -11,7 +11,8 @@ class ClockTest(TestCase):
         mock_now.return_value = datetime.datetime(2018, 9, 11, tzinfo=datetime.timezone.utc)
         self.assertEqual(clock.current_ms(), 3745612800000)
 
-        mock_now.return_value = datetime.datetime(2018, 9, 11, 0, 0, 1, tzinfo=datetime.timezone.utc)
+        mock_now.return_value = datetime.datetime(
+            2018, 9, 11, 0, 0, 1, tzinfo=datetime.timezone.utc)
         self.assertEqual(clock.current_ms(), 3745612801000)
 
     def test_datetime_from_ntp(self):

@@ -1,6 +1,6 @@
 import asyncio
 import re
-from unittest import skip, TestCase
+from unittest import TestCase, skip
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
