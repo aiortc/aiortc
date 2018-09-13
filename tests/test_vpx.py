@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.vpx import (VpxDecoder, VpxEncoder, VpxPayloadDescriptor,
+from aiortc.codecs.vpx import (Vp8Decoder, Vp8Encoder, VpxPayloadDescriptor,
                                _vpx_assert, number_of_threads)
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
@@ -123,11 +123,11 @@ class Vp8Test(TestCase):
 
     def test_decoder(self):
         decoder = get_decoder(VP8_CODEC)
-        self.assertTrue(isinstance(decoder, VpxDecoder))
+        self.assertTrue(isinstance(decoder, Vp8Decoder))
 
     def test_encoder(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, VpxEncoder))
+        self.assertTrue(isinstance(encoder, Vp8Encoder))
 
         frame = VideoFrame(width=640, height=480)
         payloads = encoder.encode(frame)
@@ -141,7 +141,7 @@ class Vp8Test(TestCase):
 
     def test_encoder_large(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, VpxEncoder))
+        self.assertTrue(isinstance(encoder, Vp8Encoder))
 
         # first keyframe
         frame = VideoFrame(width=2560, height=1920)

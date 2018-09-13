@@ -49,8 +49,8 @@ class MockOpus:
 
 
 class MockVpx:
-    VpxDecoder = None
-    VpxEncoder = None
+    Vp8Decoder = None
+    Vp8Encoder = None
 
 
 sys.modules.update({'pylibsrtp._binding': MockBinding()})

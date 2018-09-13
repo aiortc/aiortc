@@ -126,7 +126,7 @@ def _vpx_assert(err):
         raise Exception('libvpx error: ' + reason.decode('utf8'))
 
 
-class VpxDecoder:
+class Vp8Decoder:
     def __init__(self):
         self.codec = ffi.new('vpx_codec_ctx_t *')
         _vpx_assert(lib.vpx_codec_dec_init(self.codec, lib.vpx_codec_vp8_dx(), ffi.NULL, 0))
@@ -175,7 +175,7 @@ class VpxDecoder:
         packet._picture_id = descriptor.picture_id
 
 
-class VpxEncoder:
+class Vp8Encoder:
     timestamp_increment = 3000
 
     def __init__(self):

@@ -2,7 +2,7 @@ from ..rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .h264 import H264Decoder, H264Encoder
 from .opus import OpusDecoder, OpusEncoder
-from .vpx import VpxDecoder, VpxEncoder
+from .vpx import Vp8Decoder, Vp8Encoder
 
 PCMU_CODEC = RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0)
 PCMA_CODEC = RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
@@ -58,7 +58,7 @@ def get_decoder(codec):
     elif codec.name == 'PCMA':
         return PcmaDecoder()
     elif codec.name == 'VP8':
-        return VpxDecoder()
+        return Vp8Decoder()
     elif codec.name == 'H264':
         return H264Decoder()
 
@@ -71,6 +71,6 @@ def get_encoder(codec):
     elif codec.name == 'PCMA':
         return PcmaEncoder()
     elif codec.name == 'VP8':
-        return VpxEncoder()
+        return Vp8Encoder()
     elif codec.name == 'H264':
         return H264Encoder()
