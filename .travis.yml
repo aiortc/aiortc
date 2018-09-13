@@ -16,7 +16,7 @@ install:
       brew install ffmpeg opus libvpx
     fi
   - pip3 install -U setuptools
-  - pip3 install coveralls flake8
+  - pip3 install coveralls flake8 isort
 language: python
 matrix:
   include:
@@ -37,6 +37,7 @@ script:
       fi
     else
       flake8 aiortc examples tests
+      isort -c -df -rc aiortc examples tests
       coverage run setup.py test
     fi
 sudo: true
