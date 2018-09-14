@@ -14,8 +14,7 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      ShutdownCompleteChunk,
                                      StreamAddOutgoingParam,
                                      StreamResetOutgoingParam,
-                                     StreamResetResponseParam, seq_gt,
-                                     seq_plus_one, tsn_gt, tsn_gte,
+                                     StreamResetResponseParam, tsn_gt, tsn_gte,
                                      tsn_minus_one, tsn_plus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
@@ -457,19 +456,6 @@ class SctpStreamTest(TestCase):
 
 
 class SctpUtilTest(TestCase):
-    def test_seq_gt(self):
-        self.assertFalse(seq_gt(0, 1))
-        self.assertFalse(seq_gt(1, 1))
-        self.assertTrue(seq_gt(2, 1))
-        self.assertTrue(seq_gt(32768, 1))
-        self.assertFalse(seq_gt(32769, 1))
-        self.assertFalse(seq_gt(65535, 1))
-
-    def test_seq_plus_one(self):
-        self.assertEqual(seq_plus_one(0), 1)
-        self.assertEqual(seq_plus_one(1), 2)
-        self.assertEqual(seq_plus_one(65535), 0)
-
     def test_tsn_gt(self):
         self.assertFalse(tsn_gt(0, 1))
         self.assertFalse(tsn_gt(1, 1))

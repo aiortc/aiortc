@@ -13,7 +13,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .utils import random32
+from .utils import random32, uint16_add, uint16_gte
 
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
@@ -41,7 +41,6 @@ SCTP_RTO_BETA = 1 / 4
 SCTP_RTO_INITIAL = 3
 SCTP_RTO_MIN = 1
 SCTP_RTO_MAX = 60
-SCTP_SEQ_MODULO = 2 ** 16
 SCTP_TSN_MODULO = 2 ** 32
 
 RECONFIG_CHUNK = 130
@@ -99,26 +98,6 @@ def padl(l):
 
 def swapl(i):
     return unpack("<I", pack(">I", i))[0]
-
-
-def seq_gt(a, b):
-    """
-    Return True if seq a is greater than b.
-    """
-    half_mod = (1 << 15)
-    return (((a < b) and ((b - a) > half_mod)) or
-            ((a > b) and ((a - b) < half_mod)))
-
-
-def seq_gte(a, b):
-    """
-    Return True if seq a is greater than or equal to b.
-    """
-    return (a == b) or seq_gt(a, b)
-
-
-def seq_plus_one(a):
-    return (a + 1) % SCTP_SEQ_MODULO
 
 
 def tsn_gt(a, b):
@@ -478,7 +457,7 @@ class InboundStream:
 
         # should never happen, this would mean receiving a chunk
         # for a message that has already been fully re-assembled
-        assert seq_gte(chunk.stream_seq, self.sequence_number)
+        assert uint16_gte(chunk.stream_seq, self.sequence_number)
 
         for i, rchunk in enumerate(self.reassembly):
             # should never happen, the chunk should have been eliminated
@@ -512,7 +491,7 @@ class InboundStream:
 
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
                 self.reassembly = self.reassembly[pos + 1:]
-                self.sequence_number = seq_plus_one(self.sequence_number)
+                self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = 0
                 yield (chunk.stream_id, chunk.protocol, user_data)
             else:
@@ -1099,7 +1078,7 @@ class RTCSctpTransport(EventEmitter):
             pos += USERDATA_MAX_LENGTH
             self._local_tsn = tsn_plus_one(self._local_tsn)
             self._outbound_queue.append(chunk)
-        self._outbound_stream_seq[stream_id] = seq_plus_one(stream_seq)
+        self._outbound_stream_seq[stream_id] = uint16_add(stream_seq, 1)
 
         # transmit outbound data
         if not self._t3_handle:
