@@ -1,16 +1,16 @@
 import asyncio
 import logging
 import random
-import struct
 import time
 
+from . import rtp
 from .clock import current_datetime, current_ntp_time
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
-                  RtpPacket, set_header_extensions, unpack_remb_fci)
+                  RtpPacket, unpack_remb_fci)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import first_completed, random16, random32, uint16_add, uint32_add
@@ -45,9 +45,8 @@ class RTCRtpSender:
         self._ssrc = random32()
         self.__force_keyframe = False
         self.__mid = None
-        self.__rtp_sdes_mid_header_id = None
-        self.__rtp_abs_send_time_header_id = None
         self.__rtp_exited = asyncio.Event()
+        self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
         self.__started = False
@@ -122,11 +121,8 @@ class RTCRtpSender:
             self.__mid = parameters.muxId
 
             # make note of the RTP header extension IDs
-            for ext in parameters.headerExtensions:
-                if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
-                    self.__rtp_sdes_mid_header_id = ext.id
-                elif ext.uri == 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time':
-                    self.__rtp_abs_send_time_header_id = ext.id
+            self.__transport._register_rtp_sender(self, parameters)
+            self.__rtp_header_extensions_map.configure(parameters)
 
             asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             asyncio.ensure_future(self._run_rtcp())
@@ -138,6 +134,7 @@ class RTCRtpSender:
         """
         self.__stopped.set()
         if self.__started:
+            self.__transport._unregister_rtp_sender(self)
             await asyncio.gather(
                 self.__rtp_exited.wait(),
                 self.__rtcp_exited.wait())
@@ -225,18 +222,10 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
 
                     # set header extensions
-                    header_extensions = []
-                    if self.__mid and self.__rtp_sdes_mid_header_id:
-                        header_extensions.append((
-                            self.__rtp_sdes_mid_header_id,
-                            self.__mid.encode('utf8')
-                        ))
-                    if self.__rtp_abs_send_time_header_id:
-                        header_extensions.append((
-                            self.__rtp_abs_send_time_header_id,
-                            struct.pack('!L', (current_ntp_time() >> 14) & 0x00ffffff)[1:]
-                        ))
-                    set_header_extensions(packet, header_extensions)
+                    header_extensions = rtp.HeaderExtensions(
+                        abs_send_time=(current_ntp_time() >> 14) & 0x00ffffff,
+                        sdes_mid=self.__mid)
+                    self.__rtp_header_extensions_map.set(packet, header_extensions)
 
                     try:
                         self.__log_debug('> %s', packet)

@@ -19,7 +19,8 @@ from OpenSSL import crypto
 from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
-from .rtp import RtcpPacket, RtpPacket, get_header_extensions, is_rtcp
+from . import rtp
+from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed
 
 binding = Binding()
@@ -234,8 +235,9 @@ class RTCDtlsTransport(EventEmitter):
         self.encrypted = False
         self._data_receiver = None
         self._role = 'auto'
-        self._rtp_sdes_mid_header_id = None
+        self._rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self._rtp_router = RtpRouter()
+        self._rtp_senders = set()
         self._start = None
         self._state = State.NEW
         self._transport = transport
@@ -402,16 +404,10 @@ class RTCDtlsTransport(EventEmitter):
 
     async def _handle_rtp_data(self, data):
         packet = RtpPacket.parse(data)
-
-        # get muxId from RTP header extensions
-        mid = None
-        for x_id, x_value in get_header_extensions(packet):
-            if x_id == self._rtp_sdes_mid_header_id:
-                mid = x_value.decode('utf8')
-                break
+        extensions = self._rtp_header_extensions_map.get(packet)
 
         # route RTP packet
-        receiver = self._rtp_router.route(packet.ssrc, mid=mid)
+        receiver = self._rtp_router.route(packet.ssrc, mid=extensions.sdes_mid)
         if receiver is not None:
             await receiver._handle_rtp_packet(packet)
 
@@ -466,12 +462,12 @@ class RTCDtlsTransport(EventEmitter):
         self._data_receiver = receiver
 
     def _register_rtp_receiver(self, receiver, parameters):
-        # make note of the RTP header extension used for muxId
-        for ext in parameters.headerExtensions:
-            if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
-                self._rtp_sdes_mid_header_id = ext.id
-
+        self._rtp_header_extensions_map.configure(parameters)
         self._rtp_router.register(receiver, parameters)
+
+    def _register_rtp_sender(self, sender, parameters):
+        self._rtp_header_extensions_map.configure(parameters)
+        self._rtp_senders.add(sender)
 
     async def _send_data(self, data):
         if self._state != State.CONNECTED:
@@ -502,6 +498,9 @@ class RTCDtlsTransport(EventEmitter):
 
     def _unregister_rtp_receiver(self, receiver):
         self._rtp_router.unregister(receiver)
+
+    def _unregister_rtp_sender(self, sender):
+        self._rtp_senders.discard(sender)
 
     async def _write_ssl(self):
         """

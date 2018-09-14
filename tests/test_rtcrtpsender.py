@@ -23,6 +23,12 @@ class FakeDtlsTransport:
     queue = asyncio.Queue(maxsize=1)
     state = 'connected'
 
+    def _register_rtp_sender(self, sender, parameters):
+        pass
+
+    def _unregister_rtp_sender(self, sender):
+        pass
+
     async def _send_rtp(self, data):
         if not is_rtcp(data):
             packet = RtpPacket.parse(data)

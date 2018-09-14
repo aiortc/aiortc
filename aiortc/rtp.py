@@ -28,6 +28,47 @@ RTCP_PSFB_RPSI = 3
 RTCP_PSFB_APP = 15
 
 
+@attr.s
+class HeaderExtensions:
+    abs_send_time = attr.ib(default=None)
+    sdes_mid = attr.ib(default=None)
+
+
+class HeaderExtensionsMap:
+    def __init__(self):
+        self.__ids = HeaderExtensions()
+
+    def configure(self, parameters):
+        for ext in parameters.headerExtensions:
+            if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
+                self.__ids.sdes_mid = ext.id
+            elif ext.uri == 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time':
+                self.__ids.abs_send_time = ext.id
+
+    def get(self, packet):
+        values = HeaderExtensions()
+        for x_id, x_value in get_header_extensions(packet):
+            if x_id == self.__ids.sdes_mid:
+                values.sdes_mid = x_value.decode('utf8')
+            elif x_id == self.__ids.abs_send_time:
+                values.abs_send_time = unpack('!L', b'\00' + x_value)[0]
+        return values
+
+    def set(self, packet, values):
+        extensions = []
+        if values.sdes_mid and self.__ids.sdes_mid:
+            extensions.append((
+                self.__ids.sdes_mid,
+                values.sdes_mid.encode('utf8')
+            ))
+        if values.abs_send_time and self.__ids.abs_send_time:
+            extensions.append((
+                self.__ids.abs_send_time,
+                pack('!L', values.abs_send_time)[1:]
+            ))
+        set_header_extensions(packet, extensions)
+
+
 def clamp_packets_lost(count):
     return max(PACKETS_LOST_MIN, min(count, PACKETS_LOST_MAX))
 

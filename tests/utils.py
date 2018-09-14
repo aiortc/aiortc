@@ -64,6 +64,9 @@ class DummyDtlsTransport:
     def _register_rtp_receiver(self, receiver, parameters):
         pass
 
+    def _register_rtp_sender(self, sender, parameters):
+        pass
+
     async def _send_data(self, data):
         await self.transport._connection.send(data)
 
@@ -77,6 +80,9 @@ class DummyDtlsTransport:
             self._data_handle = None
 
     def _unregister_rtp_receiver(self, receiver):
+        pass
+
+    def _unregister_rtp_sender(self, sender):
         pass
 
     async def __run(self):
