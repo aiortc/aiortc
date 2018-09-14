@@ -8,13 +8,12 @@ from .codecs import get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
-from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RTP_SEQ_MODULO,
-                  RtcpByePacket, RtcpPsfbPacket, RtcpReceiverInfo,
-                  RtcpRrPacket, RtcpRtpfbPacket, RtcpSrPacket,
-                  clamp_packets_lost, seq_gt, seq_plus_one)
+from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
+                  RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
+                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost)
 from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
                     RTCStatsReport)
-from .utils import first_completed
+from .utils import first_completed, uint16_add, uint16_gt
 
 logger = logging.getLogger('rtp')
 
@@ -33,14 +32,14 @@ class NackGenerator:
             self.ssrc = packet.ssrc
             return
 
-        if seq_gt(packet.sequence_number, self.max_seq):
+        if uint16_gt(packet.sequence_number, self.max_seq):
             # mark missing packets
             missed = 0
-            seq = seq_plus_one(self.max_seq)
-            while seq_gt(packet.sequence_number, seq):
+            seq = uint16_add(self.max_seq, 1)
+            while uint16_gt(packet.sequence_number, seq):
                 self.missing.add(seq)
                 missed += 1
-                seq = seq_plus_one(seq)
+                seq = uint16_add(seq, 1)
             self.max_seq = packet.sequence_number
 
             # trigger a NACK if needed
@@ -69,7 +68,7 @@ class StreamStatistics:
         self._received_prior = 0
 
     def add(self, packet):
-        in_order = self.max_seq is None or seq_gt(packet.sequence_number, self.max_seq)
+        in_order = self.max_seq is None or uint16_gt(packet.sequence_number, self.max_seq)
         self.packets_received += 1
 
         if self.base_seq is None:
@@ -79,7 +78,7 @@ class StreamStatistics:
             arrival = int(time.time() * self._clockrate)
 
             if self.max_seq is not None and packet.sequence_number < self.max_seq:
-                self.cycles += RTP_SEQ_MODULO
+                self.cycles += (1 << 16)
             self.max_seq = packet.sequence_number
 
             if packet.timestamp != self._last_timestamp and self.packets_received > 1:

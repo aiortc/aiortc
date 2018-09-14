@@ -8,8 +8,6 @@ FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
 RTP_HEADER_LENGTH = 12
-RTP_SEQ_MODULO = 2 ** 16
-RTP_TIMESTAMP_MODULO = 2 ** 32
 RTCP_HEADER_LENGTH = 8
 
 PACKETS_LOST_MIN = - (1 << 23)
@@ -106,20 +104,6 @@ def padl(l):
     Return amount of padding needed for a 4-byte multiple.
     """
     return 4 * ((l + 3) // 4) - l
-
-
-def seq_gt(a, b):
-    half_mod = (1 << 15)
-    return (((a < b) and ((b - a) > half_mod)) or
-            ((a > b) and ((a - b) < half_mod)))
-
-
-def seq_plus_one(a):
-    return (a + 1) % RTP_SEQ_MODULO
-
-
-def timestamp_plus(a, b):
-    return (a + b) % RTP_TIMESTAMP_MODULO
 
 
 def get_header_extensions(packet):

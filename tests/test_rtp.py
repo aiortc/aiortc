@@ -4,8 +4,7 @@ from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
                         get_header_extensions, pack_packets_lost,
-                        pack_remb_fci, seq_gt, seq_plus_one,
-                        set_header_extensions, timestamp_plus,
+                        pack_remb_fci, set_header_extensions,
                         unpack_packets_lost, unpack_remb_fci)
 
 from .utils import load
@@ -262,24 +261,6 @@ class RtpUtilTest(TestCase):
         # exponent = 63, mantissa = 0x3ffff
         data = pack_remb_fci(0x3ffff << 63, [2529072847])
         self.assertEqual(data, b'REMB\x01\xff\xff\xff\x96\xbe\x96\xcf')
-
-    def test_seq_gt(self):
-        self.assertFalse(seq_gt(0, 1))
-        self.assertFalse(seq_gt(1, 1))
-        self.assertTrue(seq_gt(2, 1))
-        self.assertTrue(seq_gt(32768, 1))
-        self.assertFalse(seq_gt(32769, 1))
-        self.assertFalse(seq_gt(65535, 1))
-
-    def test_seq_plus_one(self):
-        self.assertEqual(seq_plus_one(0), 1)
-        self.assertEqual(seq_plus_one(1), 2)
-        self.assertEqual(seq_plus_one(65535), 0)
-
-    def test_timestamp_plus(self):
-        self.assertEqual(timestamp_plus(0, 1), 1)
-        self.assertEqual(timestamp_plus(1, 2), 3)
-        self.assertEqual(timestamp_plus(4294967295, 3), 2)
 
     def test_unpack_packets_lost(self):
         self.assertEqual(unpack_packets_lost(b'\x80\x00\x00'), -8388608)

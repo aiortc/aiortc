@@ -8,8 +8,9 @@ from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
                         RtcpPacket, RtcpPsfbPacket, RtcpRtpfbPacket, RtpPacket,
-                        is_rtcp, seq_plus_one)
+                        is_rtcp)
 from aiortc.stats import RTCStatsReport
+from aiortc.utils import uint16_add
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -160,7 +161,7 @@ class RTCRtpSenderTest(TestCase):
 
         # wait for packet to be transmitted
         rtx_packet = run(transport.queue.get())
-        self.assertEqual(rtx_packet.sequence_number, seq_plus_one(packet.sequence_number))
+        self.assertEqual(rtx_packet.sequence_number, uint16_add(packet.sequence_number, 1))
 
         # clean shutdown
         run(sender.stop())

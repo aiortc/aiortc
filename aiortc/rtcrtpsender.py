@@ -10,11 +10,10 @@ from .exceptions import InvalidStateError
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
-                  RtpPacket, seq_plus_one, set_header_extensions,
-                  timestamp_plus, unpack_remb_fci)
+                  RtpPacket, set_header_extensions, unpack_remb_fci)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
-from .utils import first_completed, random16, random32
+from .utils import first_completed, random16, random32, uint16_add, uint32_add
 
 logger = logging.getLogger('rtp')
 
@@ -252,8 +251,8 @@ class RTCRtpSender:
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
-                    packet.sequence_number = seq_plus_one(packet.sequence_number)
-                packet.timestamp = timestamp_plus(packet.timestamp, encoder.timestamp_increment)
+                    packet.sequence_number = uint16_add(packet.sequence_number, 1)
+                packet.timestamp = uint32_add(packet.timestamp, encoder.timestamp_increment)
             else:
                 await asyncio.sleep(0.02)
 

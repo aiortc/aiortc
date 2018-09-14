@@ -8,8 +8,9 @@ from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
                                    RTCRtpReceiver, StreamStatistics)
-from aiortc.rtp import RTP_SEQ_MODULO, RtcpPacket, RtpPacket
+from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
+from aiortc.utils import uint16_add
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -19,7 +20,7 @@ def create_rtp_packets(count, seq=0):
     for i in range(count):
         packets.append(RtpPacket(
             payload_type=0,
-            sequence_number=(seq + i) % RTP_SEQ_MODULO,
+            sequence_number=uint16_add(seq, i),
             ssrc=1234,
             timestamp=i * 160))
     return packets
