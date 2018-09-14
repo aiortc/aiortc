@@ -1,3 +1,80 @@
+from aiortc.utils import uint32_add, uint32_gt
+
+BURST_DELTA_THRESHOLD_MS = 5
+
+
+class TimestampGroup:
+    def __init__(self, timestamp=None):
+        self.arrival_time = None
+        self.first_timestamp = timestamp
+        self.last_timestamp = timestamp
+        self.size = 0
+
+    def __repr__(self):
+        return 'TimestampGroup(arrival_time=%s, timestamp=%s, size=%s)' % (
+            self.arrival_time,
+            self.last_timestamp,
+            self.size)
+
+
+class InterArrival:
+    """
+    Inter-arrival time and size filter.
+
+    Adapted from the webrtc.org codebase.
+    """
+    def __init__(self, group_length, timestamp_to_ms):
+        self.group_length = group_length
+        self.timestamp_to_ms = timestamp_to_ms
+        self.current_group = None
+        self.previous_group = None
+
+    def compute_deltas(self, timestamp, arrival_time, packet_size):
+        deltas = None
+        if self.current_group is None:
+            self.current_group = TimestampGroup(timestamp)
+        elif self.packet_out_of_order(timestamp):
+            return deltas
+        elif self.new_timestamp_group(timestamp, arrival_time):
+            if self.previous_group is not None:
+                timestamp_delta = uint32_add(self.current_group.last_timestamp,
+                                             -self.previous_group.last_timestamp)
+                arrival_time_delta = (self.current_group.arrival_time -
+                                      self.previous_group.arrival_time)
+                packet_size_delta = self.current_group.size - self.previous_group.size
+                deltas = (timestamp_delta, arrival_time_delta, packet_size_delta)
+
+            # shift groups
+            self.previous_group = self.current_group
+            self.current_group = TimestampGroup(timestamp=timestamp)
+        elif uint32_gt(timestamp, self.current_group.last_timestamp):
+            self.current_group.last_timestamp = timestamp
+
+        self.current_group.size += packet_size
+        self.current_group.arrival_time = arrival_time
+
+        return deltas
+
+    def belongs_to_burst(self, timestamp, arrival_time):
+        timestamp_delta = uint32_add(timestamp, -self.current_group.last_timestamp)
+        timestamp_delta_ms = round(self.timestamp_to_ms * timestamp_delta)
+        arrival_time_delta = arrival_time - self.current_group.arrival_time
+        return (timestamp_delta_ms == 0 or
+                ((arrival_time_delta - timestamp_delta_ms) < 0 and
+                 arrival_time_delta <= BURST_DELTA_THRESHOLD_MS))
+
+    def new_timestamp_group(self, timestamp, arrival_time):
+        if self.belongs_to_burst(timestamp, arrival_time):
+            return False
+        else:
+            timestamp_delta = uint32_add(timestamp, -self.current_group.first_timestamp)
+            return timestamp_delta > self.group_length
+
+    def packet_out_of_order(self, timestamp):
+        timestamp_delta = uint32_add(timestamp, -self.current_group.first_timestamp)
+        return timestamp_delta >= 0x80000000
+
+
 class RateBucket:
     def __init__(self, count=0, value=0):
         self.count = count

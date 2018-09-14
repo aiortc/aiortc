@@ -1,6 +1,304 @@
 from unittest import TestCase
 
-from aiortc.rate import RateBucket, RateCounter
+from aiortc.rate import InterArrival, RateBucket, RateCounter
+
+TIMESTAMP_GROUP_LENGTH_US = 5000
+MIN_STEP_US = 20
+TRIGGER_NEW_GROUP_US = TIMESTAMP_GROUP_LENGTH_US + MIN_STEP_US
+BURST_THRESHOLD_MS = 5
+
+START_RTP_TIMESTAMP_WRAP_US = 47721858827
+START_ABS_SEND_TIME_WRAP_US = 63999995
+
+
+def abs_send_time(us):
+    absolute_send_time = (((us << 18) + 500000) // 1000000) & 0xFFFFFF
+    return absolute_send_time << 8
+
+
+def rtp_timestamp(us):
+    return ((us * 90 + 500) // 1000) & 0xFFFFFFFF
+
+
+class InterArrivalTest(TestCase):
+    def setUp(self):
+        self.inter_arrival_ast = InterArrival(
+            abs_send_time(TIMESTAMP_GROUP_LENGTH_US), 1000 / (1 << 26))
+        self.inter_arrival_rtp = InterArrival(
+            rtp_timestamp(TIMESTAMP_GROUP_LENGTH_US), 1 / 9)
+
+    def assertComputed(self, timestamp_us, arrival_time_ms, packet_size,
+                       timestamp_delta_us, arrival_time_delta_ms, packet_size_delta,
+                       timestamp_near=0):
+        # AbsSendTime
+        deltas = self.inter_arrival_ast.compute_deltas(abs_send_time(timestamp_us),
+                                                       arrival_time_ms, packet_size)
+        self.assertIsNotNone(deltas)
+        self.assertAlmostEqual(deltas[0], abs_send_time(timestamp_delta_us),
+                               delta=timestamp_near << 8)
+        self.assertEqual(deltas[1], arrival_time_delta_ms)
+        self.assertEqual(deltas[2], packet_size_delta)
+
+        # RtpTimestamp
+        deltas = self.inter_arrival_rtp.compute_deltas(rtp_timestamp(timestamp_us),
+                                                       arrival_time_ms, packet_size)
+        self.assertIsNotNone(deltas)
+        self.assertAlmostEqual(deltas[0], rtp_timestamp(timestamp_delta_us),
+                               delta=timestamp_near)
+        self.assertEqual(deltas[1], arrival_time_delta_ms)
+        self.assertEqual(deltas[2], packet_size_delta)
+
+    def assertNotComputed(self, timestamp_us, arrival_time_ms, packet_size):
+        self.assertIsNone(self.inter_arrival_ast.compute_deltas(
+            abs_send_time(timestamp_us), arrival_time_ms, packet_size))
+        self.assertIsNone(self.inter_arrival_rtp.compute_deltas(
+            rtp_timestamp(timestamp_us), arrival_time_ms, packet_size))
+
+    def wrapTest(self, wrap_start_us, unorderly_within_group):
+        timestamp_near = 1
+
+        # G1
+        arrival_time = 17
+        self.assertNotComputed(0, arrival_time, 1)
+
+        # G2
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(wrap_start_us // 4, arrival_time, 1)
+
+        # G3
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(wrap_start_us // 2, arrival_time, 1,
+                            wrap_start_us // 4, 6, 0)
+
+        # G4
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(wrap_start_us // 2 + wrap_start_us // 4, arrival_time, 1,
+                            wrap_start_us // 4, 6, 0, timestamp_near)
+        g4_arrival_time = arrival_time
+
+        # G5
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(wrap_start_us, arrival_time, 2,
+                            wrap_start_us // 4, 6, 0, timestamp_near)
+        for i in range(10):
+            arrival_time += BURST_THRESHOLD_MS + 1
+            if unorderly_within_group:
+                self.assertNotComputed(wrap_start_us + (9 - i) * MIN_STEP_US, arrival_time, 1)
+            else:
+                self.assertNotComputed(wrap_start_us + i * MIN_STEP_US, arrival_time, 1)
+        g5_arrival_time = arrival_time
+
+        # out of order
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(wrap_start_us - 100, arrival_time, 100)
+
+        # G6
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(wrap_start_us + TRIGGER_NEW_GROUP_US, arrival_time, 10,
+                            wrap_start_us // 4 + 9 * MIN_STEP_US,
+                            g5_arrival_time - g4_arrival_time,
+                            11, timestamp_near)
+        g6_arrival_time = arrival_time
+
+        # out of order
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(wrap_start_us + TIMESTAMP_GROUP_LENGTH_US, arrival_time, 100)
+
+        # G7
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(wrap_start_us + 2 * TRIGGER_NEW_GROUP_US, arrival_time, 10,
+                            TRIGGER_NEW_GROUP_US - 9 * MIN_STEP_US,
+                            g6_arrival_time - g5_arrival_time,
+                            -2, timestamp_near)
+
+    def test_first_packet(self):
+        self.assertNotComputed(0, 17, 1)
+
+    def test_first_group(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(timestamp, arrival_time, 2)
+        g2_arrival_time = arrival_time
+
+        # G3
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(timestamp, arrival_time, 1,
+                            TRIGGER_NEW_GROUP_US, g2_arrival_time - g1_arrival_time, 1)
+
+    def test_second_group(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(timestamp, arrival_time, 2)
+        g2_arrival_time = arrival_time
+
+        # G3
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(timestamp, arrival_time, 1,
+                            TRIGGER_NEW_GROUP_US, g2_arrival_time - g1_arrival_time, 1)
+        g3_arrival_time = arrival_time
+
+        # G4
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(timestamp, arrival_time, 2,
+                            TRIGGER_NEW_GROUP_US, g3_arrival_time - g2_arrival_time, -1)
+
+    def test_accumulated_group(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_timestamp = timestamp
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertNotComputed(timestamp, 28, 2)
+        for i in range(10):
+            timestamp += MIN_STEP_US
+            arrival_time += BURST_THRESHOLD_MS + 1
+            self.assertNotComputed(timestamp, arrival_time, 1)
+        g2_timestamp = timestamp
+        g2_arrival_time = arrival_time
+
+        # G3
+        timestamp = 2 * TRIGGER_NEW_GROUP_US
+        arrival_time = 500
+        self.assertComputed(timestamp, arrival_time, 100,
+                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+
+    def test_out_of_order_packet(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_timestamp = timestamp
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += 11
+        self.assertNotComputed(timestamp, 28, 2)
+        for i in range(10):
+            timestamp += MIN_STEP_US
+            arrival_time += BURST_THRESHOLD_MS + 1
+            self.assertNotComputed(timestamp, arrival_time, 1)
+        g2_timestamp = timestamp
+        g2_arrival_time = arrival_time
+
+        # out of order packet
+        arrival_time = 281
+        self.assertNotComputed(g1_timestamp, arrival_time, 1)
+
+        # G3
+        timestamp = 2 * TRIGGER_NEW_GROUP_US
+        arrival_time = 500
+        self.assertComputed(timestamp, arrival_time, 100,
+                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+
+    def test_out_of_order_within_group(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_timestamp = timestamp
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time += 11
+        self.assertNotComputed(timestamp, 28, 2)
+        timestamp += 10 * MIN_STEP_US
+        g2_timestamp = timestamp
+        for i in range(10):
+            arrival_time += BURST_THRESHOLD_MS + 1
+            self.assertNotComputed(timestamp, arrival_time, 1)
+            timestamp -= MIN_STEP_US
+        g2_arrival_time = arrival_time
+
+        # out of order packet
+        arrival_time = 281
+        self.assertNotComputed(g1_timestamp, arrival_time, 1)
+
+        # G3
+        timestamp = 2 * TRIGGER_NEW_GROUP_US
+        arrival_time = 500
+        self.assertComputed(timestamp, arrival_time, 100,
+                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+
+    def test_two_bursts(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_timestamp = timestamp
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time = 100
+        for i in range(10):
+            timestamp += 30000
+            arrival_time += BURST_THRESHOLD_MS
+            self.assertNotComputed(timestamp, arrival_time, 1)
+        g2_timestamp = timestamp
+        g2_arrival_time = arrival_time
+
+        # G3
+        timestamp += 30000
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(timestamp, arrival_time, 100,
+                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 9)
+
+    def test_no_bursts(self):
+        # G1
+        timestamp = 0
+        arrival_time = 17
+        self.assertNotComputed(timestamp, arrival_time, 1)
+        g1_timestamp = timestamp
+        g1_arrival_time = arrival_time
+
+        # G2
+        timestamp += TRIGGER_NEW_GROUP_US
+        arrival_time = 28
+        self.assertNotComputed(timestamp, arrival_time, 2)
+        g2_timestamp = timestamp
+        g2_arrival_time = arrival_time
+
+        # G3
+        timestamp += 30000
+        arrival_time += BURST_THRESHOLD_MS + 1
+        self.assertComputed(timestamp, arrival_time, 100,
+                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 1)
+
+    def test_wrap_abs_send_time(self):
+        self.wrapTest(START_ABS_SEND_TIME_WRAP_US, False)
+
+    def test_wrap_abs_send_time_out_of_order_within_group(self):
+        self.wrapTest(START_ABS_SEND_TIME_WRAP_US, True)
+
+    def test_wrap_rtp_timestamp(self):
+        self.wrapTest(START_RTP_TIMESTAMP_WRAP_US, False)
+
+    def test_wrap_rtp_timestamp_out_of_order_within_group(self):
+        self.wrapTest(START_RTP_TIMESTAMP_WRAP_US, True)
 
 
 class RateCounterTest(TestCase):

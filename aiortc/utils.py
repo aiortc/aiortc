@@ -11,6 +11,52 @@ def random32():
     return unpack('!L', os.urandom(4))[0]
 
 
+def uint16_add(a, b):
+    """
+    Return a + b.
+    """
+    return (a + b) & 0xFFFF
+
+
+def uint16_gt(a, b):
+    """
+    Return a > b.
+    """
+    half_mod = 0x8000
+    return (((a < b) and ((b - a) > half_mod)) or
+            ((a > b) and ((a - b) < half_mod)))
+
+
+def uint16_gte(a, b):
+    """
+    Return a >= b.
+    """
+    return (a == b) or uint16_gt(a, b)
+
+
+def uint32_add(a, b):
+    """
+    Return a + b.
+    """
+    return (a + b) & 0xFFFFFFFF
+
+
+def uint32_gt(a, b):
+    """
+    Return a > b.
+    """
+    half_mod = 0x80000000
+    return (((a < b) and ((b - a) > half_mod)) or
+            ((a > b) and ((a - b) < half_mod)))
+
+
+def uint32_gte(a, b):
+    """
+    Return a >= b.
+    """
+    return (a == b) or uint32_gt(a, b)
+
+
 async def first_completed(*coros, timeout=None):
     tasks = [asyncio.ensure_future(x) for x in coros]
     try:
