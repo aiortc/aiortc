@@ -1,6 +1,23 @@
+import math
+from enum import Enum
+
 from aiortc.utils import uint32_add, uint32_gt
 
 BURST_DELTA_THRESHOLD_MS = 5
+
+# overuse detector
+MAX_ADAPT_OFFSET_MS = 15
+MIN_NUM_DELTAS = 60
+
+# overuse estimator
+DELTA_COUNTER_MAX = 1000
+MIN_FRAME_PERIOD_HISTORY_LENGTH = 60
+
+
+class BandwidthUsage(Enum):
+    NORMAL = 0
+    UNDERUSING = 1
+    OVERUSING = 2
 
 
 class TimestampGroup:
@@ -15,6 +32,13 @@ class TimestampGroup:
             self.arrival_time,
             self.last_timestamp,
             self.size)
+
+
+class InterArrivalDelta:
+    def __init__(self, timestamp, arrival_time, size):
+        self.timestamp = timestamp
+        self.arrival_time = arrival_time
+        self.size = size
 
 
 class InterArrival:
@@ -37,12 +61,12 @@ class InterArrival:
             return deltas
         elif self.new_timestamp_group(timestamp, arrival_time):
             if self.previous_group is not None:
-                timestamp_delta = uint32_add(self.current_group.last_timestamp,
-                                             -self.previous_group.last_timestamp)
-                arrival_time_delta = (self.current_group.arrival_time -
-                                      self.previous_group.arrival_time)
-                packet_size_delta = self.current_group.size - self.previous_group.size
-                deltas = (timestamp_delta, arrival_time_delta, packet_size_delta)
+                deltas = InterArrivalDelta(
+                    timestamp=uint32_add(self.current_group.last_timestamp,
+                                         -self.previous_group.last_timestamp),
+                    arrival_time=(self.current_group.arrival_time -
+                                  self.previous_group.arrival_time),
+                    size=self.current_group.size - self.previous_group.size)
 
             # shift groups
             self.previous_group = self.current_group
@@ -73,6 +97,184 @@ class InterArrival:
     def packet_out_of_order(self, timestamp):
         timestamp_delta = uint32_add(timestamp, -self.current_group.first_timestamp)
         return timestamp_delta >= 0x80000000
+
+
+class OveruseDetector:
+    """
+    Bandwidth overuse detector.
+
+    Adapted from the webrtc.org codebase.
+    """
+    def __init__(self):
+        self.hypothesis = BandwidthUsage.NORMAL
+        self.last_update_ms = None
+        self.k_up = 0.0087
+        self.k_down = 0.039
+        self.overuse_counter = 0
+        self.overuse_time = None
+        self.overuse_time_threshold = 10
+        self.previous_offset = 0
+        self.threshold = 12.5
+
+    def detect(self, offset, ts_delta, num_of_deltas, now_ms):
+        if num_of_deltas < 2:
+            return BandwidthUsage.NORMAL
+
+        T = min(num_of_deltas, MIN_NUM_DELTAS) * offset
+        if T > self.threshold:
+            if self.overuse_time is None:
+                self.overuse_time = ts_delta / 2
+            else:
+                self.overuse_time += ts_delta
+            self.overuse_counter += 1
+
+            if (self.overuse_time > self.overuse_time_threshold and
+               self.overuse_counter > 1 and
+               offset >= self.previous_offset):
+                self.overuse_counter = 0
+                self.overuse_time = 0
+                self.hypothesis = BandwidthUsage.OVERUSING
+        elif T < -self.threshold:
+            self.overuse_counter = 0
+            self.overuse_time = None
+            self.hypothesis = BandwidthUsage.UNDERUSING
+        else:
+            self.overuse_counter = 0
+            self.overuse_time = None
+            self.hypothesis = BandwidthUsage.NORMAL
+
+        self.previous_offset = offset
+        self.update_threshold(T, now_ms)
+        return self.hypothesis
+
+    def state(self):
+        return self.hypothesis
+
+    def update_threshold(self, modified_offset, now_ms):
+        if self.last_update_ms is None:
+            self.last_update_ms = now_ms
+
+        if abs(modified_offset) > self.threshold + MAX_ADAPT_OFFSET_MS:
+            self.last_update_ms = now_ms
+            return
+
+        k = self.k_down if abs(modified_offset) < self.threshold else self.k_up
+        time_delta_ms = min(now_ms - self.last_update_ms, 100)
+        self.threshold += k * (abs(modified_offset) - self.threshold) * time_delta_ms
+        self.threshold = max(6, min(self.threshold, 600))
+        self.last_update_ms = now_ms
+
+
+class OveruseEstimator:
+    """
+    Bandwidth overuse estimator.
+
+    Adapted from the webrtc.org codebase.
+    """
+    def __init__(self):
+        self.E = [
+            [100, 0],
+            [0, 0.1],
+        ]
+        self._num_of_deltas = 0
+        self._offset = 0
+        self.previous_offset = 0
+        self.slope = 1 / 64
+        self.ts_delta_hist = []
+
+        self.avg_noise = 0
+        self.var_noise = 50
+        self.process_noise = [
+            1e-13,
+            1e-3
+        ]
+
+    def num_of_deltas(self):
+        return self._num_of_deltas
+
+    def offset(self):
+        return self._offset
+
+    def update(self, time_delta_ms, timestamp_delta_ms, size_delta,
+               current_hypothesis, now_ms):
+        min_frame_period = self.update_min_frame_period(timestamp_delta_ms)
+        t_ts_delta = time_delta_ms - timestamp_delta_ms
+        fs_delta = size_delta
+
+        self._num_of_deltas = min(self._num_of_deltas + 1, DELTA_COUNTER_MAX)
+
+        # update  Kalman filter
+        self.E[0][0] += self.process_noise[0]
+        self.E[1][1] += self.process_noise[1]
+        if ((current_hypothesis == BandwidthUsage.OVERUSING and
+           self._offset < self.previous_offset) or
+           (current_hypothesis == BandwidthUsage.UNDERUSING and
+           self._offset > self.previous_offset)):
+            self.E[1][1] += 10 * self.process_noise[1]
+
+        h = [fs_delta, 1.0]
+        Eh = [
+            self.E[0][0] * h[0] + self.E[0][1] * h[1],
+            self.E[1][0] * h[0] + self.E[1][1] * h[1]
+        ]
+
+        # update noise estimate
+        residual = t_ts_delta - self.slope * h[0] - self._offset
+        if current_hypothesis == BandwidthUsage.NORMAL:
+            max_residual = 3.0 * math.sqrt(self.var_noise)
+            if abs(residual) < max_residual:
+                self.update_noise_estimate(residual, min_frame_period)
+            else:
+                self.update_noise_estimate(-max_residual if residual < 0 else max_residual,
+                                           min_frame_period)
+
+        denom = self.var_noise + h[0] * Eh[0] + h[1] * Eh[1]
+        K = [Eh[0] / denom, Eh[1] / denom]
+
+        IKh = [
+            [1.0 - K[0] * h[0], -K[0] * h[1]],
+            [-K[1] * h[0], 1.0 - K[1] * h[1]]
+        ]
+        e00 = self.E[0][0]
+        e01 = self.E[0][1]
+
+        # update state
+        self.E[0][0] = e00 * IKh[0][0] + self.E[1][0] * IKh[0][1]
+        self.E[0][1] = e01 * IKh[0][0] + self.E[1][1] * IKh[0][1]
+        self.E[1][0] = e00 * IKh[1][0] + self.E[1][0] * IKh[1][1]
+        self.E[1][1] = e01 * IKh[1][0] + self.E[1][1] * IKh[1][1]
+
+        self.previous_offset = self._offset
+        self.slope += K[0] * residual
+        self._offset += K[1] * residual
+        if False:
+            print(now_ms, 'slope', self.slope)
+            print(now_ms, 'offset', self._offset)
+            print(now_ms, 'num_of_deltas', self._num_of_deltas)
+            print('---')
+
+    def update_min_frame_period(self, ts_delta):
+        min_frame_period = ts_delta
+        if len(self.ts_delta_hist) >= MIN_FRAME_PERIOD_HISTORY_LENGTH:
+            self.ts_delta_hist.pop(0)
+
+        for old_ts_delta in self.ts_delta_hist:
+            min_frame_period = min(old_ts_delta, min_frame_period)
+
+        self.ts_delta_hist.append(ts_delta)
+        return min_frame_period
+
+    def update_noise_estimate(self, residual, ts_delta):
+        alpha = 0.01
+        if self._num_of_deltas > 10 * 30:
+            alpha = 0.002
+
+        beta = pow(1 - alpha, ts_delta * 30.0 / 1000.0)
+        self.avg_noise = beta * self.avg_noise + (1 - beta) * residual
+        self.var_noise = beta * self.var_noise + (1 - beta) * (self.avg_noise - residual) ** 2
+
+        if self.var_noise < 1:
+            self.var_noise = 1
 
 
 class RateBucket:

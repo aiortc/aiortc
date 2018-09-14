@@ -1,6 +1,9 @@
 from unittest import TestCase
 
-from aiortc.rate import InterArrival, RateBucket, RateCounter
+from numpy import random
+
+from aiortc.rate import (BandwidthUsage, InterArrival, OveruseDetector,
+                         OveruseEstimator, RateBucket, RateCounter)
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20
@@ -34,19 +37,19 @@ class InterArrivalTest(TestCase):
         deltas = self.inter_arrival_ast.compute_deltas(abs_send_time(timestamp_us),
                                                        arrival_time_ms, packet_size)
         self.assertIsNotNone(deltas)
-        self.assertAlmostEqual(deltas[0], abs_send_time(timestamp_delta_us),
+        self.assertAlmostEqual(deltas.timestamp, abs_send_time(timestamp_delta_us),
                                delta=timestamp_near << 8)
-        self.assertEqual(deltas[1], arrival_time_delta_ms)
-        self.assertEqual(deltas[2], packet_size_delta)
+        self.assertEqual(deltas.arrival_time, arrival_time_delta_ms)
+        self.assertEqual(deltas.size, packet_size_delta)
 
         # RtpTimestamp
         deltas = self.inter_arrival_rtp.compute_deltas(rtp_timestamp(timestamp_us),
                                                        arrival_time_ms, packet_size)
         self.assertIsNotNone(deltas)
-        self.assertAlmostEqual(deltas[0], rtp_timestamp(timestamp_delta_us),
+        self.assertAlmostEqual(deltas.timestamp, rtp_timestamp(timestamp_delta_us),
                                delta=timestamp_near)
-        self.assertEqual(deltas[1], arrival_time_delta_ms)
-        self.assertEqual(deltas[2], packet_size_delta)
+        self.assertEqual(deltas.arrival_time, arrival_time_delta_ms)
+        self.assertEqual(deltas.size, packet_size_delta)
 
     def assertNotComputed(self, timestamp_us, arrival_time_ms, packet_size):
         self.assertIsNone(self.inter_arrival_ast.compute_deltas(
@@ -299,6 +302,179 @@ class InterArrivalTest(TestCase):
 
     def test_wrap_rtp_timestamp_out_of_order_within_group(self):
         self.wrapTest(START_RTP_TIMESTAMP_WRAP_US, True)
+
+
+class OveruseDetectorTest(TestCase):
+    def setUp(self):
+        self.timestamp_to_ms = 1 / 90
+        self.detector = OveruseDetector()
+        self.estimator = OveruseEstimator()
+        self.inter_arrival = InterArrival(5 * 90, 1 / 9)
+
+        self.packet_size = 1200
+        self.now_ms = 0
+        self.receive_time_ms = 0
+        self.rtp_timestamp = 900
+
+        random.seed(21)
+
+    def test_simple_non_overuse_30fps(self):
+        frame_duration_ms = 33
+
+        for i in range(1000):
+            self.update_detector(self.rtp_timestamp, self.now_ms)
+            self.now_ms += frame_duration_ms
+            self.rtp_timestamp += frame_duration_ms * 90
+        self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
+
+    def test_simple_non_overuse_with_receive_variance(self):
+        frame_duration_ms = 10
+
+        for i in range(1000):
+            self.update_detector(self.rtp_timestamp, self.now_ms)
+            self.rtp_timestamp += frame_duration_ms * 90
+            if i % 2:
+                self.now_ms += frame_duration_ms - 5
+            else:
+                self.now_ms += frame_duration_ms + 5
+            self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
+
+    def test_simple_non_overuse_with_rtp_timestamp_variance(self):
+        frame_duration_ms = 10
+
+        for i in range(1000):
+            self.update_detector(self.rtp_timestamp, self.now_ms)
+            self.now_ms += frame_duration_ms
+            if i % 2:
+                self.rtp_timestamp += (frame_duration_ms - 5) * 90
+            else:
+                self.rtp_timestamp += (frame_duration_ms + 5) * 90
+            self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
+
+    def test_simple_overuse_2000Kbit_30fps(self):
+        packets_per_frame = 6
+        frame_duration_ms = 33
+        drift_per_frame_ms = 1
+        sigma_ms = 0
+
+        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        self.assertEqual(unique_overuse, 0)
+
+        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
+                                                      sigma_ms, drift_per_frame_ms)
+        self.assertEqual(frames_until_overuse, 7)
+
+    def test_simple_overuse_100Kbit_10fps(self):
+        packets_per_frame = 1
+        frame_duration_ms = 100
+        drift_per_frame_ms = 1
+        sigma_ms = 0
+
+        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        self.assertEqual(unique_overuse, 0)
+
+        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
+                                                      sigma_ms, drift_per_frame_ms)
+        self.assertEqual(frames_until_overuse, 7)
+
+    def test_overuse_with_low_variance_2000Kbit_30fps(self):
+        frame_duration_ms = 33
+        drift_per_frame_ms = 1
+        self.rtp_timestamp = frame_duration_ms * 90
+        offset = 0
+
+        # run 1000 samples to reach steady state
+        for i in range(1000):
+            for j in range(6):
+                self.update_detector(self.rtp_timestamp, self.now_ms)
+            self.rtp_timestamp += frame_duration_ms * 90
+            if i % 2:
+                offset = random.randint(0, 1)
+                self.now_ms += frame_duration_ms - offset
+            else:
+                self.now_ms += frame_duration_ms + offset
+            self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
+
+        # simulate a higher send pace, that is too high.
+        for i in range(3):
+            for j in range(6):
+                self.update_detector(self.rtp_timestamp, self.now_ms)
+            self.now_ms += frame_duration_ms + drift_per_frame_ms * 6
+            self.rtp_timestamp += frame_duration_ms * 90
+            self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
+
+        self.update_detector(self.rtp_timestamp, self.now_ms)
+        self.assertEqual(self.detector.state(), BandwidthUsage.OVERUSING)
+
+    def test_low_gaussian_variance_fast_drift_30Kbit_3fps(self):
+        packets_per_frame = 1
+        frame_duration_ms = 333
+        drift_per_frame_ms = 100
+        sigma_ms = 3
+
+        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        self.assertEqual(unique_overuse, 0)
+
+        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
+                                                      sigma_ms, drift_per_frame_ms)
+        self.assertEqual(frames_until_overuse, 4)
+
+    def test_high_haussian_variance_30Kbit_3fps(self):
+        packets_per_frame = 1
+        frame_duration_ms = 333
+        drift_per_frame_ms = 1
+        sigma_ms = 10
+
+        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        self.assertEqual(unique_overuse, 0)
+
+        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
+                                                      sigma_ms, drift_per_frame_ms)
+        self.assertEqual(frames_until_overuse, 44)
+
+    def run_100000_samples(self, packets_per_frame, mean_ms, standard_deviation_ms):
+        unique_overuse = 0
+        last_overuse = -1
+
+        for i in range(100000):
+            for j in range(packets_per_frame):
+                self.update_detector(self.rtp_timestamp, self.receive_time_ms)
+            self.rtp_timestamp += mean_ms * 90
+            self.now_ms += mean_ms
+            self.receive_time_ms = max(
+                self.receive_time_ms,
+                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5))
+
+            if self.detector.state() == BandwidthUsage.OVERUSING:
+                if last_overuse + 1 != i:
+                    unique_overuse += 1
+                last_overuse = i
+
+        return unique_overuse
+
+    def run_until_overuse(self, packets_per_frame, mean_ms, standard_deviation_ms,
+                          drift_per_frame_ms):
+        for i in range(100000):
+            for j in range(packets_per_frame):
+                self.update_detector(self.rtp_timestamp, self.receive_time_ms)
+            self.rtp_timestamp += mean_ms * 90
+            self.now_ms += mean_ms + drift_per_frame_ms
+            self.receive_time_ms = max(
+                self.receive_time_ms,
+                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5))
+
+            if self.detector.state() == BandwidthUsage.OVERUSING:
+                return i + 1
+        return -1
+
+    def update_detector(self, timestamp, receive_time_ms):
+        deltas = self.inter_arrival.compute_deltas(timestamp, receive_time_ms, self.packet_size)
+        if deltas is not None:
+            timestamp_delta_ms = deltas.timestamp / 90
+            self.estimator.update(deltas.arrival_time, timestamp_delta_ms, deltas.size,
+                                  self.detector.state(), receive_time_ms)
+            self.detector.detect(self.estimator.offset(), timestamp_delta_ms,
+                                 self.estimator.num_of_deltas(), receive_time_ms)
 
 
 class RateCounterTest(TestCase):
