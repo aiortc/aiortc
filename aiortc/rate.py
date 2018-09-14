@@ -27,12 +27,6 @@ class TimestampGroup:
         self.last_timestamp = timestamp
         self.size = 0
 
-    def __repr__(self):
-        return 'TimestampGroup(arrival_time=%s, timestamp=%s, size=%s)' % (
-            self.arrival_time,
-            self.last_timestamp,
-            self.size)
-
 
 class InterArrivalDelta:
     def __init__(self, timestamp, arrival_time, size):
@@ -247,11 +241,6 @@ class OveruseEstimator:
         self.previous_offset = self._offset
         self.slope += K[0] * residual
         self._offset += K[1] * residual
-        if False:
-            print(now_ms, 'slope', self.slope)
-            print(now_ms, 'offset', self._offset)
-            print(now_ms, 'num_of_deltas', self._num_of_deltas)
-            print('---')
 
     def update_min_frame_period(self, ts_delta):
         min_frame_period = ts_delta
