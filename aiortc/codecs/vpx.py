@@ -168,12 +168,6 @@ class Vp8Decoder:
 
         return frames
 
-    def parse(self, packet):
-        descriptor, data = VpxPayloadDescriptor.parse(packet.payload)
-        packet._data = data
-        packet._first_in_frame = descriptor.partition_start
-        packet._picture_id = descriptor.picture_id
-
 
 class Vp8Encoder:
     timestamp_increment = 3000
@@ -249,3 +243,8 @@ class Vp8Encoder:
                     descr.partition_start = 0
                 self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads
+
+
+def vp8_depayload(payload):
+    descriptor, data = VpxPayloadDescriptor.parse(payload)
+    return data

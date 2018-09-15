@@ -26,10 +26,10 @@ class OpusDecoder:
                                  ffi.cast('int16_t *', self.cdata), FRAME_SIZE, 0)
         assert length == FRAME_SIZE
 
-        return AudioFrame(
+        return [AudioFrame(
             channels=CHANNELS,
             data=self.buffer[:],
-            sample_rate=SAMPLE_RATE)
+            sample_rate=SAMPLE_RATE)]
 
 
 class OpusEncoder:

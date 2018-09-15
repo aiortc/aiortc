@@ -1,8 +1,7 @@
 from unittest import TestCase
 
 from aiortc import AudioFrame, VideoFrame
-from aiortc.codecs import get_decoder, get_encoder
-from aiortc.rtp import RtpPacket
+from aiortc.codecs import depayload, get_decoder, get_encoder
 
 AUDIO_PTIME = 0.020
 
@@ -24,11 +23,12 @@ class CodecTestCase(TestCase):
         data = encoder.encode(frame)
 
         # decode
-        decoded = decoder.decode(data)
-        self.assertEqual(len(decoded.data), output_sample_rate * AUDIO_PTIME * output_channels * 2)
-        self.assertEqual(decoded.channels, output_channels)
-        self.assertEqual(decoded.sample_rate, output_sample_rate)
-        self.assertEqual(decoded.sample_width, 2)
+        frames = decoder.decode(data)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(len(frames[0].data), output_sample_rate * AUDIO_PTIME * output_channels * 2)
+        self.assertEqual(frames[0].channels, output_channels)
+        self.assertEqual(frames[0].sample_rate, output_sample_rate)
+        self.assertEqual(frames[0].sample_width, 2)
 
     def roundtrip_video(self, codec, width, height):
         """
@@ -44,9 +44,7 @@ class CodecTestCase(TestCase):
         # depacketize
         data = b''
         for package in packages:
-            packet = RtpPacket(payload=package)
-            decoder.parse(packet)
-            data += packet._data
+            data += depayload(codec, package)
 
         # decode
         frames = decoder.decode(data)

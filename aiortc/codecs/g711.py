@@ -27,10 +27,10 @@ def mono_8khz(frame):
 
 class PcmaDecoder:
     def decode(self, data):
-        return AudioFrame(
+        return [AudioFrame(
             channels=1,
             data=audioop.alaw2lin(data, 2),
-            sample_rate=8000)
+            sample_rate=8000)]
 
 
 class PcmaEncoder:
@@ -42,10 +42,10 @@ class PcmaEncoder:
 
 class PcmuDecoder:
     def decode(self, data):
-        return AudioFrame(
+        return [AudioFrame(
             channels=1,
             data=audioop.ulaw2lin(data, 2),
-            sample_rate=8000)
+            sample_rate=8000)]
 
 
 class PcmuEncoder:

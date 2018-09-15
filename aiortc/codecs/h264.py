@@ -117,11 +117,6 @@ class H264Decoder:
 
         return list(map(frame_from_avframe, frames))
 
-    def parse(self, packet):
-        descriptor, data = H264PayloadDescriptor.parse(packet.payload)
-        packet._data = data
-        packet._first_in_frame = descriptor.first_fragment
-
 
 class H264Encoder:
     timestamp_increment = 3000
@@ -268,3 +263,8 @@ class H264Encoder:
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)
         return self._packetize(packages)
+
+
+def h264_depayload(payload):
+    descriptor, data = H264PayloadDescriptor.parse(payload)
+    return data

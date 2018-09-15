@@ -11,7 +11,9 @@ class PcmaTest(CodecTestCase):
         decoder = get_decoder(PCMA_CODEC)
         self.assertTrue(isinstance(decoder, PcmaDecoder))
 
-        frame = decoder.decode(b'\xd5' * 160)
+        frames = decoder.decode(b'\xd5' * 160)
+        self.assertEqual(len(frames), 1)
+        frame = frames[0]
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x08\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)
@@ -58,7 +60,9 @@ class PcmuTest(CodecTestCase):
         decoder = get_decoder(PCMU_CODEC)
         self.assertTrue(isinstance(decoder, PcmuDecoder))
 
-        frame = decoder.decode(b'\xff' * 160)
+        frames = decoder.decode(b'\xff' * 160)
+        self.assertEqual(len(frames), 1)
+        frame = frames[0]
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x00\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)

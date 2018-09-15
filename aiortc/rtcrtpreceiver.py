@@ -4,9 +4,9 @@ import random
 import time
 
 from .clock import current_datetime, datetime_from_ntp
-from .codecs import get_decoder
+from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
-from .jitterbuffer import JitterBuffer
+from .jitterbuffer import JitterBuffer, JitterFrame
 from .mediastreams import MediaStreamTrack
 from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
@@ -260,40 +260,39 @@ class RTCRtpReceiver:
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
-        if packet.payload_type in self.__decoders:
-            decoder = self.__decoders[packet.payload_type]
-            loop = asyncio.get_event_loop()
+
+        if packet.payload_type in self.__codecs:
+            codec = self.__codecs[packet.payload_type]
 
             # RTCP
             if self.__remote_counter is None or self.__remote_counter.ssrc != packet.ssrc:
-                codec = self.__codecs[packet.payload_type]
                 self.__remote_counter = StreamStatistics(packet.ssrc, codec.clockRate)
             self.__remote_counter.add(packet)
 
+            # parse codec-specific information
+            if packet.payload:
+                packet._data = depayload(codec, packet.payload)
+            else:
+                packet._data = b''
+
             if self._kind == 'audio':
                 # FIXME: audio should use a jitter buffer!
-                audio_frame = await loop.run_in_executor(None, decoder.decode, packet.payload)
-                await self._track._queue.put(audio_frame)
+                encoded_frame = JitterFrame(data=packet._data, timestamp=packet.timestamp)
             else:
-                if packet.payload:
-                    # Parse codec-specific information
-                    decoder.parse(packet)
-                else:
-                    # Firefox sends empty frames
-                    packet._data = b''
-                    packet._first_in_frame = False
-                    packet._picture_id = None
-
                 # check if we are missing any packets
                 await self.__nack_generator.add(packet)
 
-                # check if we have a complete video frame
+                # try to re-assemble encoded frame
                 encoded_frame = self._jitter_buffer.add(packet)
-                if encoded_frame is not None:
-                    video_frames = await loop.run_in_executor(None, decoder.decode,
-                                                              encoded_frame.data)
-                    for video_frame in video_frames:
-                        await self._track._queue.put(video_frame)
+
+            # if we have a complete encoded frame, decode it
+            if encoded_frame is not None:
+                decoder = self.__decoders[packet.payload_type]
+                loop = asyncio.get_event_loop()
+                frames = await loop.run_in_executor(None, decoder.decode,
+                                                    encoded_frame.data)
+                for frame in frames:
+                    await self._track._queue.put(frame)
 
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')

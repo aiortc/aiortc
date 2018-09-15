@@ -13,7 +13,9 @@ class OpusTest(CodecTestCase):
         decoder = get_decoder(OPUS_CODEC)
         self.assertTrue(isinstance(decoder, OpusDecoder))
 
-        frame = decoder.decode(b'\xfc\xff\xfe')
+        frames = decoder.decode(b'\xfc\xff\xfe')
+        self.assertEqual(len(frames), 1)
+        frame = frames[0]
         self.assertEqual(frame.channels, 2)
         self.assertEqual(frame.data, b'\x00' * 4 * 960)
         self.assertEqual(frame.sample_rate, 48000)

@@ -41,6 +41,7 @@ class MockBinding:
 class MockH264:
     H264Decoder = None
     H264Encoder = None
+    h264_depayload = None
 
 
 class MockOpus:
@@ -51,6 +52,7 @@ class MockOpus:
 class MockVpx:
     Vp8Decoder = None
     Vp8Encoder = None
+    vp8_depayload = None
 
 
 sys.modules.update({'pylibsrtp._binding': MockBinding()})
