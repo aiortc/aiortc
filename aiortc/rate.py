@@ -13,6 +13,11 @@ MIN_NUM_DELTAS = 60
 DELTA_COUNTER_MAX = 1000
 MIN_FRAME_PERIOD_HISTORY_LENGTH = 60
 
+# abs-send-time estimator
+INTER_ARRIVAL_SHIFT = 26
+TIMESTAMP_GROUP_LENGTH_MS = 5
+TIMESTAMP_TO_MS = 1000.0 / (1 << INTER_ARRIVAL_SHIFT)
+
 
 class BandwidthUsage(Enum):
     NORMAL = 0
@@ -110,16 +115,16 @@ class OveruseDetector:
         self.previous_offset = 0
         self.threshold = 12.5
 
-    def detect(self, offset, ts_delta, num_of_deltas, now_ms):
+    def detect(self, offset, timestamp_delta_ms, num_of_deltas, now_ms):
         if num_of_deltas < 2:
             return BandwidthUsage.NORMAL
 
         T = min(num_of_deltas, MIN_NUM_DELTAS) * offset
         if T > self.threshold:
             if self.overuse_time is None:
-                self.overuse_time = ts_delta / 2
+                self.overuse_time = timestamp_delta_ms / 2
             else:
-                self.overuse_time += ts_delta
+                self.overuse_time += timestamp_delta_ms
             self.overuse_counter += 1
 
             if (self.overuse_time > self.overuse_time_threshold and
@@ -320,3 +325,45 @@ class RateCounter:
 
             self._origin_index = (self._origin_index + 1) % self._window_size
             self._origin_ms += 1
+
+
+class RemoteBitrateEstimator:
+    def __init__(self):
+        self.incoming_bitrate = RateCounter(1000, 8000)
+        self.incoming_bitrate_initialized = True
+        self.inter_arrival = InterArrival(
+            (TIMESTAMP_GROUP_LENGTH_MS << INTER_ARRIVAL_SHIFT) // 1000,
+            TIMESTAMP_TO_MS)
+        self.estimator = OveruseEstimator()
+        self.detector = OveruseDetector()
+        self.ssrcs = {}
+
+    def add(self, arrival_time_ms, abs_send_time, payload_size, ssrc):
+        timestamp = abs_send_time << 8
+
+        # make note of SSRC
+        self.ssrcs[ssrc] = arrival_time_ms
+
+        # update incoming bitrate
+        if self.incoming_bitrate.rate(arrival_time_ms) is not None:
+            self.incoming_bitrate_initialized = True
+        elif self.incoming_bitrate_initialized:
+            self.incoming_bitrate.reset()
+            self.incoming_bitrate_initialized = False
+        self.incoming_bitrate.add(payload_size, arrival_time_ms)
+
+        # calculate inter-arrival deltas
+        deltas = self.inter_arrival.compute_deltas(timestamp, arrival_time_ms, payload_size)
+        if deltas is not None:
+            timestamp_delta_ms = int(deltas.timestamp * TIMESTAMP_TO_MS)
+            self.estimator.update(
+                deltas.arrival_time,
+                timestamp_delta_ms,
+                deltas.size,
+                self.detector.state(),
+                arrival_time_ms)
+            self.detector.detect(
+                self.estimator.offset(),
+                timestamp_delta_ms,
+                self.estimator.num_of_deltas(),
+                arrival_time_ms)

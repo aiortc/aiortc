@@ -5,11 +5,13 @@ import random
 import threading
 import time
 
+from . import clock, rtp
 from .clock import current_datetime, datetime_from_ntp
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer, JitterFrame
 from .mediastreams import MediaStreamTrack
+from .rate import RemoteBitrateEstimator
 from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
                   RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost)
@@ -177,6 +179,11 @@ class RTCRtpReceiver:
         self._jitter_buffer = JitterBuffer(capacity=128)
         self.__nack_generator = NackGenerator(self)
         self._track = None
+        if kind == 'video':
+            self.__remote_bitrate_estimator = RemoteBitrateEstimator()
+        else:
+            self.__remote_bitrate_estimator = None
+        self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
         self.__started = False
@@ -240,6 +247,7 @@ class RTCRtpReceiver:
             self.__decoder_thread.start()
 
             self.__transport._register_rtp_receiver(self, parameters)
+            self.__rtp_header_extensions_map.configure(parameters)
             asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
@@ -294,6 +302,17 @@ class RTCRtpReceiver:
 
     async def _handle_rtp_packet(self, packet):
         self.__log_debug('< %s', packet)
+
+        # feed bitrate estimator
+        if self.__remote_bitrate_estimator is not None:
+            header_extensions = self.__rtp_header_extensions_map.get(packet)
+            if header_extensions.abs_send_time is not None:
+                self.__remote_bitrate_estimator.add(
+                    abs_send_time=header_extensions.abs_send_time,
+                    arrival_time_ms=clock.current_ms(),
+                    payload_size=len(packet.payload) + packet.padding_size,
+                    ssrc=packet.ssrc,
+                )
 
         if packet.payload_type in self.__codecs:
             codec = self.__codecs[packet.payload_type]
