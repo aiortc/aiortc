@@ -60,9 +60,9 @@ class HeaderExtensionsMap:
             elif ext.uri == 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01':  # noqa
                 self.__ids.transport_sequence_number = ext.id
 
-    def get(self, packet):
+    def get(self, extension_profile, extension_value):
         values = HeaderExtensions()
-        for x_id, x_value in get_header_extensions(packet):
+        for x_id, x_value in get_header_extensions(extension_profile, extension_value):
             if x_id == self.__ids.sdes_mid:
                 values.sdes_mid = x_value.decode('utf8')
             elif x_id == self.__ids.repaired_rtp_stream_id:
@@ -80,7 +80,7 @@ class HeaderExtensionsMap:
                 values.transport_sequence_number = unpack('!H', x_value)[0]
         return values
 
-    def set(self, packet, values):
+    def set(self, values):
         extensions = []
         if values.sdes_mid is not None and self.__ids.sdes_mid:
             extensions.append((
@@ -117,7 +117,7 @@ class HeaderExtensionsMap:
                 self.__ids.transport_sequence_number,
                 pack('!H', values.transport_sequence_number)
             ))
-        set_header_extensions(packet, extensions)
+        return set_header_extensions(extensions)
 
 
 def clamp_packets_lost(count):
@@ -198,52 +198,53 @@ def padl(l):
     return 4 * ((l + 3) // 4) - l
 
 
-def get_header_extensions(packet):
+def get_header_extensions(extension_profile, extension_value):
     """
     Parse header extensions according to RFC5285.
     """
     extensions = []
     pos = 0
 
-    if packet.extension_profile == 0xBEDE:
+    if extension_profile == 0xBEDE:
         # One-Byte Header
-        while pos < len(packet.extension_value):
-            if packet.extension_value[pos] == 0:
+        while pos < len(extension_value):
+            if extension_value[pos] == 0:
                 pos += 1
                 continue
 
-            x_id = (packet.extension_value[pos] & 0xf0) >> 4
-            x_length = (packet.extension_value[pos] & 0x0f) + 1
+            x_id = (extension_value[pos] & 0xf0) >> 4
+            x_length = (extension_value[pos] & 0x0f) + 1
             pos += 1
 
-            x_value = packet.extension_value[pos:pos + x_length]
+            x_value = extension_value[pos:pos + x_length]
             extensions.append((x_id,  x_value))
             pos += x_length
-    elif packet.extension_profile == 0x1000:
+    elif extension_profile == 0x1000:
         # Two-Byte Header
-        while pos < len(packet.extension_value):
-            if packet.extension_value[pos] == 0:
+        while pos < len(extension_value):
+            if extension_value[pos] == 0:
                 pos += 1
                 continue
 
-            x_id, x_length = unpack('!BB', packet.extension_value[pos:pos+2])
+            x_id, x_length = unpack('!BB', extension_value[pos:pos+2])
             pos += 2
 
-            x_value = packet.extension_value[pos:pos + x_length]
+            x_value = extension_value[pos:pos + x_length]
             extensions.append((x_id,  x_value))
             pos += x_length
 
     return extensions
 
 
-def set_header_extensions(packet, extensions):
+def set_header_extensions(extensions):
     """
     Serialize header extensions according to RFC5285.
     """
+    extension_profile = 0
+    extension_value = None
+
     if not extensions:
-        packet.extension_profile = 0
-        packet.extension_value = None
-        return
+        return extension_profile, extension_value
 
     one_byte = True
     for x_id, x_value in extensions:
@@ -255,22 +256,23 @@ def set_header_extensions(packet, extensions):
 
     if one_byte:
         # One-Byte Header
-        packet.extension_profile = 0xBEDE
-        packet.extension_value = b''
+        extension_profile = 0xBEDE
+        extension_value = b''
         for x_id, x_value in extensions:
             x_length = len(x_value)
-            packet.extension_value += pack('!B', (x_id << 4) | (x_length - 1))
-            packet.extension_value += x_value
+            extension_value += pack('!B', (x_id << 4) | (x_length - 1))
+            extension_value += x_value
     else:
         # Two-Byte Header
-        packet.extension_profile = 0x1000
-        packet.extension_value = b''
+        extension_profile = 0x1000
+        extension_value = b''
         for x_id, x_value in extensions:
             x_length = len(x_value)
-            packet.extension_value += pack('!BB', x_id, x_length)
-            packet.extension_value += x_value
+            extension_value += pack('!BB', x_id, x_length)
+            extension_value += x_value
 
-    packet.extension_value += b'\x00' * padl(len(packet.extension_value))
+    extension_value += b'\x00' * padl(len(extension_value))
+    return extension_profile, extension_value
 
 
 @attr.s
@@ -541,38 +543,16 @@ class RtpPacket:
         self.timestamp = timestamp
         self.ssrc = ssrc
         self.csrc = []
-        self.extension_profile = 0
-        self.extension_value = None
+        self.extensions = HeaderExtensions()
         self.payload = payload
         self.padding_size = 0
-
-    def __bytes__(self):
-        extension = self.extension_value is not None
-        padding = self.padding_size > 0
-        data = pack(
-            '!BBHLL',
-            (self.version << 6) | (padding << 5) | (extension << 4) | len(self.csrc),
-            (self.marker << 7) | self.payload_type,
-            self.sequence_number,
-            self.timestamp,
-            self.ssrc)
-        for csrc in self.csrc:
-            data += pack('!L', csrc)
-        if self.extension_value is not None:
-            data += pack('!HH', self.extension_profile, len(self.extension_value) >> 2)
-            data += self.extension_value
-        data += self.payload
-        if padding:
-            data += os.urandom(self.padding_size - 1)
-            data += bytes([self.padding_size])
-        return data
 
     def __repr__(self):
         return 'RtpPacket(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)' % (
             self.sequence_number, self.timestamp, self.marker, self.payload_type, len(self.payload))
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data, extensions_map=HeaderExtensionsMap()):
         if len(data) < RTP_HEADER_LENGTH:
             raise ValueError('RTP packet length is less than %d bytes' % RTP_HEADER_LENGTH)
 
@@ -597,10 +577,11 @@ class RtpPacket:
             pos += 4
 
         if extension:
-            packet.extension_profile, x_length = unpack('!HH', data[pos:pos+4])
+            extension_profile, x_length = unpack('!HH', data[pos:pos+4])
             pos += 4
-            packet.extension_value = data[pos:pos+x_length*4]
+            extension_value = data[pos:pos+x_length*4]
             pos += x_length * 4
+            packet.extensions = extensions_map.get(extension_profile, extension_value)
 
         if padding:
             padding_len = data[-1]
@@ -612,3 +593,26 @@ class RtpPacket:
             packet.payload = data[pos:]
 
         return packet
+
+    def serialize(self, extensions_map=HeaderExtensionsMap()):
+        extension_profile, extension_value = extensions_map.set(self.extensions)
+        has_extension = extension_value is not None
+
+        padding = self.padding_size > 0
+        data = pack(
+            '!BBHLL',
+            (self.version << 6) | (padding << 5) | (has_extension << 4) | len(self.csrc),
+            (self.marker << 7) | self.payload_type,
+            self.sequence_number,
+            self.timestamp,
+            self.ssrc)
+        for csrc in self.csrc:
+            data += pack('!L', csrc)
+        if has_extension:
+            data += pack('!HH', extension_profile, len(extension_value) >> 2)
+            data += extension_value
+        data += self.payload
+        if padding:
+            data += os.urandom(self.padding_size - 1)
+            data += bytes([self.padding_size])
+        return data

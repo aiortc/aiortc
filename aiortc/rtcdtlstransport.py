@@ -403,11 +403,10 @@ class RTCDtlsTransport(EventEmitter):
                 await receiver._handle_rtcp_packet(packet)
 
     async def _handle_rtp_data(self, data):
-        packet = RtpPacket.parse(data)
-        extensions = self._rtp_header_extensions_map.get(packet)
+        packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
 
         # route RTP packet
-        receiver = self._rtp_router.route(packet.ssrc, mid=extensions.sdes_mid)
+        receiver = self._rtp_router.route(packet.ssrc, mid=packet.extensions.sdes_mid)
         if receiver is not None:
             await receiver._handle_rtp_packet(packet)
 

@@ -5,7 +5,7 @@ import random
 import threading
 import time
 
-from . import clock, rtp
+from . import clock
 from .clock import current_datetime, datetime_from_ntp
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
@@ -183,7 +183,6 @@ class RTCRtpReceiver:
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         else:
             self.__remote_bitrate_estimator = None
-        self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
         self.__started = False
@@ -247,7 +246,6 @@ class RTCRtpReceiver:
             self.__decoder_thread.start()
 
             self.__transport._register_rtp_receiver(self, parameters)
-            self.__rtp_header_extensions_map.configure(parameters)
             asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
@@ -305,10 +303,9 @@ class RTCRtpReceiver:
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
-            header_extensions = self.__rtp_header_extensions_map.get(packet)
-            if header_extensions.abs_send_time is not None:
+            if packet.extensions.abs_send_time is not None:
                 self.__remote_bitrate_estimator.add(
-                    abs_send_time=header_extensions.abs_send_time,
+                    abs_send_time=packet.extensions.abs_send_time,
                     arrival_time_ms=clock.current_ms(),
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,

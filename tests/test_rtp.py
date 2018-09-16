@@ -136,10 +136,9 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 24152)
         self.assertEqual(packet.timestamp, 4021352124)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extension_profile, 0)
-        self.assertEqual(packet.extension_value, None)
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions())
         self.assertEqual(len(packet.payload), 4)
-        self.assertEqual(bytes(packet), data)
+        self.assertEqual(packet.serialize(), data)
 
     def test_no_ssrc(self):
         data = load('rtp.bin')
@@ -150,10 +149,9 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 15743)
         self.assertEqual(packet.timestamp, 3937035252)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extension_profile, 0)
-        self.assertEqual(packet.extension_value, None)
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions())
         self.assertEqual(len(packet.payload), 160)
-        self.assertEqual(bytes(packet), data)
+        self.assertEqual(packet.serialize(), data)
 
         self.assertEqual(repr(packet),
                          'RtpPacket(seq=15743, ts=3937035252, marker=0, payload=0, 160 bytes)')
@@ -167,12 +165,11 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 27759)
         self.assertEqual(packet.timestamp, 4044047131)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extension_profile, 0)
-        self.assertEqual(packet.extension_value, None)
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions())
         self.assertEqual(len(packet.payload), 0)
         self.assertEqual(packet.padding_size, 224)
 
-        serialized = bytes(packet)
+        serialized = packet.serialize()
         self.assertEqual(len(serialized), len(data))
         self.assertEqual(serialized[0:12], data[0:12])
         self.assertEqual(serialized[-1], data[-1])
@@ -198,24 +195,30 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 16082)
         self.assertEqual(packet.timestamp, 144)
         self.assertEqual(packet.csrc, [2882400001, 3735928559])
-        self.assertEqual(packet.extension_profile, 0)
-        self.assertEqual(packet.extension_value, None)
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions())
         self.assertEqual(len(packet.payload), 160)
-        self.assertEqual(bytes(packet), data)
+        self.assertEqual(packet.serialize(), data)
 
     def test_with_sdes_mid(self):
+        extensions_map = rtp.HeaderExtensionsMap()
+        extensions_map.configure(RTCRtpParameters(
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=9,
+                    uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+            ]))
+
         data = load('rtp_with_sdes_mid.bin')
-        packet = RtpPacket.parse(data)
+        packet = RtpPacket.parse(data, extensions_map)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 1)
         self.assertEqual(packet.payload_type, 111)
         self.assertEqual(packet.sequence_number, 14156)
         self.assertEqual(packet.timestamp, 1327210925)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extension_profile, 0xBEDE)
-        self.assertEqual(packet.extension_value,  b'\x900\x00\x00')
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions(sdes_mid='0'))
         self.assertEqual(len(packet.payload), 54)
-        self.assertEqual(bytes(packet), data)
+        self.assertEqual(packet.serialize(extensions_map), data)
 
     def test_truncated(self):
         data = load('rtp.bin')[0:11]
@@ -303,62 +306,44 @@ class RtpUtilTest(TestCase):
         self.assertEqual(ssrcs, [2529072847])
 
     def test_get_header_extensions(self):
-        packet = RtpPacket()
-
         # none
-        self.assertEqual(get_header_extensions(packet), [])
+        self.assertEqual(get_header_extensions(0, None), [])
 
         # one-byte, single value
-        packet.extension_profile = 0xBEDE
-        packet.extension_value = b'\x900\x00\x00'
-        self.assertEqual(get_header_extensions(packet), [
+        self.assertEqual(get_header_extensions(0xBEDE, b'\x900\x00\x00'), [
             (9, b'0'),
         ])
 
         # one-byte, two values
-        packet.extension_profile = 0xBEDE
-        packet.extension_value = b'\x10\xc18sdparta_0'
-        self.assertEqual(get_header_extensions(packet), [
+        self.assertEqual(get_header_extensions(0xBEDE, b'\x10\xc18sdparta_0'), [
             (1, b'\xc1'),
             (3, b'sdparta_0'),
         ])
 
         # two-byte, single value
-        packet.extension_profile = 0x1000
-        packet.extension_value = b'\xff\x010\x00'
-        self.assertEqual(get_header_extensions(packet), [
+        self.assertEqual(get_header_extensions(0x1000, b'\xff\x010\x00'), [
             (255, b'0'),
         ])
 
     def test_set_header_extensions(self):
-        packet = RtpPacket()
-
         # none
-        set_header_extensions(packet, {})
-        self.assertEqual(packet.extension_profile, 0)
-        self.assertEqual(packet.extension_value, None)
+        self.assertEqual(set_header_extensions([]), (0, None))
 
         # one-byte, single value
-        set_header_extensions(packet, [
+        self.assertEqual(set_header_extensions([
             (9, b'0'),
-        ])
-        self.assertEqual(packet.extension_profile, 0xBEDE)
-        self.assertEqual(packet.extension_value, b'\x900\x00\x00')
+        ]), (0xBEDE, b'\x900\x00\x00'))
 
         # one-byte, two values
-        set_header_extensions(packet, [
+        self.assertEqual(set_header_extensions([
             (1, b'\xc1'),
             (3, b'sdparta_0'),
-        ])
-        self.assertEqual(packet.extension_profile, 0xBEDE)
-        self.assertEqual(packet.extension_value, b'\x10\xc18sdparta_0')
+        ]), (0xBEDE, b'\x10\xc18sdparta_0'))
 
         # two-byte, single value
-        set_header_extensions(packet, [
+        self.assertEqual(set_header_extensions([
             (255, b'0'),
-        ])
-        self.assertEqual(packet.extension_profile, 0x1000)
-        self.assertEqual(packet.extension_value, b'\xff\x010\x00')
+        ]), (0x1000, b'\xff\x010\x00'))
 
     def test_map_header_extensions(self):
         data = bytearray([
@@ -376,23 +361,8 @@ class RtpUtilTest(TestCase):
             0xd5, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d,  # RepairedRtpStreamId
             0x00, 0x00,              # Padding to 32bit boundary.
         ])
-        packet = RtpPacket.parse(data)
-
-        # check raw values
-        self.assertEqual(get_header_extensions(packet), [
-            (4, b'\xda'),
-            (2, b'\x01V\xce'),
-            (6, b'\x124V'),
-            (8, b'\xce\xab'),
-            (10, b'\x03'),
-            (11, b'\x12Hv'),
-            (12, b'rtx'),
-            (13, b'stream'),
-        ])
-
-        # check mapped values
-        m = rtp.HeaderExtensionsMap()
-        m.configure(RTCRtpParameters(
+        extensions_map = rtp.HeaderExtensionsMap()
+        extensions_map.configure(RTCRtpParameters(
             headerExtensions=[
                 RTCRtpHeaderExtensionParameters(
                     id=2,
@@ -413,14 +383,17 @@ class RtpUtilTest(TestCase):
                     id=13,
                     uri='urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id'),
             ]))
-        extensions = m.get(packet)
-        self.assertEqual(extensions.abs_send_time, 0x123456)
-        self.assertEqual(extensions.audio_level, (True, 90))
-        self.assertEqual(extensions.repaired_rtp_stream_id, 'stream')
-        self.assertEqual(extensions.rtp_stream_id, 'rtx')
-        self.assertEqual(extensions.sdes_mid, None)
-        self.assertEqual(extensions.transmission_offset, 0x156ce)
-        self.assertEqual(extensions.transport_sequence_number, 0xceab)
+
+        packet = RtpPacket.parse(data, extensions_map)
+
+        # check mapped values
+        self.assertEqual(packet.extensions.abs_send_time, 0x123456)
+        self.assertEqual(packet.extensions.audio_level, (True, 90))
+        self.assertEqual(packet.extensions.repaired_rtp_stream_id, 'stream')
+        self.assertEqual(packet.extensions.rtp_stream_id, 'rtx')
+        self.assertEqual(packet.extensions.sdes_mid, None)
+        self.assertEqual(packet.extensions.transmission_offset, 0x156ce)
+        self.assertEqual(packet.extensions.transport_sequence_number, 0xceab)
 
         # TODO: check
-        m.set(packet, extensions)
+        packet.serialize(extensions_map)

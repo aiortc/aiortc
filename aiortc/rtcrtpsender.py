@@ -199,10 +199,8 @@ class RTCRtpSender:
         loop = asyncio.get_event_loop()
 
         encoder = get_encoder(codec)
-        packet = RtpPacket(
-            payload_type=codec.payloadType,
-            sequence_number=random16(),
-            timestamp=random32())
+        sequence_number = random16()
+        timestamp = random32()
         while not self.__stopped.is_set():
             if self._track:
                 frame = await first_completed(self._track.recv(), self.__stopped.wait())
@@ -217,19 +215,21 @@ class RTCRtpSender:
                 self.__force_keyframe = False
 
                 for i, payload in enumerate(payloads):
+                    packet = RtpPacket(
+                        payload_type=codec.payloadType,
+                        sequence_number=sequence_number,
+                        timestamp=timestamp)
                     packet.ssrc = self._ssrc
                     packet.payload = payload
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
 
                     # set header extensions
-                    header_extensions = rtp.HeaderExtensions(
-                        abs_send_time=(current_ntp_time() >> 14) & 0x00ffffff,
-                        sdes_mid=self.__mid)
-                    self.__rtp_header_extensions_map.set(packet, header_extensions)
+                    packet.extensions.abs_send_time = (current_ntp_time() >> 14) & 0x00ffffff
+                    packet.extensions.sdes_mid = self.__mid
 
                     try:
                         self.__log_debug('> %s', packet)
-                        packet_bytes = bytes(packet)
+                        packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
                         self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
                             packet.sequence_number, packet_bytes)
                         await self.transport._send_rtp(packet_bytes)
@@ -240,8 +240,8 @@ class RTCRtpSender:
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
-                    packet.sequence_number = uint16_add(packet.sequence_number, 1)
-                packet.timestamp = uint32_add(packet.timestamp, encoder.timestamp_increment)
+                    sequence_number = uint16_add(sequence_number, 1)
+                timestamp = uint32_add(timestamp, encoder.timestamp_increment)
             else:
                 await asyncio.sleep(0.02)
 
