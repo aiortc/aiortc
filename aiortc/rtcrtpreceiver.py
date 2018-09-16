@@ -175,7 +175,6 @@ class RTCRtpReceiver:
         self.__codecs = {}
         self.__decoder_queue = queue.Queue()
         self.__decoder_thread = None
-        self.__decoders = {}
         self._kind = kind
         self._jitter_buffer = JitterBuffer(capacity=128)
         self.__nack_generator = NackGenerator(self)
@@ -239,11 +238,10 @@ class RTCRtpReceiver:
                 self.__codecs[codec.payloadType] = codec
 
             # start decoder thread
-            self.__decoder_thread = threading.Thread(target=decoder_worker, args=(
-                asyncio.get_event_loop(),
-                self.__decoder_queue,
-                self._track._queue
-            ))
+            self.__decoder_thread = threading.Thread(
+                target=decoder_worker,
+                name=self._kind + '-decoder',
+                args=(asyncio.get_event_loop(), self.__decoder_queue, self._track._queue))
             self.__decoder_thread.start()
 
             self.__transport._register_rtp_receiver(self, parameters)

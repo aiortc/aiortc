@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import queue
 import random
+import threading
 import time
 
 from . import rtp
@@ -19,6 +21,27 @@ logger = logging.getLogger('rtp')
 
 RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
+
+
+def encoder_worker(input_q):
+    codec_name = None
+    encoder = None
+
+    while True:
+        task = input_q.get()
+        if task is None:
+            return
+        codec, frame, force_keyframe, future = task
+
+        if codec.name != codec_name:
+            encoder = get_encoder(codec)
+            codec_name = codec.name
+
+        payloads = encoder.encode(frame, force_keyframe)
+        if not isinstance(payloads, list):
+            payloads = [payloads]
+
+        future.set_result((payloads, encoder.timestamp_increment))
 
 
 class RTCRtpSender:
@@ -196,9 +219,16 @@ class RTCRtpSender:
 
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
-        loop = asyncio.get_event_loop()
 
-        encoder = get_encoder(codec)
+        # start encoder thread
+        encoder_queue = queue.Queue()
+        encoder_thread = None
+        encoder_thread = threading.Thread(
+            target=encoder_worker,
+            name=self._kind + '-encoder',
+            args=(encoder_queue,))
+        encoder_thread.start()
+
         sequence_number = random16()
         timestamp = random32()
         while not self.__stopped.is_set():
@@ -208,11 +238,10 @@ class RTCRtpSender:
                     break
 
                 # encode frame
-                payloads = await loop.run_in_executor(None, encoder.encode, frame,
-                                                      self.__force_keyframe)
-                if not isinstance(payloads, list):
-                    payloads = [payloads]
+                future = asyncio.Future()
+                encoder_queue.put((codec, frame, self.__force_keyframe, future))
                 self.__force_keyframe = False
+                payloads, timestamp_increment = await future
 
                 for i, payload in enumerate(payloads):
                     packet = RtpPacket(
@@ -241,9 +270,13 @@ class RTCRtpSender:
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
-                timestamp = uint32_add(timestamp, encoder.timestamp_increment)
+                timestamp = uint32_add(timestamp, timestamp_increment)
             else:
                 await asyncio.sleep(0.02)
+
+        # stop encoder thread
+        encoder_queue.put(None)
+        encoder_thread.join()
 
         self.__log_debug('- RTP finished')
         self.__rtp_exited.set()
