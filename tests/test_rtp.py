@@ -216,7 +216,7 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 14156)
         self.assertEqual(packet.timestamp, 1327210925)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extensions, rtp.HeaderExtensions(sdes_mid='0'))
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions(mid='0'))
         self.assertEqual(len(packet.payload), 54)
         self.assertEqual(packet.serialize(extensions_map), data)
 
@@ -389,9 +389,9 @@ class RtpUtilTest(TestCase):
         # check mapped values
         self.assertEqual(packet.extensions.abs_send_time, 0x123456)
         self.assertEqual(packet.extensions.audio_level, (True, 90))
+        self.assertEqual(packet.extensions.mid, None)
         self.assertEqual(packet.extensions.repaired_rtp_stream_id, 'stream')
         self.assertEqual(packet.extensions.rtp_stream_id, 'rtx')
-        self.assertEqual(packet.extensions.sdes_mid, None)
         self.assertEqual(packet.extensions.transmission_offset, 0x156ce)
         self.assertEqual(packet.extensions.transport_sequence_number, 0xceab)
 

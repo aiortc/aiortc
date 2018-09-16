@@ -32,9 +32,9 @@ RTCP_PSFB_APP = 15
 class HeaderExtensions:
     abs_send_time = attr.ib(default=None)
     audio_level = attr.ib(default=None)
+    mid = attr.ib(default=None)
     repaired_rtp_stream_id = attr.ib(default=None)
     rtp_stream_id = attr.ib(default=None)
-    sdes_mid = attr.ib(default=None)
     transmission_offset = attr.ib(default=None)
     transport_sequence_number = attr.ib(default=None)
 
@@ -46,7 +46,7 @@ class HeaderExtensionsMap:
     def configure(self, parameters):
         for ext in parameters.headerExtensions:
             if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
-                self.__ids.sdes_mid = ext.id
+                self.__ids.mid = ext.id
             elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id':
                 self.__ids.repaired_rtp_stream_id = ext.id
             elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id':
@@ -63,8 +63,8 @@ class HeaderExtensionsMap:
     def get(self, extension_profile, extension_value):
         values = HeaderExtensions()
         for x_id, x_value in get_header_extensions(extension_profile, extension_value):
-            if x_id == self.__ids.sdes_mid:
-                values.sdes_mid = x_value.decode('utf8')
+            if x_id == self.__ids.mid:
+                values.mid = x_value.decode('utf8')
             elif x_id == self.__ids.repaired_rtp_stream_id:
                 values.repaired_rtp_stream_id = x_value.decode('ascii')
             elif x_id == self.__ids.rtp_stream_id:
@@ -82,10 +82,10 @@ class HeaderExtensionsMap:
 
     def set(self, values):
         extensions = []
-        if values.sdes_mid is not None and self.__ids.sdes_mid:
+        if values.mid is not None and self.__ids.mid:
             extensions.append((
-                self.__ids.sdes_mid,
-                values.sdes_mid.encode('utf8')
+                self.__ids.mid,
+                values.mid.encode('utf8')
             ))
         if values.repaired_rtp_stream_id is not None and self.__ids.repaired_rtp_stream_id:
             extensions.append((

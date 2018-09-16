@@ -406,7 +406,7 @@ class RTCDtlsTransport(EventEmitter):
         packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
 
         # route RTP packet
-        receiver = self._rtp_router.route(packet.ssrc, mid=packet.extensions.sdes_mid)
+        receiver = self._rtp_router.route(packet.ssrc, mid=packet.extensions.mid)
         if receiver is not None:
             await receiver._handle_rtp_packet(packet)
 

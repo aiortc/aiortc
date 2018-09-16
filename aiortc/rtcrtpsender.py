@@ -225,7 +225,7 @@ class RTCRtpSender:
 
                     # set header extensions
                     packet.extensions.abs_send_time = (current_ntp_time() >> 14) & 0x00ffffff
-                    packet.extensions.sdes_mid = self.__mid
+                    packet.extensions.mid = self.__mid
 
                     try:
                         self.__log_debug('> %s', packet)
