@@ -25,7 +25,8 @@ class CodecTestCase(TestCase):
         # decode
         frames = decoder.decode(data)
         self.assertEqual(len(frames), 1)
-        self.assertEqual(len(frames[0].data), output_sample_rate * AUDIO_PTIME * output_channels * 2)
+        self.assertEqual(len(frames[0].data),
+                         output_sample_rate * AUDIO_PTIME * output_channels * 2)
         self.assertEqual(frames[0].channels, output_channels)
         self.assertEqual(frames[0].sample_rate, output_sample_rate)
         self.assertEqual(frames[0].sample_width, 2)

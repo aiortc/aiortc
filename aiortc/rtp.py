@@ -31,7 +31,12 @@ RTCP_PSFB_APP = 15
 @attr.s
 class HeaderExtensions:
     abs_send_time = attr.ib(default=None)
+    audio_level = attr.ib(default=None)
+    repaired_rtp_stream_id = attr.ib(default=None)
+    rtp_stream_id = attr.ib(default=None)
     sdes_mid = attr.ib(default=None)
+    transmission_offset = attr.ib(default=None)
+    transport_sequence_number = attr.ib(default=None)
 
 
 class HeaderExtensionsMap:
@@ -42,29 +47,75 @@ class HeaderExtensionsMap:
         for ext in parameters.headerExtensions:
             if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
                 self.__ids.sdes_mid = ext.id
+            elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id':
+                self.__ids.repaired_rtp_stream_id = ext.id
+            elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id':
+                self.__ids.rtp_stream_id = ext.id
             elif ext.uri == 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time':
                 self.__ids.abs_send_time = ext.id
+            elif ext.uri == 'urn:ietf:params:rtp-hdrext:toffset':
+                self.__ids.transmission_offset = ext.id
+            elif ext.uri == 'urn:ietf:params:rtp-hdrext:ssrc-audio-level':
+                self.__ids.audio_level = ext.id
+            elif ext.uri == 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01':  # noqa
+                self.__ids.transport_sequence_number = ext.id
 
     def get(self, packet):
         values = HeaderExtensions()
         for x_id, x_value in get_header_extensions(packet):
             if x_id == self.__ids.sdes_mid:
                 values.sdes_mid = x_value.decode('utf8')
+            elif x_id == self.__ids.repaired_rtp_stream_id:
+                values.repaired_rtp_stream_id = x_value.decode('ascii')
+            elif x_id == self.__ids.rtp_stream_id:
+                values.rtp_stream_id = x_value.decode('ascii')
             elif x_id == self.__ids.abs_send_time:
                 values.abs_send_time = unpack('!L', b'\00' + x_value)[0]
+            elif x_id == self.__ids.transmission_offset:
+                values.transmission_offset = unpack('!l', x_value + b'\00')[0] >> 8
+            elif x_id == self.__ids.audio_level:
+                vad_level = unpack('!B', x_value)[0]
+                values.audio_level = (vad_level & 0x80 == 0x80, vad_level & 0x7f)
+            elif x_id == self.__ids.transport_sequence_number:
+                values.transport_sequence_number = unpack('!H', x_value)[0]
         return values
 
     def set(self, packet, values):
         extensions = []
-        if values.sdes_mid and self.__ids.sdes_mid:
+        if values.sdes_mid is not None and self.__ids.sdes_mid:
             extensions.append((
                 self.__ids.sdes_mid,
                 values.sdes_mid.encode('utf8')
             ))
-        if values.abs_send_time and self.__ids.abs_send_time:
+        if values.repaired_rtp_stream_id is not None and self.__ids.repaired_rtp_stream_id:
+            extensions.append((
+                self.__ids.repaired_rtp_stream_id,
+                values.repaired_rtp_stream_id.encode('ascii')
+            ))
+        if values.rtp_stream_id is not None and self.__ids.rtp_stream_id:
+            extensions.append((
+                self.__ids.rtp_stream_id,
+                values.rtp_stream_id.encode('ascii')
+            ))
+        if values.abs_send_time is not None and self.__ids.abs_send_time:
             extensions.append((
                 self.__ids.abs_send_time,
                 pack('!L', values.abs_send_time)[1:]
+            ))
+        if values.transmission_offset is not None and self.__ids.transmission_offset:
+            extensions.append((
+                self.__ids.transmission_offset,
+                pack('!l', values.transmission_offset << 8)[0:2]
+            ))
+        if values.audio_level is not None and self.__ids.audio_level:
+            extensions.append((
+                self.__ids.audio_level,
+                pack('!B', (0x80 if values.audio_level[0] else 0) | (values.audio_level[1] & 0x7f))
+            ))
+        if values.transport_sequence_number is not None and self.__ids.transport_sequence_number:
+            extensions.append((
+                self.__ids.transport_sequence_number,
+                pack('!H', values.transport_sequence_number)
             ))
         set_header_extensions(packet, extensions)
 

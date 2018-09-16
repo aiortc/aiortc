@@ -1,5 +1,8 @@
 from unittest import TestCase
 
+from aiortc import rtp
+from aiortc.rtcrtpparameters import (RTCRtpHeaderExtensionParameters,
+                                     RTCRtpParameters)
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
@@ -356,3 +359,68 @@ class RtpUtilTest(TestCase):
         ])
         self.assertEqual(packet.extension_profile, 0x1000)
         self.assertEqual(packet.extension_value, b'\xff\x010\x00')
+
+    def test_map_header_extensions(self):
+        data = bytearray([
+            0x90, 0x64, 0x00, 0x58,
+            0x65, 0x43, 0x12, 0x78,
+            0x12, 0x34, 0x56, 0x78,  # SSRC
+            0xbe, 0xde, 0x00, 0x08,  # Extension of size 8x32bit words.
+            0x40, 0xda,              # AudioLevel.
+            0x22, 0x01, 0x56, 0xce,  # TransmissionOffset.
+            0x62, 0x12, 0x34, 0x56,  # AbsoluteSendTime.
+            0x81, 0xce, 0xab,        # TransportSequenceNumber.
+            0xa0, 0x03,              # VideoRotation.
+            0xb2, 0x12, 0x48, 0x76,  # PlayoutDelayLimits.
+            0xc2, 0x72, 0x74, 0x78,  # RtpStreamId
+            0xd5, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d,  # RepairedRtpStreamId
+            0x00, 0x00,              # Padding to 32bit boundary.
+        ])
+        packet = RtpPacket.parse(data)
+
+        # check raw values
+        self.assertEqual(get_header_extensions(packet), [
+            (4, b'\xda'),
+            (2, b'\x01V\xce'),
+            (6, b'\x124V'),
+            (8, b'\xce\xab'),
+            (10, b'\x03'),
+            (11, b'\x12Hv'),
+            (12, b'rtx'),
+            (13, b'stream'),
+        ])
+
+        # check mapped values
+        m = rtp.HeaderExtensionsMap()
+        m.configure(RTCRtpParameters(
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=2,
+                    uri='urn:ietf:params:rtp-hdrext:toffset'),
+                RTCRtpHeaderExtensionParameters(
+                    id=4,
+                    uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
+                RTCRtpHeaderExtensionParameters(
+                    id=6,
+                    uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+                RTCRtpHeaderExtensionParameters(
+                    id=8,
+                    uri='http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01'),  # noqa
+                RTCRtpHeaderExtensionParameters(
+                    id=12,
+                    uri='urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'),
+                RTCRtpHeaderExtensionParameters(
+                    id=13,
+                    uri='urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id'),
+            ]))
+        extensions = m.get(packet)
+        self.assertEqual(extensions.abs_send_time, 0x123456)
+        self.assertEqual(extensions.audio_level, (True, 90))
+        self.assertEqual(extensions.repaired_rtp_stream_id, 'stream')
+        self.assertEqual(extensions.rtp_stream_id, 'rtx')
+        self.assertEqual(extensions.sdes_mid, None)
+        self.assertEqual(extensions.transmission_offset, 0x156ce)
+        self.assertEqual(extensions.transport_sequence_number, 0xceab)
+
+        # TODO: check
+        m.set(packet, extensions)
