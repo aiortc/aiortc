@@ -12,9 +12,10 @@ from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer, JitterFrame
 from .mediastreams import MediaStreamTrack
 from .rate import RemoteBitrateEstimator
-from .rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
+from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost)
+                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
+                  pack_remb_fci)
 from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import first_completed, uint16_add, uint16_gt
@@ -304,12 +305,17 @@ class RTCRtpReceiver:
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
             if packet.extensions.abs_send_time is not None:
-                self.__remote_bitrate_estimator.add(
+                remb = self.__remote_bitrate_estimator.add(
                     abs_send_time=packet.extensions.abs_send_time,
                     arrival_time_ms=clock.current_ms(),
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
+                if remb is not None:
+                    # send Receiver Estimated Maximum Bitrate feedback
+                    rtcp_packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=self._ssrc, media_ssrc=0)
+                    rtcp_packet.fci = pack_remb_fci(*remb)
+                    await self._send_rtcp(rtcp_packet)
 
         if packet.payload_type in self.__codecs:
             codec = self.__codecs[packet.payload_type]

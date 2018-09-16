@@ -25,6 +25,77 @@ class BandwidthUsage(Enum):
     OVERUSING = 2
 
 
+class RateControlState(Enum):
+    HOLD = 0
+    INCREASE = 1
+    DECREASE = 2
+
+
+class AimdRateControl:
+    def __init__(self):
+        self.current_bitrate = 30000000
+        self.current_bitrate_initialized = False
+        self.first_estimated_throughput_time = None
+        self.last_change_ms = None
+        self.latest_estimated_throughput = 30000000
+        self.state = RateControlState.HOLD
+
+    def feedback_interval(self):
+        return 500
+
+    def update(self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int):
+        if not self.current_bitrate_initialized:
+            if self.first_estimated_throughput_time is None:
+                if estimated_throughput is not None:
+                    self.first_estimated_throughput_time = now_ms
+            elif now_ms - self.first_estimated_throughput_time > 3000:
+                self.current_bitrate = estimated_throughput
+                self.current_bitrate_initialized = True
+
+        # wait for initialisation or overuse
+        if not self.current_bitrate_initialized and bandwidth_usage != BandwidthUsage.OVERUSING:
+            return
+
+        # update state
+        if bandwidth_usage == BandwidthUsage.NORMAL and self.state == RateControlState.HOLD:
+            self.last_change_ms = now_ms
+            self.state = RateControlState.INCREASE
+        elif (bandwidth_usage == BandwidthUsage.OVERUSING and
+              self.state != RateControlState.DECREASE):
+            self.state = RateControlState.DECREASE
+        elif bandwidth_usage == BandwidthUsage.UNDERUSING:
+            self.state = RateControlState.HOLD
+
+        # update bitrate
+        new_bitrate = self.current_bitrate
+        if estimated_throughput is not None:
+            self.latest_estimated_throughput = estimated_throughput
+        else:
+            estimated_throughput = self.latest_estimated_throughput
+        if self.state == RateControlState.INCREASE:
+            new_bitrate += self._multiplicative_rate_increase(
+                new_bitrate, self.last_change_ms, now_ms)
+            self.last_change_ms = now_ms
+        elif self.state == RateControlState.DECREASE:
+            new_bitrate = round(0.85 * estimated_throughput)
+            self.last_change_ms = now_ms
+            self.state = RateControlState.HOLD
+
+        self.current_bitrate = self._clamp_bitrate(new_bitrate, estimated_throughput)
+        return self.current_bitrate
+
+    def _clamp_bitrate(self, new_bitrate, estimated_throughput):
+        max_bitrate = max(int(1.5 * estimated_throughput) + 10000, self.current_bitrate)
+        return min(new_bitrate, max_bitrate)
+
+    def _multiplicative_rate_increase(self, new_bitrate, last_ms, now_ms):
+        alpha = 1.08
+        if last_ms is not None:
+            elapsed_ms = min(now_ms - last_ms, 1000)
+            alpha = pow(alpha, elapsed_ms / 1000)
+        return int(max((alpha - 1) * new_bitrate, 1000))
+
+
 class TimestampGroup:
     def __init__(self, timestamp=None):
         self.arrival_time = None
@@ -336,10 +407,13 @@ class RemoteBitrateEstimator:
             TIMESTAMP_TO_MS)
         self.estimator = OveruseEstimator()
         self.detector = OveruseDetector()
+        self.rate_control = AimdRateControl()
+        self.last_update_ms = None
         self.ssrcs = {}
 
     def add(self, arrival_time_ms, abs_send_time, payload_size, ssrc):
         timestamp = abs_send_time << 8
+        update_estimate = False
 
         # make note of SSRC
         self.ssrcs[ssrc] = arrival_time_ms
@@ -367,3 +441,19 @@ class RemoteBitrateEstimator:
                 timestamp_delta_ms,
                 self.estimator.num_of_deltas(),
                 arrival_time_ms)
+
+        if not update_estimate:
+            if (self.last_update_ms is None or
+               (arrival_time_ms - self.last_update_ms) > self.rate_control.feedback_interval()):
+                update_estimate = True
+            elif self.detector.state() == BandwidthUsage.OVERUSING:
+                update_estimate = True
+
+        if update_estimate:
+            target_bitrate = self.rate_control.update(
+                self.detector.state(),
+                self.incoming_bitrate.rate(arrival_time_ms),
+                arrival_time_ms)
+            if target_bitrate is not None:
+                self.last_update_ms = arrival_time_ms
+                return target_bitrate, self.ssrcs.keys()
