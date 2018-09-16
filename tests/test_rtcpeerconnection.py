@@ -978,6 +978,9 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, 'completed')
         self.assertEqual(pc2.iceConnectionState, 'completed')
 
+        # let media flow to trigger RTCP feedback, including REMB
+        run(asyncio.sleep(5))
+
         # close
         run(pc1.close())
         run(pc2.close())
