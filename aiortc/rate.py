@@ -355,7 +355,7 @@ class RemoteBitrateEstimator:
         # calculate inter-arrival deltas
         deltas = self.inter_arrival.compute_deltas(timestamp, arrival_time_ms, payload_size)
         if deltas is not None:
-            timestamp_delta_ms = int(deltas.timestamp * TIMESTAMP_TO_MS)
+            timestamp_delta_ms = deltas.timestamp * TIMESTAMP_TO_MS
             self.estimator.update(
                 deltas.arrival_time,
                 timestamp_delta_ms,
