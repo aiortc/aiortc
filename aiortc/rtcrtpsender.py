@@ -59,11 +59,11 @@ class RTCRtpSender:
             raise InvalidStateError
 
         if hasattr(trackOrKind, 'kind'):
-            self._kind = trackOrKind.kind
-            self._track = trackOrKind
+            self.__kind = trackOrKind.kind
+            self.__track = trackOrKind
         else:
-            self._kind = trackOrKind
-            self._track = None
+            self.__kind = trackOrKind
+            self.__track = None
         self.__cname = None
         self._ssrc = random32()
         self.__force_keyframe = False
@@ -88,14 +88,14 @@ class RTCRtpSender:
 
     @property
     def kind(self):
-        return self._kind
+        return self.__kind
 
     @property
     def track(self):
         """
         The :class:`MediaStreamTrack` which is being handled by the sender.
         """
-        return self._track
+        return self.__track
 
     @property
     def transport(self):
@@ -117,7 +117,7 @@ class RTCRtpSender:
             id=str(id(self)),
             # RTCStreamStats
             ssrc=self._ssrc,
-            kind=self._kind,
+            kind=self.__kind,
             transportId=str(id(self.transport)),
             # RTCSentRtpStreamStats
             packetsSent=self.__packet_count,
@@ -128,7 +128,7 @@ class RTCRtpSender:
         return self.__stats
 
     def replaceTrack(self, track):
-        self._track = track
+        self.__track = track
 
     def setTransport(self, transport):
         self.__transport = transport
@@ -180,7 +180,7 @@ class RTCRtpSender:
                     id=str(id(self)),
                     # RTCStreamStats
                     ssrc=packet.ssrc,
-                    kind=self._kind,
+                    kind=self.__kind,
                     transportId=str(id(self.transport)),
                     # RTCReceivedRtpStreamStats
                     packetsReceived=self.__packet_count - report.packets_lost,
@@ -225,15 +225,15 @@ class RTCRtpSender:
         encoder_thread = None
         encoder_thread = threading.Thread(
             target=encoder_worker,
-            name=self._kind + '-encoder',
+            name=self.__kind + '-encoder',
             args=(encoder_queue,))
         encoder_thread.start()
 
         sequence_number = random16()
         timestamp = random32()
         while not self.__stopped.is_set():
-            if self._track:
-                frame = await first_completed(self._track.recv(), self.__stopped.wait())
+            if self.__track:
+                frame = await first_completed(self.__track.recv(), self.__stopped.wait())
                 if frame is True:
                     break
 
@@ -330,4 +330,4 @@ class RTCRtpSender:
             pass
 
     def __log_debug(self, msg, *args):
-        logger.debug('sender(%s) ' + msg, self._kind, *args)
+        logger.debug('sender(%s) ' + msg, self.__kind, *args)

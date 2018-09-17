@@ -175,8 +175,8 @@ class RTCRtpReceiver:
         self.__codecs = {}
         self.__decoder_queue = queue.Queue()
         self.__decoder_thread = None
-        self._kind = kind
-        self._jitter_buffer = JitterBuffer(capacity=128)
+        self.__kind = kind
+        self.__jitter_buffer = JitterBuffer(capacity=128)
         self.__nack_generator = NackGenerator(self)
         self._track = None
         if kind == 'video':
@@ -217,7 +217,7 @@ class RTCRtpReceiver:
                 id=str(id(self)),
                 # RTCStreamStats
                 ssrc=self.__remote_counter.ssrc,
-                kind=self._kind,
+                kind=self.__kind,
                 transportId=str(id(self.transport)),
                 # RTCReceivedRtpStreamStats
                 packetsReceived=self.__remote_counter.packets_received,
@@ -240,7 +240,7 @@ class RTCRtpReceiver:
             # start decoder thread
             self.__decoder_thread = threading.Thread(
                 target=decoder_worker,
-                name=self._kind + '-decoder',
+                name=self.__kind + '-decoder',
                 args=(asyncio.get_event_loop(), self.__decoder_queue, self._track._queue))
             self.__decoder_thread.start()
 
@@ -279,7 +279,7 @@ class RTCRtpReceiver:
                 id=str(id(self)),
                 # RTCStreamStats
                 ssrc=packet.ssrc,
-                kind=self._kind,
+                kind=self.__kind,
                 transportId=str(id(self.transport)),
                 # RTCSentRtpStreamStats
                 packetsSent=packet.sender_info.packet_count,
@@ -329,7 +329,7 @@ class RTCRtpReceiver:
             else:
                 packet._data = b''
 
-            if self._kind == 'audio':
+            if self.__kind == 'audio':
                 # FIXME: audio should use a jitter buffer!
                 encoded_frame = JitterFrame(data=packet._data, timestamp=packet.timestamp)
             else:
@@ -337,7 +337,7 @@ class RTCRtpReceiver:
                 await self.__nack_generator.add(packet)
 
                 # try to re-assemble encoded frame
-                encoded_frame = self._jitter_buffer.add(packet)
+                encoded_frame = self.__jitter_buffer.add(packet)
 
             # if we have a complete encoded frame, decode it
             if encoded_frame is not None:
@@ -407,4 +407,4 @@ class RTCRtpReceiver:
         self.__sender = sender
 
     def __log_debug(self, msg, *args):
-        logger.debug('receiver(%s) ' + msg, self._kind, *args)
+        logger.debug('receiver(%s) ' + msg, self.__kind, *args)
