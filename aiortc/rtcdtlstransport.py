@@ -19,7 +19,7 @@ from OpenSSL import crypto
 from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
-from . import rtp
+from . import clock, rtp
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .utils import first_completed
 
@@ -402,13 +402,13 @@ class RTCDtlsTransport(EventEmitter):
             if receiver is not None:
                 await receiver._handle_rtcp_packet(packet)
 
-    async def _handle_rtp_data(self, data):
+    async def _handle_rtp_data(self, data, arrival_time_ms):
         packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
 
         # route RTP packet
         receiver = self._rtp_router.route(packet.ssrc, mid=packet.extensions.mid)
         if receiver is not None:
-            await receiver._handle_rtp_packet(packet)
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=arrival_time_ms)
 
     async def _recv_next(self):
         # get timeout
@@ -432,6 +432,7 @@ class RTCDtlsTransport(EventEmitter):
             # session was closed
             raise ConnectionError
 
+        arrival_time_ms = clock.current_ms()
         first_byte = data[0]
         if first_byte > 19 and first_byte < 64:
             # DTLS
@@ -452,7 +453,7 @@ class RTCDtlsTransport(EventEmitter):
                     await self._handle_rtcp_data(data)
                 else:
                     data = self._rx_srtp.unprotect(data)
-                    await self._handle_rtp_data(data)
+                    await self._handle_rtp_data(data, arrival_time_ms=arrival_time_ms)
             except pylibsrtp.Error as exc:
                 self.__log_debug('x SRTP unprotect failed: %s', exc)
 

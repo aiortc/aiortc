@@ -195,7 +195,7 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive a packet to prime RTCP
         packet = RtpPacket.parse(load('rtp.bin'))
-        run(receiver._handle_rtp_packet(packet))
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # break connection
         run(transport.stop())
@@ -218,7 +218,7 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTP
         packet = RtpPacket.parse(load('rtp.bin'))
-        run(receiver._handle_rtp_packet(packet))
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # receive RTCP SR
         for packet in RtcpPacket.parse(load('rtcp_sr.bin')):
@@ -250,7 +250,7 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTP with empty payload
         packet = RtpPacket(payload_type=100)
-        run(receiver._handle_rtp_packet(packet))
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # shutdown
         run(receiver.stop())

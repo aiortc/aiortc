@@ -5,7 +5,6 @@ import random
 import threading
 import time
 
-from . import clock
 from .clock import current_datetime, datetime_from_ntp
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
@@ -300,7 +299,7 @@ class RTCRtpReceiver:
         if self.__sender:
             await self.__sender._handle_rtcp_packet(packet)
 
-    async def _handle_rtp_packet(self, packet):
+    async def _handle_rtp_packet(self, packet, arrival_time_ms):
         self.__log_debug('< %s', packet)
 
         # feed bitrate estimator
@@ -308,7 +307,7 @@ class RTCRtpReceiver:
             if packet.extensions.abs_send_time is not None:
                 remb = self.__remote_bitrate_estimator.add(
                     abs_send_time=packet.extensions.abs_send_time,
-                    arrival_time_ms=clock.current_ms(),
+                    arrival_time_ms=arrival_time_ms,
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
