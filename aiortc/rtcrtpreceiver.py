@@ -30,7 +30,7 @@ def decoder_worker(loop, input_q, output_q):
     while True:
         task = input_q.get()
         if task is None:
-            return
+            break
         codec, encoded_frame = task
 
         if codec.name != codec_name:
@@ -39,6 +39,9 @@ def decoder_worker(loop, input_q, output_q):
 
         for frame in decoder.decode(encoded_frame.data):
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+
+    if decoder is not None:
+        del decoder
 
 
 class NackGenerator:

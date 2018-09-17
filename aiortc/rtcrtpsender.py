@@ -30,7 +30,7 @@ def encoder_worker(input_q):
     while True:
         task = input_q.get()
         if task is None:
-            return
+            break
         codec, frame, force_keyframe, future = task
 
         if codec.name != codec_name:
@@ -42,6 +42,9 @@ def encoder_worker(input_q):
             payloads = [payloads]
 
         future.set_result((payloads, encoder.timestamp_increment))
+
+    if encoder is not None:
+        del encoder
 
 
 class RTCRtpSender:
