@@ -4,7 +4,7 @@ from numpy import random
 
 from aiortc.rate import (AimdRateControl, BandwidthUsage, InterArrival,
                          OveruseDetector, OveruseEstimator, RateBucket,
-                         RateCounter)
+                         RateControlState, RateCounter)
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20
@@ -35,6 +35,10 @@ class AimdRateControlTest(TestCase):
         estimate = self.rate_control.update(BandwidthUsage.NORMAL, bitrate, now_ms)
         self.assertEqual(estimate, 301000)
 
+        self.assertEqual(self.rate_control.state, RateControlState.INCREASE)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
+        self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
+
     def test_update_normal_no_estimated_throughput(self):
         bitrate = 300000
         now_ms = 0
@@ -49,12 +53,85 @@ class AimdRateControlTest(TestCase):
         estimate = self.rate_control.update(BandwidthUsage.OVERUSING, bitrate, now_ms)
         self.assertEqual(estimate, 255000)
 
+        self.assertEqual(self.rate_control.state, RateControlState.HOLD)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 300.0)
+        self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
+
     def test_update_underuse(self):
         bitrate = 300000
         now_ms = 0
         self.rate_control.set_estimate(bitrate, now_ms)
         estimate = self.rate_control.update(BandwidthUsage.UNDERUSING, bitrate, now_ms)
         self.assertEqual(estimate, 300000)
+
+        self.assertEqual(self.rate_control.state, RateControlState.HOLD)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
+        self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
+
+    def test_additive_rate_increase(self):
+        acked_bitrate = 100000
+        self.rate_control.set_estimate(acked_bitrate, 0)
+        for now_ms in range(0, 20000, 100):
+            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 160000)
+        self.assertEqual(self.rate_control.near_max, False)
+
+        # overuse -> hold
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 85000)
+        self.assertEqual(self.rate_control.near_max, True)
+        now_ms += 1000
+
+        # back to normal -> hold
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 85000)
+        self.assertEqual(self.rate_control.near_max, True)
+        now_ms += 1000
+
+        # still normal -> additive increase
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 94444)
+        self.assertEqual(self.rate_control.near_max, True)
+        now_ms += 1000
+
+        # overuse -> hold
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 85000)
+        self.assertEqual(self.rate_control.near_max, True)
+        now_ms += 1000
+
+    def test_clear_max_throughput(self):
+        normal_bitrate = 100000
+        high_bitrate = 150000
+        now_ms = 0
+        self.rate_control.set_estimate(normal_bitrate, now_ms)
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
+        now_ms += 1000
+
+        # overuse
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
+        now_ms += 1000
+
+        # stable
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
+        now_ms += 1000
+
+        # large increase in throughput
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, high_bitrate, now_ms)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
+        now_ms += 1000
+
+        # overuse
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, high_bitrate, now_ms)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 150.0)
+        now_ms += 1000
+
+        # overuse and large decrease in throughput
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
+        self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
+        now_ms += 1000
 
     def test_bwe_limited_by_acked_bitrate(self):
         acked_bitrate = 10000

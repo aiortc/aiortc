@@ -33,11 +33,15 @@ class RateControlState(Enum):
 
 class AimdRateControl:
     def __init__(self):
+        self.avg_max_bitrate_kbps = None
+        self.var_max_bitrate_kbps = 0.4
         self.current_bitrate = 30000000
         self.current_bitrate_initialized = False
         self.first_estimated_throughput_time = None
         self.last_change_ms = None
+        self.near_max = False
         self.latest_estimated_throughput = 30000000
+        self.rtt = 200
         self.state = RateControlState.HOLD
 
     def feedback_interval(self):
@@ -68,29 +72,56 @@ class AimdRateControl:
         if bandwidth_usage == BandwidthUsage.NORMAL and self.state == RateControlState.HOLD:
             self.last_change_ms = now_ms
             self.state = RateControlState.INCREASE
-        elif (bandwidth_usage == BandwidthUsage.OVERUSING and
-              self.state != RateControlState.DECREASE):
+        elif bandwidth_usage == BandwidthUsage.OVERUSING:
             self.state = RateControlState.DECREASE
         elif bandwidth_usage == BandwidthUsage.UNDERUSING:
             self.state = RateControlState.HOLD
 
-        # update bitrate
+        # helper variables
         new_bitrate = self.current_bitrate
         if estimated_throughput is not None:
             self.latest_estimated_throughput = estimated_throughput
         else:
             estimated_throughput = self.latest_estimated_throughput
+        estimated_throughput_kbps = estimated_throughput / 1000
+
+        # update bitrate
         if self.state == RateControlState.INCREASE:
-            new_bitrate += self._multiplicative_rate_increase(
-                new_bitrate, self.last_change_ms, now_ms)
+            # if the estimated throughput increases significantly,
+            # clear estimated max throughput
+            if self.avg_max_bitrate_kbps is not None:
+                sigma_kbps = math.sqrt(self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps)
+                if estimated_throughput_kbps >= self.avg_max_bitrate_kbps + 3 * sigma_kbps:
+                    self.near_max = False
+                    self.avg_max_bitrate_kbps = None
+
+            # we use additive or multiplicative rate increase depending on whether
+            # we are close to the maximum throughput
+            if self.near_max:
+                new_bitrate += self._additive_rate_increase(self.last_change_ms, now_ms)
+            else:
+                new_bitrate += self._multiplicative_rate_increase(
+                    new_bitrate, self.last_change_ms, now_ms)
             self.last_change_ms = now_ms
         elif self.state == RateControlState.DECREASE:
+            # if the estimated throughput drops significantly,
+            # clear estimated max throughput
+            if self.avg_max_bitrate_kbps is not None:
+                sigma_kbps = math.sqrt(self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps)
+                if estimated_throughput_kbps < self.avg_max_bitrate_kbps - 3 * sigma_kbps:
+                    self.avg_max_bitrate_kbps = None
+            self._update_max_throughput_estimate(estimated_throughput_kbps)
+
+            self.near_max = True
             new_bitrate = round(0.85 * estimated_throughput)
             self.last_change_ms = now_ms
             self.state = RateControlState.HOLD
 
         self.current_bitrate = self._clamp_bitrate(new_bitrate, estimated_throughput)
         return self.current_bitrate
+
+    def _additive_rate_increase(self, last_ms, now_ms):
+        return int((now_ms - last_ms) * self._near_max_rate_increase() / 1000)
 
     def _clamp_bitrate(self, new_bitrate, estimated_throughput):
         max_bitrate = max(int(1.5 * estimated_throughput) + 10000, self.current_bitrate)
@@ -102,6 +133,29 @@ class AimdRateControl:
             elapsed_ms = min(now_ms - last_ms, 1000)
             alpha = pow(alpha, elapsed_ms / 1000)
         return int(max((alpha - 1) * new_bitrate, 1000))
+
+    def _near_max_rate_increase(self):
+        bits_per_frame = self.current_bitrate / 30
+        packets_per_frame = math.ceil(bits_per_frame / (8 * 1200))
+        avg_packet_size_bits = bits_per_frame / packets_per_frame
+
+        response_time = self.rtt + 100
+        return max(4000, int((avg_packet_size_bits * 1000) / response_time))
+
+    def _update_max_throughput_estimate(self, estimated_throughput_kbps):
+        alpha = 0.05
+        if self.avg_max_bitrate_kbps is None:
+            self.avg_max_bitrate_kbps = estimated_throughput_kbps
+        else:
+            self.avg_max_bitrate_kbps = (
+                (1 - alpha) * self.avg_max_bitrate_kbps +
+                alpha * estimated_throughput_kbps)
+
+        norm = max(1, self.avg_max_bitrate_kbps)
+        self.var_max_bitrate_kbps = (
+            (1 - alpha) * self.var_max_bitrate_kbps +
+            alpha * ((self.avg_max_bitrate_kbps - estimated_throughput_kbps) ** 2) / norm)
+        self.var_max_bitrate_kbps = max(0.4, min(self.var_max_bitrate_kbps, 2.5))
 
 
 class TimestampGroup:
