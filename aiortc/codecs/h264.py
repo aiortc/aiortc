@@ -13,6 +13,8 @@ from ..mediastreams import VideoFrame
 
 logger = logging.getLogger('codec.h264')
 
+CLOCK_RATE = 90000
+MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
 NAL_TYPE_FU_A = 28
@@ -119,10 +121,9 @@ class H264Decoder:
 
 
 class H264Encoder:
-    timestamp_increment = 3000
-
     def __init__(self):
         self.stream = None
+        self.timestamp_increment = CLOCK_RATE // MAX_FRAME_RATE
 
     @staticmethod
     def _packetize_fu_a(data):
@@ -246,7 +247,7 @@ class H264Encoder:
             # TODO: can we use CodecContext directly?
             buffer = io.BytesIO()
             self.container = av.open(buffer, format='h264', mode='w')
-            self.stream = self.container.add_stream('libx264', rate=30)
+            self.stream = self.container.add_stream('libx264', rate=MAX_FRAME_RATE)
             self.stream.width = frame.width
             self.stream.height = frame.height
             self.stream.pix_fmt = 'yuv420p'

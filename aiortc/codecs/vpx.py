@@ -6,8 +6,9 @@ from struct import pack, unpack
 from ..mediastreams import VideoFrame
 from ._vpx import ffi, lib
 
-PACKET_MAX = 1300 - 4
+CLOCK_RATE = 90000
 MAX_FRAME_RATE = 30
+PACKET_MAX = 1300 - 4
 
 
 def number_of_threads(pixels, cpus):
@@ -170,8 +171,6 @@ class Vp8Decoder:
 
 
 class Vp8Encoder:
-    timestamp_increment = 3000
-
     def __init__(self):
         self.cx = lib.vpx_codec_vp8_cx()
 
@@ -181,6 +180,7 @@ class Vp8Encoder:
         self.codec = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
         self.timestamp = 0
+        self.timestamp_increment = CLOCK_RATE // MAX_FRAME_RATE
 
     def __del__(self):
         if self.codec:
@@ -199,7 +199,7 @@ class Vp8Encoder:
         if not self.codec:
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
-            self.cfg.g_timebase.den = 90000
+            self.cfg.g_timebase.den = CLOCK_RATE
             self.cfg.g_lag_in_frames = 0
             self.cfg.g_threads = number_of_threads(frame.width * frame.height,
                                                    multiprocessing.cpu_count())
@@ -219,13 +219,13 @@ class Vp8Encoder:
             self.cfg.kf_max_dist = 600
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
-        duration = 90000 // MAX_FRAME_RATE
         flags = 0
         if force_keyframe:
             flags |= lib.VPX_EFLAG_FORCE_KF
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, self.timestamp, duration, flags, lib.VPX_DL_REALTIME))
-        self.timestamp += duration
+            self.codec, image, self.timestamp, self.timestamp_increment,
+            flags, lib.VPX_DL_REALTIME))
+        self.timestamp += self.timestamp_increment
 
         it = ffi.new('vpx_codec_iter_t *')
         payloads = []
