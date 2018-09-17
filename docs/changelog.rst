@@ -1,6 +1,37 @@
 Changelog
 =========
 
+.. currentmodule:: aiortc
+
+0.9.8
+-----
+
+*In development*
+
+Media
+.....
+
+  * Add support for sending Receiver Estimate Maximum Bitrate (REMB) feedback.
+  * Add support for parsing / serializing more RTP header extensions.
+  * Move each media encoder / decoder its one thread instead of using a
+    thread pool.
+
+0.9.7
+-----
+
+Media
+.....
+
+  * Make RemoteStreamTrack emit an "ended" event, to simplify shutting down
+    media consumers.
+  * Add RemoteStreamTrack.readyState property.
+  * Handle timestamp wraparound on sent RTP packets.
+
+Packaging
+.........
+
+  * Add a versioned dependency on cffi>=1.0.0 to fix Raspberry Pi builds.
+
 0.9.6
 -----
 
