@@ -6,8 +6,8 @@ from aiortc.rtcrtpparameters import (RTCRtpHeaderExtensionParameters,
 from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
-                        get_header_extensions, pack_packets_lost,
-                        pack_remb_fci, set_header_extensions,
+                        pack_header_extensions, pack_packets_lost,
+                        pack_remb_fci, unpack_header_extensions,
                         unpack_packets_lost, unpack_remb_fci)
 
 from .utils import load
@@ -305,43 +305,43 @@ class RtpUtilTest(TestCase):
         self.assertEqual(bitrate, 0x3ffff << 63)
         self.assertEqual(ssrcs, [2529072847])
 
-    def test_get_header_extensions(self):
+    def test_unpack_header_extensions(self):
         # none
-        self.assertEqual(get_header_extensions(0, None), [])
+        self.assertEqual(unpack_header_extensions(0, None), [])
 
         # one-byte, single value
-        self.assertEqual(get_header_extensions(0xBEDE, b'\x900\x00\x00'), [
+        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900\x00\x00'), [
             (9, b'0'),
         ])
 
         # one-byte, two values
-        self.assertEqual(get_header_extensions(0xBEDE, b'\x10\xc18sdparta_0'), [
+        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x10\xc18sdparta_0'), [
             (1, b'\xc1'),
             (3, b'sdparta_0'),
         ])
 
         # two-byte, single value
-        self.assertEqual(get_header_extensions(0x1000, b'\xff\x010\x00'), [
+        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010\x00'), [
             (255, b'0'),
         ])
 
-    def test_set_header_extensions(self):
+    def test_pack_header_extensions(self):
         # none
-        self.assertEqual(set_header_extensions([]), (0, None))
+        self.assertEqual(pack_header_extensions([]), (0, b''))
 
         # one-byte, single value
-        self.assertEqual(set_header_extensions([
+        self.assertEqual(pack_header_extensions([
             (9, b'0'),
         ]), (0xBEDE, b'\x900\x00\x00'))
 
         # one-byte, two values
-        self.assertEqual(set_header_extensions([
+        self.assertEqual(pack_header_extensions([
             (1, b'\xc1'),
             (3, b'sdparta_0'),
         ]), (0xBEDE, b'\x10\xc18sdparta_0'))
 
         # two-byte, single value
-        self.assertEqual(set_header_extensions([
+        self.assertEqual(pack_header_extensions([
             (255, b'0'),
         ]), (0x1000, b'\xff\x010\x00'))
 

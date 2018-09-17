@@ -1,7 +1,10 @@
 import os
 from struct import pack, unpack, unpack_from
+from typing import List, Tuple
 
 import attr
+
+from .rtcrtpparameters import RTCRtpParameters
 
 # reserved to avoid confusion with RTCP
 FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
@@ -43,7 +46,7 @@ class HeaderExtensionsMap:
     def __init__(self):
         self.__ids = HeaderExtensions()
 
-    def configure(self, parameters):
+    def configure(self, parameters: RTCRtpParameters):
         for ext in parameters.headerExtensions:
             if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
                 self.__ids.mid = ext.id
@@ -60,9 +63,9 @@ class HeaderExtensionsMap:
             elif ext.uri == 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01':  # noqa
                 self.__ids.transport_sequence_number = ext.id
 
-    def get(self, extension_profile, extension_value):
+    def get(self, extension_profile: int, extension_value: bytes) -> HeaderExtensions:
         values = HeaderExtensions()
-        for x_id, x_value in get_header_extensions(extension_profile, extension_value):
+        for x_id, x_value in unpack_header_extensions(extension_profile, extension_value):
             if x_id == self.__ids.mid:
                 values.mid = x_value.decode('utf8')
             elif x_id == self.__ids.repaired_rtp_stream_id:
@@ -80,7 +83,7 @@ class HeaderExtensionsMap:
                 values.transport_sequence_number = unpack('!H', x_value)[0]
         return values
 
-    def set(self, values):
+    def set(self, values: HeaderExtensions):
         extensions = []
         if values.mid is not None and self.__ids.mid:
             extensions.append((
@@ -117,7 +120,7 @@ class HeaderExtensionsMap:
                 self.__ids.transport_sequence_number,
                 pack('!H', values.transport_sequence_number)
             ))
-        return set_header_extensions(extensions)
+        return pack_header_extensions(extensions)
 
 
 def clamp_packets_lost(count):
@@ -191,14 +194,15 @@ def is_rtcp(msg):
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
-def padl(l):
+def padl(l: int) -> int:
     """
     Return amount of padding needed for a 4-byte multiple.
     """
     return 4 * ((l + 3) // 4) - l
 
 
-def get_header_extensions(extension_profile, extension_value):
+def unpack_header_extensions(extension_profile: int,
+                             extension_value: bytes) -> List[Tuple[int, bytes]]:
     """
     Parse header extensions according to RFC5285.
     """
@@ -236,12 +240,12 @@ def get_header_extensions(extension_profile, extension_value):
     return extensions
 
 
-def set_header_extensions(extensions):
+def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, bytes]:
     """
     Serialize header extensions according to RFC5285.
     """
     extension_profile = 0
-    extension_value = None
+    extension_value = b''
 
     if not extensions:
         return extension_profile, extension_value
@@ -596,7 +600,7 @@ class RtpPacket:
 
     def serialize(self, extensions_map=HeaderExtensionsMap()):
         extension_profile, extension_value = extensions_map.set(self.extensions)
-        has_extension = extension_value is not None
+        has_extension = bool(extension_value)
 
         padding = self.padding_size > 0
         data = pack(
