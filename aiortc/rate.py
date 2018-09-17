@@ -43,6 +43,14 @@ class AimdRateControl:
     def feedback_interval(self):
         return 500
 
+    def set_estimate(self, bitrate: int, now_ms: int):
+        """
+        For testing purposes.
+        """
+        self.current_bitrate = self._clamp_bitrate(bitrate, bitrate)
+        self.current_bitrate_initialized = True
+        self.last_change_ms = now_ms
+
     def update(self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int):
         if not self.current_bitrate_initialized:
             if self.first_estimated_throughput_time is None:

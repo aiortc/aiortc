@@ -2,8 +2,9 @@ from unittest import TestCase
 
 from numpy import random
 
-from aiortc.rate import (BandwidthUsage, InterArrival, OveruseDetector,
-                         OveruseEstimator, RateBucket, RateCounter)
+from aiortc.rate import (AimdRateControl, BandwidthUsage, InterArrival,
+                         OveruseDetector, OveruseEstimator, RateBucket,
+                         RateCounter)
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20
@@ -21,6 +22,57 @@ def abs_send_time(us):
 
 def rtp_timestamp(us):
     return ((us * 90 + 500) // 1000) & 0xFFFFFFFF
+
+
+class AimdRateControlTest(TestCase):
+    def setUp(self):
+        self.rate_control = AimdRateControl()
+
+    def test_update_normal(self):
+        bitrate = 300000
+        now_ms = 0
+        self.rate_control.set_estimate(bitrate, now_ms)
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, bitrate, now_ms)
+        self.assertEqual(estimate, 301000)
+
+    def test_update_normal_no_estimated_throughput(self):
+        bitrate = 300000
+        now_ms = 0
+        self.rate_control.set_estimate(bitrate, now_ms)
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, None, now_ms)
+        self.assertEqual(estimate, 301000)
+
+    def test_update_overuse(self):
+        bitrate = 300000
+        now_ms = 0
+        self.rate_control.set_estimate(bitrate, now_ms)
+        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, bitrate, now_ms)
+        self.assertEqual(estimate, 255000)
+
+    def test_update_underuse(self):
+        bitrate = 300000
+        now_ms = 0
+        self.rate_control.set_estimate(bitrate, now_ms)
+        estimate = self.rate_control.update(BandwidthUsage.UNDERUSING, bitrate, now_ms)
+        self.assertEqual(estimate, 300000)
+
+    def test_bwe_limited_by_acked_bitrate(self):
+        acked_bitrate = 10000
+        self.rate_control.set_estimate(acked_bitrate, 0)
+        for now_ms in range(0, 20000, 100):
+            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 25000)
+
+    def test_bwe_not_limited_by_decreasing_acked_bitrate(self):
+        acked_bitrate = 100000
+        self.rate_control.set_estimate(acked_bitrate, 0)
+        for now_ms in range(0, 20000, 100):
+            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        self.assertEqual(estimate, 160000)
+
+        # estimate doesn't change
+        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate // 2, now_ms)
+        self.assertEqual(estimate, 160000)
 
 
 class InterArrivalTest(TestCase):
