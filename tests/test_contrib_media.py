@@ -6,7 +6,7 @@ import cv2
 import numpy
 
 from aiortc import VideoFrame
-from aiortc.contrib.media import (AudioFileTrack, VideoFileTrack,
+from aiortc.contrib.media import (AudioFileTrack, MediaPlayer, VideoFileTrack,
                                   frame_from_bgr, frame_from_gray,
                                   frame_to_bgr)
 
@@ -68,6 +68,44 @@ class FileTrackTest(TestCase):
             self.assertEqual(len(frame.data), 460800)
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
+
+
+class MediaPlayerTest(TestCase):
+    def setUp(self):
+        self.audio_path = os.path.join(os.path.dirname(__file__), 'test.wav')
+        create_audio(self.audio_path)
+
+        self.video_path = os.path.join(os.path.dirname(__file__), 'test.avi')
+        create_video(self.video_path)
+
+    def tearDown(self):
+        os.unlink(self.audio_path)
+        os.unlink(self.video_path)
+
+    def test_audio_file(self):
+        player = MediaPlayer(path=self.audio_path)
+
+        # read all frames
+        player.play()
+        for i in range(50):
+            frame = run(player.audio.recv())
+            self.assertEqual(frame.channels, 1)
+            self.assertEqual(len(frame.data), 320)
+            self.assertEqual(frame.sample_rate, 8000)
+            self.assertEqual(frame.sample_width, 2)
+        player.stop()
+
+    def test_video_file(self):
+        player = MediaPlayer(path=self.video_path)
+
+        # read all frames
+        player.play()
+        for i in range(20):
+            frame = run(player.video.recv())
+            self.assertEqual(len(frame.data), 460800)
+            self.assertEqual(frame.width, 640)
+            self.assertEqual(frame.height, 480)
+        player.stop()
 
 
 class VideoFrameTest(TestCase):
