@@ -105,31 +105,31 @@ class AimdRateControlTest(TestCase):
         high_bitrate = 150000
         now_ms = 0
         self.rate_control.set_estimate(normal_bitrate, now_ms)
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
         now_ms += 1000
 
         # overuse
-        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
         now_ms += 1000
 
         # stable
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.NORMAL, normal_bitrate, now_ms)
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
         now_ms += 1000
 
         # large increase in throughput
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, high_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.NORMAL, high_bitrate, now_ms)
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
         now_ms += 1000
 
         # overuse
-        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, high_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.OVERUSING, high_bitrate, now_ms)
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 150.0)
         now_ms += 1000
 
         # overuse and large decrease in throughput
-        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
+        self.rate_control.update(BandwidthUsage.OVERUSING, normal_bitrate, now_ms)
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
         now_ms += 1000
 

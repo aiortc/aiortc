@@ -1,7 +1,7 @@
 from collections import OrderedDict
+from typing import List  # noqa
 
 import attr
-from typing import List  # noqa
 
 
 @attr.s
