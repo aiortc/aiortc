@@ -222,6 +222,7 @@ class RTCRtpSender:
 
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
+        loop = asyncio.get_event_loop()
 
         # start encoder thread
         encoder_queue = queue.Queue()
@@ -241,7 +242,7 @@ class RTCRtpSender:
                     break
 
                 # encode frame
-                future = asyncio.Future()
+                future = loop.create_future()
                 encoder_queue.put((codec, frame, self.__force_keyframe, future))
                 self.__force_keyframe = False
                 payloads, timestamp_increment = await future
