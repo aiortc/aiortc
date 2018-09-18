@@ -5,18 +5,9 @@ addons:
     - libavfilter-dev
     - libopus-dev
     - libvpx-dev
-after_success: coveralls
 cache: pip
 dist: xenial
-install:
-  - |
-    if [[ "$(uname -s)" == 'Darwin' ]]; then
-      brew update
-      brew upgrade python3
-      brew install ffmpeg opus libvpx
-    fi
-  - pip3 install -U setuptools
-  - pip3 install coveralls flake8 isort
+install: .travis/install
 language: python
 matrix:
   include:
@@ -27,17 +18,5 @@ matrix:
   - python: "3.7"
   - env: BUILD=sdist
     python: "3.6"
-script:
-  - |
-    if [ "$BUILD" = "sdist" ]; then
-      python3 setup.py sdist
-      if [ -n "$TRAVIS_TAG" ]; then
-        pip3 install twine
-        python3 -m twine upload --skip-existing dist/*
-      fi
-    else
-      flake8 aiortc examples tests
-      isort -c -df -rc aiortc examples tests
-      coverage run setup.py test
-    fi
+script: .travis/script
 sudo: true

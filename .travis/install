@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    brew update
+    brew upgrade python3
+    brew install ffmpeg opus libvpx
+fi
+
+pip3 install -U setuptools
+pip3 install coveralls flake8 isort
