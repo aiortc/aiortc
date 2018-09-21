@@ -10,8 +10,8 @@ from aiohttp import web
 
 from aiortc import (RTCPeerConnection, RTCSessionDescription, VideoFrame,
                     VideoStreamTrack)
-from aiortc.contrib.media import (AudioFileTrack, frame_from_bgr,
-                                  frame_from_gray, frame_to_bgr)
+from aiortc.contrib.media import (MediaPlayer, frame_from_bgr, frame_from_gray,
+                                  frame_to_bgr)
 
 ROOT = os.path.dirname(__file__)
 
@@ -128,7 +128,8 @@ async def offer(request):
     pcs.append(pc)
 
     # prepare local media
-    local_audio = AudioFileTrack(path=os.path.join(ROOT, 'demo-instruct.wav'))
+    player = MediaPlayer(path=os.path.join(ROOT, 'demo-instruct.wav'))
+    player.play()
     local_video = VideoTransformTrack(transform=params['video_transform'])
 
     @pc.on('datachannel')
@@ -142,7 +143,7 @@ async def offer(request):
         print('Track %s received' % track.kind)
 
         if track.kind == 'audio':
-            pc.addTrack(local_audio)
+            pc.addTrack(player.audio)
             task = asyncio.ensure_future(consume_audio(track))
         elif track.kind == 'video':
             pc.addTrack(local_video)
@@ -152,6 +153,7 @@ async def offer(request):
         def on_ended():
             print('Track %s ended' % track.kind)
             task.cancel()
+            player.stop()
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
