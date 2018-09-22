@@ -1,13 +1,15 @@
 addons:
   apt:
     packages:
-    - libavdevice-dev
-    - libavfilter-dev
     - libopus-dev
     - libvpx-dev
-cache: pip
+    - libx264-dev
+    - yasm
+cache:
+  directories: $HOME/.local
+  pip: true
 dist: xenial
-install: .travis/install
+install: source .travis/install
 language: python
 matrix:
   include:
@@ -17,6 +19,7 @@ matrix:
   - python: "3.6"
   - python: "3.7"
   - env: BUILD=sdist
+    install: true
     python: "3.6"
 script: .travis/script
 sudo: true

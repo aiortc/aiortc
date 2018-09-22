@@ -2,10 +2,25 @@
 
 set -e
 
+PREFIX=$HOME/.local
+
 if [ "$(uname -s)" = "Darwin" ]; then
     brew update
     brew upgrade python3
     brew install ffmpeg opus libvpx
+else
+    if [ ! -e "$PREFIX/bin/ffmpeg" ]; then
+        curl http://www.ffmpeg.org/releases/ffmpeg-3.2.12.tar.xz | tar xJ
+        cd ffmpeg-3.2.12
+        ./configure --prefix=$PREFIX \
+            --disable-static --enable-shared \
+            --enable-gpl --enable-libx264
+        make
+        make install
+        cd ..
+    fi
+    export LD_LIBRARY_PATH=$PREFIX/lib
+    export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig
 fi
 
 pip3 install -U setuptools
