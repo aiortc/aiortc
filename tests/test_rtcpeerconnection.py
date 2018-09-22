@@ -1,6 +1,6 @@
 import asyncio
 import re
-from unittest import TestCase, skip
+from unittest import TestCase
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
@@ -1002,7 +1002,6 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
-    @skip('multithreading seems to break h264 encoding')
     def test_connect_video_h264(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
