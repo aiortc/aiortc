@@ -1,13 +1,14 @@
+import asyncio
 import os
 import wave
-from unittest import TestCase
+from unittest import TestCase, skip
 
 import cv2
 import numpy
 
-from aiortc import VideoFrame
-from aiortc.contrib.media import (MediaPlayer, frame_from_bgr, frame_from_gray,
-                                  frame_to_bgr)
+from aiortc import AudioStreamTrack, VideoFrame, VideoStreamTrack
+from aiortc.contrib.media import (MediaPlayer, MediaRecorder, frame_from_bgr,
+                                  frame_from_gray, frame_to_bgr)
 
 from .utils import run
 
@@ -71,6 +72,32 @@ class MediaPlayerTest(TestCase):
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
         player.stop()
+
+
+class MediaRecorderTest(TestCase):
+    def test_audio(self):
+        recorder = MediaRecorder(path='foo.wav')
+        recorder.addTrack(AudioStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    @skip
+    def test_audio_and_video(self):
+        recorder = MediaRecorder(path='foo.mp4')
+        recorder.addTrack(AudioStreamTrack())
+        recorder.addTrack(VideoStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    @skip
+    def test_video(self):
+        recorder = MediaRecorder(path='foo.mp4')
+        recorder.addTrack(VideoStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
 
 
 class VideoFrameTest(TestCase):

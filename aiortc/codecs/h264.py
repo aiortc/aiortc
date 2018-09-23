@@ -26,14 +26,14 @@ LENGTH_FIELD_SIZE = 2
 STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
 
 
-def frame_from_avframe(avframe):
+def video_frame_from_avframe(avframe):
     return VideoFrame(
         width=avframe.width,
         height=avframe.height,
         data=b''.join(p.to_bytes() for p in avframe.planes))
 
 
-def frame_to_avframe(frame):
+def video_frame_to_avframe(frame):
     u_start = frame.width * frame.height
     v_start = 5 * u_start // 4
     av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
@@ -117,7 +117,7 @@ class H264Decoder:
             logger.warning('failed to decode, skipping package: ' + str(e))
             return []
 
-        return list(map(frame_from_avframe, frames))
+        return list(map(video_frame_from_avframe, frames))
 
 
 class H264Encoder:
@@ -257,7 +257,7 @@ class H264Encoder:
                 'tune': 'zerolatency'
             }
 
-        av_frame = frame_to_avframe(frame)
+        av_frame = video_frame_to_avframe(frame)
         packages = self.stream.encode(av_frame)
         yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
 

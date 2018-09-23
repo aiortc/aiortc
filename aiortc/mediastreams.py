@@ -47,7 +47,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
 class VideoStreamTrack(MediaStreamTrack):
     """
-    The base implementation just reads a 320x240 green frame at 30fps.
+    The base implementation just reads a 640x480 green frame at 30fps.
 
     Subclass it to provide a useful implementation.
     """
@@ -55,4 +55,4 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         await asyncio.sleep(1/30)
-        return VideoFrame(width=320, height=240, data=b'\x00' * 115200)
+        return VideoFrame(width=640, height=480)

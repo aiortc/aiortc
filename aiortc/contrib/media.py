@@ -1,4 +1,5 @@
 import asyncio
+import fractions
 import math
 import threading
 import time
@@ -7,11 +8,39 @@ import av
 import cv2
 import numpy
 
-from ..codecs.h264 import frame_from_avframe
+from ..codecs.h264 import video_frame_from_avframe, video_frame_to_avframe
 from ..mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
                             VideoStreamTrack)
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
+
+
+def audio_frame_from_avframe(av_frame):
+    """
+    Convert an av.AudioFrame to aiortc.AudioFrame.
+    """
+    return AudioFrame(
+        channels=len(av_frame.layout.channels),
+        data=av_frame.planes[0].to_bytes(),
+        sample_rate=av_frame.sample_rate)
+
+
+def audio_frame_to_avframe(frame):
+    """
+    Convert an aiortc.AudioFrame to av.AudioFrame.
+    """
+    assert frame.channels in [1, 2]
+    assert frame.sample_width in [1, 2, 4]
+
+    samples = len(frame.data) // (frame.channels * frame.sample_width)
+    av_frame = av.AudioFrame(
+        format='s%d' % (8 * frame.sample_width),
+        layout='stereo' if frame.channels == 2 else 'mono',
+        samples=samples)
+    av_frame.planes[0].update(frame.data)
+    av_frame.sample_rate = frame.sample_rate
+    av_frame.time_base = fractions.Fraction(1, frame.sample_rate)
+    return av_frame
 
 
 def frame_from_bgr(data_bgr):
@@ -63,10 +92,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 frame = audio_fifo.read(samples_per_frame)
                 if frame:
                     frame_time = frame.time
-                    frame = AudioFrame(
-                        channels=len(frame.layout.channels),
-                        data=frame.planes[0].to_bytes(),
-                        sample_rate=frame.sample_rate)
+                    frame = audio_frame_from_avframe(frame)
                     asyncio.run_coroutine_threadsafe(audio_track._queue.put(
                         (frame, frame_time)), loop)
                 else:
@@ -74,7 +100,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
         elif isinstance(frame, av.VideoFrame) and video_track:
             if video_track._queue.qsize() < 30:
                 frame_time = frame.time
-                frame = frame_from_avframe(frame)
+                frame = video_frame_from_avframe(frame)
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(
                     (frame, frame_time)), loop)
 
@@ -188,3 +214,66 @@ class MediaPlayer:
             self.__audio.stop()
         if self.__video:
             self.__video.stop()
+
+
+class MediaRecorder:
+    def __init__(self, path):
+        self.__container = av.open(file=path, mode='w')
+
+        self.__audio_stream = None
+        self.__audio_task = None
+        self.__audio_track = None
+
+        self.__video_stream = None
+        self.__video_task = None
+        self.__video_track = None
+
+    def addTrack(self, track):
+        if track.kind == 'audio':
+            if self.__container.format.name == 'wav':
+                codec_name = 'pcm_s16le'
+            else:
+                codec_name = 'aac'
+            self.__audio_stream = self.__container.add_stream(codec_name)
+            self.__audio_track = track
+        else:
+            self.__video_stream = self.__container.add_stream('h264')
+            self.__video_track = track
+
+    def start(self):
+        if self.__audio_track:
+            self.__audio_task = asyncio.ensure_future(self.__run_audio())
+        if self.__video_track:
+            self.__video_task = asyncio.ensure_future(self.__run_video())
+
+    def stop(self):
+        if self.__audio_task:
+            self.__audio_task.cancel()
+            self.__audio_task = None
+            for packet in self.__audio_stream.encode(None):
+                self.__container.mux(packet)
+
+        if self.__video_task:
+            self.__video_task.cancel()
+            self.__video_task = None
+
+        if self.__container:
+            self.__container.close()
+            self.__container = None
+
+    async def __run_audio(self):
+        pts = 0
+        while True:
+            frame = await self.__audio_track.recv()
+            avframe = audio_frame_to_avframe(frame)
+            avframe.pts = pts
+            pts += avframe.samples
+            for packet in self.__audio_stream.encode(avframe):
+                self.__container.mux(packet)
+
+    async def __run_video(self):
+        while True:
+            frame = await self.__video_track.recv()
+            avframe = video_frame_to_avframe(frame)
+            for packet in self.__video_stream.encode(avframe):
+                self.__container.mux(packet)
