@@ -9,11 +9,10 @@ from av import AVError
 from av.codec.context import CodecContext
 from av.packet import Packet
 
-from ..mediastreams import VideoFrame
+from ..mediastreams import VIDEO_CLOCKRATE, VideoFrame
 
 logger = logging.getLogger('codec.h264')
 
-CLOCK_RATE = 90000
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
@@ -126,7 +125,7 @@ class H264Decoder:
 class H264Encoder:
     def __init__(self):
         self.stream = None
-        self.timestamp_increment = CLOCK_RATE // MAX_FRAME_RATE
+        self.timestamp_increment = VIDEO_CLOCKRATE // MAX_FRAME_RATE
 
     @staticmethod
     def _packetize_fu_a(data):

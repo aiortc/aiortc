@@ -10,43 +10,48 @@ from aiortc import RTCPeerConnection, VideoStreamTrack
 from aiortc.contrib.media import video_frame_from_bgr, video_frame_to_bgr
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
-BLUE = (255, 0, 0)
-GREEN = (0, 255, 0)
-RED = (0, 0, 255)
-
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output.png')
 
 
-class ColorVideoStreamTrack(VideoStreamTrack):
-    def __init__(self, width, height, color):
-        data_bgr = numpy.zeros((height, width, 3), numpy.uint8)
-        data_bgr[:, :] = color
-        self.frame = video_frame_from_bgr(data_bgr)
+async def consume_video(track):
+    while True:
+        frame = await track.recv()
+        data_bgr = video_frame_to_bgr(frame)
+        cv2.imwrite(OUTPUT_PATH, data_bgr)
+
+
+def create_rectangle(color):
+    data_bgr = numpy.zeros((480, 240, 3), numpy.uint8)
+    data_bgr[:, :] = color
+    return data_bgr
+
+
+class FlagVideoStreamTrack(VideoStreamTrack):
+    def __init__(self):
+        self.data_bgr = numpy.hstack([
+            create_rectangle((255, 0, 0)),      # blue
+            create_rectangle((255, 255, 255)),  # white
+            create_rectangle((0, 0, 255)),      # red
+        ])
 
     async def recv(self):
-        return self.frame
-
-
-class CombinedVideoStreamTrack(VideoStreamTrack):
-    def __init__(self, tracks):
-        self.tracks = tracks
-
-    async def recv(self):
-        coros = [track.recv() for track in self.tracks]
-        frames = await asyncio.gather(*coros)
-        data_bgrs = [video_frame_to_bgr(frame) for frame in frames]
-        data_bgr = numpy.hstack(data_bgrs)
-        return video_frame_from_bgr(data_bgr)
+        timestamp = await self.next_timestamp()
+        return video_frame_from_bgr(self.data_bgr, timestamp=timestamp)
 
 
 async def run_answer(pc, signaling):
-    remote_track = None
+    done = asyncio.Event()
 
     @pc.on('track')
     def on_track(track):
-        nonlocal remote_track
+        print('Receiving video')
         assert track.kind == 'video'
-        remote_track = track
+        task = asyncio.ensure_future(consume_video(track))
+
+        @track.on('ended')
+        def on_ended():
+            task.cancel()
+            done.set()
 
     # receive offer
     offer = await signaling.receive()
@@ -56,29 +61,13 @@ async def run_answer(pc, signaling):
     await pc.setLocalDescription(await pc.createAnswer())
     await signaling.send(pc.localDescription)
 
-    print('Receiving video')
-    while True:
-        done, pending = await asyncio.wait([remote_track.recv()], timeout=5)
-        for task in pending:
-            task.cancel()
-        if done:
-            frame = list(done)[0].result()
-            data_bgr = video_frame_to_bgr(frame)
-            cv2.imwrite(OUTPUT_PATH, data_bgr)
-        else:
-            print('No video for 5s, stopping')
-            break
+    # wait for completion
+    await done.wait()
 
 
 async def run_offer(pc, signaling):
     # add video track
-    width = 320
-    height = 240
-    local_video = CombinedVideoStreamTrack(tracks=[
-        ColorVideoStreamTrack(width=width, height=height, color=BLUE),
-        ColorVideoStreamTrack(width=width, height=height, color=GREEN),
-        ColorVideoStreamTrack(width=width, height=height, color=RED),
-    ])
+    local_video = FlagVideoStreamTrack()
     pc.addTrack(local_video)
 
     # send offer

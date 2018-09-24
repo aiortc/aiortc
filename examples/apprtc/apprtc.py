@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import random
-import time
 
 import aiohttp
 import cv2
@@ -17,7 +16,6 @@ from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
 PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
-VIDEO_PTIME = 1 / 30
 
 
 def description_to_dict(description):
@@ -52,22 +50,16 @@ class VideoImageTrack(VideoStreamTrack):
     def __init__(self):
         self.counter = 0
         self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
-        self.last = None
 
     async def recv(self):
+        timestamp = await self.next_timestamp()
+
         # rotate image
         rows, cols, _ = self.img.shape
         M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter / 2, 1)
         rotated = cv2.warpAffine(self.img, M, (cols, rows))
-        frame = video_frame_from_bgr(rotated, timestamp=self.counter * 3000)
+        frame = video_frame_from_bgr(rotated, timestamp=timestamp)
         self.counter += 1
-
-        # sleep
-        if self.last:
-            delta = self.last + VIDEO_PTIME - time.time()
-            if delta > 0:
-                await asyncio.sleep(delta)
-        self.last = time.time()
 
         return frame
 

@@ -3,9 +3,9 @@ import math
 
 from pyee import EventEmitter
 
-from .utils import uint32_add
-
 AUDIO_PTIME = 0.020  # 20ms audio packetization
+VIDEO_CLOCKRATE = 90000
+VIDEO_PTIME = 1 / 30  # 30fps
 
 
 class AudioFrame:
@@ -47,10 +47,18 @@ class AudioStreamTrack(MediaStreamTrack):
     kind = 'audio'
 
     async def recv(self):
+        sample_rate = 8000
+        samples = int(AUDIO_PTIME * sample_rate)
+
         timestamp = getattr(self, '_timestamp', 0)
-        self._timestamp = uint32_add(timestamp, 160)
+        self._timestamp = timestamp + samples
         await asyncio.sleep(AUDIO_PTIME)
-        return AudioFrame(channels=1, data=b'\x00\x00' * 160, sample_rate=8000, timestamp=timestamp)
+
+        return AudioFrame(
+            channels=1,
+            data=b'\x00\x00' * samples,
+            sample_rate=sample_rate,
+            timestamp=timestamp)
 
 
 class VideoStreamTrack(MediaStreamTrack):
@@ -61,8 +69,14 @@ class VideoStreamTrack(MediaStreamTrack):
     """
     kind = 'video'
 
+    async def next_timestamp(self):
+        if hasattr(self, '_timestamp'):
+            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCKRATE)
+            await asyncio.sleep(VIDEO_PTIME)
+        else:
+            self._timestamp = 0
+        return self._timestamp
+
     async def recv(self):
-        timestamp = getattr(self, '_timestamp', 0)
-        self._timestamp = uint32_add(timestamp, 3000)
-        await asyncio.sleep(1/30)
+        timestamp = await self.next_timestamp()
         return VideoFrame(width=640, height=480, timestamp=timestamp)

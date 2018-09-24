@@ -3,10 +3,9 @@ import multiprocessing
 import random
 from struct import pack, unpack
 
-from ..mediastreams import VideoFrame
+from ..mediastreams import VIDEO_CLOCKRATE, VideoFrame
 from ._vpx import ffi, lib
 
-CLOCK_RATE = 90000
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300 - 4
 
@@ -185,7 +184,7 @@ class Vp8Encoder:
         self.codec = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
         self.timestamp = 0
-        self.timestamp_increment = CLOCK_RATE // MAX_FRAME_RATE
+        self.timestamp_increment = VIDEO_CLOCKRATE // MAX_FRAME_RATE
 
     def __del__(self):
         if self.codec:
@@ -204,7 +203,7 @@ class Vp8Encoder:
         if not self.codec:
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
-            self.cfg.g_timebase.den = CLOCK_RATE
+            self.cfg.g_timebase.den = VIDEO_CLOCKRATE
             self.cfg.g_lag_in_frames = 0
             self.cfg.g_threads = number_of_threads(frame.width * frame.height,
                                                    multiprocessing.cpu_count())
