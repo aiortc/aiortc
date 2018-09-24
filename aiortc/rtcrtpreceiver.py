@@ -36,7 +36,7 @@ def decoder_worker(loop, input_q, output_q):
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame.data):
+        for frame in decoder.decode(encoded_frame):
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
     if decoder is not None:

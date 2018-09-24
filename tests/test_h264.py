@@ -4,6 +4,7 @@ from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
+from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
@@ -55,7 +56,7 @@ class H264Test(CodecTestCase):
 
         # decode junk
         with redirect_stderr(io.StringIO()):
-            frames = decoder.decode(b'123')
+            frames = decoder.decode(JitterFrame(data=b'123', timestamp=0))
         self.assertEqual(frames, [])
 
     def test_encoder(self):

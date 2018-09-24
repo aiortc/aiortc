@@ -1,6 +1,7 @@
 from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
 from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
                                 PcmuEncoder)
+from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import AudioFrame
 
 from .codecs import CodecTestCase
@@ -11,7 +12,7 @@ class PcmaTest(CodecTestCase):
         decoder = get_decoder(PCMA_CODEC)
         self.assertTrue(isinstance(decoder, PcmaDecoder))
 
-        frames = decoder.decode(b'\xd5' * 160)
+        frames = decoder.decode(JitterFrame(data=b'\xd5' * 160, timestamp=0))
         self.assertEqual(len(frames), 1)
         frame = frames[0]
         self.assertEqual(frame.channels, 1)
@@ -60,7 +61,7 @@ class PcmuTest(CodecTestCase):
         decoder = get_decoder(PCMU_CODEC)
         self.assertTrue(isinstance(decoder, PcmuDecoder))
 
-        frames = decoder.decode(b'\xff' * 160)
+        frames = decoder.decode(JitterFrame(data=b'\xff' * 160, timestamp=0))
         self.assertEqual(len(frames), 1)
         frame = frames[0]
         self.assertEqual(frame.channels, 1)

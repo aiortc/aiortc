@@ -140,9 +140,10 @@ class Vp8Decoder:
     def __del__(self):
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, data):
+    def decode(self, encoded_frame):
         frames = []
-        result = lib.vpx_codec_decode(self.codec, data, len(data), ffi.NULL, lib.VPX_DL_REALTIME)
+        result = lib.vpx_codec_decode(self.codec, encoded_frame.data, len(encoded_frame.data),
+                                      ffi.NULL, lib.VPX_DL_REALTIME)
         if result == lib.VPX_CODEC_OK:
             it = ffi.new('vpx_codec_iter_t *')
             while True:

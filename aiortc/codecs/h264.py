@@ -109,9 +109,9 @@ class H264Decoder:
     def __init__(self):
         self.codec = CodecContext.create('h264', 'r')
 
-    def decode(self, data):
+    def decode(self, encoded_frame):
         try:
-            packet = Packet(data)
+            packet = Packet(encoded_frame.data)
             frames = self.codec.decode(packet)
         except AVError as e:
             logger.warning('failed to decode, skipping package: ' + str(e))

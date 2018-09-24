@@ -2,6 +2,7 @@ from unittest import TestCase
 
 from aiortc import AudioFrame, VideoFrame
 from aiortc.codecs import depayload, get_decoder, get_encoder
+from aiortc.jitterbuffer import JitterFrame
 
 AUDIO_PTIME = 0.020
 
@@ -23,7 +24,7 @@ class CodecTestCase(TestCase):
         data = encoder.encode(frame)
 
         # decode
-        frames = decoder.decode(data)
+        frames = decoder.decode(JitterFrame(data=data, timestamp=0))
         self.assertEqual(len(frames), 1)
         self.assertEqual(len(frames[0].data),
                          output_sample_rate * AUDIO_PTIME * output_channels * 2)
@@ -48,7 +49,7 @@ class CodecTestCase(TestCase):
             data += depayload(codec, package)
 
         # decode
-        frames = decoder.decode(data)
+        frames = decoder.decode(JitterFrame(data=data, timestamp=0))
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].width, width)
         self.assertEqual(frames[0].height, height)

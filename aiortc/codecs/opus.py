@@ -21,8 +21,8 @@ class OpusDecoder:
     def __del__(self):
         lib.opus_decoder_destroy(self.decoder)
 
-    def decode(self, data):
-        length = lib.opus_decode(self.decoder, data, len(data),
+    def decode(self, encoded_frame):
+        length = lib.opus_decode(self.decoder, encoded_frame.data, len(encoded_frame.data),
                                  ffi.cast('int16_t *', self.cdata), FRAME_SIZE, 0)
         assert length == FRAME_SIZE
 

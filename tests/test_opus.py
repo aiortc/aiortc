@@ -1,5 +1,6 @@
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.opus import OpusDecoder, OpusEncoder
+from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
@@ -13,7 +14,7 @@ class OpusTest(CodecTestCase):
         decoder = get_decoder(OPUS_CODEC)
         self.assertTrue(isinstance(decoder, OpusDecoder))
 
-        frames = decoder.decode(b'\xfc\xff\xfe')
+        frames = decoder.decode(JitterFrame(data=b'\xfc\xff\xfe', timestamp=0))
         self.assertEqual(len(frames), 1)
         frame = frames[0]
         self.assertEqual(frame.channels, 2)
