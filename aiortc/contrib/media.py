@@ -70,8 +70,12 @@ def frame_to_bgr(frame):
 def player_worker(loop, container, audio_track, video_track, quit_event):
     audio_fifo = av.audio.fifo.AudioFifo()
     audio_format = av.audio.format.AudioFormat('s16')
+    audio_sample_rate = 48000
+    audio_samples = 0
+    audio_samples_per_frame = int(audio_sample_rate * AUDIO_PTIME)
     audio_resampler = av.audio.resampler.AudioResampler(
-        format=audio_format)
+        format=audio_format,
+        rate=audio_sample_rate)
 
     frame_time = None
     start_time = time.time()
@@ -90,13 +94,18 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
             time.sleep(0.1)
 
         if isinstance(frame, av.AudioFrame) and audio_track:
-            frame_time = frame.time
-            if frame.format != audio_format:
+            if frame.format != audio_format or frame.sample_rate != audio_sample_rate:
+                frame.pts = None
                 frame = audio_resampler.resample(frame)
-            samples_per_frame = int(frame.sample_rate * AUDIO_PTIME)
+
+            # fix timestamps
+            frame.pts = audio_samples
+            frame.time_base = fractions.Fraction(1, audio_sample_rate)
+            audio_samples += frame.samples
+
             audio_fifo.write(frame)
             while True:
-                frame = audio_fifo.read(samples_per_frame)
+                frame = audio_fifo.read(audio_samples_per_frame)
                 if frame:
                     frame_time = frame.time
                     frame = audio_frame_from_avframe(frame)

@@ -19,7 +19,7 @@ def create_audio(path, channels=1, sample_rate=8000, sample_width=2):
     writer.setframerate(sample_rate)
     writer.setsampwidth(sample_width)
 
-    writer.writeframes(b'\x00\x00' * sample_rate)
+    writer.writeframes(b'\x00' * sample_rate * sample_width * channels)
     writer.close()
 
 
@@ -48,7 +48,21 @@ class MediaPlayerTest(TestCase):
         os.unlink(self.audio_path)
         os.unlink(self.video_path)
 
-    def test_audio_file(self):
+    def test_audio_file_8kHz(self):
+        player = MediaPlayer(path=self.audio_path)
+
+        # read all frames
+        player.play()
+        for i in range(49):
+            frame = run(player.audio.recv())
+            self.assertEqual(frame.channels, 1)
+            self.assertEqual(len(frame.data), 1920)
+            self.assertEqual(frame.sample_rate, 48000)
+            self.assertEqual(frame.sample_width, 2)
+        player.stop()
+
+    def test_audio_file_48kHz(self):
+        create_audio(self.audio_path, sample_rate=48000)
         player = MediaPlayer(path=self.audio_path)
 
         # read all frames
@@ -56,8 +70,8 @@ class MediaPlayerTest(TestCase):
         for i in range(50):
             frame = run(player.audio.recv())
             self.assertEqual(frame.channels, 1)
-            self.assertEqual(len(frame.data), 320)
-            self.assertEqual(frame.sample_rate, 8000)
+            self.assertEqual(len(frame.data), 1920)
+            self.assertEqual(frame.sample_rate, 48000)
             self.assertEqual(frame.sample_width, 2)
         player.stop()
 
