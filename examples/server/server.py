@@ -10,8 +10,8 @@ from aiohttp import web
 
 from aiortc import (RTCPeerConnection, RTCSessionDescription, VideoFrame,
                     VideoStreamTrack)
-from aiortc.contrib.media import (MediaPlayer, frame_from_bgr, frame_from_gray,
-                                  frame_to_bgr)
+from aiortc.contrib.media import (MediaPlayer, video_frame_from_bgr,
+                                  video_frame_from_gray, video_frame_to_bgr)
 
 ROOT = os.path.dirname(__file__)
 
@@ -29,15 +29,15 @@ class VideoTransformTrack(VideoStreamTrack):
         if (self.counter % 100) > 50:
             # apply image processing to frame
             if self.transform == 'edges':
-                img = frame_to_bgr(frame)
+                img = video_frame_to_bgr(frame)
                 edges = cv2.Canny(img, 100, 200)
-                return frame_from_gray(edges, timestamp=frame.timestamp)
+                return video_frame_from_gray(edges, timestamp=frame.timestamp)
             elif self.transform == 'rotate':
-                img = frame_to_bgr(frame)
+                img = video_frame_to_bgr(frame)
                 rows, cols, _ = img.shape
                 M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 7.2, 1)
                 rotated = cv2.warpAffine(img, M, (cols, rows))
-                return frame_from_bgr(rotated, timestamp=frame.timestamp)
+                return video_frame_from_bgr(rotated, timestamp=frame.timestamp)
             elif self.transform == 'green':
                 return VideoFrame(width=frame.width, height=frame.height, timestamp=frame.timestamp)
             else:
@@ -96,7 +96,7 @@ async def consume_video(track, local_video):
                 if writer is None:
                     fourcc = cv2.VideoWriter_fourcc(*'XVID')
                     writer = cv2.VideoWriter(args.write_video, fourcc, 30, frame_size)
-                writer.write(frame_to_bgr(frame))
+                writer.write(video_frame_to_bgr(frame))
 
             # we are only interested in the latest frame
             if local_video.received.full():

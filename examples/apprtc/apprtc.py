@@ -12,7 +12,7 @@ import websockets
 
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
-from aiortc.contrib.media import frame_from_bgr
+from aiortc.contrib.media import video_frame_from_bgr
 from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
@@ -59,7 +59,7 @@ class VideoImageTrack(VideoStreamTrack):
         rows, cols, _ = self.img.shape
         M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter / 2, 1)
         rotated = cv2.warpAffine(self.img, M, (cols, rows))
-        frame = frame_from_bgr(rotated)
+        frame = video_frame_from_bgr(rotated, timestamp=self.counter * 3000)
         self.counter += 1
 
         # sleep

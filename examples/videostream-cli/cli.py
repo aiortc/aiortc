@@ -7,7 +7,7 @@ import cv2
 import numpy
 
 from aiortc import RTCPeerConnection, VideoStreamTrack
-from aiortc.contrib.media import frame_from_bgr, frame_to_bgr
+from aiortc.contrib.media import video_frame_from_bgr, video_frame_to_bgr
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 BLUE = (255, 0, 0)
@@ -21,7 +21,7 @@ class ColorVideoStreamTrack(VideoStreamTrack):
     def __init__(self, width, height, color):
         data_bgr = numpy.zeros((height, width, 3), numpy.uint8)
         data_bgr[:, :] = color
-        self.frame = frame_from_bgr(data_bgr)
+        self.frame = video_frame_from_bgr(data_bgr)
 
     async def recv(self):
         return self.frame
@@ -34,9 +34,9 @@ class CombinedVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         coros = [track.recv() for track in self.tracks]
         frames = await asyncio.gather(*coros)
-        data_bgrs = [frame_to_bgr(frame) for frame in frames]
+        data_bgrs = [video_frame_to_bgr(frame) for frame in frames]
         data_bgr = numpy.hstack(data_bgrs)
-        return frame_from_bgr(data_bgr)
+        return video_frame_from_bgr(data_bgr)
 
 
 async def run_answer(pc, signaling):
@@ -63,7 +63,7 @@ async def run_answer(pc, signaling):
             task.cancel()
         if done:
             frame = list(done)[0].result()
-            data_bgr = frame_to_bgr(frame)
+            data_bgr = video_frame_to_bgr(frame)
             cv2.imwrite(OUTPUT_PATH, data_bgr)
         else:
             print('No video for 5s, stopping')
