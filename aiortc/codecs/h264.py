@@ -27,6 +27,8 @@ STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
 
 
 def video_frame_from_avframe(avframe):
+    if str(avframe.format) != 'yuv420p':
+        avframe = avframe.reformat(format='yuv420p')
     return VideoFrame(
         width=avframe.width,
         height=avframe.height,

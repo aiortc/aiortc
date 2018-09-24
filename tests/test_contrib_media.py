@@ -3,12 +3,14 @@ import os
 import wave
 from unittest import TestCase, skip
 
+import av
 import cv2
 import numpy
 
 from aiortc import AudioStreamTrack, VideoFrame, VideoStreamTrack
 from aiortc.contrib.media import (MediaPlayer, MediaRecorder, frame_from_bgr,
-                                  frame_from_gray, frame_to_bgr)
+                                  frame_from_gray, frame_to_bgr,
+                                  video_frame_from_avframe)
 
 from .utils import run
 
@@ -130,6 +132,18 @@ class VideoFrameTest(TestCase):
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
         self.assertEqual(frame.timestamp, 123)
+
+    def test_video_frame_from_avframe_rgb32(self):
+        avframe = av.VideoFrame(width=640, height=480, format='rgb32')
+        frame = video_frame_from_avframe(avframe)
+        self.assertEqual(frame.width, 640)
+        self.assertEqual(frame.height, 480)
+
+    def test_video_frame_from_avframe_yuv420p(self):
+        avframe = av.VideoFrame(width=640, height=480, format='yuv420p')
+        frame = video_frame_from_avframe(avframe)
+        self.assertEqual(frame.width, 640)
+        self.assertEqual(frame.height, 480)
 
     def test_frame_to_bgr(self):
         frame = VideoFrame(width=640, height=480, timestamp=123)
