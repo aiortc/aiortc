@@ -9,10 +9,8 @@ import cv2
 import numpy
 
 from ..codecs.h264 import video_frame_from_avframe, video_frame_to_avframe
-from ..mediastreams import (AudioFrame, AudioStreamTrack, VideoFrame,
-                            VideoStreamTrack)
-
-AUDIO_PTIME = 0.020  # 20ms audio packetization
+from ..mediastreams import (AUDIO_PTIME, AudioFrame, AudioStreamTrack,
+                            VideoFrame, VideoStreamTrack)
 
 
 def audio_frame_from_avframe(av_frame):
@@ -22,7 +20,8 @@ def audio_frame_from_avframe(av_frame):
     return AudioFrame(
         channels=len(av_frame.layout.channels),
         data=av_frame.planes[0].to_bytes(),
-        sample_rate=av_frame.sample_rate)
+        sample_rate=av_frame.sample_rate,
+        timestamp=av_frame.pts)
 
 
 def audio_frame_to_avframe(frame):
@@ -43,15 +42,23 @@ def audio_frame_to_avframe(frame):
     return av_frame
 
 
-def frame_from_bgr(data_bgr):
+def frame_from_bgr(data_bgr, timestamp):
     data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_I420)
-    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
+    return VideoFrame(
+        width=data_bgr.shape[1],
+        height=data_bgr.shape[0],
+        timestamp=timestamp,
+        data=data_yuv.tobytes())
 
 
-def frame_from_gray(data_gray):
+def frame_from_gray(data_gray, timestamp):
     data_bgr = cv2.cvtColor(data_gray, cv2.COLOR_GRAY2BGR)
     data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_I420)
-    return VideoFrame(width=data_bgr.shape[1], height=data_bgr.shape[0], data=data_yuv.tobytes())
+    return VideoFrame(
+        width=data_bgr.shape[1],
+        height=data_bgr.shape[0],
+        timestamp=timestamp,
+        data=data_yuv.tobytes())
 
 
 def frame_to_bgr(frame):
@@ -237,7 +244,7 @@ class MediaRecorder:
             self.__audio_stream = self.__container.add_stream(codec_name)
             self.__audio_track = track
         else:
-            self.__video_stream = self.__container.add_stream('h264')
+            self.__video_stream = self.__container.add_stream('h264', rate=30)
             self.__video_track = track
 
     def start(self):
@@ -262,12 +269,9 @@ class MediaRecorder:
             self.__container = None
 
     async def __run_audio(self):
-        pts = 0
         while True:
             frame = await self.__audio_track.recv()
             avframe = audio_frame_to_avframe(frame)
-            avframe.pts = pts
-            pts += avframe.samples
             for packet in self.__audio_stream.encode(avframe):
                 self.__container.mux(packet)
 

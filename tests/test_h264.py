@@ -63,7 +63,7 @@ class H264Test(CodecTestCase):
         encoder = get_encoder(H264_CODEC)
         self.assertTrue(isinstance(encoder, H264Encoder))
 
-        frame = VideoFrame(width=640, height=480)
+        frame = VideoFrame(width=640, height=480, timestamp=0)
         packages = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
@@ -114,7 +114,7 @@ class H264Test(CodecTestCase):
     def test_frame_encoder(self):
         encoder = get_encoder(H264_CODEC)
 
-        frame = VideoFrame(width=640, height=480)
+        frame = VideoFrame(width=640, height=480, timestamp=0)
         packages = list(encoder._encode_frame(frame, False))
 
         self.assertGreaterEqual(len(packages), 3)
@@ -125,11 +125,11 @@ class H264Test(CodecTestCase):
             5,  # IDR (aka key frame)
         })
 
-        frame = VideoFrame(width=640, height=480)
+        frame = VideoFrame(width=640, height=480, timestamp=3000)
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)
 
         # change resolution
-        frame = VideoFrame(width=320, height=240)
+        frame = VideoFrame(width=320, height=240, timestamp=6000)
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)

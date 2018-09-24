@@ -166,7 +166,11 @@ class Vp8Decoder:
                         i_pos += i_stride
                         o_pos += o_stride
 
-                frames.append(VideoFrame(width=img.d_w, height=img.d_h, data=bytes(o_buf)))
+                frames.append(VideoFrame(
+                    width=img.d_w,
+                    height=img.d_h,
+                    timestamp=encoded_frame.timestamp,
+                    data=bytes(o_buf)))
 
         return frames
 

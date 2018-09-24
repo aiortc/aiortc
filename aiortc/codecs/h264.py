@@ -30,7 +30,8 @@ def video_frame_from_avframe(avframe):
     return VideoFrame(
         width=avframe.width,
         height=avframe.height,
-        data=b''.join(p.to_bytes() for p in avframe.planes))
+        data=b''.join(p.to_bytes() for p in avframe.planes),
+        timestamp=avframe.pts)
 
 
 def video_frame_to_avframe(frame):

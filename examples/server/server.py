@@ -31,15 +31,15 @@ class VideoTransformTrack(VideoStreamTrack):
             if self.transform == 'edges':
                 img = frame_to_bgr(frame)
                 edges = cv2.Canny(img, 100, 200)
-                return frame_from_gray(edges)
+                return frame_from_gray(edges, timestamp=frame.timestamp)
             elif self.transform == 'rotate':
                 img = frame_to_bgr(frame)
                 rows, cols, _ = img.shape
                 M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 7.2, 1)
                 rotated = cv2.warpAffine(img, M, (cols, rows))
-                return frame_from_bgr(rotated)
+                return frame_from_bgr(rotated, timestamp=frame.timestamp)
             elif self.transform == 'green':
-                return VideoFrame(width=frame.width, height=frame.height)
+                return VideoFrame(width=frame.width, height=frame.height, timestamp=frame.timestamp)
             else:
                 return frame
         else:

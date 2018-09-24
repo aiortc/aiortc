@@ -103,19 +103,21 @@ class MediaRecorderTest(TestCase):
 class VideoFrameTest(TestCase):
     def test_frame_from_bgr(self):
         image = numpy.full((480, 640, 3), (0, 0, 0), numpy.uint8)
-        frame = frame_from_bgr(image)
+        frame = frame_from_bgr(image, timestamp=123)
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
+        self.assertEqual(frame.timestamp, 123)
 
     def test_frame_from_gray(self):
         image = numpy.full((480, 640), 0, numpy.uint8)
-        frame = frame_from_gray(image)
+        frame = frame_from_gray(image, timestamp=123)
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
+        self.assertEqual(frame.timestamp, 123)
 
     def test_frame_to_bgr(self):
-        frame = VideoFrame(width=640, height=480)
+        frame = VideoFrame(width=640, height=480, timestamp=123)
         image = frame_to_bgr(frame)
         self.assertEqual(image.shape, (480, 640, 3))
