@@ -29,7 +29,8 @@ class OpusDecoder:
         return [AudioFrame(
             channels=CHANNELS,
             data=self.buffer[:],
-            sample_rate=SAMPLE_RATE)]
+            sample_rate=SAMPLE_RATE,
+            timestamp=encoded_frame.timestamp)]
 
 
 class OpusEncoder:

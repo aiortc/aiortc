@@ -8,11 +8,12 @@ class AudioFrame:
     """
     Audio frame, 16-bit PCM.
     """
-    def __init__(self, channels, data, sample_rate):
+    def __init__(self, channels, data, sample_rate, timestamp=None):
         self.channels = channels
         self.data = data
         self.sample_rate = sample_rate
         self.sample_width = 2
+        self.timestamp = timestamp
 
 
 class VideoFrame:
@@ -41,8 +42,10 @@ class AudioStreamTrack(MediaStreamTrack):
     kind = 'audio'
 
     async def recv(self):
+        timestamp = getattr(self, '_timestamp', 0)
+        self._timestamp = timestamp + 160
         await asyncio.sleep(0.02)
-        return AudioFrame(channels=1, data=b'\x00\x00' * 160, sample_rate=8000)
+        return AudioFrame(channels=1, data=b'\x00\x00' * 160, sample_rate=8000, timestamp=timestamp)
 
 
 class VideoStreamTrack(MediaStreamTrack):

@@ -30,7 +30,8 @@ class PcmaDecoder:
         return [AudioFrame(
             channels=1,
             data=audioop.alaw2lin(encoded_frame.data, 2),
-            sample_rate=8000)]
+            sample_rate=8000,
+            timestamp=encoded_frame.timestamp)]
 
 
 class PcmaEncoder:
@@ -45,7 +46,8 @@ class PcmuDecoder:
         return [AudioFrame(
             channels=1,
             data=audioop.ulaw2lin(encoded_frame.data, 2),
-            sample_rate=8000)]
+            sample_rate=8000,
+            timestamp=encoded_frame.timestamp)]
 
 
 class PcmuEncoder:

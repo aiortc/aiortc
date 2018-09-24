@@ -20,6 +20,7 @@ class OpusTest(CodecTestCase):
         self.assertEqual(frame.channels, 2)
         self.assertEqual(frame.data, b'\x00' * 4 * 960)
         self.assertEqual(frame.sample_rate, 48000)
+        self.assertEqual(frame.timestamp, 0)
 
     def test_encoder_mono_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
@@ -28,7 +29,8 @@ class OpusTest(CodecTestCase):
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xfc\xff\xfe')
 
@@ -39,7 +41,8 @@ class OpusTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xfc\xff\xfe')
 
@@ -50,7 +53,8 @@ class OpusTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,
-            sample_rate=48000)
+            sample_rate=48000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xfc\xff\xfe')
 

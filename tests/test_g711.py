@@ -18,6 +18,7 @@ class PcmaTest(CodecTestCase):
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x08\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)
+        self.assertEqual(frame.timestamp, 0)
 
     def test_encoder_mono_8hz(self):
         encoder = get_encoder(PCMA_CODEC)
@@ -26,7 +27,8 @@ class PcmaTest(CodecTestCase):
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xd5' * 160)
 
@@ -37,7 +39,8 @@ class PcmaTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xd5' * 160)
 
@@ -48,7 +51,8 @@ class PcmaTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,
-            sample_rate=48000)
+            sample_rate=48000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xd5' * 160)
 
@@ -67,6 +71,7 @@ class PcmuTest(CodecTestCase):
         self.assertEqual(frame.channels, 1)
         self.assertEqual(frame.data, b'\x00\x00' * 160)
         self.assertEqual(frame.sample_rate, 8000)
+        self.assertEqual(frame.timestamp, 0)
 
     def test_encoder_mono_8hz(self):
         encoder = get_encoder(PCMU_CODEC)
@@ -75,7 +80,8 @@ class PcmuTest(CodecTestCase):
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xff' * 160)
 
@@ -86,7 +92,8 @@ class PcmuTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
-            sample_rate=8000)
+            sample_rate=8000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xff' * 160)
 
@@ -97,7 +104,8 @@ class PcmuTest(CodecTestCase):
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,
-            sample_rate=48000)
+            sample_rate=48000,
+            timestamp=0)
         data = encoder.encode(frame)
         self.assertEqual(data, b'\xff' * 160)
 
