@@ -3,25 +3,17 @@ import asyncio
 import logging
 import os
 
-import cv2
 import numpy
 
 from aiortc import RTCPeerConnection, VideoStreamTrack
-from aiortc.contrib.media import video_frame_from_bgr, video_frame_to_bgr
+from aiortc.contrib.media import MediaRecorder, video_frame_from_bgr
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output.png')
+OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output-%3d.jpg')
 
 
-async def consume_video(track):
-    while True:
-        frame = await track.recv()
-        data_bgr = video_frame_to_bgr(frame)
-        cv2.imwrite(OUTPUT_PATH, data_bgr)
-
-
-def create_rectangle(color):
-    data_bgr = numpy.zeros((480, 240, 3), numpy.uint8)
+def create_rectangle(width, height, color):
+    data_bgr = numpy.zeros((height, width, 3), numpy.uint8)
     data_bgr[:, :] = color
     return data_bgr
 
@@ -29,9 +21,9 @@ def create_rectangle(color):
 class FlagVideoStreamTrack(VideoStreamTrack):
     def __init__(self):
         self.data_bgr = numpy.hstack([
-            create_rectangle((255, 0, 0)),      # blue
-            create_rectangle((255, 255, 255)),  # white
-            create_rectangle((0, 0, 255)),      # red
+            create_rectangle(width=213, height=480, color=(255, 0, 0)),      # blue
+            create_rectangle(width=214, height=480, color=(255, 255, 255)),  # white
+            create_rectangle(width=213, height=480, color=(0, 0, 255)),      # red
         ])
 
     async def recv(self):
@@ -41,16 +33,18 @@ class FlagVideoStreamTrack(VideoStreamTrack):
 
 async def run_answer(pc, signaling):
     done = asyncio.Event()
+    recorder = MediaRecorder(path=OUTPUT_PATH)
 
     @pc.on('track')
     def on_track(track):
         print('Receiving video')
         assert track.kind == 'video'
-        task = asyncio.ensure_future(consume_video(track))
+        recorder.addTrack(track)
+        recorder.start()
 
         @track.on('ended')
         def on_ended():
-            task.cancel()
+            recorder.stop()
             done.set()
 
     # receive offer
