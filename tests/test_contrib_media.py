@@ -137,7 +137,14 @@ class MediaRecorderTest(TestCase):
         run(asyncio.sleep(2))
         recorder.stop()
 
-    def test_video(self):
+    def test_video_jpg(self):
+        recorder = MediaRecorder(path='foo-%3d.jpg')
+        recorder.addTrack(VideoStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_video_mp4(self):
         recorder = MediaRecorder(path='foo.mp4')
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
