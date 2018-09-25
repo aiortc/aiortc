@@ -83,6 +83,12 @@ class MediaBlackhole:
         if track not in self.__tracks:
             self.__tracks[track] = None
 
+    def removeTrack(self, track):
+        if track in self.__tracks:
+            task = self.__tracks.pop(track)
+            if task is not None:
+                task.cancel()
+
     def start(self):
         for track, task in self.__tracks.items():
             if task is None:
