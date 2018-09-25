@@ -129,7 +129,6 @@ async def offer(request):
 
     # prepare local media
     player = MediaPlayer(path=os.path.join(ROOT, 'demo-instruct.wav'))
-    player.play()
     local_video = VideoTransformTrack(transform=params['video_transform'])
 
     @pc.on('datachannel')
@@ -158,6 +157,7 @@ async def offer(request):
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
+    player.start()
 
     return web.Response(
         content_type='application/json',

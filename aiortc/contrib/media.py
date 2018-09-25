@@ -203,7 +203,7 @@ class MediaPlayer:
         """
         return self.__video
 
-    def play(self):
+    def start(self):
         """
         Start playback.
         """

@@ -55,7 +55,7 @@ class MediaPlayerTest(TestCase):
         player = MediaPlayer(path=self.audio_path)
 
         # read all frames
-        player.play()
+        player.start()
         for i in range(49):
             frame = run(player.audio.recv())
             self.assertEqual(frame.channels, 1)
@@ -69,7 +69,7 @@ class MediaPlayerTest(TestCase):
         player = MediaPlayer(path=self.audio_path)
 
         # read all frames
-        player.play()
+        player.start()
         for i in range(50):
             frame = run(player.audio.recv())
             self.assertEqual(frame.channels, 1)
@@ -82,7 +82,7 @@ class MediaPlayerTest(TestCase):
         player = MediaPlayer(path=self.video_path)
 
         # read all frames
-        player.play()
+        player.start()
         for i in range(20):
             frame = run(player.video.recv())
             self.assertEqual(len(frame.data), 460800)
