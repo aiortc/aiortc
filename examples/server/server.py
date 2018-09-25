@@ -3,15 +3,15 @@ import asyncio
 import json
 import logging
 import os
-import wave
 
 import cv2
 from aiohttp import web
 
 from aiortc import (RTCPeerConnection, RTCSessionDescription, VideoFrame,
                     VideoStreamTrack)
-from aiortc.contrib.media import (MediaPlayer, video_frame_from_bgr,
-                                  video_frame_from_gray, video_frame_to_bgr)
+from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
+                                  video_frame_from_bgr, video_frame_from_gray,
+                                  video_frame_to_bgr)
 
 ROOT = os.path.dirname(__file__)
 
@@ -45,31 +45,6 @@ class VideoTransformTrack(VideoStreamTrack):
         else:
             # return raw frame
             return frame
-
-
-async def consume_audio(track):
-    """
-    Receive incoming audio.
-
-    The audio can optionally be written to a file.
-    """
-    writer = None
-
-    try:
-        while True:
-            frame = await track.recv()
-
-            # write to file
-            if args.write_audio:
-                if writer is None:
-                    writer = wave.open(args.write_audio, 'wb')
-                    writer.setnchannels(frame.channels)
-                    writer.setframerate(frame.sample_rate)
-                    writer.setsampwidth(frame.sample_width)
-                writer.writeframes(frame.data)
-    finally:
-        if writer is not None:
-            writer.close()
 
 
 async def consume_video(track, local_video):
@@ -129,6 +104,10 @@ async def offer(request):
 
     # prepare local media
     player = MediaPlayer(path=os.path.join(ROOT, 'demo-instruct.wav'))
+    if args.write_audio:
+        recorder = MediaRecorder(path=args.write_audio)
+    else:
+        recorder = MediaBlackhole()
     local_video = VideoTransformTrack(transform=params['video_transform'])
 
     @pc.on('datachannel')
@@ -140,10 +119,11 @@ async def offer(request):
     @pc.on('track')
     def on_track(track):
         print('Track %s received' % track.kind)
+        task = None
 
         if track.kind == 'audio':
             pc.addTrack(player.audio)
-            task = asyncio.ensure_future(consume_audio(track))
+            recorder.addTrack(track)
         elif track.kind == 'video':
             pc.addTrack(local_video)
             task = asyncio.ensure_future(consume_video(track, local_video))
@@ -151,13 +131,16 @@ async def offer(request):
         @track.on('ended')
         def on_ended():
             print('Track %s ended' % track.kind)
-            task.cancel()
+            if task:
+                task.cancel()
+            recorder.stop()
             player.stop()
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
     player.start()
+    recorder.start()
 
     return web.Response(
         content_type='application/json',

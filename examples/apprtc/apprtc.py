@@ -11,7 +11,7 @@ import websockets
 
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
-from aiortc.contrib.media import video_frame_from_bgr
+from aiortc.contrib.media import MediaBlackhole, video_frame_from_bgr
 from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
@@ -64,19 +64,22 @@ class VideoImageTrack(VideoStreamTrack):
         return frame
 
 
-async def consume_signaling(signaling, pc, params):
+async def consume_signaling(signaling, pc, recorder, params):
     async def handle_message(message):
         print('<', message)
 
         if message['type'] == 'bye':
+            recorder.stop()
             return True
 
         if message['type'] == 'offer':
             await pc.setRemoteDescription(RTCSessionDescription(**message))
             await pc.setLocalDescription(await pc.createAnswer())
             await signaling.send_message(description_to_dict(pc.localDescription))
+            recorder.start()
         elif message['type'] == 'answer':
             await pc.setRemoteDescription(RTCSessionDescription(**message))
+            recorder.start()
         elif message['type'] == 'candidate':
             candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
             candidate.sdpMid = message['id']
@@ -95,22 +98,6 @@ async def consume_signaling(signaling, pc, params):
         stop = await handle_message(message)
 
 
-async def consume_audio(track):
-    """
-    Drain incoming audio.
-    """
-    while True:
-        await track.recv()
-
-
-async def consume_video(track):
-    """
-    Drain incoming video.
-    """
-    while True:
-        await track.recv()
-
-
 async def join_room(room):
     # fetch room parameters
     async with aiohttp.ClientSession() as session:
@@ -126,19 +113,16 @@ async def join_room(room):
     pc.addTrack(AudioStreamTrack())
     pc.addTrack(VideoImageTrack())
 
+    # dummy sink for media
+    recorder = MediaBlackhole()
+
     @pc.on('track')
     def on_track(track):
         print('Track %s received' % track.kind)
+        recorder.addTrack(track)
 
-        if track.kind == 'audio':
-            task = asyncio.ensure_future(consume_audio(track))
-        elif track.kind == 'video':
-            task = asyncio.ensure_future(consume_video(track))
-
-        @track.on('ended')
         def on_ended():
             print('Track %s ended' % track.kind)
-            task.cancel()
 
     # connect to websocket and join
     signaling = Signaling()
@@ -157,7 +141,7 @@ async def join_room(room):
 
     # receive 60s of media
     try:
-        await asyncio.wait_for(consume_signaling(signaling, pc, params), timeout=60)
+        await asyncio.wait_for(consume_signaling(signaling, pc, recorder, params), timeout=60)
     except asyncio.TimeoutError:
         pass
 
