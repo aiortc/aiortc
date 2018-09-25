@@ -1,7 +1,7 @@
 import asyncio
 import os
 import wave
-from unittest import TestCase, skip
+from unittest import TestCase
 
 import av
 import cv2
@@ -99,7 +99,6 @@ class MediaRecorderTest(TestCase):
         run(asyncio.sleep(2))
         recorder.stop()
 
-    @skip
     def test_audio_and_video(self):
         recorder = MediaRecorder(path='foo.mp4')
         recorder.addTrack(AudioStreamTrack())
@@ -108,7 +107,6 @@ class MediaRecorderTest(TestCase):
         run(asyncio.sleep(2))
         recorder.stop()
 
-    @skip
     def test_video(self):
         recorder = MediaRecorder(path='foo.mp4')
         recorder.addTrack(VideoStreamTrack())

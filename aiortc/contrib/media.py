@@ -262,6 +262,7 @@ class MediaRecorder:
             self.__audio_track = track
         elif track.kind == 'video' and self.__video_track is None:
             self.__video_stream = self.__container.add_stream('h264', rate=30)
+            self.__video_stream.pix_fmt = 'yuv420p'
             self.__video_track = track
 
     def start(self):
