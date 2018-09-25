@@ -67,6 +67,34 @@ def video_frame_to_bgr(frame):
     return cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_I420)
 
 
+async def blackhole_consume(track):
+    while True:
+        await track.recv()
+
+
+class MediaBlackhole:
+    """
+    A media sink that consumes and discards all media.
+    """
+    def __init__(self):
+        self.__tracks = {}
+
+    def addTrack(self, track):
+        if track not in self.__tracks:
+            self.__tracks[track] = None
+
+    def start(self):
+        for track, task in self.__tracks.items():
+            if task is None:
+                self.__tracks[track] = asyncio.ensure_future(blackhole_consume(track))
+
+    def stop(self):
+        for task in self.__tracks.values():
+            if task is not None:
+                task.cancel()
+        self.__tracks = {}
+
+
 def player_worker(loop, container, audio_track, video_track, quit_event):
     audio_fifo = av.audio.fifo.AudioFifo()
     audio_format = av.audio.format.AudioFormat('s16')

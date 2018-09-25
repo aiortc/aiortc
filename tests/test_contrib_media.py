@@ -8,7 +8,7 @@ import cv2
 import numpy
 
 from aiortc import AudioStreamTrack, VideoFrame, VideoStreamTrack
-from aiortc.contrib.media import (MediaPlayer, MediaRecorder,
+from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
                                   video_frame_from_avframe,
                                   video_frame_from_bgr, video_frame_from_gray,
                                   video_frame_to_bgr)
@@ -37,6 +37,29 @@ def create_video(path, width=640, height=480, fps=20, duration=1):
         image = numpy.full((height, width, 3), pixel, numpy.uint8)
         out.write(image)
     out.release()
+
+
+class MediaBlackholeTest(TestCase):
+    def test_audio(self):
+        recorder = MediaBlackhole()
+        recorder.addTrack(AudioStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_audio_and_video(self):
+        recorder = MediaBlackhole()
+        recorder.addTrack(AudioStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_video(self):
+        recorder = MediaBlackhole()
+        recorder.addTrack(VideoStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
 
 
 class MediaPlayerTest(TestCase):
