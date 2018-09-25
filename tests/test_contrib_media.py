@@ -92,7 +92,14 @@ class MediaPlayerTest(TestCase):
 
 
 class MediaRecorderTest(TestCase):
-    def test_audio(self):
+    def test_audio_mp3(self):
+        recorder = MediaRecorder(path='foo.mp3')
+        recorder.addTrack(AudioStreamTrack())
+        recorder.start()
+        run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_audio_wav(self):
         recorder = MediaRecorder(path='foo.wav')
         recorder.addTrack(AudioStreamTrack())
         recorder.start()

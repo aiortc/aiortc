@@ -14,7 +14,9 @@ else
         cd ffmpeg-3.2.12
         ./configure --prefix=$PREFIX \
             --disable-static --enable-shared \
-            --enable-gpl --enable-libx264
+            --enable-gpl \
+            --enable-libmp3lame \
+            --enable-libx264
         make
         make install
         cd ..

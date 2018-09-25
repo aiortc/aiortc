@@ -1,6 +1,7 @@
 addons:
   apt:
     packages:
+    - libmp3lame-dev
     - libopus-dev
     - libvpx-dev
     - libx264-dev

@@ -256,6 +256,8 @@ class MediaRecorder:
         if track.kind == 'audio' and self.__audio_track is None:
             if self.__container.format.name == 'wav':
                 codec_name = 'pcm_s16le'
+            elif self.__container.format.name == 'mp3':
+                codec_name = 'mp3'
             else:
                 codec_name = 'aac'
             self.__audio_stream = self.__container.add_stream(codec_name)
