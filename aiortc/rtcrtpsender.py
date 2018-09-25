@@ -41,7 +41,11 @@ def encoder_worker(input_q):
         if not isinstance(payloads, list):
             payloads = [payloads]
 
-        future.set_result((payloads, encoder.timestamp_increment))
+        try:
+            future.set_result((payloads, encoder.timestamp_increment))
+        except asyncio.InvalidStateError:
+            # the future was cancelled
+            pass
 
     if encoder is not None:
         del encoder
@@ -70,6 +74,7 @@ class RTCRtpSender:
         self.__cname = None
         self._ssrc = random32()
         self.__force_keyframe = False
+        self.__loop = asyncio.get_event_loop()
         self.__mid = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
@@ -206,6 +211,16 @@ class RTCRtpSender:
             except ValueError:
                 pass
 
+    async def _next_encoded_frame(self, codec, encoder_queue):
+        # get frame
+        frame = await self.__track.recv()
+
+        # encode frame
+        future = self.__loop.create_future()
+        encoder_queue.put((codec, frame, self.__force_keyframe, future))
+        self.__force_keyframe = False
+        return await future
+
     async def _retransmit(self, sequence_number):
         """
         Retransmit an RTP packet which was reported as lost.
@@ -222,7 +237,6 @@ class RTCRtpSender:
 
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
-        loop = asyncio.get_event_loop()
 
         # start encoder thread
         encoder_queue = queue.Queue()
@@ -237,15 +251,11 @@ class RTCRtpSender:
         timestamp = random32()
         while not self.__stopped.is_set():
             if self.__track:
-                frame = await first_completed(self.__track.recv(), self.__stopped.wait())
-                if frame is True:
+                result = await first_completed(self._next_encoded_frame(codec, encoder_queue),
+                                               self.__stopped.wait())
+                if result is True:
                     break
-
-                # encode frame
-                future = loop.create_future()
-                encoder_queue.put((codec, frame, self.__force_keyframe, future))
-                self.__force_keyframe = False
-                payloads, timestamp_increment = await future
+                payloads, timestamp_increment = result
 
                 for i, payload in enumerate(payloads):
                     packet = RtpPacket(
