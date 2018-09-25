@@ -233,6 +233,9 @@ class MediaPlayer:
 
 
 class MediaRecorder:
+    """
+    Allows you to write audio and/or video to a file.
+    """
     def __init__(self, path):
         self.__container = av.open(file=path, mode='w')
 
@@ -245,24 +248,35 @@ class MediaRecorder:
         self.__video_track = None
 
     def addTrack(self, track):
-        if track.kind == 'audio':
+        """
+        Add a track to be recorded.
+
+        :param: track: An :class:`AudioStreamTrack` or :class:`VideoStreamTrack`.
+        """
+        if track.kind == 'audio' and self.__audio_track is None:
             if self.__container.format.name == 'wav':
                 codec_name = 'pcm_s16le'
             else:
                 codec_name = 'aac'
             self.__audio_stream = self.__container.add_stream(codec_name)
             self.__audio_track = track
-        else:
+        elif track.kind == 'video' and self.__video_track is None:
             self.__video_stream = self.__container.add_stream('h264', rate=30)
             self.__video_track = track
 
     def start(self):
+        """
+        Start recording.
+        """
         if self.__audio_track:
             self.__audio_task = asyncio.ensure_future(self.__run_audio())
         if self.__video_track:
             self.__video_task = asyncio.ensure_future(self.__run_video())
 
     def stop(self):
+        """
+        Stop recording.
+        """
         if self.__audio_task:
             self.__audio_task.cancel()
             self.__audio_task = None
