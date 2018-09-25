@@ -266,20 +266,20 @@ class MediaPlayer:
             self.__video.stop()
 
 
+class MediaRecorderContext:
+    def __init__(self, stream, convert):
+        self.stream = stream
+        self.convert = convert
+        self.task = None
+
+
 class MediaRecorder:
     """
     Allows you to write audio and/or video to a file.
     """
     def __init__(self, path):
         self.__container = av.open(file=path, mode='w')
-
-        self.__audio_stream = None
-        self.__audio_task = None
-        self.__audio_track = None
-
-        self.__video_stream = None
-        self.__video_task = None
-        self.__video_track = None
+        self.__tracks = {}
 
     def addTrack(self, track):
         """
@@ -287,62 +287,55 @@ class MediaRecorder:
 
         :param: track: An :class:`AudioStreamTrack` or :class:`VideoStreamTrack`.
         """
-        if track.kind == 'audio' and self.__audio_track is None:
+        if track.kind == 'audio':
+            convert = audio_frame_to_avframe
             if self.__container.format.name == 'wav':
                 codec_name = 'pcm_s16le'
             elif self.__container.format.name == 'mp3':
                 codec_name = 'mp3'
             else:
                 codec_name = 'aac'
-            self.__audio_stream = self.__container.add_stream(codec_name)
-            self.__audio_track = track
-        elif track.kind == 'video' and self.__video_track is None:
+            stream = self.__container.add_stream(codec_name)
+        else:
+            convert = video_frame_to_avframe
             if self.__container.format.name == 'image2':
-                self.__video_stream = self.__container.add_stream('jpeg2000', rate=30)
-                self.__video_stream.pix_fmt = 'rgb24'
+                stream = self.__container.add_stream('jpeg2000', rate=30)
+                stream.pix_fmt = 'rgb24'
             else:
-                self.__video_stream = self.__container.add_stream('h264', rate=30)
-                self.__video_stream.pix_fmt = 'yuv420p'
-                codec_name = 'h264'
-            self.__video_track = track
+                stream = self.__container.add_stream('h264', rate=30)
+                stream.pix_fmt = 'yuv420p'
+        self.__tracks[track] = MediaRecorderContext(stream, convert)
 
     def start(self):
         """
         Start recording.
         """
-        if self.__audio_track:
-            self.__audio_task = asyncio.ensure_future(self.__run_audio())
-        if self.__video_track:
-            self.__video_task = asyncio.ensure_future(self.__run_video())
+        for track, context in self.__tracks.items():
+            if context.task is None:
+                context.task = asyncio.ensure_future(self.__run_track(track, context))
 
     def stop(self):
         """
         Stop recording.
         """
-        if self.__audio_task:
-            self.__audio_task.cancel()
-            self.__audio_task = None
-            for packet in self.__audio_stream.encode(None):
-                self.__container.mux(packet)
-
-        if self.__video_task:
-            self.__video_task.cancel()
-            self.__video_task = None
-
         if self.__container:
-            self.__container.close()
-            self.__container = None
+            for track, context in self.__tracks.items():
+                if context.task is not None:
+                    context.task.cancel()
+                    context.task = None
 
-    async def __run_audio(self):
-        while True:
-            frame = await self.__audio_track.recv()
-            avframe = audio_frame_to_avframe(frame)
-            for packet in self.__audio_stream.encode(avframe):
-                self.__container.mux(packet)
+                    if track.kind == 'audio':  # FIXME: do this for video too
+                        for packet in context.stream.encode(None):
+                            self.__container.mux(packet)
+            self.__tracks = {}
 
-    async def __run_video(self):
+            if self.__container:
+                self.__container.close()
+                self.__container = None
+
+    async def __run_track(self, track, context):
         while True:
-            frame = await self.__video_track.recv()
-            avframe = video_frame_to_avframe(frame)
-            for packet in self.__video_stream.encode(avframe):
+            frame = await track.recv()
+            avframe = context.convert(frame)
+            for packet in context.stream.encode(avframe):
                 self.__container.mux(packet)
