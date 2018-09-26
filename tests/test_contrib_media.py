@@ -87,6 +87,10 @@ class MediaPlayerTest(TestCase):
     def test_audio_file_8kHz(self):
         player = MediaPlayer(path=self.audio_path)
 
+        # check tracks
+        self.assertIsNotNone(player.audio)
+        self.assertIsNone(player.video)
+
         # read all frames
         player.start()
         for i in range(49):
@@ -101,6 +105,10 @@ class MediaPlayerTest(TestCase):
         create_audio(self.audio_path, sample_rate=48000)
         player = MediaPlayer(path=self.audio_path)
 
+        # check tracks
+        self.assertIsNotNone(player.audio)
+        self.assertIsNone(player.video)
+
         # read all frames
         player.start()
         for i in range(50):
@@ -113,6 +121,10 @@ class MediaPlayerTest(TestCase):
 
     def test_video_file(self):
         player = MediaPlayer(path=self.video_path)
+
+        # check tracks
+        self.assertIsNone(player.audio)
+        self.assertIsNotNone(player.video)
 
         # read all frames
         player.start()
