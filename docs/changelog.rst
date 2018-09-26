@@ -6,8 +6,6 @@ Changelog
 0.9.8
 -----
 
-*In development*
-
 Media
 .....
 
