@@ -1,5 +1,6 @@
 import asyncio
 import math
+import uuid
 
 from pyee import EventEmitter
 
@@ -35,7 +36,21 @@ class VideoFrame:
 
 
 class MediaStreamTrack(EventEmitter):
-    pass
+    """
+    A single media track within a stream.
+
+    See :class:`AudioStreamTrack` and :class:`VideoStreamTrack`.
+    """
+    def __init__(self):
+        super().__init__()
+        self.__id = str(uuid.uuid4())
+
+    @property
+    def id(self):
+        """
+        An automatically generated globally unique ID.
+        """
+        return self.__id
 
 
 class AudioStreamTrack(MediaStreamTrack):
@@ -47,6 +62,9 @@ class AudioStreamTrack(MediaStreamTrack):
     kind = 'audio'
 
     async def recv(self):
+        """
+        Receive the next audio frame.
+        """
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
 
@@ -78,5 +96,8 @@ class VideoStreamTrack(MediaStreamTrack):
         return self._timestamp
 
     async def recv(self):
+        """
+        Receive the next video frame.
+        """
         timestamp = await self.next_timestamp()
         return VideoFrame(width=640, height=480, timestamp=timestamp)
