@@ -53,6 +53,7 @@ the ``aiortc`` code to ensure best-in-class code quality.
 .. toctree::
    :maxdepth: 2
 
+   examples
    api
    helpers
    changelog
