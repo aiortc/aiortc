@@ -8,7 +8,6 @@ import av
 import cv2
 import numpy
 
-from ..codecs.h264 import video_frame_from_avframe, video_frame_to_avframe
 from ..mediastreams import (AUDIO_PTIME, VIDEO_CLOCKRATE, AudioFrame,
                             AudioStreamTrack, VideoFrame, VideoStreamTrack)
 
@@ -39,6 +38,34 @@ def audio_frame_to_avframe(frame):
     av_frame.planes[0].update(frame.data)
     av_frame.sample_rate = frame.sample_rate
     av_frame.time_base = fractions.Fraction(1, frame.sample_rate)
+    return av_frame
+
+
+def video_frame_from_avframe(avframe):
+    """
+    Convert an av.VideoFrame to aiortc.VideoFrame.
+    """
+    if str(avframe.format) != 'yuv420p':
+        avframe = avframe.reformat(format='yuv420p')
+    return VideoFrame(
+        width=avframe.width,
+        height=avframe.height,
+        data=b''.join(p.to_bytes() for p in avframe.planes),
+        timestamp=avframe.pts)
+
+
+def video_frame_to_avframe(frame):
+    """
+    Convert an aiortc.VideoFrame to av.VideoFrame.
+    """
+    u_start = frame.width * frame.height
+    v_start = 5 * u_start // 4
+    av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
+    av_frame.planes[0].update(frame.data[0:u_start])
+    av_frame.planes[1].update(frame.data[u_start:v_start])
+    av_frame.planes[2].update(frame.data[v_start:])
+    av_frame.pts = frame.timestamp
+    av_frame.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
     return av_frame
 
 

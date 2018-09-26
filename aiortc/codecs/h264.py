@@ -1,4 +1,3 @@
-import fractions
 import io
 import logging
 import math
@@ -10,7 +9,8 @@ from av import AVError
 from av.codec.context import CodecContext
 from av.packet import Packet
 
-from ..mediastreams import VIDEO_CLOCKRATE, VideoFrame
+from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
+from ..mediastreams import VIDEO_CLOCKRATE
 
 logger = logging.getLogger('codec.h264')
 
@@ -24,28 +24,6 @@ NAL_HEADER_SIZE = 1
 FU_A_HEADER_SIZE = 2
 LENGTH_FIELD_SIZE = 2
 STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
-
-
-def video_frame_from_avframe(avframe):
-    if str(avframe.format) != 'yuv420p':
-        avframe = avframe.reformat(format='yuv420p')
-    return VideoFrame(
-        width=avframe.width,
-        height=avframe.height,
-        data=b''.join(p.to_bytes() for p in avframe.planes),
-        timestamp=avframe.pts)
-
-
-def video_frame_to_avframe(frame):
-    u_start = frame.width * frame.height
-    v_start = 5 * u_start // 4
-    av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
-    av_frame.planes[0].update(frame.data[0:u_start])
-    av_frame.planes[1].update(frame.data[u_start:v_start])
-    av_frame.planes[2].update(frame.data[v_start:])
-    av_frame.pts = frame.timestamp
-    av_frame.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
-    return av_frame
 
 
 def pairwise(iterable):
