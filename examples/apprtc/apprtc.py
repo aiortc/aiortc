@@ -11,7 +11,8 @@ import websockets
 
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
-from aiortc.contrib.media import MediaBlackhole, video_frame_from_bgr
+from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
+                                  video_frame_from_bgr)
 from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
@@ -64,11 +65,13 @@ class VideoImageTrack(VideoStreamTrack):
         return frame
 
 
-async def consume_signaling(signaling, pc, recorder, params):
+async def consume_signaling(signaling, pc, player, recorder, params):
     async def handle_message(message):
         print('<', message)
 
         if message['type'] == 'bye':
+            if player:
+                player.stop()
             recorder.stop()
             return True
 
@@ -76,9 +79,13 @@ async def consume_signaling(signaling, pc, recorder, params):
             await pc.setRemoteDescription(RTCSessionDescription(**message))
             await pc.setLocalDescription(await pc.createAnswer())
             await signaling.send_message(description_to_dict(pc.localDescription))
+            if player:
+                player.start()
             recorder.start()
         elif message['type'] == 'answer':
             await pc.setRemoteDescription(RTCSessionDescription(**message))
+            if player:
+                player.start()
             recorder.start()
         elif message['type'] == 'candidate':
             candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
@@ -98,7 +105,7 @@ async def consume_signaling(signaling, pc, recorder, params):
         stop = await handle_message(message)
 
 
-async def join_room(room):
+async def join_room(room, play_from, record_to):
     # fetch room parameters
     async with aiohttp.ClientSession() as session:
         async with session.post('https://appr.tc/join/' + room) as response:
@@ -110,11 +117,28 @@ async def join_room(room):
 
     # create peer conection
     pc = RTCPeerConnection()
-    pc.addTrack(AudioStreamTrack())
-    pc.addTrack(VideoImageTrack())
 
-    # dummy sink for media
-    recorder = MediaBlackhole()
+    # setup media source
+    if play_from:
+        player = MediaPlayer(play_from)
+    else:
+        player = None
+
+    if player and player.audio:
+        pc.addTrack(player.audio)
+    else:
+        pc.addTrack(AudioStreamTrack())
+
+    if player and player.video:
+        pc.addTrack(player.video)
+    else:
+        pc.addTrack(VideoImageTrack())
+
+    # setup media sink
+    if record_to:
+        recorder = MediaRecorder(record_to)
+    else:
+        recorder = MediaBlackhole()
 
     @pc.on('track')
     def on_track(track):
@@ -141,7 +165,8 @@ async def join_room(room):
 
     # receive 60s of media
     try:
-        await asyncio.wait_for(consume_signaling(signaling, pc, recorder, params), timeout=60)
+        await asyncio.wait_for(consume_signaling(
+            signaling, pc, player, recorder, params), timeout=60)
     except asyncio.TimeoutError:
         pass
 
@@ -153,6 +178,8 @@ async def join_room(room):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AppRTC')
     parser.add_argument('room', nargs='?')
+    parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
+    parser.add_argument('--record-to', help='Write received media to a file.'),
     parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
 
@@ -162,4 +189,8 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    asyncio.get_event_loop().run_until_complete(join_room(args.room))
+    asyncio.get_event_loop().run_until_complete(join_room(
+        room=args.room,
+        play_from=args.play_from,
+        record_to=args.record_to,
+    ))

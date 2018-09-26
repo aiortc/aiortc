@@ -2,6 +2,11 @@ AppRTC client
 =============
 
 This example illustrates how to connect to Google's AppRTC demo application.
+It also illustrates:
+
+- how to use a MediaPlayer to read media from a file
+
+- how to use a MediaRecorder to capture media to a file
 
 First install the required packages:
 
