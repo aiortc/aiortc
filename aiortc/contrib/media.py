@@ -107,6 +107,11 @@ class MediaBlackhole:
         self.__tracks = {}
 
     def addTrack(self, track):
+        """
+        Add a track whose media should be discarded.
+
+        :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
+        """
         if track not in self.__tracks:
             self.__tracks[track] = None
 
@@ -117,11 +122,17 @@ class MediaBlackhole:
                 task.cancel()
 
     def start(self):
+        """
+        Start discarding media.
+        """
         for track, task in self.__tracks.items():
             if task is None:
                 self.__tracks[track] = asyncio.ensure_future(blackhole_consume(track))
 
     def stop(self):
+        """
+        Stop discarding media.
+        """
         for task in self.__tracks.values():
             if task is not None:
                 task.cancel()
@@ -234,7 +245,7 @@ class PlayerVideoTrack(VideoStreamTrack):
 
 class MediaPlayer:
     """
-    Allows you to read audio and/or video from a file.
+    A media source that reads audio and/or video from a file.
     """
     def __init__(self, path):
         self.__container = av.open(file=path, mode='r')
@@ -253,14 +264,14 @@ class MediaPlayer:
     @property
     def audio(self):
         """
-        An :class:`AudioStreamTrack` instance if the file contains audio.
+        An :class:`aiortc.AudioStreamTrack` instance if the file contains audio.
         """
         return self.__audio
 
     @property
     def video(self):
         """
-        A :class:`VideoStreamTrack` instance if the file contains video.
+        A :class:`aiortc.VideoStreamTrack` instance if the file contains video.
         """
         return self.__video
 
@@ -302,7 +313,7 @@ class MediaRecorderContext:
 
 class MediaRecorder:
     """
-    Allows you to write audio and/or video to a file.
+    A media sink that writes audio and/or video to a file.
     """
     def __init__(self, path):
         self.__container = av.open(file=path, mode='w')
@@ -312,7 +323,7 @@ class MediaRecorder:
         """
         Add a track to be recorded.
 
-        :param: track: An :class:`AudioStreamTrack` or :class:`VideoStreamTrack`.
+        :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
         """
         if track.kind == 'audio':
             convert = audio_frame_to_avframe

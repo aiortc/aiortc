@@ -38,6 +38,10 @@ class MockBinding:
     lib = MockLib()
 
 
+class MockAv:
+    pass
+
+
 class MockH264:
     H264Decoder = None
     H264Encoder = None
@@ -55,6 +59,7 @@ class MockVpx:
     vp8_depayload = None
 
 
+sys.modules.update({'av': MockAv()})
 sys.modules.update({'pylibsrtp._binding': MockBinding()})
 sys.modules.update({'aiortc.codecs.h264': MockH264()})
 sys.modules.update({'aiortc.codecs.opus': MockOpus()})

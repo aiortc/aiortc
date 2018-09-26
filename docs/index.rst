@@ -54,5 +54,6 @@ the ``aiortc`` code to ensure best-in-class code quality.
    :maxdepth: 2
 
    api
+   helpers
    changelog
    license

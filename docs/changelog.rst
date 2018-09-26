@@ -26,9 +26,9 @@ Statistics
 Examples
 ........
 
-  * Add new :class:`MediaRecorder` class to `aiortc.contrib` to write audio / video to a file.
-  * Add new :class:`MediaBlackhole` class to `aiortc.contrib` to discard audio / video.
-  * Add new :class:`MediaPlayer` class to `aiortc.contrib` to read audio / video from a file.
+  * Add new :class:`aiortc.contrib.media.MediaPlayer` class to read audio / video from a file.
+  * Add new :class:`aiortc.contrib.media.MediaRecorder` class to write audio / video to a file.
+  * Add new :class:`aiortc.contrib.media.MediaBlackhole` class to discard audio / video.
 
 0.9.7
 -----

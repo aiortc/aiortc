@@ -3,6 +3,9 @@ import attr
 
 @attr.s
 class RTCStats:
+    """
+    Base class for statistics.
+    """
     timestamp = attr.ib()
     "The timestamp associated with this object."
     type = attr.ib()
