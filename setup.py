@@ -14,7 +14,7 @@ cffi_modules = [
 install_requires = [
     'aioice>=0.6.7,<0.7.0',
     'attrs',
-    'av',
+    'av>=0.5.0',
     'cffi>=1.0.0',
     'crcmod',
     'cryptography>=2.2',
