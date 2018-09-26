@@ -15,24 +15,30 @@ class AudioFrame:
     """
     def __init__(self, channels, data, sample_rate, timestamp):
         self.channels = channels
+        "The number of channels (`1` for mono, `2` for stereo)."
         self.data = data
+        "The bytes representing the PCM samples."
         self.sample_rate = sample_rate
+        "The sample rate, for instance `48000` for 48kHz."
         self.sample_width = 2
+        "The sample width in bytes, always `2` (16-bit)."
         self.timestamp = timestamp
 
 
 class VideoFrame:
     """
-    Video frame in YUV420 format.
+    Video frame in YUV420 planar format.
     """
     def __init__(self, width, height, timestamp, data=None):
-        self.height = height
-        self.width = width
-        self.timestamp = timestamp
         if data is None:
-            self.data = b'\x00' * math.ceil(width * height * 12 / 8)
-        else:
-            self.data = data
+            data = b'\x00' * math.ceil(width * height * 12 / 8)
+        self.data = data
+        "The bytes representing the pixels."
+        self.width = width
+        "The image width in pixels."
+        self.height = height
+        "The image height in pixels."
+        self.timestamp = timestamp
 
 
 class MediaStreamTrack(EventEmitter):
@@ -55,15 +61,16 @@ class MediaStreamTrack(EventEmitter):
 
 class AudioStreamTrack(MediaStreamTrack):
     """
-    The base implementation just reads silence.
-
-    Subclass it to provide a useful implementation.
+    An audio track.
     """
     kind = 'audio'
 
     async def recv(self):
         """
-        Receive the next audio frame.
+        Receive the next :class:`AudioFrame`.
+
+        The base implementation just reads silence, subclass
+        :class:`AudioStreamTrack` to provide a useful implementation.
         """
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
@@ -81,9 +88,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
 class VideoStreamTrack(MediaStreamTrack):
     """
-    The base implementation just reads a 640x480 green frame at 30fps.
-
-    Subclass it to provide a useful implementation.
+    A video stream track.
     """
     kind = 'video'
 
@@ -97,7 +102,10 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         """
-        Receive the next video frame.
+        Receive the next :class:`VideoFrame`.
+
+        The base implementation just reads a 640x480 green frame at 30fps,
+        subclass :class:`VideoStreamTrack` to provide a useful implementation.
         """
         timestamp = await self.next_timestamp()
         return VideoFrame(width=640, height=480, timestamp=timestamp)

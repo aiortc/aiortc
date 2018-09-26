@@ -84,6 +84,24 @@ Data channels
    .. autoclass:: RTCDataChannelParameters()
       :members:
 
+Media
+-----
+
+   .. autoclass:: MediaStreamTrack
+      :members:
+
+   .. autoclass:: AudioStreamTrack
+      :members:
+
+   .. autoclass:: AudioFrame()
+      :members:
+
+   .. autoclass:: VideoStreamTrack
+      :members:
+
+   .. autoclass:: VideoFrame()
+      :members:
+
 Statistics
 ----------
 
