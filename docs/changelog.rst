@@ -11,11 +11,24 @@ Changelog
 Media
 .....
 
-  * Add the :meth:`RTCPeerConnection.getStats()` coroutine to retrieve statistics.
+  * Add support for H.264 video, a big thank you to @dsvictor94!
   * Add support for sending Receiver Estimate Maximum Bitrate (REMB) feedback.
   * Add support for parsing / serializing more RTP header extensions.
   * Move each media encoder / decoder its one thread instead of using a
     thread pool.
+
+Statistics
+..........
+
+  * Add the :meth:`RTCPeerConnection.getStats()` coroutine to retrieve statistics.
+  * Add initial :class:`RTCTransportStats` to report transport statistics.
+
+Examples
+........
+
+  * Add new :class:`MediaRecorder` class to `aiortc.contrib` to write audio / video to a file.
+  * Add new :class:`MediaBlackhole` class to `aiortc.contrib` to discard audio / video.
+  * Add new :class:`MediaPlayer` class to `aiortc.contrib` to read audio / video from a file.
 
 0.9.7
 -----
