@@ -5,7 +5,7 @@ import random
 import threading
 import time
 
-from .clock import current_datetime, datetime_from_ntp
+from . import clock
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer, JitterFrame
@@ -213,22 +213,23 @@ class RTCRtpReceiver:
         :rtype: :class:`RTCStatsReport`
         """
         if self.__remote_counter is not None:
-            stats = RTCInboundRtpStreamStats(
+            self.__stats.add(RTCInboundRtpStreamStats(
                 # RTCStats
-                timestamp=current_datetime(),
+                timestamp=clock.current_datetime(),
                 type='inbound-rtp',
                 id='inbound-rtp_' + str(id(self)),
                 # RTCStreamStats
                 ssrc=self.__remote_counter.ssrc,
                 kind=self.__kind,
-                transportId=str(id(self.transport)),
+                transportId=self.transport._stats_id,
                 # RTCReceivedRtpStreamStats
                 packetsReceived=self.__remote_counter.packets_received,
                 packetsLost=self.__remote_counter.packets_lost,
                 jitter=self.__remote_counter.jitter,
                 # RTPInboundRtpStreamStats
-            )
-            self.__stats[stats.id] = stats
+            ))
+        self.__stats.update(self.transport._get_stats())
+
         return self.__stats
 
     async def receive(self, parameters):
@@ -276,22 +277,21 @@ class RTCRtpReceiver:
         self.__log_debug('< %s', packet)
 
         if isinstance(packet, RtcpSrPacket):
-            stats = RTCRemoteOutboundRtpStreamStats(
+            self.__stats.add(RTCRemoteOutboundRtpStreamStats(
                 # RTCStats
-                timestamp=current_datetime(),
+                timestamp=clock.current_datetime(),
                 type='remote-outbound-rtp',
                 id='remote-outbound-rtp_' + str(id(self)),
                 # RTCStreamStats
                 ssrc=packet.ssrc,
                 kind=self.__kind,
-                transportId=str(id(self.transport)),
+                transportId=self.transport._stats_id,
                 # RTCSentRtpStreamStats
                 packetsSent=packet.sender_info.packet_count,
                 bytesSent=packet.sender_info.octet_count,
                 # RTCRemoteOutboundRtpStreamStats
-                remoteTimestamp=datetime_from_ntp(packet.sender_info.ntp_timestamp)
-            )
-            self.__stats[stats.id] = stats
+                remoteTimestamp=clock.datetime_from_ntp(packet.sender_info.ntp_timestamp)
+            ))
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
         elif isinstance(packet, RtcpByePacket):

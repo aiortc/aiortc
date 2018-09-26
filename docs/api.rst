@@ -118,3 +118,6 @@ Statistics
 
    .. autoclass:: RTCRemoteOutboundRtpStreamStats()
       :members:
+
+   .. autoclass:: RTCTransportStats()
+      :members:

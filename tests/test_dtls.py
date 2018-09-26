@@ -53,6 +53,23 @@ class RTCCertificateTest(TestCase):
 
 
 class RTCDtlsTransportTest(TestCase):
+    def assertCounters(self, transport_a, transport_b, packets_sent_a, packets_sent_b):
+        stats_a = transport_a._get_stats()[transport_a._stats_id]
+        stats_b = transport_b._get_stats()[transport_b._stats_id]
+
+        self.assertEqual(stats_a.packetsSent, packets_sent_a)
+        self.assertEqual(stats_a.packetsReceived, packets_sent_b)
+        self.assertGreater(stats_a.bytesSent, 0)
+        self.assertGreater(stats_a.bytesReceived, 0)
+
+        self.assertEqual(stats_b.packetsSent, packets_sent_b)
+        self.assertEqual(stats_b.packetsReceived, packets_sent_a)
+        self.assertGreater(stats_b.bytesSent, 0)
+        self.assertGreater(stats_b.bytesReceived, 0)
+
+        self.assertEqual(stats_a.bytesSent, stats_b.bytesReceived)
+        self.assertEqual(stats_b.bytesSent, stats_a.bytesReceived)
+
     @patch('aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate')
     def test_broken_ssl(self, mock_use_certificate):
         mock_use_certificate.return_value = 0
@@ -118,22 +135,26 @@ class RTCDtlsTransportTest(TestCase):
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
             session2.start(session1.getLocalParameters())))
+        self.assertCounters(session1, session2, 2, 2)
 
         # send RTP
         run(session1._send_rtp(RTP))
         run(asyncio.sleep(0.1))
+        self.assertCounters(session1, session2, 3, 2)
         self.assertEqual(len(receiver2.rtcp_packets), 0)
         self.assertEqual(len(receiver2.rtp_packets), 1)
 
         # send RTCP
         run(session2._send_rtp(RTCP))
         run(asyncio.sleep(0.1))
+        self.assertCounters(session1, session2, 3, 3)
         self.assertEqual(len(receiver1.rtcp_packets), 1)
         self.assertEqual(len(receiver1.rtp_packets), 0)
 
         # shutdown
         run(session1.stop())
         run(asyncio.sleep(0.5))
+        self.assertCounters(session1, session2, 4, 3)
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
 

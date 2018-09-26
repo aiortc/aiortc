@@ -21,6 +21,7 @@ from pylibsrtp import Policy, Session
 
 from . import clock, rtp
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
+from .stats import RTCStatsReport, RTCTransportStats
 from .utils import first_completed
 
 binding = Binding()
@@ -240,7 +241,14 @@ class RTCDtlsTransport(EventEmitter):
         self._rtp_senders = set()
         self._start = None
         self._state = State.NEW
+        self._stats_id = 'transport_' + str(id(self))
         self._transport = transport
+
+        # counters
+        self.__rx_bytes = 0
+        self.__rx_packets = 0
+        self.__tx_bytes = 0
+        self.__tx_packets = 0
 
         # SSL init
         self.__ctx = create_ssl_context(certificate)
@@ -260,6 +268,8 @@ class RTCDtlsTransport(EventEmitter):
     def state(self):
         """
         The current state of the DTLS transport.
+
+        One of `'new'`, `'connecting'`, `'connected'`, `'closed'` or `'failed'`.
         """
         return str(self._state)[6:].lower()
 
@@ -382,6 +392,23 @@ class RTCDtlsTransport(EventEmitter):
             self._set_state(State.CLOSED)
             self.closed.set()
 
+    def _get_stats(self):
+        report = RTCStatsReport()
+        report.add(RTCTransportStats(
+            # RTCStats
+            timestamp=clock.current_datetime(),
+            type='transport',
+            id=self._stats_id,
+            # RTCTransportStats,
+            packetsSent=self.__tx_packets,
+            packetsReceived=self.__rx_packets,
+            bytesSent=self.__tx_bytes,
+            bytesReceived=self.__rx_bytes,
+            iceRole=self.transport.role,
+            dtlsState=self.state,
+        ))
+        return report
+
     async def _handle_data(self, data):
         if self._data_receiver:
             await self._data_receiver._handle_data(data)
@@ -433,6 +460,9 @@ class RTCDtlsTransport(EventEmitter):
             raise ConnectionError
 
         arrival_time_ms = clock.current_ms()
+        self.__rx_bytes += len(data)
+        self.__rx_packets += 1
+
         first_byte = data[0]
         if first_byte > 19 and first_byte < 64:
             # DTLS
@@ -485,6 +515,8 @@ class RTCDtlsTransport(EventEmitter):
         else:
             data = self._tx_srtp.protect(data)
         await self.transport._connection.send(data)
+        self.__tx_bytes += len(data)
+        self.__tx_packets += 1
 
     def _set_state(self, state):
         if state != self._state:
@@ -510,6 +542,8 @@ class RTCDtlsTransport(EventEmitter):
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
             await self.transport._connection.send(ffi.buffer(self.write_cdata)[0:result])
+            self.__tx_bytes += result
+            self.__tx_packets += 1
 
     def __log_debug(self, msg, *args):
         logger.debug(self._role + ' ' + msg, *args)

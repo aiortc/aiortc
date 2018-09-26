@@ -987,7 +987,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue(isinstance(report, RTCStatsReport))
         self.assertEqual(
             sorted([s.type for s in report.values()]),
-            ['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp', 'remote-outbound-rtp'])
+            ['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp', 'remote-outbound-rtp',
+             'transport'])
 
         # close
         run(pc1.close())

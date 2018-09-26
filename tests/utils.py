@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 
+from aiortc import clock
+from aiortc.stats import RTCStatsReport, RTCTransportStats
 from aiortc.utils import first_completed
 
 
@@ -51,10 +53,28 @@ class DummyDtlsTransport:
         self.transport = transport
         self._data_handle = None
         self._data_receiver = None
+        self._stats_id = 'transport_' + str(id(self))
 
     async def stop(self):
         await self.transport.stop()
         self.state = 'closed'
+
+    def _get_stats(self):
+        report = RTCStatsReport()
+        report.add(RTCTransportStats(
+            # RTCStats
+            timestamp=clock.current_datetime(),
+            type='transport',
+            id=self._stats_id,
+            # RTCTransportStats,
+            packetsSent=0,
+            packetsReceived=0,
+            bytesSent=0,
+            bytesReceived=0,
+            iceRole=self.transport.role,
+            dtlsState=self.state,
+        ))
+        return report
 
     def _register_data_receiver(self, receiver):
         assert self._data_receiver is None

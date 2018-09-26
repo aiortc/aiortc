@@ -5,8 +5,7 @@ import random
 import threading
 import time
 
-from . import rtp
-from .clock import current_datetime, current_ntp_time
+from . import clock, rtp
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
@@ -119,22 +118,23 @@ class RTCRtpSender:
 
         :rtype: :class:`RTCStatsReport`
         """
-        stats = RTCOutboundRtpStreamStats(
+        self.__stats.add(RTCOutboundRtpStreamStats(
             # RTCStats
-            timestamp=current_datetime(),
+            timestamp=clock.current_datetime(),
             type='outbound-rtp',
             id='outbound-rtp_' + str(id(self)),
             # RTCStreamStats
             ssrc=self._ssrc,
             kind=self.__kind,
-            transportId=str(id(self.transport)),
+            transportId=self.transport._stats_id,
             # RTCSentRtpStreamStats
             packetsSent=self.__packet_count,
             bytesSent=self.__octet_count,
             # RTCOutboundRtpStreamStats
             trackId=str(id(self.track)),
-        )
-        self.__stats[stats.id] = stats
+        ))
+        self.__stats.update(self.transport._get_stats())
+
         return self.__stats
 
     def replaceTrack(self, track):
@@ -183,15 +183,15 @@ class RTCRtpSender:
                     else:
                         self.__rtt = RTT_ALPHA * self.__rtt + (1 - RTT_ALPHA) * rtt
 
-                stats = RTCRemoteInboundRtpStreamStats(
+                self.__stats.add(RTCRemoteInboundRtpStreamStats(
                     # RTCStats
-                    timestamp=current_datetime(),
+                    timestamp=clock.current_datetime(),
                     type='remote-inbound-rtp',
                     id='remote-inbound-rtp_' + str(id(self)),
                     # RTCStreamStats
                     ssrc=packet.ssrc,
                     kind=self.__kind,
-                    transportId=str(id(self.transport)),
+                    transportId=self.transport._stats_id,
                     # RTCReceivedRtpStreamStats
                     packetsReceived=self.__packet_count - report.packets_lost,
                     packetsLost=report.packets_lost,
@@ -199,8 +199,7 @@ class RTCRtpSender:
                     # RTCRemoteInboundRtpStreamStats
                     roundTripTime=self.__rtt,
                     fractionLost=report.fraction_lost
-                )
-                self.__stats[stats.id] = stats
+                ))
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
             for seq in packet.lost:
                 await self._retransmit(seq)
@@ -269,7 +268,7 @@ class RTCRtpSender:
                     packet.marker = (i == len(payloads) - 1) and 1 or 0
 
                     # set header extensions
-                    packet.extensions.abs_send_time = (current_ntp_time() >> 14) & 0x00ffffff
+                    packet.extensions.abs_send_time = (clock.current_ntp_time() >> 14) & 0x00ffffff
                     packet.extensions.mid = self.__mid
 
                     try:
@@ -281,7 +280,7 @@ class RTCRtpSender:
                     except ConnectionError:
                         self.__stopped.set()
                         break
-                    self.__ntp_timestamp = current_ntp_time()
+                    self.__ntp_timestamp = clock.current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1

@@ -68,6 +68,22 @@ class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
     remoteTimestamp = attr.ib(default=None)
 
 
+@attr.s
+class RTCTransportStats(RTCStats):
+    packetsSent = attr.ib()  # type: int
+    "Total number of packets sent over this transport."
+    packetsReceived = attr.ib()  # type: int
+    "Total number of packets received over this transport."
+    bytesSent = attr.ib()  # type: int
+    "Total number of bytes sent over this transport."
+    bytesReceived = attr.ib()  # type: int
+    "Total number of bytes received over this transport."
+    iceRole = attr.ib()  # type: str
+    "The current value of :attr:`RTCIceTransport.role`."
+    dtlsState = attr.ib()  # type: str
+    "The current value of :attr:`RTCDtlsTransport.state`."
+
+
 class RTCStatsReport(dict):
     """
     Provides statistics data about WebRTC connections as returned by the
@@ -81,5 +97,7 @@ class RTCStatsReport(dict):
     - :class:`RTCOutboundRtpStreamStats`
     - :class:`RTCRemoteInboundRtpStreamStats`
     - :class:`RTCRemoteOutboundRtpStreamStats`
+    - :class:`RTCTransportStats`
     """
-    pass
+    def add(self, stats):
+        self[stats.id] = stats

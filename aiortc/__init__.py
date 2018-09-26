@@ -20,4 +20,4 @@ from .stats import (RTCInboundRtpStreamStats,  # noqa
                     RTCOutboundRtpStreamStats,
                     RTCRemoteInboundRtpStreamStats,
                     RTCRemoteOutboundRtpStreamStats,
-                    RTCStatsReport)
+                    RTCStatsReport, RTCTransportStats)
