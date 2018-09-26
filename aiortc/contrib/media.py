@@ -7,7 +7,7 @@ import time
 import av
 
 from ..mediastreams import (AUDIO_PTIME, VIDEO_CLOCKRATE, AudioFrame,
-                            AudioStreamTrack, VideoFrame, VideoStreamTrack)
+                            MediaStreamTrack, VideoFrame)
 
 
 def audio_frame_from_avframe(av_frame):
@@ -195,9 +195,10 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                     (frame, frame_time)), loop)
 
 
-class PlayerAudioTrack(AudioStreamTrack):
-    def __init__(self):
+class PlayerStreamTrack(MediaStreamTrack):
+    def __init__(self, kind):
         super().__init__()
+        self.kind = kind
         self._ended = False
         self._queue = asyncio.Queue()
         self._start = None
@@ -206,36 +207,12 @@ class PlayerAudioTrack(AudioStreamTrack):
         frame, frame_time = await self._queue.get()
 
         # control playback rate
-        if self._start is None:
-            self._start = time.time() - frame_time
-        else:
-            wait = self._start + frame_time - time.time()
-            await asyncio.sleep(wait)
-
-        return frame
-
-    def stop(self):
-        if not self._ended:
-            self._ended = True
-            self.emit('ended')
-
-
-class PlayerVideoTrack(VideoStreamTrack):
-    def __init__(self):
-        super().__init__()
-        self._ended = False
-        self._queue = asyncio.Queue()
-        self._start = None
-
-    async def recv(self):
-        frame, frame_time = await self._queue.get()
-
-        # control playback rate
-        if self._start is None:
-            self._start = time.time() - frame_time
-        else:
-            wait = self._start + frame_time - time.time()
-            await asyncio.sleep(wait)
+        if frame_time is not None:
+            if self._start is None:
+                self._start = time.time() - frame_time
+            else:
+                wait = self._start + frame_time - time.time()
+                await asyncio.sleep(wait)
 
         return frame
 
@@ -259,9 +236,9 @@ class MediaPlayer:
         self.__video = None
         for stream in self.__container.streams:
             if isinstance(stream, av.audio.stream.AudioStream) and not self.__audio:
-                self.__audio = PlayerAudioTrack()
+                self.__audio = PlayerStreamTrack(kind='audio')
             elif isinstance(stream, av.video.stream.VideoStream) and not self.__video:
-                self.__video = PlayerVideoTrack()
+                self.__video = PlayerStreamTrack(kind='video')
 
     @property
     def audio(self):
