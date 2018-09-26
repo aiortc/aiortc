@@ -18,7 +18,6 @@ install_requires = [
     'cffi>=1.0.0',
     'crcmod',
     'cryptography>=2.2',
-    'opencv-python',
     'pyee',
     'pylibsrtp>=0.5.6',
     'pyopenssl',
