@@ -1,3 +1,4 @@
+import fractions
 import io
 import logging
 import math
@@ -42,6 +43,8 @@ def video_frame_to_avframe(frame):
     av_frame.planes[0].update(frame.data[0:u_start])
     av_frame.planes[1].update(frame.data[u_start:v_start])
     av_frame.planes[2].update(frame.data[v_start:])
+    av_frame.pts = frame.timestamp
+    av_frame.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
     return av_frame
 
 

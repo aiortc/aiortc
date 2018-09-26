@@ -9,8 +9,8 @@ import cv2
 import numpy
 
 from ..codecs.h264 import video_frame_from_avframe, video_frame_to_avframe
-from ..mediastreams import (AUDIO_PTIME, AudioFrame, AudioStreamTrack,
-                            VideoFrame, VideoStreamTrack)
+from ..mediastreams import (AUDIO_PTIME, VIDEO_CLOCKRATE, AudioFrame,
+                            AudioStreamTrack, VideoFrame, VideoStreamTrack)
 
 
 def audio_frame_from_avframe(av_frame):
@@ -304,6 +304,7 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream('h264', rate=30)
                 stream.pix_fmt = 'yuv420p'
+            stream.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
         self.__tracks[track] = MediaRecorderContext(stream, convert)
 
     def start(self):
@@ -323,10 +324,11 @@ class MediaRecorder:
                 if context.task is not None:
                     context.task.cancel()
                     context.task = None
-
-                    if track.kind == 'audio':  # FIXME: do this for video too
-                        for packet in context.stream.encode(None):
-                            self.__container.mux(packet)
+                    for packet in context.stream.encode(None):
+                        # FIXME : for some reason these "flush" packets do not have
+                        # their time_base set, so let's fix this
+                        packet.time_base = context.stream.time_base
+                        self.__container.mux(packet)
             self.__tracks = {}
 
             if self.__container:
@@ -334,8 +336,15 @@ class MediaRecorder:
                 self.__container = None
 
     async def __run_track(self, track, context):
+        first_timestamp = None
         while True:
             frame = await track.recv()
+
+            # frames received from RTP have a random initial timestamp, cancel it out
+            if first_timestamp is None:
+                first_timestamp = frame.timestamp
+            frame.timestamp -= first_timestamp
+
             avframe = context.convert(frame)
             for packet in context.stream.encode(avframe):
                 self.__container.mux(packet)
