@@ -17,6 +17,7 @@ from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
+from .stats import RTCStatsReport
 
 DUMMY_CANDIDATE = RTCIceCandidate(
     foundation='',
@@ -317,6 +318,18 @@ class RTCPeerConnection(EventEmitter):
         attached to the connection.
         """
         return list(map(lambda x: x.sender, self.__transceivers))
+
+    async def getStats(self):
+        """
+        Returns statistics for the connection.
+
+        :rtype: :class:`RTCStatsReport`
+        """
+        merged = RTCStatsReport()
+        coros = [x.getStats() for x in (self.getSenders() + self.getReceivers())]
+        for report in await asyncio.gather(*coros):
+            merged.update(report)
+        return merged
 
     def getTransceivers(self):
         """

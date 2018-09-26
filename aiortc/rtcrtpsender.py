@@ -115,14 +115,15 @@ class RTCRtpSender:
 
     async def getStats(self):
         """
-        Returns a :class:`RTCStatsReport` containing :class:`RTCOutboundRtpStreamStats`
-        and :class:`RTCRemoteInboundRtpStreamStats`.
+        Returns statistics about the RTP sender.
+
+        :rtype: :class:`RTCStatsReport`
         """
-        self.__stats['outbound-rtp'] = RTCOutboundRtpStreamStats(
+        stats = RTCOutboundRtpStreamStats(
             # RTCStats
             timestamp=current_datetime(),
             type='outbound-rtp',
-            id=str(id(self)),
+            id='outbound-rtp_' + str(id(self)),
             # RTCStreamStats
             ssrc=self._ssrc,
             kind=self.__kind,
@@ -133,6 +134,7 @@ class RTCRtpSender:
             # RTCOutboundRtpStreamStats
             trackId=str(id(self.track)),
         )
+        self.__stats[stats.id] = stats
         return self.__stats
 
     def replaceTrack(self, track):
@@ -185,7 +187,7 @@ class RTCRtpSender:
                     # RTCStats
                     timestamp=current_datetime(),
                     type='remote-inbound-rtp',
-                    id=str(id(self)),
+                    id='remote-inbound-rtp_' + str(id(self)),
                     # RTCStreamStats
                     ssrc=packet.ssrc,
                     kind=self.__kind,
@@ -198,7 +200,7 @@ class RTCRtpSender:
                     roundTripTime=self.__rtt,
                     fractionLost=report.fraction_lost
                 )
-                self.__stats[stats.type] = stats
+                self.__stats[stats.id] = stats
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
             for seq in packet.lost:
                 await self._retransmit(seq)

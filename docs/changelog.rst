@@ -11,6 +11,7 @@ Changelog
 Media
 .....
 
+  * Add the :meth:`RTCPeerConnection.getStats()` coroutine to retrieve statistics.
   * Add support for sending Receiver Estimate Maximum Bitrate (REMB) feedback.
   * Add support for parsing / serializing more RTP header extensions.
   * Move each media encoder / decoder its one thread instead of using a
@@ -43,8 +44,7 @@ Data channels
 Media
 .....
 
-  * Add initial `getStats()` API to :class:`aiortc.RTCRtpReceiver` and
-    :class:`aiortc.RTCRtpSender`.
+  * Add initial :meth:`RTCRtpReceiver.getStats()` and :meth:`RTCRtpReceiver.getStats()` coroutines.
 
 Examples
 ........
@@ -194,8 +194,7 @@ Miscellaneous
 Peer connection
 ...............
 
-  * Add addIceCandidate() method to :class:`aiortc.RTCPeerConnection` to handle
-    trickled ICE candidates.
+  * Add :meth:`RTCPeerConnection.addIceCandidate()` method to handle trickled ICE candidates.
 
 Media
 .....

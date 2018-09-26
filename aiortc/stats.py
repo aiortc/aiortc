@@ -62,11 +62,24 @@ class RTCOutboundRtpStreamStats(RTCSentRtpStreamStats):
 @attr.s
 class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
     """
-    The RTCRemoteOutboundRtpStreamStats dictionary represents the remote
+    The :class:`RTCRemoteOutboundRtpStreamStats` dictionary represents the remote
     endpoint's measurement metrics for its outgoing RTP stream.
     """
     remoteTimestamp = attr.ib(default=None)
 
 
 class RTCStatsReport(dict):
+    """
+    Provides statistics data about WebRTC connections as returned by the
+    :meth:`RTCPeerConnection.getStats()`, :meth:`RTCRtpReceiver.getStats()`
+    and :meth:`RTCRtpSender.getStats()` coroutines.
+
+    This object consists of a mapping of string identifiers to objects which
+    are instances of:
+
+    - :class:`RTCInboundRtpStreamStats`
+    - :class:`RTCOutboundRtpStreamStats`
+    - :class:`RTCRemoteInboundRtpStreamStats`
+    - :class:`RTCRemoteOutboundRtpStreamStats`
+    """
     pass

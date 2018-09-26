@@ -10,6 +10,7 @@ from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
 from aiortc.rtcpeerconnection import find_common_codecs
 from aiortc.rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 from aiortc.sdp import SessionDescription
+from aiortc.stats import RTCStatsReport
 
 from .utils import run
 
@@ -980,6 +981,13 @@ class RTCPeerConnectionTest(TestCase):
 
         # let media flow to trigger RTCP feedback, including REMB
         run(asyncio.sleep(5))
+
+        # check stats
+        report = run(pc1.getStats())
+        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertEqual(
+            sorted([s.type for s in report.values()]),
+            ['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp', 'remote-outbound-rtp'])
 
         # close
         run(pc1.close())

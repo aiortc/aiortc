@@ -105,6 +105,8 @@ Media
 Statistics
 ----------
 
+   .. autoclass:: RTCStatsReport()
+
    .. autoclass:: RTCInboundRtpStreamStats()
       :members:
 

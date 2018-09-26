@@ -208,15 +208,16 @@ class RTCRtpReceiver:
 
     async def getStats(self):
         """
-        Returns a :class:`RTCStatsReport` containing :class:`RTCInboundRtpStreamStats`
-        and :class:`RTCRemoteOutboundRtpStreamStats`.
+        Returns statistics about the RTP receiver.
+
+        :rtype: :class:`RTCStatsReport`
         """
         if self.__remote_counter is not None:
-            self.__stats['inbound-rtp'] = RTCInboundRtpStreamStats(
+            stats = RTCInboundRtpStreamStats(
                 # RTCStats
                 timestamp=current_datetime(),
                 type='inbound-rtp',
-                id=str(id(self)),
+                id='inbound-rtp_' + str(id(self)),
                 # RTCStreamStats
                 ssrc=self.__remote_counter.ssrc,
                 kind=self.__kind,
@@ -227,6 +228,7 @@ class RTCRtpReceiver:
                 jitter=self.__remote_counter.jitter,
                 # RTPInboundRtpStreamStats
             )
+            self.__stats[stats.id] = stats
         return self.__stats
 
     async def receive(self, parameters):
@@ -278,7 +280,7 @@ class RTCRtpReceiver:
                 # RTCStats
                 timestamp=current_datetime(),
                 type='remote-outbound-rtp',
-                id=str(id(self)),
+                id='remote-outbound-rtp_' + str(id(self)),
                 # RTCStreamStats
                 ssrc=packet.ssrc,
                 kind=self.__kind,
@@ -289,7 +291,7 @@ class RTCRtpReceiver:
                 # RTCRemoteOutboundRtpStreamStats
                 remoteTimestamp=datetime_from_ntp(packet.sender_info.ntp_timestamp)
             )
-            self.__stats[stats.type] = stats
+            self.__stats[stats.id] = stats
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
         elif isinstance(packet, RtcpByePacket):
