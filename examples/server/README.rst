@@ -28,8 +28,8 @@ http://127.0.0.1:8080
 Once you click `Start` the browser will send the audio and video from its
 webcam to the server.
 
-The server will play a pre-recorded audio clip and alternately send a green
-square and the received video back to the browser.
+The server will play a pre-recorded audio clip and send the received video back
+to the browser, optionally applying a transform to it.
 
 In parallel to media streams, the browser sends a 'ping' message over the data
 channel, and the server replies with 'pong'.

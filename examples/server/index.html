@@ -41,20 +41,19 @@
     <input id="use-video" type="checkbox"/>
     <label for="use-video">Use video</label>
     <select id="video-resolution">
-        <option value="">Default resolution</option>
+        <option value="" selected>Default resolution</option>
         <option value="320x240">320x240</option>
         <option value="640x480">640x480</option>
         <option value="960x540">960x540</option>
         <option value="1280x720">1280x720</option>
     </select>
     <select id="video-transform">
+        <option value="none" selected>No transform</option>
         <option value="edges">Edge detection</option>
         <option value="rotate">Rotate</option>
-        <option value="green">Green frame</option>
-        <option value="none">None</option>
     </select>
     <select id="video-codec">
-        <option value="default" selected>Default</option>
+        <option value="default" selected>Default codec</option>
         <option value="VP8/90000">VP8/90000</option>
         <option value="H264/90000">H264/90000</option>
     </select>
@@ -77,7 +76,6 @@
 <div id="media" style="display: none">
     <h2>Media</h2>
 
-    <p>You should see a video alternating between the raw and transformed video.</p>
     <audio id="audio" autoplay="true"></audio>
     <video id="video" autoplay="true"></video>
 </div>

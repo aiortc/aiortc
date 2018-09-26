@@ -7,8 +7,7 @@ import os
 import cv2
 from aiohttp import web
 
-from aiortc import (RTCPeerConnection, RTCSessionDescription, VideoFrame,
-                    VideoStreamTrack)
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
                                   video_frame_from_bgr, video_frame_from_gray,
                                   video_frame_to_bgr)
@@ -17,70 +16,29 @@ ROOT = os.path.dirname(__file__)
 
 
 class VideoTransformTrack(VideoStreamTrack):
-    def __init__(self, transform):
+    def __init__(self, track, transform):
         self.counter = 0
         self.received = asyncio.Queue(maxsize=1)
+        self.track = track
         self.transform = transform
 
     async def recv(self):
-        frame = await self.received.get()
-
+        frame = await self.track.recv()
         self.counter += 1
-        if (self.counter % 100) > 50:
-            # apply image processing to frame
-            if self.transform == 'edges':
-                img = video_frame_to_bgr(frame)
-                edges = cv2.Canny(img, 100, 200)
-                return video_frame_from_gray(edges, timestamp=frame.timestamp)
-            elif self.transform == 'rotate':
-                img = video_frame_to_bgr(frame)
-                rows, cols, _ = img.shape
-                M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 7.2, 1)
-                rotated = cv2.warpAffine(img, M, (cols, rows))
-                return video_frame_from_bgr(rotated, timestamp=frame.timestamp)
-            elif self.transform == 'green':
-                return VideoFrame(width=frame.width, height=frame.height, timestamp=frame.timestamp)
-            else:
-                return frame
+
+        # apply image processing to frame
+        if self.transform == 'edges':
+            img = video_frame_to_bgr(frame)
+            edges = cv2.Canny(img, 100, 200)
+            return video_frame_from_gray(edges, timestamp=frame.timestamp)
+        elif self.transform == 'rotate':
+            img = video_frame_to_bgr(frame)
+            rows, cols, _ = img.shape
+            M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 1.8, 1)
+            rotated = cv2.warpAffine(img, M, (cols, rows))
+            return video_frame_from_bgr(rotated, timestamp=frame.timestamp)
         else:
-            # return raw frame
             return frame
-
-
-async def consume_video(track, local_video):
-    """
-    Receive incoming video.
-
-    The video can optionally be written to a file.
-    """
-    last_size = None
-    writer = None
-
-    try:
-        while True:
-            frame = await track.recv()
-
-            # print frame size
-            frame_size = (frame.width, frame.height)
-            if frame_size != last_size:
-                print('Received frame size', frame_size)
-                last_size = frame_size
-
-            # write to file
-            if args.write_video:
-                if writer is None:
-                    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                    writer = cv2.VideoWriter(args.write_video, fourcc, 30, frame_size)
-                writer.write(video_frame_to_bgr(frame))
-
-            # we are only interested in the latest frame
-            if local_video.received.full():
-                await local_video.received.get()
-
-            await local_video.received.put(frame)
-    finally:
-        if writer is not None:
-            writer.release()
 
 
 async def index(request):
@@ -108,7 +66,6 @@ async def offer(request):
         recorder = MediaRecorder(path=args.write_audio)
     else:
         recorder = MediaBlackhole()
-    local_video = VideoTransformTrack(transform=params['video_transform'])
 
     @pc.on('datachannel')
     def on_datachannel(channel):
@@ -119,20 +76,17 @@ async def offer(request):
     @pc.on('track')
     def on_track(track):
         print('Track %s received' % track.kind)
-        task = None
 
         if track.kind == 'audio':
             pc.addTrack(player.audio)
             recorder.addTrack(track)
         elif track.kind == 'video':
+            local_video = VideoTransformTrack(track, transform=params['video_transform'])
             pc.addTrack(local_video)
-            task = asyncio.ensure_future(consume_video(track, local_video))
 
         @track.on('ended')
         def on_ended():
             print('Track %s ended' % track.kind)
-            if task:
-                task.cancel()
             recorder.stop()
             player.stop()
 
@@ -164,8 +118,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080,
                         help='Port for HTTP server (default: 8080)')
     parser.add_argument('--verbose', '-v', action='count')
-    parser.add_argument('--write-audio', help='Write received audio to a file (WAV)')
-    parser.add_argument('--write-video', help='Write received video to a file (AVI)')
+    parser.add_argument('--write-audio', help='Write received audio to a file')
     args = parser.parse_args()
 
     if args.verbose:
