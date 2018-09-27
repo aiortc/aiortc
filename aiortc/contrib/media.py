@@ -319,7 +319,7 @@ class MediaRecorder:
                 stream = self.__container.add_stream('jpeg2000', rate=30)
                 stream.pix_fmt = 'rgb24'
             else:
-                stream = self.__container.add_stream('h264', rate=30)
+                stream = self.__container.add_stream('libx264', rate=30)
                 stream.pix_fmt = 'yuv420p'
             stream.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
         self.__tracks[track] = MediaRecorderContext(stream, convert)
