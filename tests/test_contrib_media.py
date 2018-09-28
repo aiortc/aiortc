@@ -193,15 +193,21 @@ class VideoFrameTest(TestCase):
 
     def test_video_frame_from_avframe_rgb32(self):
         avframe = av.VideoFrame(width=640, height=480, format='rgb32')
+        avframe.pts = 123
         frame = video_frame_from_avframe(avframe)
+        self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
+        self.assertEqual(frame.timestamp, 123)
 
     def test_video_frame_from_avframe_yuv420p(self):
         avframe = av.VideoFrame(width=640, height=480, format='yuv420p')
+        avframe.pts = 123
         frame = video_frame_from_avframe(avframe)
+        self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
+        self.assertEqual(frame.timestamp, 123)
 
     def test_video_frame_to_bgr(self):
         frame = VideoFrame(width=640, height=480, timestamp=123)
