@@ -95,6 +95,7 @@ class H264Decoder:
     def decode(self, encoded_frame):
         try:
             packet = Packet(encoded_frame.data)
+            packet.pts = encoded_frame.timestamp
             frames = self.codec.decode(packet)
         except AVError as e:
             logger.warning('failed to decode, skipping package: ' + str(e))

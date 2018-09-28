@@ -40,17 +40,19 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        # encode
-        frame = VideoFrame(width=width, height=height, timestamp=0)
-        packages = encoder.encode(frame)
+        for timestamp in range(0, 90000, 3000):
+            # encode
+            frame = VideoFrame(width=width, height=height, timestamp=timestamp)
+            packages = encoder.encode(frame)
 
-        # depacketize
-        data = b''
-        for package in packages:
-            data += depayload(codec, package)
+            # depacketize
+            data = b''
+            for package in packages:
+                data += depayload(codec, package)
 
-        # decode
-        frames = decoder.decode(JitterFrame(data=data, timestamp=0))
-        self.assertEqual(len(frames), 1)
-        self.assertEqual(frames[0].width, width)
-        self.assertEqual(frames[0].height, height)
+            # decode
+            frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
+            self.assertEqual(len(frames), 1)
+            self.assertEqual(frames[0].width, width)
+            self.assertEqual(frames[0].height, height)
+            self.assertEqual(frames[0].timestamp, timestamp)
