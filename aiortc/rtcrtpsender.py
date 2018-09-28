@@ -37,9 +37,6 @@ def encoder_worker(input_q):
             codec_name = codec.name
 
         payloads = encoder.encode(frame, force_keyframe)
-        if not isinstance(payloads, list):
-            payloads = [payloads]
-
         try:
             future.set_result((payloads, encoder.timestamp_increment))
         except asyncio.InvalidStateError:

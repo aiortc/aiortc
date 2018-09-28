@@ -69,4 +69,4 @@ class OpusEncoder:
         length = lib.opus_encode(self.encoder, ffi.cast('int16_t*', ffi.from_buffer(data)),
                                  FRAME_SIZE, self.cdata, len(self.cdata))
         assert length > 0
-        return self.buffer[0:length]
+        return [self.buffer[0:length]]

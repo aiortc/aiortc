@@ -29,8 +29,8 @@ class PcmaTest(CodecTestCase):
             data=b'\x00\x00' * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xd5' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xd5' * 160])
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMA_CODEC)
@@ -41,8 +41,8 @@ class PcmaTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xd5' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xd5' * 160])
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMA_CODEC)
@@ -53,8 +53,8 @@ class PcmaTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 960,
             sample_rate=48000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xd5' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xd5' * 160])
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMA_CODEC, output_channels=1, output_sample_rate=8000)
@@ -82,8 +82,8 @@ class PcmuTest(CodecTestCase):
             data=b'\x00\x00' * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xff' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xff' * 160])
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMU_CODEC)
@@ -94,8 +94,8 @@ class PcmuTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xff' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xff' * 160])
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMU_CODEC)
@@ -106,8 +106,8 @@ class PcmuTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 960,
             sample_rate=48000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xff' * 160)
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xff' * 160])
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMU_CODEC, output_channels=1, output_sample_rate=8000)

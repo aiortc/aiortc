@@ -21,7 +21,12 @@ class CodecTestCase(TestCase):
             sample_rate=8000,
             timestamp=0)
         self.assertEqual(len(frame.data), 320)
-        data = encoder.encode(frame)
+        packages = encoder.encode(frame)
+
+        # depacketize
+        data = b''
+        for package in packages:
+            data += depayload(codec, package)
 
         # decode
         frames = decoder.decode(JitterFrame(data=data, timestamp=0))

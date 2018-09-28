@@ -38,7 +38,7 @@ class PcmaEncoder:
     timestamp_increment = 160
 
     def encode(self, frame, force_keyframe=False):
-        return audioop.lin2alaw(mono_8khz(frame), frame.sample_width)
+        return [audioop.lin2alaw(mono_8khz(frame), frame.sample_width)]
 
 
 class PcmuDecoder:
@@ -54,4 +54,4 @@ class PcmuEncoder:
     timestamp_increment = 160
 
     def encode(self, frame, force_keyframe=False):
-        return audioop.lin2ulaw(mono_8khz(frame), frame.sample_width)
+        return [audioop.lin2ulaw(mono_8khz(frame), frame.sample_width)]

@@ -31,8 +31,8 @@ class OpusTest(CodecTestCase):
             data=b'\x00\x00' * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xfc\xff\xfe')
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xfc\xff\xfe'])
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
@@ -43,8 +43,8 @@ class OpusTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 160,
             sample_rate=8000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xfc\xff\xfe')
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xfc\xff\xfe'])
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(OPUS_CODEC)
@@ -55,8 +55,8 @@ class OpusTest(CodecTestCase):
             data=b'\x00\x00' * 2 * 960,
             sample_rate=48000,
             timestamp=0)
-        data = encoder.encode(frame)
-        self.assertEqual(data, b'\xfc\xff\xfe')
+        payloads = encoder.encode(frame)
+        self.assertEqual(payloads, [b'\xfc\xff\xfe'])
 
     def test_roundtrip(self):
         self.roundtrip_audio(OPUS_CODEC, output_channels=2, output_sample_rate=48000)
