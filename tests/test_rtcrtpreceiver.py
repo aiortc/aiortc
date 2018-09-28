@@ -7,7 +7,8 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
-                                   RTCRtpReceiver, StreamStatistics)
+                                   RTCRtpReceiver, StreamStatistics,
+                                   TimestampMapper)
 from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
@@ -237,6 +238,13 @@ class RTCRtpReceiverTest(TestCase):
         # check remote track
         frame = run(receiver._track.recv())
         self.assertTrue(isinstance(frame, AudioFrame))
+        self.assertEqual(frame.sample_rate, 8000)
+        self.assertEqual(frame.timestamp, 0)
+
+        frame = run(receiver._track.recv())
+        self.assertTrue(isinstance(frame, AudioFrame))
+        self.assertEqual(frame.sample_rate, 8000)
+        self.assertEqual(frame.timestamp, 160)
 
         # shutdown
         run(receiver.stop())
@@ -298,3 +306,21 @@ class RTCRtpReceiverTest(TestCase):
         dtlsTransport = ClosedDtlsTransport()
         with self.assertRaises(InvalidStateError):
             RTCRtpReceiver('audio', dtlsTransport)
+
+
+class TimestampMapperTest(TestCase):
+    def test_simple(self):
+        mapper = TimestampMapper()
+        self.assertEqual(mapper.map(1000), 0)
+        self.assertEqual(mapper.map(1001), 1)
+        self.assertEqual(mapper.map(1003), 3)
+        self.assertEqual(mapper.map(1004), 4)
+        self.assertEqual(mapper.map(1010), 10)
+
+    def test_wrap(self):
+        mapper = TimestampMapper()
+        self.assertEqual(mapper.map(4294967293), 0)
+        self.assertEqual(mapper.map(4294967294), 1)
+        self.assertEqual(mapper.map(4294967295), 2)
+        self.assertEqual(mapper.map(0), 3)
+        self.assertEqual(mapper.map(1), 4)

@@ -353,15 +353,8 @@ class MediaRecorder:
                 self.__container = None
 
     async def __run_track(self, track, context):
-        first_timestamp = None
         while True:
             frame = await track.recv()
-
-            # frames received from RTP have a random initial timestamp, cancel it out
-            if first_timestamp is None:
-                first_timestamp = frame.timestamp
-            frame.timestamp -= first_timestamp
-
             avframe = context.convert(frame)
             for packet in context.stream.encode(avframe):
                 self.__container.mux(packet)

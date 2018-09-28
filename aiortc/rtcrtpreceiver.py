@@ -162,6 +162,23 @@ class RemoteStreamTrack(MediaStreamTrack):
             self.emit('ended')
 
 
+class TimestampMapper:
+    def __init__(self):
+        self._last = None
+        self._origin = None
+
+    def map(self, timestamp):
+        if self._origin is None:
+            # first timestamp
+            self._origin = timestamp
+        elif timestamp < self._last:
+            # RTP timestamp wrapped
+            self._origin -= (1 << 32)
+
+        self._last = timestamp
+        return timestamp - self._origin
+
+
 class RTCRtpReceiver:
     """
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
@@ -192,6 +209,7 @@ class RTCRtpReceiver:
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__stopped = asyncio.Event()
+        self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
 
         # RTCP
@@ -344,6 +362,7 @@ class RTCRtpReceiver:
 
             # if we have a complete encoded frame, decode it
             if encoded_frame is not None:
+                encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
                 self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self):
