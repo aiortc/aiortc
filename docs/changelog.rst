@@ -3,6 +3,24 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.9
+-----
+
+*Under development*
+
+Media
+.....
+
+  * Use a jitter buffer for incoming audio.
+
+Examples
+........
+
+  * `apprtc` : demonstrate the use of :class:`aiortc.contrib.media.MediaPlayer`
+    and :class:`aiortc.contrib.media.MediaRecorder`.
+  * :class:`aiortc.contrib.media.MediaRecorder` : don't sleep if a frame lacks timing information.
+  * :class:`aiortc.contrib.media.MediaRecorder` : use `libx264` for encoding.
+
 0.9.8
 -----
 

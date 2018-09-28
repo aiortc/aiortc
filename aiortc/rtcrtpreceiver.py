@@ -8,7 +8,7 @@ import time
 from . import clock
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
-from .jitterbuffer import JitterBuffer, JitterFrame
+from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamTrack
 from .rate import RemoteBitrateEstimator
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
@@ -178,13 +178,15 @@ class RTCRtpReceiver:
         self.__decoder_queue = queue.Queue()
         self.__decoder_thread = None
         self.__kind = kind
-        self.__jitter_buffer = JitterBuffer(capacity=128)
-        self.__nack_generator = NackGenerator(self)
-        self._track = None
-        if kind == 'video':
-            self.__remote_bitrate_estimator = RemoteBitrateEstimator()
-        else:
+        if kind == 'audio':
+            self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
+            self.__nack_generator = None
             self.__remote_bitrate_estimator = None
+        else:
+            self.__jitter_buffer = JitterBuffer(capacity=128)
+            self.__nack_generator = NackGenerator(self)
+            self.__remote_bitrate_estimator = RemoteBitrateEstimator()
+        self._track = None
         self.__rtcp_exited = asyncio.Event()
         self.__sender = None
         self.__started = False
@@ -322,7 +324,7 @@ class RTCRtpReceiver:
         if packet.payload_type in self.__codecs:
             codec = self.__codecs[packet.payload_type]
 
-            # RTCP
+            # feed RTCP statistics
             if self.__remote_counter is None or self.__remote_counter.ssrc != packet.ssrc:
                 self.__remote_counter = StreamStatistics(packet.ssrc, codec.clockRate)
             self.__remote_counter.add(packet)
@@ -333,15 +335,12 @@ class RTCRtpReceiver:
             else:
                 packet._data = b''
 
-            if self.__kind == 'audio':
-                # FIXME: audio should use a jitter buffer!
-                encoded_frame = JitterFrame(data=packet._data, timestamp=packet.timestamp)
-            else:
-                # check if we are missing any packets
+            # send NACKs for any missing any packets
+            if self.__nack_generator is not None:
                 await self.__nack_generator.add(packet)
 
-                # try to re-assemble encoded frame
-                encoded_frame = self.__jitter_buffer.add(packet)
+            # try to re-assemble encoded frame
+            encoded_frame = self.__jitter_buffer.add(packet)
 
             # if we have a complete encoded frame, decode it
             if encoded_frame is not None:

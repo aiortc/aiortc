@@ -217,8 +217,11 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
-        packet = RtpPacket.parse(load('rtp.bin'))
-        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+        for i in range(10):
+            packet = RtpPacket.parse(load('rtp.bin'))
+            packet.sequence_number += i
+            packet.timestamp += i * 160
+            run(receiver._handle_rtp_packet(packet, arrival_time_ms=i * 20))
 
         # receive RTCP SR
         for packet in RtcpPacket.parse(load('rtcp_sr.bin')):
