@@ -176,8 +176,51 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 3)
         self.assertPackets(jbuffer, [None, None, None, 3])
 
-    def test_remove_frame(self):
-        jbuffer = JitterBuffer(capacity=4)
+    def test_remove_audio_frame(self):
+        """
+        Audio jitter buffer.
+        """
+        jbuffer = JitterBuffer(capacity=16, prefetch=4)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1234)
+        packet._data = b'0000'
+        frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1235)
+        packet._data = b'0001'
+        frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=2, timestamp=1236)
+        packet._data = b'0002'
+        frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=3, timestamp=1237)
+        packet._data = b'0003'
+        frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=4, timestamp=1238)
+        packet._data = b'0003'
+        frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b'0000')
+        self.assertEqual(frame.timestamp, 1234)
+
+        packet = RtpPacket(sequence_number=5, timestamp=1239)
+        packet._data = b'0004'
+        frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b'0001')
+        self.assertEqual(frame.timestamp, 1235)
+
+    def test_remove_video_frame(self):
+        """
+        Video jitter buffer.
+        """
+        jbuffer = JitterBuffer(capacity=128)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
         packet._data = b'0000'

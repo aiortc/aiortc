@@ -8,11 +8,12 @@ class JitterFrame:
 
 
 class JitterBuffer:
-    def __init__(self, capacity):
+    def __init__(self, capacity, prefetch=0):
         assert capacity & (capacity - 1) == 0, 'capacity must be a power of 2'
         self._capacity = capacity
         self._origin = None
         self._packets = [None for i in range(capacity)]
+        self._prefetch = prefetch
 
     @property
     def capacity(self):
@@ -44,8 +45,11 @@ class JitterBuffer:
         return self._remove_frame(packet.sequence_number)
 
     def _remove_frame(self, sequence_number):
-        timestamp = None
+        frame = None
+        frames = 0
         packets = []
+        remove = 0
+        timestamp = None
 
         for count in range(self.capacity):
             pos = (self._origin + count) % self._capacity
@@ -55,9 +59,22 @@ class JitterBuffer:
             if timestamp is None:
                 timestamp = packet.timestamp
             elif packet.timestamp != timestamp:
-                self.remove(count)
-                return JitterFrame(data=b''.join([x._data for x in packets]),
-                                   timestamp=timestamp)
+                # we now have a complete frame, only store the first one
+                if frame is None:
+                    frame = JitterFrame(data=b''.join([x._data for x in packets]),
+                                        timestamp=timestamp)
+                    remove = count
+
+                # check we have prefetched enough
+                frames += 1
+                if frames >= self._prefetch:
+                    self.remove(remove)
+                    return frame
+
+                # start a new frame
+                packets = []
+                timestamp = packet.timestamp
+
             packets.append(packet)
 
     def remove(self, count):
