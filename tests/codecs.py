@@ -14,29 +14,41 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        # encode
-        frame = AudioFrame(
-            channels=1,
-            data=b'\x00\x00' * 160,
-            sample_rate=8000,
-            timestamp=0)
-        self.assertEqual(len(frame.data), 320)
-        packages = encoder.encode(frame)
+        input_sample_rate = 8000
+        input_sample_count = int(input_sample_rate * AUDIO_PTIME)
+        input_timestamp = 0
 
-        # depacketize
-        data = b''
-        for package in packages:
-            data += depayload(codec, package)
+        output_sample_count = int(output_sample_rate * AUDIO_PTIME)
+        output_timestamp = 0
 
-        # decode
-        frames = decoder.decode(JitterFrame(data=data, timestamp=0))
-        self.assertEqual(len(frames), 1)
-        self.assertEqual(len(frames[0].data),
-                         output_sample_rate * AUDIO_PTIME * output_channels * 2)
-        self.assertEqual(frames[0].channels, output_channels)
-        self.assertEqual(frames[0].sample_rate, output_sample_rate)
-        self.assertEqual(frames[0].sample_width, 2)
-        self.assertEqual(frames[0].timestamp, 0)
+        for i in range(10):
+            # encode
+            frame = AudioFrame(
+                channels=1,
+                data=b'\x00\x00' * input_sample_count,
+                sample_rate=input_sample_rate,
+                timestamp=input_timestamp)
+            self.assertEqual(len(frame.data), 320)
+            packages, timestamp = encoder.encode(frame)
+
+            # depacketize
+            data = b''
+            for package in packages:
+                data += depayload(codec, package)
+
+            # decode
+            frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
+            self.assertEqual(len(frames), 1)
+            self.assertEqual(len(frames[0].data),
+                             output_sample_rate * AUDIO_PTIME * output_channels * 2)
+            self.assertEqual(frames[0].channels, output_channels)
+            self.assertEqual(frames[0].sample_rate, output_sample_rate)
+            self.assertEqual(frames[0].sample_width, 2)
+            self.assertEqual(frames[0].timestamp, output_timestamp)
+
+            # tick
+            input_timestamp += input_sample_count
+            output_timestamp += output_sample_count
 
     def roundtrip_video(self, codec, width, height):
         """
@@ -48,7 +60,7 @@ class CodecTestCase(TestCase):
         for timestamp in range(0, 90000, 3000):
             # encode
             frame = VideoFrame(width=width, height=height, timestamp=timestamp)
-            packages = encoder.encode(frame)
+            packages, timestamp = encoder.encode(frame)
 
             # depacketize
             data = b''

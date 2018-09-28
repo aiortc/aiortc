@@ -26,37 +26,70 @@ class OpusTest(CodecTestCase):
         encoder = get_encoder(OPUS_CODEC)
         self.assertTrue(isinstance(encoder, OpusEncoder))
 
+        # first frame
         frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * 160,
             sample_rate=8000,
             timestamp=0)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(payloads, [b'\xfc\xff\xfe'])
+        self.assertEqual(timestamp, 0)
+
+        # second frame
+        frame = AudioFrame(
+            channels=1,
+            data=b'\x00\x00' * 160,
+            sample_rate=8000,
+            timestamp=160)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(timestamp, 960)
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
         self.assertTrue(isinstance(encoder, OpusEncoder))
 
+        # first frame
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 160,
             sample_rate=8000,
             timestamp=0)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(payloads, [b'\xfc\xff\xfe'])
+        self.assertEqual(timestamp, 0)
+
+        # second frame
+        frame = AudioFrame(
+            channels=2,
+            data=b'\x00\x00' * 2 * 160,
+            sample_rate=8000,
+            timestamp=160)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(timestamp, 960)
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(OPUS_CODEC)
         self.assertTrue(isinstance(encoder, OpusEncoder))
 
+        # first frame
         frame = AudioFrame(
             channels=2,
             data=b'\x00\x00' * 2 * 960,
             sample_rate=48000,
             timestamp=0)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(payloads, [b'\xfc\xff\xfe'])
+        self.assertEqual(timestamp, 0)
+
+        # second frame
+        frame = AudioFrame(
+            channels=2,
+            data=b'\x00\x00' * 2 * 960,
+            sample_rate=48000,
+            timestamp=960)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(timestamp, 960)
 
     def test_roundtrip(self):
         self.roundtrip_audio(OPUS_CODEC, output_channels=2, output_sample_rate=48000)

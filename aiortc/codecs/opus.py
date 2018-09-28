@@ -34,8 +34,6 @@ class OpusDecoder:
 
 
 class OpusEncoder:
-    timestamp_increment = FRAME_SIZE
-
     def __init__(self):
         error = ffi.new('int *')
         self.encoder = lib.opus_encoder_create(
@@ -51,6 +49,7 @@ class OpusEncoder:
 
     def encode(self, frame, force_keyframe=False):
         data = frame.data
+        timestamp = frame.timestamp
 
         # resample at 48 kHz
         if frame.sample_rate != SAMPLE_RATE:
@@ -61,6 +60,7 @@ class OpusEncoder:
                 frame.sample_rate,
                 SAMPLE_RATE,
                 self.rate_state)
+            timestamp = (timestamp * SAMPLE_RATE) // frame.sample_rate
 
         # convert to stereo
         if frame.channels == 1:
@@ -69,4 +69,5 @@ class OpusEncoder:
         length = lib.opus_encode(self.encoder, ffi.cast('int16_t*', ffi.from_buffer(data)),
                                  FRAME_SIZE, self.cdata, len(self.cdata))
         assert length > 0
-        return [self.buffer[0:length]]
+
+        return [self.buffer[0:length]], timestamp

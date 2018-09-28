@@ -36,9 +36,9 @@ def encoder_worker(input_q):
             encoder = get_encoder(codec)
             codec_name = codec.name
 
-        payloads = encoder.encode(frame, force_keyframe)
+        result = encoder.encode(frame, force_keyframe)
         try:
-            future.set_result((payloads, encoder.timestamp_increment))
+            future.set_result(result)
         except asyncio.InvalidStateError:
             # the future was cancelled
             pass
@@ -246,14 +246,15 @@ class RTCRtpSender:
         encoder_thread.start()
 
         sequence_number = random16()
-        timestamp = random32()
+        timestamp_origin = random32()
         while not self.__stopped.is_set():
             if self.__track:
                 result = await first_completed(self._next_encoded_frame(codec, encoder_queue),
                                                self.__stopped.wait())
                 if result is True:
                     break
-                payloads, timestamp_increment = result
+                payloads, timestamp = result
+                timestamp = uint32_add(timestamp_origin, timestamp)
 
                 for i, payload in enumerate(payloads):
                     packet = RtpPacket(
@@ -282,7 +283,6 @@ class RTCRtpSender:
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
-                timestamp = uint32_add(timestamp, timestamp_increment)
             else:
                 await asyncio.sleep(0.02)
 

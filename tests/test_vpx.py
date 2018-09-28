@@ -132,15 +132,17 @@ class Vp8Test(CodecTestCase):
         self.assertTrue(isinstance(encoder, Vp8Encoder))
 
         frame = VideoFrame(width=640, height=480, timestamp=0)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
 
         # change resolution
         frame = VideoFrame(width=320, height=240, timestamp=3000)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 3000)
 
     def test_encoder_large(self):
         encoder = get_encoder(VP8_CODEC)
@@ -148,21 +150,24 @@ class Vp8Test(CodecTestCase):
 
         # first keyframe
         frame = VideoFrame(width=2560, height=1920, timestamp=0)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 7)
         self.assertEqual(len(payloads[0]), 1300)
+        self.assertEqual(timestamp, 0)
 
         # delta frame
         frame = VideoFrame(width=2560, height=1920, timestamp=3000)
-        payloads = encoder.encode(frame)
+        payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 3000)
 
         # force keyframe
         frame = VideoFrame(width=2560, height=1920, timestamp=6000)
-        payloads = encoder.encode(frame, force_keyframe=True)
+        payloads, timestamp = encoder.encode(frame, force_keyframe=True)
         self.assertEqual(len(payloads), 7)
         self.assertEqual(len(payloads[0]), 1300)
+        self.assertEqual(timestamp, 6000)
 
     def test_number_of_threads(self):
         self.assertEqual(number_of_threads(1920 * 1080, 16), 8)

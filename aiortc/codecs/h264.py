@@ -10,7 +10,6 @@ from av.codec.context import CodecContext
 from av.packet import Packet
 
 from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
-from ..mediastreams import VIDEO_CLOCKRATE
 
 logger = logging.getLogger('codec.h264')
 
@@ -107,7 +106,6 @@ class H264Decoder:
 class H264Encoder:
     def __init__(self):
         self.stream = None
-        self.timestamp_increment = VIDEO_CLOCKRATE // MAX_FRAME_RATE
 
     @staticmethod
     def _packetize_fu_a(data):
@@ -247,7 +245,7 @@ class H264Encoder:
 
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)
-        return self._packetize(packages)
+        return self._packetize(packages), frame.timestamp
 
 
 def h264_depayload(payload):

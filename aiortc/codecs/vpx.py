@@ -183,7 +183,6 @@ class Vp8Encoder:
 
         self.codec = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
-        self.timestamp = 0
         self.timestamp_increment = VIDEO_CLOCKRATE // MAX_FRAME_RATE
 
     def __del__(self):
@@ -227,9 +226,8 @@ class Vp8Encoder:
         if force_keyframe:
             flags |= lib.VPX_EFLAG_FORCE_KF
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, self.timestamp, self.timestamp_increment,
+            self.codec, image, frame.timestamp, self.timestamp_increment,
             flags, lib.VPX_DL_REALTIME))
-        self.timestamp += self.timestamp_increment
 
         it = ffi.new('vpx_codec_iter_t *')
         payloads = []
@@ -246,7 +244,8 @@ class Vp8Encoder:
                     payloads.append(bytes(descr) + data)
                     descr.partition_start = 0
                 self.picture_id = (self.picture_id + 1) % (1 << 15)
-        return payloads
+
+        return payloads, frame.timestamp
 
 
 def vp8_depayload(payload):

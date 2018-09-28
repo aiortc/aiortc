@@ -7,6 +7,7 @@ SAMPLE_RATE = 8000
 
 def mono_8khz(frame):
     data = frame.data
+    timestamp = frame.timestamp
 
     # resample at 8 kHz
     if frame.sample_rate != SAMPLE_RATE:
@@ -17,12 +18,13 @@ def mono_8khz(frame):
             frame.sample_rate,
             SAMPLE_RATE,
             None)
+        timestamp = (timestamp * SAMPLE_RATE) // frame.sample_rate
 
     # convert to mono
     if frame.channels == 2:
         data = audioop.tomono(data, frame.sample_width, 1, 1)
 
-    return data
+    return data, timestamp
 
 
 class PcmaDecoder:
@@ -35,10 +37,10 @@ class PcmaDecoder:
 
 
 class PcmaEncoder:
-    timestamp_increment = 160
-
     def encode(self, frame, force_keyframe=False):
-        return [audioop.lin2alaw(mono_8khz(frame), frame.sample_width)]
+        data, timestamp = mono_8khz(frame)
+        data = audioop.lin2alaw(data, frame.sample_width)
+        return [data], timestamp
 
 
 class PcmuDecoder:
@@ -51,7 +53,7 @@ class PcmuDecoder:
 
 
 class PcmuEncoder:
-    timestamp_increment = 160
-
     def encode(self, frame, force_keyframe=False):
-        return [audioop.lin2ulaw(mono_8khz(frame), frame.sample_width)]
+        data, timestamp = mono_8khz(frame)
+        data = audioop.lin2ulaw(data, frame.sample_width)
+        return [data], timestamp
