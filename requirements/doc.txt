@@ -1,9 +1,9 @@
 aioice
 attrs
-av
 cffi
 crcmod
 cryptography
+numpy
 pyee
 pylibsrtp
 pyopenssl
