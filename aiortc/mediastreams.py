@@ -30,8 +30,16 @@ class VideoFrame:
     Video frame in YUV420 planar format.
     """
     def __init__(self, width, height, timestamp, data=None):
+        assert width % 2 == 0, 'Frame width must be a multiple of 2'
+        assert height % 2 == 0, 'Frame height must be a multiple of 2'
+
+        data_size = math.ceil(width * height * 12 / 8)
+
         if data is None:
-            data = b'\x00' * math.ceil(width * height * 12 / 8)
+            data = bytes(data_size)
+        else:
+            assert len(data) == data_size, 'Frame data size does not match frame dimensions'
+
         self.data = data
         "The bytes representing the pixels."
         self.width = width

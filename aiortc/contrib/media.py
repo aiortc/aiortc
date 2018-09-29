@@ -46,10 +46,20 @@ def video_frame_from_avframe(avframe):
     """
     if str(avframe.format) != 'yuv420p':
         avframe = avframe.reformat(format='yuv420p')
+
+    data = b''
+    shifts = [0, 1, 1]
+    for i, plane in enumerate(avframe.planes):
+        arr = numpy.frombuffer(plane, numpy.uint8).reshape(-1, plane.line_size)
+        data += bytes(arr[
+            :(avframe.height >> shifts[i]),
+            :(avframe.width >> shifts[i]),
+        ])
+
     return VideoFrame(
         width=avframe.width,
         height=avframe.height,
-        data=b''.join(p.to_bytes() for p in avframe.planes),
+        data=data,
         timestamp=avframe.pts)
 
 
@@ -60,6 +70,7 @@ def video_frame_to_avframe(frame):
     u_start = frame.width * frame.height
     v_start = 5 * u_start // 4
     av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
+    assert av_frame.planes[0].line_size == av_frame.width
     av_frame.planes[0].update(frame.data[0:u_start])
     av_frame.planes[1].update(frame.data[u_start:v_start])
     av_frame.planes[2].update(frame.data[v_start:])
