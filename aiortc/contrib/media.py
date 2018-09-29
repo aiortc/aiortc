@@ -5,6 +5,7 @@ import threading
 import time
 
 import av
+import numpy
 
 from ..mediastreams import (AUDIO_PTIME, VIDEO_CLOCKRATE, AudioFrame,
                             MediaStreamTrack, VideoFrame)
@@ -90,7 +91,6 @@ def video_frame_from_gray(data_gray, timestamp):
 
 def video_frame_to_bgr(frame):
     import cv2
-    import numpy
     data_flat = numpy.frombuffer(frame.data, numpy.uint8)
     data_yuv = data_flat.reshape((math.ceil(frame.height * 12 / 8), frame.width))
     return cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_I420)
