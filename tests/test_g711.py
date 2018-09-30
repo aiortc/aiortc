@@ -2,7 +2,6 @@ from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
 from aiortc.codecs.g711 import (PcmaDecoder, PcmaEncoder, PcmuDecoder,
                                 PcmuEncoder)
 from aiortc.jitterbuffer import JitterFrame
-from aiortc.mediastreams import AudioFrame
 
 from .codecs import CodecTestCase
 
@@ -24,45 +23,28 @@ class PcmaTest(CodecTestCase):
         encoder = get_encoder(PCMA_CODEC)
         self.assertTrue(isinstance(encoder, PcmaEncoder))
 
-        for i in range(10):
-            frame_timestamp = i * 160
-            frame = AudioFrame(
-                channels=1,
-                data=b'\x00\x00' * 160,
-                sample_rate=8000,
-                timestamp=frame_timestamp)
+        for frame in self.create_audio_frames(channels=1, sample_rate=8000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xd5' * 160])
-            self.assertEqual(timestamp, frame_timestamp)
+            self.assertEqual(timestamp, frame.timestamp)
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMA_CODEC)
         self.assertTrue(isinstance(encoder, PcmaEncoder))
 
-        for i in range(10):
-            frame_timestamp = i * 160
-            frame = AudioFrame(
-                channels=2,
-                data=b'\x00\x00' * 2 * 160,
-                sample_rate=8000,
-                timestamp=frame_timestamp)
+        for frame in self.create_audio_frames(channels=2, sample_rate=8000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xd5' * 160])
-            self.assertEqual(timestamp, frame_timestamp)
+            self.assertEqual(timestamp, frame.timestamp)
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMA_CODEC)
         self.assertTrue(isinstance(encoder, PcmaEncoder))
 
-        for i in range(10):
-            frame = AudioFrame(
-                channels=2,
-                data=b'\x00\x00' * 2 * 960,
-                sample_rate=48000,
-                timestamp=i * 960)
+        for frame in self.create_audio_frames(channels=2, sample_rate=48000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xd5' * 160])
-            self.assertEqual(timestamp, i * 160)
+            self.assertEqual(timestamp, frame.timestamp // 6)
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMA_CODEC, output_channels=1, output_sample_rate=8000)
@@ -85,45 +67,28 @@ class PcmuTest(CodecTestCase):
         encoder = get_encoder(PCMU_CODEC)
         self.assertTrue(isinstance(encoder, PcmuEncoder))
 
-        for i in range(10):
-            frame_timestamp = i * 160
-            frame = AudioFrame(
-                channels=1,
-                data=b'\x00\x00' * 160,
-                sample_rate=8000,
-                timestamp=frame_timestamp)
+        for frame in self.create_audio_frames(channels=1, sample_rate=8000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xff' * 160])
-            self.assertEqual(timestamp, frame_timestamp)
+            self.assertEqual(timestamp, frame.timestamp)
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMU_CODEC)
         self.assertTrue(isinstance(encoder, PcmuEncoder))
 
-        for i in range(10):
-            frame_timestamp = i * 160
-            frame = AudioFrame(
-                channels=2,
-                data=b'\x00\x00' * 2 * 160,
-                sample_rate=8000,
-                timestamp=frame_timestamp)
+        for frame in self.create_audio_frames(channels=2, sample_rate=8000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xff' * 160])
-            self.assertEqual(timestamp, frame_timestamp)
+            self.assertEqual(timestamp, frame.timestamp)
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMU_CODEC)
         self.assertTrue(isinstance(encoder, PcmuEncoder))
 
-        for i in range(10):
-            frame = AudioFrame(
-                channels=2,
-                data=b'\x00\x00' * 2 * 960,
-                sample_rate=48000,
-                timestamp=i * 960)
+        for frame in self.create_audio_frames(channels=2, sample_rate=48000, count=10):
             payloads, timestamp = encoder.encode(frame)
             self.assertEqual(payloads, [b'\xff' * 160])
-            self.assertEqual(timestamp, i * 160)
+            self.assertEqual(timestamp, frame.timestamp // 6)
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMU_CODEC, output_channels=1, output_sample_rate=8000)

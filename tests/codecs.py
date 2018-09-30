@@ -7,6 +7,19 @@ from aiortc.mediastreams import AUDIO_PTIME
 
 
 class CodecTestCase(TestCase):
+    def create_audio_frames(self, channels, sample_rate, count):
+        frames = []
+        timestamp = 0
+        samples_per_frame = int(AUDIO_PTIME * sample_rate)
+        for i in range(count):
+            frames.append(AudioFrame(
+                channels=channels,
+                data=b'\x00\x00' * channels * samples_per_frame,
+                sample_rate=sample_rate,
+                timestamp=timestamp))
+            timestamp += samples_per_frame
+        return frames
+
     def roundtrip_audio(self, codec, output_channels, output_sample_rate):
         """
         Round-trip an AudioFrame through encoder then decoder.
@@ -21,13 +34,8 @@ class CodecTestCase(TestCase):
         output_sample_count = int(output_sample_rate * AUDIO_PTIME)
         output_timestamp = 0
 
-        for i in range(10):
+        for frame in self.create_audio_frames(channels=1, sample_rate=input_sample_rate, count=10):
             # encode
-            frame = AudioFrame(
-                channels=1,
-                data=b'\x00\x00' * input_sample_count,
-                sample_rate=input_sample_rate,
-                timestamp=input_timestamp)
             self.assertEqual(len(frame.data), 320)
             packages, timestamp = encoder.encode(frame)
 
