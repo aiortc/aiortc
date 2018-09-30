@@ -1,6 +1,5 @@
 import asyncio
 import fractions
-import math
 import threading
 import time
 
@@ -89,21 +88,9 @@ def video_frame_from_bgr(data_bgr, timestamp):
         data=data_yuv.tobytes())
 
 
-def video_frame_from_gray(data_gray, timestamp):
-    import cv2
-    data_bgr = cv2.cvtColor(data_gray, cv2.COLOR_GRAY2BGR)
-    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_I420)
-    return VideoFrame(
-        width=data_bgr.shape[1],
-        height=data_bgr.shape[0],
-        timestamp=timestamp,
-        data=data_yuv.tobytes())
-
-
 def video_frame_to_bgr(frame):
     import cv2
-    data_flat = numpy.frombuffer(frame.data, numpy.uint8)
-    data_yuv = data_flat.reshape((math.ceil(frame.height * 12 / 8), frame.width))
+    data_yuv = numpy.frombuffer(frame.data, numpy.uint8).reshape(-1, frame.width)
     return cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_I420)
 
 

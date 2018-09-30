@@ -10,8 +10,7 @@ import numpy
 from aiortc import AudioStreamTrack, VideoFrame, VideoStreamTrack
 from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
                                   video_frame_from_avframe,
-                                  video_frame_from_bgr, video_frame_from_gray,
-                                  video_frame_to_bgr)
+                                  video_frame_from_bgr, video_frame_to_bgr)
 
 from .utils import run
 
@@ -178,14 +177,6 @@ class VideoFrameTest(TestCase):
     def test_video_frame_from_bgr(self):
         image = numpy.full((480, 640, 3), (0, 0, 0), numpy.uint8)
         frame = video_frame_from_bgr(image, timestamp=123)
-        self.assertEqual(len(frame.data), 460800)
-        self.assertEqual(frame.width, 640)
-        self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.timestamp, 123)
-
-    def test_video_frame_from_gray(self):
-        image = numpy.full((480, 640), 0, numpy.uint8)
-        frame = video_frame_from_gray(image, timestamp=123)
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
