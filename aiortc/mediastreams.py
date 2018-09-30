@@ -1,4 +1,5 @@
 import asyncio
+import fractions
 import math
 import uuid
 
@@ -18,11 +19,16 @@ class AudioFrame:
         "The number of channels (`1` for mono, `2` for stereo)."
         self.data = data
         "The bytes representing the PCM samples."
-        self.sample_rate = sample_rate
-        "The sample rate, for instance `48000` for 48kHz."
+        self.__sample_rate = sample_rate
         self.sample_width = 2
         "The sample width in bytes, always `2` (16-bit)."
         self.timestamp = timestamp
+        self.time_base = fractions.Fraction(1, sample_rate)
+
+    @property
+    def sample_rate(self):
+        "The sample rate, for instance `48000` for 48kHz."
+        return self.__sample_rate
 
 
 class VideoFrame:
@@ -45,6 +51,7 @@ class VideoFrame:
         self.__width = width
         self.__height = height
         self.timestamp = timestamp
+        self.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
 
     @property
     def height(self):

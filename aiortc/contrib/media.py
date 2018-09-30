@@ -14,11 +14,13 @@ def audio_frame_from_avframe(av_frame):
     """
     Convert an av.AudioFrame to aiortc.AudioFrame.
     """
-    return AudioFrame(
+    frame = AudioFrame(
         channels=len(av_frame.layout.channels),
         data=av_frame.planes[0].to_bytes(),
         sample_rate=av_frame.sample_rate,
         timestamp=av_frame.pts)
+    frame.time_base = av_frame.time_base
+    return frame
 
 
 def audio_frame_to_avframe(frame):
@@ -35,31 +37,33 @@ def audio_frame_to_avframe(frame):
         samples=samples)
     av_frame.planes[0].update(frame.data)
     av_frame.sample_rate = frame.sample_rate
-    av_frame.time_base = fractions.Fraction(1, frame.sample_rate)
+    av_frame.time_base = frame.time_base
     return av_frame
 
 
-def video_frame_from_avframe(avframe):
+def video_frame_from_avframe(av_frame):
     """
     Convert an av.VideoFrame to aiortc.VideoFrame.
     """
-    if str(avframe.format) != 'yuv420p':
-        avframe = avframe.reformat(format='yuv420p')
+    if str(av_frame.format) != 'yuv420p':
+        av_frame = av_frame.reformat(format='yuv420p')
 
     data = b''
     shifts = [0, 1, 1]
-    for i, plane in enumerate(avframe.planes):
+    for i, plane in enumerate(av_frame.planes):
         arr = numpy.frombuffer(plane, numpy.uint8).reshape(-1, plane.line_size)
         data += bytes(arr[
-            :(avframe.height >> shifts[i]),
-            :(avframe.width >> shifts[i]),
+            :(av_frame.height >> shifts[i]),
+            :(av_frame.width >> shifts[i]),
         ])
 
-    return VideoFrame(
-        width=avframe.width,
-        height=avframe.height,
+    frame = VideoFrame(
+        width=av_frame.width,
+        height=av_frame.height,
         data=data,
-        timestamp=avframe.pts)
+        timestamp=av_frame.pts)
+    frame.time_base = av_frame.time_base
+    return frame
 
 
 def video_frame_to_avframe(frame):
@@ -74,7 +78,7 @@ def video_frame_to_avframe(frame):
     av_frame.planes[1].update(frame.data[u_start:v_start])
     av_frame.planes[2].update(frame.data[v_start:])
     av_frame.pts = frame.timestamp
-    av_frame.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
+    av_frame.time_base = frame.time_base
     return av_frame
 
 
