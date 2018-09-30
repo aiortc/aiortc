@@ -3,7 +3,7 @@ import multiprocessing
 import random
 from struct import pack, unpack
 
-from ..mediastreams import VIDEO_CLOCKRATE, VideoFrame
+from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, VideoFrame
 from ._vpx import ffi, lib
 
 MAX_FRAME_RATE = 30
@@ -165,11 +165,13 @@ class Vp8Decoder:
                         i_pos += i_stride
                         o_pos += o_stride
 
-                frames.append(VideoFrame(
+                frame = VideoFrame(
                     width=img.d_w,
                     height=img.d_h,
-                    timestamp=encoded_frame.timestamp,
-                    data=bytes(o_buf)))
+                    data=bytes(o_buf))
+                frame.pts = encoded_frame.timestamp
+                frame.time_base = VIDEO_TIME_BASE
+                frames.append(frame)
 
         return frames
 
@@ -183,7 +185,7 @@ class Vp8Encoder:
 
         self.codec = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
-        self.timestamp_increment = VIDEO_CLOCKRATE // MAX_FRAME_RATE
+        self.timestamp_increment = VIDEO_CLOCK_RATE // MAX_FRAME_RATE
 
     def __del__(self):
         if self.codec:
@@ -202,7 +204,7 @@ class Vp8Encoder:
         if not self.codec:
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
-            self.cfg.g_timebase.den = VIDEO_CLOCKRATE
+            self.cfg.g_timebase.den = VIDEO_CLOCK_RATE
             self.cfg.g_lag_in_frames = 0
             self.cfg.g_threads = number_of_threads(frame.width * frame.height,
                                                    multiprocessing.cpu_count())
@@ -226,7 +228,7 @@ class Vp8Encoder:
         if force_keyframe:
             flags |= lib.VPX_EFLAG_FORCE_KF
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, frame.timestamp, self.timestamp_increment,
+            self.codec, image, frame.pts, self.timestamp_increment,
             flags, lib.VPX_DL_REALTIME))
 
         it = ffi.new('vpx_codec_iter_t *')
@@ -245,7 +247,7 @@ class Vp8Encoder:
                     descr.partition_start = 0
                 self.picture_id = (self.picture_id + 1) % (1 << 15)
 
-        return payloads, frame.timestamp
+        return payloads, frame.pts
 
 
 def vp8_depayload(payload):

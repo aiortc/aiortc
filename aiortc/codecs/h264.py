@@ -10,6 +10,7 @@ from av.codec.context import CodecContext
 from av.packet import Packet
 
 from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
+from ..mediastreams import VIDEO_TIME_BASE
 
 logger = logging.getLogger('codec.h264')
 
@@ -95,6 +96,7 @@ class H264Decoder:
         try:
             packet = Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
+            packet.time_base = VIDEO_TIME_BASE
             frames = self.codec.decode(packet)
         except AVError as e:
             logger.warning('failed to decode, skipping package: ' + str(e))
@@ -245,7 +247,7 @@ class H264Encoder:
 
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)
-        return self._packetize(packages), frame.timestamp
+        return self._packetize(packages), frame.pts
 
 
 def h264_depayload(payload):

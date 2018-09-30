@@ -1,4 +1,5 @@
 import asyncio
+import fractions
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -238,13 +239,15 @@ class RTCRtpReceiverTest(TestCase):
         # check remote track
         frame = run(receiver._track.recv())
         self.assertTrue(isinstance(frame, AudioFrame))
+        self.assertEqual(frame.pts, 0)
         self.assertEqual(frame.sample_rate, 8000)
-        self.assertEqual(frame.timestamp, 0)
+        self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
 
         frame = run(receiver._track.recv())
         self.assertTrue(isinstance(frame, AudioFrame))
+        self.assertEqual(frame.pts, 160)
         self.assertEqual(frame.sample_rate, 8000)
-        self.assertEqual(frame.timestamp, 160)
+        self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
 
         # shutdown
         run(receiver.stop())

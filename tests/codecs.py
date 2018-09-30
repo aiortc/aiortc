@@ -1,9 +1,10 @@
+import fractions
 from unittest import TestCase
 
 from aiortc import AudioFrame, VideoFrame
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
-from aiortc.mediastreams import AUDIO_PTIME
+from aiortc.mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE
 
 
 class CodecTestCase(TestCase):
@@ -12,11 +13,13 @@ class CodecTestCase(TestCase):
         timestamp = 0
         samples_per_frame = int(AUDIO_PTIME * sample_rate)
         for i in range(count):
-            frames.append(AudioFrame(
+            frame = AudioFrame(
                 channels=channels,
                 data=b'\x00\x00' * channels * samples_per_frame,
-                sample_rate=sample_rate,
-                timestamp=timestamp))
+                sample_rate=sample_rate)
+            frame.pts = timestamp
+            frame.time_base = fractions.Fraction(1, sample_rate)
+            frames.append(frame)
             timestamp += samples_per_frame
         return frames
 
@@ -52,7 +55,8 @@ class CodecTestCase(TestCase):
             self.assertEqual(frames[0].channels, output_channels)
             self.assertEqual(frames[0].sample_rate, output_sample_rate)
             self.assertEqual(frames[0].sample_width, 2)
-            self.assertEqual(frames[0].timestamp, output_timestamp)
+            self.assertEqual(frames[0].pts, output_timestamp)
+            self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
 
             # tick
             input_timestamp += input_sample_count
@@ -67,7 +71,9 @@ class CodecTestCase(TestCase):
 
         for timestamp in range(0, 90000, 3000):
             # encode
-            frame = VideoFrame(width=width, height=height, timestamp=timestamp)
+            frame = VideoFrame(width=width, height=height)
+            frame.pts = timestamp
+            frame.time_base = VIDEO_TIME_BASE
             packages, timestamp = encoder.encode(frame)
 
             # depacketize
@@ -80,4 +86,5 @@ class CodecTestCase(TestCase):
             self.assertEqual(len(frames), 1)
             self.assertEqual(frames[0].width, width)
             self.assertEqual(frames[0].height, height)
-            self.assertEqual(frames[0].timestamp, timestamp)
+            self.assertEqual(frames[0].pts, timestamp)
+            self.assertEqual(frames[0].time_base, VIDEO_TIME_BASE)

@@ -1,3 +1,5 @@
+import fractions
+
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.opus import OpusDecoder, OpusEncoder
 from aiortc.jitterbuffer import JitterFrame
@@ -19,7 +21,8 @@ class OpusTest(CodecTestCase):
         self.assertEqual(frame.channels, 2)
         self.assertEqual(frame.data, b'\x00' * 4 * 960)
         self.assertEqual(frame.sample_rate, 48000)
-        self.assertEqual(frame.timestamp, 0)
+        self.assertEqual(frame.pts, 0)
+        self.assertEqual(frame.time_base, fractions.Fraction(1, 48000))
 
     def test_encoder_mono_8khz(self):
         encoder = get_encoder(OPUS_CODEC)

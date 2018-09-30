@@ -5,7 +5,7 @@ from unittest import TestCase
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.jitterbuffer import JitterFrame
-from aiortc.mediastreams import VideoFrame
+from aiortc.mediastreams import VIDEO_TIME_BASE, VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
@@ -63,8 +63,10 @@ class H264Test(CodecTestCase):
         encoder = get_encoder(H264_CODEC)
         self.assertTrue(isinstance(encoder, H264Encoder))
 
-        frame = VideoFrame(width=640, height=480, timestamp=0)
-        packages = encoder.encode(frame)
+        frame = VideoFrame(width=640, height=480)
+        frame.pts = 0
+        frame.time_base = VIDEO_TIME_BASE
+        packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
     def test_roundtrip_1280_720(self):
@@ -114,7 +116,9 @@ class H264Test(CodecTestCase):
     def test_frame_encoder(self):
         encoder = get_encoder(H264_CODEC)
 
-        frame = VideoFrame(width=640, height=480, timestamp=0)
+        frame = VideoFrame(width=640, height=480)
+        frame.pts = 0
+        frame.time_base = VIDEO_TIME_BASE
         packages = list(encoder._encode_frame(frame, False))
 
         self.assertGreaterEqual(len(packages), 3)
@@ -125,11 +129,15 @@ class H264Test(CodecTestCase):
             5,  # IDR (aka key frame)
         })
 
-        frame = VideoFrame(width=640, height=480, timestamp=3000)
+        frame = VideoFrame(width=640, height=480)
+        frame.pts = 3000
+        frame.time_base = VIDEO_TIME_BASE
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)
 
         # change resolution
-        frame = VideoFrame(width=320, height=240, timestamp=6000)
+        frame = VideoFrame(width=320, height=240)
+        frame.pts = 6000
+        frame.time_base = VIDEO_TIME_BASE
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)

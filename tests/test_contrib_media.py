@@ -180,7 +180,7 @@ class VideoFrameTest(TestCase):
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.timestamp, 123)
+        self.assertEqual(frame.pts, 123)
 
     def test_video_frame_from_avframe_rgb32(self):
         avframe = av.VideoFrame(width=640, height=480, format='rgb32')
@@ -189,7 +189,7 @@ class VideoFrameTest(TestCase):
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.timestamp, 123)
+        self.assertEqual(frame.pts, 123)
 
     def test_video_frame_from_avframe_yuv420p(self):
         avframe = av.VideoFrame(width=640, height=480, format='yuv420p')
@@ -198,9 +198,9 @@ class VideoFrameTest(TestCase):
         self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.timestamp, 123)
+        self.assertEqual(frame.pts, 123)
 
     def test_video_frame_to_bgr(self):
-        frame = VideoFrame(width=640, height=480, timestamp=123)
+        frame = VideoFrame(width=640, height=480)
         image = video_frame_to_bgr(frame)
         self.assertEqual(image.shape, (480, 640, 3))

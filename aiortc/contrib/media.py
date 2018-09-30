@@ -6,7 +6,7 @@ import time
 import av
 import numpy
 
-from ..mediastreams import (AUDIO_PTIME, VIDEO_CLOCKRATE, AudioFrame,
+from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, AudioFrame,
                             MediaStreamTrack, VideoFrame)
 
 
@@ -17,8 +17,8 @@ def audio_frame_from_avframe(av_frame):
     frame = AudioFrame(
         channels=len(av_frame.layout.channels),
         data=av_frame.planes[0].to_bytes(),
-        sample_rate=av_frame.sample_rate,
-        timestamp=av_frame.pts)
+        sample_rate=av_frame.sample_rate)
+    frame.pts = av_frame.pts
     frame.time_base = av_frame.time_base
     return frame
 
@@ -60,8 +60,8 @@ def video_frame_from_avframe(av_frame):
     frame = VideoFrame(
         width=av_frame.width,
         height=av_frame.height,
-        data=data,
-        timestamp=av_frame.pts)
+        data=data)
+    frame.pts = av_frame.pts
     frame.time_base = av_frame.time_base
     return frame
 
@@ -77,7 +77,7 @@ def video_frame_to_avframe(frame):
     av_frame.planes[0].update(frame.data[0:u_start])
     av_frame.planes[1].update(frame.data[u_start:v_start])
     av_frame.planes[2].update(frame.data[v_start:])
-    av_frame.pts = frame.timestamp
+    av_frame.pts = frame.pts
     av_frame.time_base = frame.time_base
     return av_frame
 
@@ -85,11 +85,13 @@ def video_frame_to_avframe(frame):
 def video_frame_from_bgr(data_bgr, timestamp):
     import cv2
     data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_I420)
-    return VideoFrame(
+    frame = VideoFrame(
         width=data_bgr.shape[1],
         height=data_bgr.shape[0],
-        timestamp=timestamp,
         data=data_yuv.tobytes())
+    frame.pts = timestamp
+    frame.time_base = VIDEO_TIME_BASE
+    return frame
 
 
 def video_frame_to_bgr(frame):
@@ -323,7 +325,7 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream('libx264', rate=30)
                 stream.pix_fmt = 'yuv420p'
-            stream.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
+            stream.time_base = VIDEO_TIME_BASE
         self.__tracks[track] = MediaRecorderContext(stream, convert)
 
     def start(self):

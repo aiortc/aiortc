@@ -6,15 +6,16 @@ import uuid
 from pyee import EventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
-VIDEO_CLOCKRATE = 90000
+VIDEO_CLOCK_RATE = 90000
 VIDEO_PTIME = 1 / 30  # 30fps
+VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
 
 class AudioFrame:
     """
     Audio frame, 16-bit PCM.
     """
-    def __init__(self, channels, data, sample_rate, timestamp):
+    def __init__(self, channels, data, sample_rate):
         self.channels = channels
         "The number of channels (`1` for mono, `2` for stereo)."
         self.data = data
@@ -22,8 +23,10 @@ class AudioFrame:
         self.__sample_rate = sample_rate
         self.sample_width = 2
         "The sample width in bytes, always `2` (16-bit)."
-        self.timestamp = timestamp
-        self.time_base = fractions.Fraction(1, sample_rate)
+        self.pts = None
+        "The presentation timestamp in :attr:`time_base` units for this frame."
+        self.time_base = None
+        "The unit of time (in fractional seconds) in which timestamps are expressed."
 
     @property
     def sample_rate(self):
@@ -35,7 +38,7 @@ class VideoFrame:
     """
     Video frame in YUV420 planar format.
     """
-    def __init__(self, width, height, timestamp, data=None):
+    def __init__(self, width, height, data=None):
         assert width % 2 == 0, 'Frame width must be a multiple of 2'
         assert height % 2 == 0, 'Frame height must be a multiple of 2'
 
@@ -50,8 +53,10 @@ class VideoFrame:
         "The bytes representing the pixels."
         self.__width = width
         self.__height = height
-        self.timestamp = timestamp
-        self.time_base = fractions.Fraction(1, VIDEO_CLOCKRATE)
+        self.pts = None
+        "The presentation timestamp in :attr:`time_base` units for this frame."
+        self.time_base = None
+        "The unit of time (in fractional seconds) in which timestamps are expressed."
 
     @property
     def height(self):
@@ -102,11 +107,13 @@ class AudioStreamTrack(MediaStreamTrack):
         self._timestamp = timestamp + samples
         await asyncio.sleep(AUDIO_PTIME)
 
-        return AudioFrame(
+        frame = AudioFrame(
             channels=1,
             data=b'\x00\x00' * samples,
-            sample_rate=sample_rate,
-            timestamp=timestamp)
+            sample_rate=sample_rate)
+        frame.pts = timestamp
+        frame.time_base = fractions.Fraction(1, sample_rate)
+        return frame
 
 
 class VideoStreamTrack(MediaStreamTrack):
@@ -117,7 +124,7 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def next_timestamp(self):
         if hasattr(self, '_timestamp'):
-            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCKRATE)
+            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
             await asyncio.sleep(VIDEO_PTIME)
         else:
             self._timestamp = 0
@@ -131,4 +138,7 @@ class VideoStreamTrack(MediaStreamTrack):
         subclass :class:`VideoStreamTrack` to provide a useful implementation.
         """
         timestamp = await self.next_timestamp()
-        return VideoFrame(width=640, height=480, timestamp=timestamp)
+        frame = VideoFrame(width=640, height=480)
+        frame.pts = timestamp
+        frame.time_base = VIDEO_TIME_BASE
+        return frame

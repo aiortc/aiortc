@@ -1,13 +1,15 @@
 import audioop
+import fractions
 
 from ..mediastreams import AudioFrame
 
 SAMPLE_RATE = 8000
+TIME_BASE = fractions.Fraction(1, 8000)
 
 
 def mono_8khz(frame):
     data = frame.data
-    timestamp = frame.timestamp
+    timestamp = frame.pts
 
     # resample at 8 kHz
     if frame.sample_rate != SAMPLE_RATE:
@@ -29,11 +31,13 @@ def mono_8khz(frame):
 
 class PcmaDecoder:
     def decode(self, encoded_frame):
-        return [AudioFrame(
+        frame = AudioFrame(
             channels=1,
             data=audioop.alaw2lin(encoded_frame.data, 2),
-            sample_rate=8000,
-            timestamp=encoded_frame.timestamp)]
+            sample_rate=SAMPLE_RATE)
+        frame.pts = encoded_frame.timestamp
+        frame.time_base = TIME_BASE
+        return [frame]
 
 
 class PcmaEncoder:
@@ -45,11 +49,13 @@ class PcmaEncoder:
 
 class PcmuDecoder:
     def decode(self, encoded_frame):
-        return [AudioFrame(
+        frame = AudioFrame(
             channels=1,
             data=audioop.ulaw2lin(encoded_frame.data, 2),
-            sample_rate=8000,
-            timestamp=encoded_frame.timestamp)]
+            sample_rate=SAMPLE_RATE)
+        frame.pts = encoded_frame.timestamp
+        frame.time_base = TIME_BASE
+        return [frame]
 
 
 class PcmuEncoder:

@@ -1,4 +1,5 @@
 import audioop
+import fractions
 
 from ..mediastreams import AudioFrame
 from ._opus import ffi, lib
@@ -7,6 +8,7 @@ CHANNELS = 2
 FRAME_SIZE = 960
 SAMPLE_RATE = 48000
 SAMPLE_WIDTH = 2
+TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
 class OpusDecoder:
@@ -26,11 +28,13 @@ class OpusDecoder:
                                  ffi.cast('int16_t *', self.cdata), FRAME_SIZE, 0)
         assert length == FRAME_SIZE
 
-        return [AudioFrame(
+        frame = AudioFrame(
             channels=CHANNELS,
             data=self.buffer[:],
-            sample_rate=SAMPLE_RATE,
-            timestamp=encoded_frame.timestamp)]
+            sample_rate=SAMPLE_RATE)
+        frame.pts = encoded_frame.timestamp
+        frame.time_base = TIME_BASE
+        return [frame]
 
 
 class OpusEncoder:
@@ -49,7 +53,7 @@ class OpusEncoder:
 
     def encode(self, frame, force_keyframe=False):
         data = frame.data
-        timestamp = frame.timestamp
+        timestamp = frame.pts
 
         # resample at 48 kHz
         if frame.sample_rate != SAMPLE_RATE:
