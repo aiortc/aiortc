@@ -42,11 +42,19 @@ class VideoFrame:
 
         self.data = data
         "The bytes representing the pixels."
-        self.width = width
-        "The image width in pixels."
-        self.height = height
-        "The image height in pixels."
+        self.__width = width
+        self.__height = height
         self.timestamp = timestamp
+
+    @property
+    def height(self):
+        "The image height in pixels."
+        return self.__height
+
+    @property
+    def width(self):
+        "The image width in pixels."
+        return self.__width
 
 
 class MediaStreamTrack(EventEmitter):
