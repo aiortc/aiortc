@@ -33,6 +33,12 @@ class AudioFrame:
         "The sample rate, for instance `48000` for 48kHz."
         return self.__sample_rate
 
+    @property
+    def time(self):
+        "The presentation time in seconds for this frame."
+        if self.pts is not None and self.time_base is not None:
+            return float(self.pts * self.time_base)
+
 
 class VideoFrame:
     """
@@ -67,6 +73,12 @@ class VideoFrame:
     def width(self):
         "The image width in pixels."
         return self.__width
+
+    @property
+    def time(self):
+        "The presentation time in seconds for this frame."
+        if self.pts is not None and self.time_base is not None:
+            return float(self.pts * self.time_base)
 
 
 class MediaStreamTrack(EventEmitter):

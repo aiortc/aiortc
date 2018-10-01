@@ -187,16 +187,14 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 if frame:
                     frame_time = frame.time
                     frame = audio_frame_from_avframe(frame)
-                    asyncio.run_coroutine_threadsafe(audio_track._queue.put(
-                        (frame, frame_time)), loop)
+                    asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
                 else:
                     break
         elif isinstance(frame, av.VideoFrame) and video_track:
             if video_track._queue.qsize() < 30:
                 frame_time = frame.time
                 frame = video_frame_from_avframe(frame)
-                asyncio.run_coroutine_threadsafe(video_track._queue.put(
-                    (frame, frame_time)), loop)
+                asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -208,7 +206,8 @@ class PlayerStreamTrack(MediaStreamTrack):
         self._start = None
 
     async def recv(self):
-        frame, frame_time = await self._queue.get()
+        frame = await self._queue.get()
+        frame_time = frame.time
 
         # control playback rate
         if frame_time is not None:
