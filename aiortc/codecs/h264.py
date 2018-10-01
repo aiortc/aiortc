@@ -1,13 +1,10 @@
-import io
+import fractions
 import logging
 import math
 from itertools import tee
 from struct import pack, unpack_from
 
 import av
-from av import AVError
-from av.codec.context import CodecContext
-from av.packet import Packet
 
 from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
 from ..mediastreams import VIDEO_TIME_BASE
@@ -90,15 +87,15 @@ class H264PayloadDescriptor:
 
 class H264Decoder:
     def __init__(self):
-        self.codec = CodecContext.create('h264', 'r')
+        self.codec = av.CodecContext.create('h264', 'r')
 
     def decode(self, encoded_frame):
         try:
-            packet = Packet(encoded_frame.data)
+            packet = av.packet.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
             frames = self.codec.decode(packet)
-        except AVError as e:
+        except av.AVError as e:
             logger.warning('failed to decode, skipping package: ' + str(e))
             return []
 
@@ -107,7 +104,7 @@ class H264Decoder:
 
 class H264Encoder:
     def __init__(self):
-        self.stream = None
+        self.codec = None
 
     @staticmethod
     def _packetize_fu_a(data):
@@ -224,25 +221,23 @@ class H264Encoder:
         return packetized_packages
 
     def _encode_frame(self, frame, force_keyframe):
-        if self.stream and (frame.width != self.stream.width or frame.height != self.stream.height):
-            self.stream = None
+        if self.codec and (frame.width != self.codec.width or frame.height != self.codec.height):
+            self.codec = None
 
-        if self.stream is None:
-            # TODO: can we use CodecContext directly?
-            buffer = io.BytesIO()
-            self.container = av.open(buffer, format='h264', mode='w')
-            self.stream = self.container.add_stream('libx264', rate=MAX_FRAME_RATE)
-            self.stream.width = frame.width
-            self.stream.height = frame.height
-            self.stream.pix_fmt = 'yuv420p'
-            self.stream.codec_context.options = {
+        if self.codec is None:
+            self.codec = av.CodecContext.create('libx264', 'w')
+            self.codec.width = frame.width
+            self.codec.height = frame.height
+            self.codec.pix_fmt = 'yuv420p'
+            self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+            self.codec.options = {
                 'profile': 'baseline',
                 'level': '31',
                 'tune': 'zerolatency'
             }
 
         av_frame = video_frame_to_avframe(frame)
-        packages = self.stream.encode(av_frame)
+        packages = self.codec.encode(av_frame)
         yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
 
     def encode(self, frame, force_keyframe=False):
