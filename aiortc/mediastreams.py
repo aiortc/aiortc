@@ -121,7 +121,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
         frame = AudioFrame(
             channels=1,
-            data=b'\x00\x00' * samples,
+            data=bytes(2 * samples),
             sample_rate=sample_rate)
         frame.pts = timestamp
         frame.time_base = fractions.Fraction(1, sample_rate)

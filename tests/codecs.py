@@ -15,7 +15,7 @@ class CodecTestCase(TestCase):
         for i in range(count):
             frame = AudioFrame(
                 channels=channels,
-                data=b'\x00\x00' * channels * samples_per_frame,
+                data=bytes(2 * channels * samples_per_frame),
                 sample_rate=sample_rate)
             frame.pts = timestamp
             frame.time_base = fractions.Fraction(1, sample_rate)
