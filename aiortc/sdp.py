@@ -128,7 +128,8 @@ class MediaDescription:
             self.profile,
             ' '.join(map(str, self.fmt))
         ))
-        lines.append('c=%s' % ipaddress_to_sdp(self.host))
+        if self.host is not None:
+            lines.append('c=%s' % ipaddress_to_sdp(self.host))
         if self.direction is not None:
             lines.append('a=' + self.direction)
 
@@ -196,6 +197,7 @@ class SessionDescription:
         self.origin = None
         self.name = '-'
         self.time = '0 0'
+        self.host = None
         self.bundle = []
         self.media = []
 
@@ -214,8 +216,16 @@ class SessionDescription:
         # parse session
         session = cls()
         for line in session_lines:
-            if line.startswith('o='):
+            if line.startswith('v='):
+                session.version = int(line.strip()[2:])
+            elif line.startswith('o='):
                 session.origin = line.strip()[2:]
+            elif line.startswith('s='):
+                session.name = line.strip()[2:]
+            elif line.startswith('c='):
+                session.host = ipaddress_from_sdp(line[2:])
+            elif line.startswith('t='):
+                session.time = line.strip()[2:]
             elif line.startswith('a='):
                 attr, value = parse_attr(line)
                 if attr == 'fingerprint':
@@ -340,8 +350,10 @@ class SessionDescription:
             'v=%d' % self.version,
             'o=%s' % self.origin,
             's=%s' % self.name,
-            't=%s' % self.time,
         ]
+        if self.host is not None:
+            lines += ['c=%s' % ipaddress_to_sdp(self.host)]
+        lines += ['t=%s' % self.time]
         if self.bundle:
             lines += ['a=group:BUNDLE ' + (' '.join(self.bundle))]
         return '\r\n'.join(lines) + '\r\n' + ''.join([str(m) for m in self.media])

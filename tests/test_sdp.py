@@ -54,7 +54,13 @@ a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12
 a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
 a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
+
         self.assertEqual(d.bundle, ['audio'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin, '- 863426017819471768 2 IN IP4 127.0.0.1')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'audio')
@@ -189,6 +195,12 @@ a=setup:actpass
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 """))  # noqa
         self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin,
+                         'mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'audio')
@@ -276,6 +288,93 @@ a=fingerprint:sha-256 EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:0
 a=setup:actpass
 """))  # noqa
 
+    def test_audio_freeswitch(self):
+        d = SessionDescription.parse(lf2crlf("""v=0
+o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
+s=FreeSWITCH
+c=IN IP4 1.2.3.4
+t=0 0
+a=msid-semantic: WMS lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=ptime:20
+a=fingerprint:sha-256 35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B
+a=setup:active
+a=rtcp-mux
+a=rtcp:16628 IN IP4 1.2.3.4
+a=ice-ufrag:75EDuLTEOkEUd3cu
+a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host generation 0
+a=end-of-candidates
+a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
+a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
+
+        self.assertEqual(d.bundle, [])
+        self.assertEqual(d.host, '1.2.3.4')
+        self.assertEqual(d.name, 'FreeSWITCH')
+        self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].host, None)
+        self.assertEqual(d.media[0].port, 16628)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, None)
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+        ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].rtp.muxId, '')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, 'rbaag6w9fGmRXQm6')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 2690029308)
+        self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
+        self.assertEqual(d.media[0].rtcp_port, 16628)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [8, 101])
+        self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 1)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
+        self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
+
+        # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(
+            d.media[0].dtls.fingerprints[0].value,
+            '35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B')  # noqa
+        self.assertEqual(d.media[0].dtls.role, 'client')
+
+        self.assertEqual(str(d), lf2crlf("""v=0
+o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
+s=FreeSWITCH
+c=IN IP4 1.2.3.4
+t=0 0
+m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
+a=rtcp:16628 IN IP4 1.2.3.4
+a=rtcp-mux
+a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
+a=end-of-candidates
+a=ice-ufrag:75EDuLTEOkEUd3cu
+a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+a=fingerprint:sha-256 35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B
+a=setup:active
+"""))  # noqa
+
     def test_datachannel_firefox(self):
         d = SessionDescription.parse(lf2crlf("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
@@ -301,7 +400,14 @@ a=sctpmap:5000 webrtc-datachannel 256
 a=setup:actpass
 a=max-message-size:1073741823
 """))  # noqa
+
         self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin,
+                         'mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'application')
@@ -379,7 +485,14 @@ a=sctp-port:5000
 a=setup:actpass
 a=max-message-size:1073741823
 """))  # noqa
+
         self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin,
+                         'mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'application')
@@ -490,6 +603,11 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
 """))  # noqa
 
         self.assertEqual(d.bundle, ['video'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin, '- 5195484278799753993 2 IN IP4 127.0.0.1')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'video')
@@ -614,6 +732,12 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
 """))  # noqa
 
         self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, '-')
+        self.assertEqual(d.origin,
+                         'mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(d.media[0].kind, 'video')
