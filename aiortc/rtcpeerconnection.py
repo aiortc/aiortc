@@ -445,9 +445,15 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteIce[transceiver] = media.ice
                 self.__remoteRtp[transceiver] = media.rtp
 
-                if not transceiver.receiver._track:
-                    transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
-                    self.emit('track', transceiver.receiver._track)
+                if media.direction in ['sendonly', 'sendrecv']:
+                    if not transceiver.receiver._track:
+                        transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
+                        self.emit('track', transceiver.receiver._track)
+                elif media.direction == 'recvonly' and transceiver.direction == 'sendrecv':
+                    transceiver._set_direction('sendonly')
+                elif (media.direction in ['inactive', 'recvonly'] and
+                      transceiver.direction == 'recvonly'):
+                    transceiver._set_direction('inactive')
 
             elif media.kind == 'application':
                 if not self.__sctp:
@@ -522,7 +528,8 @@ class RTCPeerConnection(EventEmitter):
                 await iceTransport.start(self.__remoteIce[transceiver])
                 await dtlsTransport.start(self.__remoteDtls[transceiver])
                 await transceiver.sender.send(self.__localRtp(transceiver))
-                await transceiver.receiver.receive(self.__remoteRtp[transceiver])
+                if transceiver.receiver._track:
+                    await transceiver.receiver.receive(self.__remoteRtp[transceiver])
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
             iceTransport = dtlsTransport.transport
