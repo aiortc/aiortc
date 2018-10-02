@@ -262,7 +262,7 @@ class RTCDtlsTransport(EventEmitter):
         self.write_cdata = ffi.new('char[]', 1500)
         lib.SSL_set_bio(self.ssl, self.read_bio, self.write_bio)
 
-        self.__local_parameters = RTCDtlsParameters(fingerprints=certificate.getFingerprints())
+        self.__local_certificate = certificate
 
     @property
     def state(self):
@@ -286,7 +286,7 @@ class RTCDtlsTransport(EventEmitter):
 
         :rtype: :class:`RTCDtlsParameters`
         """
-        return self.__local_parameters
+        return RTCDtlsParameters(fingerprints=self.__local_certificate.getFingerprints())
 
     async def start(self, remoteParameters):
         """

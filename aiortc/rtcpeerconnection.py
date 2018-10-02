@@ -80,8 +80,7 @@ def add_transport_description(media, iceTransport, dtlsTransport):
     media.ice = iceGatherer.getLocalParameters()
 
     # dtls
-    dtls_parameters = dtlsTransport.getLocalParameters()
-    media.dtls.fingerprints = dtls_parameters.fingerprints
+    media.dtls = dtlsTransport.getLocalParameters()
     if iceTransport.role == 'controlling':
         media.dtls.role = 'auto'
     else:
