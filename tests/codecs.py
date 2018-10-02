@@ -25,7 +25,6 @@ class CodecTestCase(TestCase):
 
     def create_video_frames(self, width, height, count):
         frames = []
-        timestamp = 0
         for i in range(count):
             frame = VideoFrame(width=width, height=height)
             frame.pts = i * 3000

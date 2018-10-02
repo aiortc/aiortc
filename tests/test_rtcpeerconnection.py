@@ -181,7 +181,7 @@ class RTCPeerConnectionTest(TestCase):
 
         # try adding a bogus track
         with self.assertRaises(InternalError) as cm:
-            pc.addTrack(BogusStreamTrack)
+            pc.addTrack(BogusStreamTrack())
         self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
     def test_addTrack_video(self):
@@ -222,6 +222,85 @@ class RTCPeerConnectionTest(TestCase):
         with self.assertRaises(InvalidStateError) as cm:
             pc.addTrack(AudioStreamTrack())
         self.assertEqual(str(cm.exception), 'RTCPeerConnection is closed')
+
+    def test_addTransceiver_audio_inactive(self):
+        pc = RTCPeerConnection()
+
+        # add transceiver
+        transceiver = pc.addTransceiver('audio', direction='inactive')
+        self.assertIsNotNone(transceiver)
+        self.assertEqual(transceiver.direction, 'inactive')
+        self.assertEqual(transceiver.sender.track, None)
+        self.assertEqual(pc.getSenders(), [transceiver.sender])
+        self.assertEqual(len(pc.getTransceivers()), 1)
+
+        # add track
+        pc.addTrack(AudioStreamTrack())
+        self.assertEqual(transceiver.direction, 'sendonly')
+
+    def test_addTransceiver_audio_sendrecv(self):
+        pc = RTCPeerConnection()
+
+        # add transceiver
+        transceiver = pc.addTransceiver('audio')
+        self.assertIsNotNone(transceiver)
+        self.assertEqual(transceiver.direction, 'sendrecv')
+        self.assertEqual(transceiver.sender.track, None)
+        self.assertEqual(pc.getSenders(), [transceiver.sender])
+        self.assertEqual(len(pc.getTransceivers()), 1)
+
+        # add track
+        pc.addTrack(AudioStreamTrack())
+        self.assertEqual(transceiver.direction, 'sendrecv')
+        self.assertEqual(len(pc.getTransceivers()), 1)
+
+    def test_addTransceiver_audio_track(self):
+        pc = RTCPeerConnection()
+
+        # add audio track
+        track1 = AudioStreamTrack()
+        transceiver1 = pc.addTransceiver(track1)
+        self.assertIsNotNone(transceiver1)
+        self.assertEqual(transceiver1.sender.track, track1)
+        self.assertEqual(pc.getSenders(), [transceiver1.sender])
+        self.assertEqual(len(pc.getTransceivers()), 1)
+
+        # try to add same track again
+        with self.assertRaises(InvalidAccessError) as cm:
+            pc.addTransceiver(track1)
+        self.assertEqual(str(cm.exception), 'Track already has a sender')
+
+        # add another audio track
+        track2 = AudioStreamTrack()
+        transceiver2 = pc.addTransceiver(track2)
+        self.assertIsNotNone(transceiver2)
+        self.assertEqual(transceiver2.sender.track, track2)
+        self.assertEqual(pc.getSenders(), [transceiver1.sender, transceiver2.sender])
+        self.assertEqual(len(pc.getTransceivers()), 2)
+
+    def test_addTransceiver_bogus_direction(self):
+        pc = RTCPeerConnection()
+
+        # try adding a bogus kind
+        with self.assertRaises(InternalError) as cm:
+            pc.addTransceiver('audio', direction='bogus')
+        self.assertEqual(str(cm.exception), 'Invalid direction "bogus"')
+
+    def test_addTransceiver_bogus_kind(self):
+        pc = RTCPeerConnection()
+
+        # try adding a bogus kind
+        with self.assertRaises(InternalError) as cm:
+            pc.addTransceiver('bogus')
+        self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
+
+    def test_addTransceiver_bogus_track(self):
+        pc = RTCPeerConnection()
+
+        # try adding a bogus track
+        with self.assertRaises(InternalError) as cm:
+            pc.addTransceiver(BogusStreamTrack())
+        self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
     def test_close(self):
         pc = RTCPeerConnection()

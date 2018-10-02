@@ -12,6 +12,7 @@ Media
 .....
 
   * Use a jitter buffer for incoming audio.
+  * Add `aiortc.RTCPeerConnection.addTransceiver` method.
 
 Examples
 ........

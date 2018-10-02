@@ -200,18 +200,52 @@ class RTCPeerConnection(EventEmitter):
             raise InternalError('Invalid track kind "%s"' % track.kind)
 
         # don't add track twice
-        for sender in self.getSenders():
-            if sender.track == track:
-                raise InvalidAccessError('Track already has a sender')
+        self.__assertTrackHasNoSender(track)
 
         for transceiver in self.__transceivers:
             if transceiver.kind == track.kind:
                 if transceiver.sender.track is None:
                     transceiver.sender.replaceTrack(track)
+                    if transceiver.direction == 'recvonly':
+                        transceiver._set_direction('sendrecv')
+                    elif transceiver.direction == 'inactive':
+                        transceiver._set_direction('sendonly')
                     return transceiver.sender
 
-        transceiver = self.__createTransceiver(kind=track.kind, sender_track=track)
+        transceiver = self.__createTransceiver(
+            direction='sendrecv',
+            kind=track.kind,
+            sender_track=track)
         return transceiver.sender
+
+    def addTransceiver(self, trackOrKind, direction='sendrecv'):
+        """
+        Add a new :class:`RTCRtpTransceiver`.
+        """
+        self.__assertNotClosed()
+
+        # determine track or kind
+        if hasattr(trackOrKind, 'kind'):
+            kind = trackOrKind.kind
+            track = trackOrKind
+        else:
+            kind = trackOrKind
+            track = None
+        if kind not in ['audio', 'video']:
+            raise InternalError('Invalid track kind "%s"' % kind)
+
+        # check direction
+        if direction not in sdp.DIRECTIONS:
+            raise InternalError('Invalid direction "%s"' % direction)
+
+        # don't add track twice
+        if track:
+            self.__assertTrackHasNoSender(track)
+
+        return self.__createTransceiver(
+            direction=direction,
+            kind=kind,
+            sender_track=track)
 
     async def close(self):
         """
@@ -393,7 +427,7 @@ class RTCPeerConnection(EventEmitter):
                     if t.kind == media.kind and t.mid in [None, media.rtp.muxId]:
                         transceiver = t
                 if transceiver is None:
-                    transceiver = self.__createTransceiver(kind=media.kind)
+                    transceiver = self.__createTransceiver(direction='recvonly', kind=media.kind)
                 if transceiver.mid is None:
                     transceiver.mid = media.rtp.muxId
 
@@ -505,6 +539,11 @@ class RTCPeerConnection(EventEmitter):
         if self.__isClosed:
             raise InvalidStateError('RTCPeerConnection is closed')
 
+    def __assertTrackHasNoSender(self, track):
+        for sender in self.getSenders():
+            if sender.track == track:
+                raise InvalidAccessError('Track already has a sender')
+
     def __createDtlsTransport(self):
         # create ICE transport
         iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
@@ -584,9 +623,10 @@ class RTCPeerConnection(EventEmitter):
 
         return str(description)
 
-    def __createTransceiver(self, kind, sender_track=None):
+    def __createTransceiver(self, direction, kind, sender_track=None):
         dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
+            direction=direction,
             kind=kind,
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))

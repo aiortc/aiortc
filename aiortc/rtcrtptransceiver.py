@@ -10,18 +10,16 @@ class RTCRtpTransceiver:
     shared state.
     """
 
-    def __init__(self, kind, receiver, sender):
+    def __init__(self, kind, receiver, sender, direction='sendrecv'):
         self.mid = None
+        self.__direction = direction
         self.__kind = kind
         self.__receiver = receiver
         self.__sender = sender
 
     @property
     def direction(self):
-        if self.sender.track:
-            return 'sendrecv'
-        else:
-            return 'recvonly'
+        return self.__direction
 
     @property
     def kind(self):
@@ -49,3 +47,6 @@ class RTCRtpTransceiver:
         """
         await self.__receiver.stop()
         await self.__sender.stop()
+
+    def _set_direction(self, value):
+        self.__direction = value
