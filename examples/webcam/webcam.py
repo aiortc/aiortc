@@ -31,7 +31,7 @@ async def offer(request):
     pc = RTCPeerConnection()
     pcs.append(pc)
 
-    player = MediaPlayer('/dev/video0')
+    player = MediaPlayer('/dev/video0', {'video_size': 'vga'})
     pc.addTrack(player.video)
 
     await pc.setRemoteDescription(offer)

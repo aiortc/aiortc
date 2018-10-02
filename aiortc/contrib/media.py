@@ -242,8 +242,8 @@ class MediaPlayer:
     """
     A media source that reads audio and/or video from a file.
     """
-    def __init__(self, path):
-        self.__container = av.open(file=path, mode='r')
+    def __init__(self, path, options={}):
+        self.__container = av.open(file=path, mode='r', options=options)
         self.__thread = None
         self.__thread_quit = None
 

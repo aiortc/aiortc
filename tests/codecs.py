@@ -72,7 +72,8 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        input_frames = self.create_video_frames(width=width, height=height, count=30, time_base=time_base)
+        input_frames = self.create_video_frames(
+            width=width, height=height, count=30, time_base=time_base)
         for i, frame in enumerate(input_frames):
             # encode
             packages, timestamp = encoder.encode(frame)
