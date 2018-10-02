@@ -14,6 +14,8 @@ def audio_frame_from_avframe(av_frame):
     """
     Convert an av.AudioFrame to aiortc.AudioFrame.
     """
+    assert av_frame.format.name == 's16'
+    assert len(av_frame.planes) == 1
     frame = AudioFrame(
         channels=len(av_frame.layout.channels),
         data=av_frame.planes[0].to_bytes(),
