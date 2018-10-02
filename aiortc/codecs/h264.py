@@ -7,7 +7,7 @@ from struct import pack, unpack_from
 import av
 
 from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
-from ..mediastreams import VIDEO_TIME_BASE
+from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 
 logger = logging.getLogger('codec.h264')
 
@@ -242,7 +242,8 @@ class H264Encoder:
 
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)
-        return self._packetize(packages), frame.pts
+        timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
+        return self._packetize(packages), timestamp
 
 
 def h264_depayload(payload):

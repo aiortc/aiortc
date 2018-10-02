@@ -1,3 +1,4 @@
+import fractions
 import io
 from contextlib import redirect_stderr
 from unittest import TestCase
@@ -77,6 +78,9 @@ class H264Test(CodecTestCase):
 
     def test_roundtrip_640_480(self):
         self.roundtrip_video(H264_CODEC, 640, 480)
+
+    def test_roundtrip_640_480_time_base(self):
+        self.roundtrip_video(H264_CODEC, 640, 480, time_base=fractions.Fraction(1, 9000))
 
     def test_roundtrip_320_240(self):
         self.roundtrip_video(H264_CODEC, 320, 240)

@@ -3,7 +3,8 @@ import multiprocessing
 import random
 from struct import pack, unpack
 
-from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, VideoFrame
+from ..mediastreams import (VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, VideoFrame,
+                            convert_timebase)
 from ._vpx import ffi, lib
 
 MAX_FRAME_RATE = 30
@@ -247,7 +248,8 @@ class Vp8Encoder:
                     descr.partition_start = 0
                 self.picture_id = (self.picture_id + 1) % (1 << 15)
 
-        return payloads, frame.pts
+        timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
+        return payloads, timestamp
 
 
 def vp8_depayload(payload):

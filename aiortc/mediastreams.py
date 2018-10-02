@@ -11,6 +11,12 @@ VIDEO_PTIME = 1 / 30  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
 
+def convert_timebase(pts, from_base, to_base):
+    if from_base != to_base:
+        pts = int(pts * from_base / to_base)
+    return pts
+
+
 class AudioFrame:
     """
     Audio frame, 16-bit PCM.

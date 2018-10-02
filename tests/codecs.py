@@ -23,12 +23,13 @@ class CodecTestCase(TestCase):
             timestamp += samples_per_frame
         return frames
 
-    def create_video_frames(self, width, height, count):
+    def create_video_frames(self, width, height, count, time_base=VIDEO_TIME_BASE):
         frames = []
         for i in range(count):
             frame = VideoFrame(width=width, height=height)
-            frame.pts = i * 3000
-            frame.time_base = VIDEO_TIME_BASE
+            frame.pts = int(i / time_base / 30)
+            frame.time_base = time_base
+            frames.append(frame)
         return frames
 
     def roundtrip_audio(self, codec, output_channels, output_sample_rate, drop=[]):
@@ -64,14 +65,15 @@ class CodecTestCase(TestCase):
                 self.assertEqual(frames[0].pts, i * output_sample_count)
                 self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
 
-    def roundtrip_video(self, codec, width, height):
+    def roundtrip_video(self, codec, width, height, time_base=VIDEO_TIME_BASE):
         """
         Round-trip a VideoFrame through encoder then decoder.
         """
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        for frame in self.create_video_frames(width=width, height=height, count=30):
+        input_frames = self.create_video_frames(width=width, height=height, count=30, time_base=time_base)
+        for i, frame in enumerate(input_frames):
             # encode
             packages, timestamp = encoder.encode(frame)
 
@@ -85,5 +87,5 @@ class CodecTestCase(TestCase):
             self.assertEqual(len(frames), 1)
             self.assertEqual(frames[0].width, frame.width)
             self.assertEqual(frames[0].height, frame.height)
-            self.assertEqual(frames[0].pts, frame.pts)
-            self.assertEqual(frames[0].time_base, frame.time_base)
+            self.assertEqual(frames[0].pts, i * 3000)
+            self.assertEqual(frames[0].time_base, VIDEO_TIME_BASE)
