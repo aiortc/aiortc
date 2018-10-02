@@ -4,6 +4,8 @@ import threading
 import time
 
 import av
+import av.audio.stream
+import av.video.stream
 import numpy
 
 from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, AudioFrame,

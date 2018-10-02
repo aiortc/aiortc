@@ -19,6 +19,7 @@ Examples
 
   * `apprtc` : demonstrate the use of :class:`aiortc.contrib.media.MediaPlayer`
     and :class:`aiortc.contrib.media.MediaRecorder`.
+  * `webcam` : new examples illustrating sending video from a webcam to a browser.
   * :class:`aiortc.contrib.media.MediaRecorder` : don't sleep if a frame lacks timing information.
   * :class:`aiortc.contrib.media.MediaRecorder` : use `libx264` for encoding.
 
