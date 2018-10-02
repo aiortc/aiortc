@@ -6,7 +6,6 @@ from struct import pack, unpack_from
 
 import av
 
-from ..contrib.media import video_frame_from_avframe, video_frame_to_avframe
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 
 logger = logging.getLogger('codec.h264')
@@ -99,7 +98,7 @@ class H264Decoder:
             logger.warning('failed to decode, skipping package: ' + str(e))
             return []
 
-        return list(map(video_frame_from_avframe, frames))
+        return frames
 
 
 class H264Encoder:
@@ -236,8 +235,7 @@ class H264Encoder:
                 'tune': 'zerolatency'
             }
 
-        av_frame = video_frame_to_avframe(frame)
-        packages = self.codec.encode(av_frame)
+        packages = self.codec.encode(frame)
         yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
 
     def encode(self, frame, force_keyframe=False):

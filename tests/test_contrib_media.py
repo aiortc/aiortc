@@ -3,13 +3,12 @@ import os
 import wave
 from unittest import TestCase
 
-import av
 import cv2
 import numpy
+from av import VideoFrame
 
-from aiortc import AudioStreamTrack, VideoFrame, VideoStreamTrack
+from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_avframe,
                                   video_frame_from_bgr, video_frame_to_bgr)
 
 from .utils import run
@@ -129,7 +128,6 @@ class MediaPlayerTest(TestCase):
         player.start()
         for i in range(20):
             frame = run(player.video.recv())
-            self.assertEqual(len(frame.data), 460800)
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
         player.stop()
@@ -177,25 +175,6 @@ class VideoFrameTest(TestCase):
     def test_video_frame_from_bgr(self):
         image = numpy.full((480, 640, 3), (0, 0, 0), numpy.uint8)
         frame = video_frame_from_bgr(image, timestamp=123)
-        self.assertEqual(len(frame.data), 460800)
-        self.assertEqual(frame.width, 640)
-        self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.pts, 123)
-
-    def test_video_frame_from_avframe_rgb32(self):
-        avframe = av.VideoFrame(width=640, height=480, format='rgb32')
-        avframe.pts = 123
-        frame = video_frame_from_avframe(avframe)
-        self.assertEqual(len(frame.data), 460800)
-        self.assertEqual(frame.width, 640)
-        self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.pts, 123)
-
-    def test_video_frame_from_avframe_yuv420p(self):
-        avframe = av.VideoFrame(width=640, height=480, format='yuv420p')
-        avframe.pts = 123
-        frame = video_frame_from_avframe(avframe)
-        self.assertEqual(len(frame.data), 460800)
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
         self.assertEqual(frame.pts, 123)

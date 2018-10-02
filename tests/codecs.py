@@ -1,7 +1,9 @@
 import fractions
 from unittest import TestCase
 
-from aiortc import AudioFrame, VideoFrame
+from av import VideoFrame
+
+from aiortc import AudioFrame
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE
@@ -28,6 +30,8 @@ class CodecTestCase(TestCase):
         Create a single blank video frame.
         """
         frame = VideoFrame(width=width, height=height)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
         frame.pts = pts
         frame.time_base = time_base
         return frame

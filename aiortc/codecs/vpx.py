@@ -1,10 +1,10 @@
-import math
 import multiprocessing
 import random
 from struct import pack, unpack
 
-from ..mediastreams import (VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, VideoFrame,
-                            convert_timebase)
+from av import VideoFrame
+
+from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
 from ._vpx import ffi, lib
 
 MAX_FRAME_RATE = 30
@@ -152,26 +152,25 @@ class Vp8Decoder:
                     break
                 assert img.fmt == lib.VPX_IMG_FMT_I420
 
-                o_buf = bytearray(math.ceil(img.d_w * img.d_h * 12 / 8))
-                o_pos = 0
+                frame = VideoFrame(width=img.d_w, height=img.d_h)
+                frame.pts = encoded_frame.timestamp
+                frame.time_base = VIDEO_TIME_BASE
+
                 for p in range(3):
                     i_stride = img.stride[p]
                     i_buf = ffi.buffer(img.planes[p], i_stride * img.d_h)
                     i_pos = 0
 
+                    o_stride = frame.planes[p].line_size
+                    o_buf = memoryview(frame.planes[p])
+                    o_pos = 0
+
                     div = p and 2 or 1
-                    o_stride = img.d_w // div
                     for r in range(0, img.d_h // div):
                         o_buf[o_pos:o_pos + o_stride] = i_buf[i_pos:i_pos + o_stride]
                         i_pos += i_stride
                         o_pos += o_stride
 
-                frame = VideoFrame(
-                    width=img.d_w,
-                    height=img.d_h,
-                    data=bytes(o_buf))
-                frame.pts = encoded_frame.timestamp
-                frame.time_base = VIDEO_TIME_BASE
                 frames.append(frame)
 
         return frames
@@ -193,16 +192,12 @@ class Vp8Encoder:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(self, frame, force_keyframe=False):
-        image = ffi.new('vpx_image_t *')
-
-        lib.vpx_img_wrap(image, lib.VPX_IMG_FMT_I420,
-                         frame.width, frame.height, 1, frame.data)
-
         if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
             lib.vpx_codec_destroy(self.codec)
             self.codec = None
 
         if not self.codec:
+            # create codec
             self.codec = ffi.new('vpx_codec_ctx_t *')
             self.cfg.g_timebase.num = 1
             self.cfg.g_timebase.den = VIDEO_CLOCK_RATE
@@ -225,11 +220,25 @@ class Vp8Encoder:
             self.cfg.kf_max_dist = 600
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
+            # create image on a dummy buffer, we will fill the pointers during encoding
+            self.image = ffi.new('vpx_image_t *')
+            lib.vpx_img_wrap(self.image, lib.VPX_IMG_FMT_I420,
+                             frame.width, frame.height, 1,
+                             ffi.cast('void*', 1))
+
+        # setup image
+        if frame.format.name != 'yuv420p':
+            frame = frame.reformat(format='yuv420p')
+        for p in range(3):
+            self.image.planes[p] = ffi.cast('void*', frame.planes[p].buffer_ptr)
+            self.image.stride[p] = frame.planes[p].line_size
+
+        # encode frame
         flags = 0
         if force_keyframe:
             flags |= lib.VPX_EFLAG_FORCE_KF
         _vpx_assert(lib.vpx_codec_encode(
-            self.codec, image, frame.pts, self.timestamp_increment,
+            self.codec, self.image, frame.pts, self.timestamp_increment,
             flags, lib.VPX_DL_REALTIME))
 
         it = ffi.new('vpx_codec_iter_t *')

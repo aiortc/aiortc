@@ -1,8 +1,8 @@
 import asyncio
 import fractions
-import math
 import uuid
 
+from av import VideoFrame
 from pyee import EventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
@@ -38,47 +38,6 @@ class AudioFrame:
     def sample_rate(self):
         "The sample rate, for instance `48000` for 48kHz."
         return self.__sample_rate
-
-    @property
-    def time(self):
-        "The presentation time in seconds for this frame."
-        if self.pts is not None and self.time_base is not None:
-            return float(self.pts * self.time_base)
-
-
-class VideoFrame:
-    """
-    Video frame in YUV420 planar format.
-    """
-    def __init__(self, width, height, data=None):
-        assert width % 2 == 0, 'Frame width must be a multiple of 2'
-        assert height % 2 == 0, 'Frame height must be a multiple of 2'
-
-        data_size = math.ceil(width * height * 12 / 8)
-
-        if data is None:
-            data = bytes(data_size)
-        else:
-            assert len(data) == data_size, 'Frame data size does not match frame dimensions'
-
-        self.data = data
-        "The bytes representing the pixels."
-        self.__width = width
-        self.__height = height
-        self.pts = None
-        "The presentation timestamp in :attr:`time_base` units for this frame."
-        self.time_base = None
-        "The unit of time (in fractional seconds) in which timestamps are expressed."
-
-    @property
-    def height(self):
-        "The image height in pixels."
-        return self.__height
-
-    @property
-    def width(self):
-        "The image width in pixels."
-        return self.__width
 
     @property
     def time(self):
@@ -157,6 +116,8 @@ class VideoStreamTrack(MediaStreamTrack):
         """
         timestamp = await self.next_timestamp()
         frame = VideoFrame(width=640, height=480)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
         frame.pts = timestamp
         frame.time_base = VIDEO_TIME_BASE
         return frame

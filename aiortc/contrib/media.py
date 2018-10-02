@@ -6,7 +6,6 @@ import time
 import av
 import av.audio.stream
 import av.video.stream
-import numpy
 
 from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, AudioFrame,
                             MediaStreamTrack, VideoFrame)
@@ -45,63 +44,15 @@ def audio_frame_to_avframe(frame):
     return av_frame
 
 
-def video_frame_from_avframe(av_frame):
-    """
-    Convert an av.VideoFrame to aiortc.VideoFrame.
-    """
-    if str(av_frame.format) != 'yuv420p':
-        av_frame = av_frame.reformat(format='yuv420p')
-
-    data = b''
-    shifts = [0, 1, 1]
-    for i, plane in enumerate(av_frame.planes):
-        arr = numpy.frombuffer(plane, numpy.uint8).reshape(-1, plane.line_size)
-        data += bytes(arr[
-            :(av_frame.height >> shifts[i]),
-            :(av_frame.width >> shifts[i]),
-        ])
-
-    frame = VideoFrame(
-        width=av_frame.width,
-        height=av_frame.height,
-        data=data)
-    frame.pts = av_frame.pts
-    frame.time_base = av_frame.time_base
-    return frame
-
-
-def video_frame_to_avframe(frame):
-    """
-    Convert an aiortc.VideoFrame to av.VideoFrame.
-    """
-    u_start = frame.width * frame.height
-    v_start = 5 * u_start // 4
-    av_frame = av.VideoFrame(frame.width, frame.height, 'yuv420p')
-    assert av_frame.planes[0].line_size == av_frame.width
-    av_frame.planes[0].update(frame.data[0:u_start])
-    av_frame.planes[1].update(frame.data[u_start:v_start])
-    av_frame.planes[2].update(frame.data[v_start:])
-    av_frame.pts = frame.pts
-    av_frame.time_base = frame.time_base
-    return av_frame
-
-
 def video_frame_from_bgr(data_bgr, timestamp):
-    import cv2
-    data_yuv = cv2.cvtColor(data_bgr, cv2.COLOR_BGR2YUV_I420)
-    frame = VideoFrame(
-        width=data_bgr.shape[1],
-        height=data_bgr.shape[0],
-        data=data_yuv.tobytes())
+    frame = VideoFrame.from_ndarray(data_bgr, format='bgr24')
     frame.pts = timestamp
     frame.time_base = VIDEO_TIME_BASE
     return frame
 
 
 def video_frame_to_bgr(frame):
-    import cv2
-    data_yuv = numpy.frombuffer(frame.data, numpy.uint8).reshape(-1, frame.width)
-    return cv2.cvtColor(data_yuv, cv2.COLOR_YUV2BGR_I420)
+    return frame.to_nd_array(format='bgr24')
 
 
 async def blackhole_consume(track):
@@ -206,7 +157,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 frame.pts -= video_first_pts
 
             frame_time = frame.time
-            frame = video_frame_from_avframe(frame)
+
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
 
@@ -330,7 +281,7 @@ class MediaRecorder:
                 codec_name = 'aac'
             stream = self.__container.add_stream(codec_name)
         else:
-            convert = video_frame_to_avframe
+            convert = None
             if self.__container.format.name == 'image2':
                 stream = self.__container.add_stream('jpeg2000', rate=30)
                 stream.pix_fmt = 'rgb24'
@@ -371,6 +322,7 @@ class MediaRecorder:
     async def __run_track(self, track, context):
         while True:
             frame = await track.recv()
-            avframe = context.convert(frame)
-            for packet in context.stream.encode(avframe):
+            if context.convert:
+                frame = context.convert(frame)
+            for packet in context.stream.encode(frame):
                 self.__container.mux(packet)
