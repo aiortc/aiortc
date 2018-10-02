@@ -113,7 +113,7 @@ class MediaDescription:
         self.sctp_port = None
 
         # DTLS
-        self.dtls = RTCDtlsParameters()
+        self.dtls = None
 
         # ICE
         self.ice = RTCIceParameters()
@@ -184,9 +184,10 @@ class MediaDescription:
             lines.append('a=ice-pwd:' + self.ice.password)
 
         # dtls
-        for fingerprint in self.dtls.fingerprints:
-            lines.append('a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value))
-        lines.append('a=setup:' + DTLS_ROLE_SETUP[self.dtls.role])
+        if self.dtls:
+            for fingerprint in self.dtls.fingerprints:
+                lines.append('a=fingerprint:%s %s' % (fingerprint.algorithm, fingerprint.value))
+            lines.append('a=setup:' + DTLS_ROLE_SETUP[self.dtls.role])
 
         return '\r\n'.join(lines) + '\r\n'
 
@@ -257,7 +258,9 @@ class SessionDescription:
                 port=int(m.group(2)),
                 profile=m.group(3),
                 fmt=fmt)
-            current_media.dtls.fingerprints = dtls_fingerprints
+            current_media.dtls = RTCDtlsParameters(
+                fingerprints=dtls_fingerprints[:],
+                role=None)
             session.media.append(current_media)
 
             for line in media_lines[1:]:
@@ -322,6 +325,9 @@ class SessionDescription:
                         if ssrc_attr == 'cname' and not current_media.rtp.rtcp.cname:
                             current_media.rtp.rtcp.cname = ssrc_value
                             current_media.rtp.rtcp.ssrc = int(ssrc)
+
+            if current_media.dtls.role is None:
+                current_media.dtls = None
 
             # requires codecs to have been parsed
             for line in media_lines[1:]:

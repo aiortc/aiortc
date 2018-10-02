@@ -375,6 +375,84 @@ a=fingerprint:sha-256 35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E
 a=setup:active
 """))  # noqa
 
+    def test_audio_freeswitch_no_dtls(self):
+        d = SessionDescription.parse(lf2crlf("""v=0
+o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
+s=FreeSWITCH
+c=IN IP4 1.2.3.4
+t=0 0
+a=msid-semantic: WMS lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=ptime:20
+a=rtcp-mux
+a=rtcp:16628 IN IP4 1.2.3.4
+a=ice-ufrag:75EDuLTEOkEUd3cu
+a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host generation 0
+a=end-of-candidates
+a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
+a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
+
+        self.assertEqual(d.bundle, [])
+        self.assertEqual(d.host, '1.2.3.4')
+        self.assertEqual(d.name, 'FreeSWITCH')
+        self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
+        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.version, 0)
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].host, None)
+        self.assertEqual(d.media[0].port, 16628)
+        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].direction, None)
+        self.assertEqual(d.media[0].rtp.codecs, [
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+        ])
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].rtp.muxId, '')
+        self.assertEqual(d.media[0].rtp.rtcp.cname, 'rbaag6w9fGmRXQm6')
+        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
+        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 2690029308)
+        self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
+        self.assertEqual(d.media[0].rtcp_port, 16628)
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [8, 101])
+        self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 1)
+        self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
+        self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
+
+        # dtls
+        self.assertEqual(d.media[0].dtls, None)
+
+        self.assertEqual(str(d), lf2crlf("""v=0
+o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
+s=FreeSWITCH
+c=IN IP4 1.2.3.4
+t=0 0
+m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
+a=rtcp:16628 IN IP4 1.2.3.4
+a=rtcp-mux
+a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
+a=end-of-candidates
+a=ice-ufrag:75EDuLTEOkEUd3cu
+a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+"""))  # noqa
+
     def test_datachannel_firefox(self):
         d = SessionDescription.parse(lf2crlf("""v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
