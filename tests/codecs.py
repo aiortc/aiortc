@@ -23,44 +23,47 @@ class CodecTestCase(TestCase):
             timestamp += samples_per_frame
         return frames
 
-    def roundtrip_audio(self, codec, output_channels, output_sample_rate):
+    def create_video_frames(self, width, height, count):
+        frames = []
+        timestamp = 0
+        for i in range(count):
+            frame = VideoFrame(width=width, height=height)
+            frame.pts = i * 3000
+            frame.time_base = VIDEO_TIME_BASE
+        return frames
+
+    def roundtrip_audio(self, codec, output_channels, output_sample_rate, drop=[]):
         """
         Round-trip an AudioFrame through encoder then decoder.
         """
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        input_sample_rate = 8000
-        input_sample_count = int(input_sample_rate * AUDIO_PTIME)
-        input_timestamp = 0
+        input_frames = self.create_audio_frames(channels=1, sample_rate=8000, count=10)
 
         output_sample_count = int(output_sample_rate * AUDIO_PTIME)
-        output_timestamp = 0
 
-        for frame in self.create_audio_frames(channels=1, sample_rate=input_sample_rate, count=10):
+        for i, frame in enumerate(input_frames):
             # encode
             self.assertEqual(len(frame.data), 320)
             packages, timestamp = encoder.encode(frame)
 
-            # depacketize
-            data = b''
-            for package in packages:
-                data += depayload(codec, package)
+            if i not in drop:
+                # depacketize
+                data = b''
+                for package in packages:
+                    data += depayload(codec, package)
 
-            # decode
-            frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
-            self.assertEqual(len(frames), 1)
-            self.assertEqual(len(frames[0].data),
-                             output_sample_rate * AUDIO_PTIME * output_channels * 2)
-            self.assertEqual(frames[0].channels, output_channels)
-            self.assertEqual(frames[0].sample_rate, output_sample_rate)
-            self.assertEqual(frames[0].sample_width, 2)
-            self.assertEqual(frames[0].pts, output_timestamp)
-            self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
-
-            # tick
-            input_timestamp += input_sample_count
-            output_timestamp += output_sample_count
+                # decode
+                frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
+                self.assertEqual(len(frames), 1)
+                self.assertEqual(len(frames[0].data),
+                                 output_sample_rate * AUDIO_PTIME * output_channels * 2)
+                self.assertEqual(frames[0].channels, output_channels)
+                self.assertEqual(frames[0].sample_rate, output_sample_rate)
+                self.assertEqual(frames[0].sample_width, 2)
+                self.assertEqual(frames[0].pts, i * output_sample_count)
+                self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
 
     def roundtrip_video(self, codec, width, height):
         """
@@ -69,11 +72,8 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        for timestamp in range(0, 90000, 3000):
+        for frame in self.create_video_frames(width=width, height=height, count=30):
             # encode
-            frame = VideoFrame(width=width, height=height)
-            frame.pts = timestamp
-            frame.time_base = VIDEO_TIME_BASE
             packages, timestamp = encoder.encode(frame)
 
             # depacketize
@@ -84,7 +84,7 @@ class CodecTestCase(TestCase):
             # decode
             frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
             self.assertEqual(len(frames), 1)
-            self.assertEqual(frames[0].width, width)
-            self.assertEqual(frames[0].height, height)
-            self.assertEqual(frames[0].pts, timestamp)
-            self.assertEqual(frames[0].time_base, VIDEO_TIME_BASE)
+            self.assertEqual(frames[0].width, frame.width)
+            self.assertEqual(frames[0].height, frame.height)
+            self.assertEqual(frames[0].pts, frame.pts)
+            self.assertEqual(frames[0].time_base, frame.time_base)

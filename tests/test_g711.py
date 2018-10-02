@@ -52,6 +52,9 @@ class PcmaTest(CodecTestCase):
     def test_roundtrip(self):
         self.roundtrip_audio(PCMA_CODEC, output_channels=1, output_sample_rate=8000)
 
+    def test_roundtrip_with_loss(self):
+        self.roundtrip_audio(PCMA_CODEC, output_channels=1, output_sample_rate=8000, drop=[1])
+
 
 class PcmuTest(CodecTestCase):
     def test_decoder(self):
@@ -96,3 +99,6 @@ class PcmuTest(CodecTestCase):
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMU_CODEC, output_channels=1, output_sample_rate=8000)
+
+    def test_roundtrip_with_loss(self):
+        self.roundtrip_audio(PCMU_CODEC, output_channels=1, output_sample_rate=8000, drop=[1])

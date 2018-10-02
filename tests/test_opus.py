@@ -71,3 +71,6 @@ class OpusTest(CodecTestCase):
 
     def test_roundtrip(self):
         self.roundtrip_audio(OPUS_CODEC, output_channels=2, output_sample_rate=48000)
+
+    def test_roundtrip_with_loss(self):
+        self.roundtrip_audio(OPUS_CODEC, output_channels=2, output_sample_rate=48000, drop=[1])
