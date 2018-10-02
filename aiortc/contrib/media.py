@@ -159,6 +159,8 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
         format=audio_format,
         rate=audio_sample_rate)
 
+    video_first_pts = None
+
     frame_time = None
     start_time = time.time()
 
@@ -172,7 +174,9 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 video_track.stop()
             break
 
-        if frame_time and (time.time() - start_time) < frame_time + 2:
+        # read up to 1 second ahead
+        elapsed_time = (time.time() - start_time)
+        if frame_time and frame_time > elapsed_time + 1:
             time.sleep(0.1)
 
         if isinstance(frame, av.AudioFrame) and audio_track:
@@ -195,10 +199,15 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 else:
                     break
         elif isinstance(frame, av.VideoFrame) and video_track:
-            if video_track._queue.qsize() < 30:
-                frame_time = frame.time
-                frame = video_frame_from_avframe(frame)
-                asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
+            # video from a webcam doesn't start at pts 0, cancel out offset
+            if frame.pts is not None:
+                if video_first_pts is None:
+                    video_first_pts = frame.pts
+                frame.pts -= video_first_pts
+
+            frame_time = frame.time
+            frame = video_frame_from_avframe(frame)
+            asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
