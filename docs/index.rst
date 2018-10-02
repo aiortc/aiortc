@@ -1,7 +1,7 @@
 aiortc
 =========
 
-|pypi-v| |pypi-pyversions| |pypi-l| |travis| |coveralls|
+|pypi-v| |pypi-pyversions| |pypi-l| |travis| |coveralls| |gitter|
 
 .. |pypi-v| image:: https://img.shields.io/pypi/v/aiortc.svg
     :target: https://pypi.python.org/pypi/aiortc
@@ -17,6 +17,9 @@ aiortc
 
 .. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiortc.svg
     :target: https://coveralls.io/github/jlaine/aiortc
+
+.. |gitter| image:: https://img.shields.io/gitter/room/aiortc/Lobby.svg
+    :target: https://gitter.im/aiortc/Lobby
 
 ``aiortc`` is a library for `Web Real-Time Communication (WebRTC)`_ and
 `Object Real-Time Communication (ORTC)`_ in Python. It is built on top of

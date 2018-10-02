@@ -1,7 +1,7 @@
 aiortc
 ======
 
-|rtd| |pypi-v| |pypi-pyversions| |pypi-l| |travis| |coveralls|
+|rtd| |pypi-v| |pypi-pyversions| |pypi-l| |travis| |coveralls| |gitter|
 
 .. |rtd| image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
    :target: https://aiortc.readthedocs.io/
@@ -20,6 +20,9 @@ aiortc
 
 .. |coveralls| image:: https://img.shields.io/coveralls/jlaine/aiortc.svg
     :target: https://coveralls.io/github/jlaine/aiortc
+
+.. |gitter| image:: https://img.shields.io/gitter/room/aiortc/Lobby.svg
+    :target: https://gitter.im/aiortc/Lobby
 
 What is ``aiortc``?
 -------------------
