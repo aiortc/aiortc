@@ -78,7 +78,7 @@ sys.modules.update({'aiortc.codecs.vpx': MockVpx()})
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinxcontrib.asyncio']
 autodoc_member_order = 'bysource'
 intersphinx_mapping = {
-    'av': ('http://docs.mikeboers.com/pyav/develop', None)
+    'av': ('http://docs.mikeboers.com/pyav/0.5.3', None)
 }
 
 # Add any paths that contain templates here, relative to this directory.
