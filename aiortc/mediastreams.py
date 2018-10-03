@@ -43,7 +43,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         """
-        Receive the next :class:`AudioFrame`.
+        Receive the next :class:`~av.audio.frame.AudioFrame`.
 
         The base implementation just reads silence, subclass
         :class:`AudioStreamTrack` to provide a useful implementation.
@@ -80,7 +80,7 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def recv(self):
         """
-        Receive the next :class:`VideoFrame`.
+        Receive the next :class:`~av.video.frame.VideoFrame`.
 
         The base implementation just reads a 640x480 green frame at 30fps,
         subclass :class:`VideoStreamTrack` to provide a useful implementation.

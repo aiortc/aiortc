@@ -39,7 +39,8 @@ class MockBinding:
 
 
 class MockAv:
-    pass
+    AudioFrame = None
+    VideoFrame = None
 
 
 class MockH264:
@@ -74,8 +75,11 @@ sys.modules.update({'aiortc.codecs.vpx': MockVpx()})
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinxcontrib.asyncio']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinxcontrib.asyncio']
 autodoc_member_order = 'bysource'
+intersphinx_mapping = {
+    'av': ('http://docs.mikeboers.com/pyav/develop', None)
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

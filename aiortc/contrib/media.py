@@ -4,8 +4,6 @@ import threading
 import time
 
 import av
-import av.audio.stream
-import av.video.stream
 from av import AudioFrame, VideoFrame
 
 from ..mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamTrack
@@ -68,6 +66,9 @@ class MediaBlackhole:
 
 
 def player_worker(loop, container, audio_track, video_track, quit_event):
+    import av.audio.fifo
+    import av.audio.format
+    import av.audio.resampler
     audio_fifo = av.audio.fifo.AudioFifo()
     audio_format = av.audio.format.AudioFormat('s16')
     audio_sample_rate = 48000
@@ -160,6 +161,8 @@ class MediaPlayer:
     A media source that reads audio and/or video from a file.
     """
     def __init__(self, path, options={}):
+        import av.audio.stream
+        import av.video.stream
         self.__container = av.open(file=path, mode='r', options=options)
         self.__thread = None
         self.__thread_quit = None
