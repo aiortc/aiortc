@@ -10,7 +10,6 @@ from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
                         RtcpPacket, RtcpPsfbPacket, RtcpRtpfbPacket, RtpPacket,
                         is_rtcp)
 from aiortc.stats import RTCStatsReport
-from aiortc.utils import uint16_add
 
 from .utils import dummy_dtls_transport_pair, load, run
 
@@ -20,8 +19,9 @@ class ClosedDtlsTransport:
 
 
 class FakeDtlsTransport:
-    queue = asyncio.Queue(maxsize=1)
-    state = 'connected'
+    def __init__(self):
+        self.queue = asyncio.Queue()
+        self.state = 'connected'
 
     def _register_rtp_sender(self, sender, parameters):
         pass
@@ -164,14 +164,11 @@ class RTCRtpSenderTest(TestCase):
         ])))
 
         # wait for one packet to be transmitted, and ask for keyframe
-        packet = run(transport.queue.get())
+        run(transport.queue.get())
         sender._send_keyframe()
 
-        # wait for packet to be transmitted
-        rtx_packet = run(transport.queue.get())
-        self.assertEqual(rtx_packet.sequence_number, uint16_add(packet.sequence_number, 1))
-
-        # clean shutdown
+        # wait for packet to be transmitted, then shutdown
+        run(asyncio.sleep(0.5))
         run(sender.stop())
 
     def test_retransmit(self):
@@ -192,12 +189,17 @@ class RTCRtpSenderTest(TestCase):
         packet = run(transport.queue.get())
         run(sender._retransmit(packet.sequence_number))
 
-        # wait for packet to be transmitted
-        rtx_packet = run(transport.queue.get())
-        self.assertEqual(rtx_packet.sequence_number, packet.sequence_number)
-
-        # clean shutdown
+        # wait for packet to be retransmitted, then shutdown
+        run(asyncio.sleep(0.5))
         run(sender.stop())
+
+        # check packet was retransmitted
+        found_rtx = False
+        while not transport.queue.empty():
+            queue_packet = transport.queue.get_nowait()
+            if queue_packet.sequence_number == packet.sequence_number:
+                found_rtx = True
+        self.assertTrue(found_rtx)
 
     def test_stop(self):
         transport, _ = dummy_dtls_transport_pair()
