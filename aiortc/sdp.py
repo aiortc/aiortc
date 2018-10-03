@@ -10,10 +10,10 @@ from .rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
 from .rtcsctptransport import RTCSctpCapabilities
 
 DIRECTIONS = [
-    'sendrecv',
+    'inactive',
     'sendonly',
     'recvonly',
-    'inactive'
+    'sendrecv',
 ]
 
 DTLS_ROLE_SETUP = {

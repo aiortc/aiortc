@@ -102,6 +102,22 @@ def get_default_candidate(iceTransport):
         return DUMMY_CANDIDATE
 
 
+def and_direction(a, b):
+    return sdp.DIRECTIONS[sdp.DIRECTIONS.index(a) & sdp.DIRECTIONS.index(b)]
+
+
+def or_direction(a, b):
+    return sdp.DIRECTIONS[sdp.DIRECTIONS.index(a) | sdp.DIRECTIONS.index(b)]
+
+
+def reverse_direction(direction):
+    if direction == 'sendonly':
+        return 'recvonly'
+    elif direction == 'recvonly':
+        return 'sendonly'
+    return direction
+
+
 class RTCPeerConnection(EventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
@@ -206,10 +222,7 @@ class RTCPeerConnection(EventEmitter):
             if transceiver.kind == track.kind:
                 if transceiver.sender.track is None:
                     transceiver.sender.replaceTrack(track)
-                    if transceiver.direction == 'recvonly':
-                        transceiver._set_direction('sendrecv')
-                    elif transceiver.direction == 'inactive':
-                        transceiver._set_direction('sendonly')
+                    transceiver.direction = or_direction(transceiver.direction, 'sendonly')
                     return transceiver.sender
 
         transceiver = self.__createTransceiver(
@@ -285,7 +298,7 @@ class RTCPeerConnection(EventEmitter):
                                     self.signalingState)
 
         return RTCSessionDescription(
-            sdp=self.__createSdp(),
+            sdp=self.__createSdp('answer'),
             type='answer')
 
     def createDataChannel(self, label, ordered=True, protocol=''):
@@ -334,7 +347,7 @@ class RTCPeerConnection(EventEmitter):
             self.__sctp.mid = self.__nextAvailableMid()
 
         return RTCSessionDescription(
-            sdp=self.__createSdp(),
+            sdp=self.__createSdp('offer'),
             type='offer')
 
     def getReceivers(self):
@@ -388,6 +401,11 @@ class RTCPeerConnection(EventEmitter):
             for iceTransport in self.__iceTransports:
                 iceTransport._connection.ice_controlling = self.__initialOfferer
 
+        # configure direction
+        for t in self.__transceivers:
+            if sessionDescription.type in ['answer', 'pranswer']:
+                t._currentDirection = and_direction(t.direction, t._offerDirection)
+
         # gather
         await self.__gather()
 
@@ -395,7 +413,7 @@ class RTCPeerConnection(EventEmitter):
         asyncio.ensure_future(self.__connect())
 
         self.__currentLocalDescription = RTCSessionDescription(
-            sdp=self.__createSdp(),
+            sdp=self.__createSdp(sessionDescription.type),
             type=sessionDescription.type)
 
     async def setRemoteDescription(self, sessionDescription):
@@ -445,15 +463,17 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteIce[transceiver] = media.ice
                 self.__remoteRtp[transceiver] = media.rtp
 
-                if media.direction in ['sendonly', 'sendrecv']:
-                    if not transceiver.receiver._track:
-                        transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
-                        self.emit('track', transceiver.receiver._track)
-                elif media.direction == 'recvonly' and transceiver.direction == 'sendrecv':
-                    transceiver._set_direction('sendonly')
-                elif (media.direction in ['inactive', 'recvonly'] and
-                      transceiver.direction == 'recvonly'):
-                    transceiver._set_direction('inactive')
+                # configure direction
+                direction = reverse_direction(media.direction)
+                if sessionDescription.type in ['answer', 'pranswer']:
+                    transceiver._currentDirection = direction
+                else:
+                    transceiver._offerDirection = direction
+
+                # create remote stream track
+                if direction in ['recvonly', 'sendrecv'] and not transceiver.receiver._track:
+                    transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
+                    self.emit('track', transceiver.receiver._track)
 
             elif media.kind == 'application':
                 if not self.__sctp:
@@ -527,8 +547,9 @@ class RTCPeerConnection(EventEmitter):
             if iceTransport.iceGatherer.getLocalCandidates() and transceiver in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[transceiver])
                 await dtlsTransport.start(self.__remoteDtls[transceiver])
-                await transceiver.sender.send(self.__localRtp(transceiver))
-                if transceiver.receiver._track:
+                if transceiver.currentDirection in ['sendonly', 'sendrecv']:
+                    await transceiver.sender.send(self.__localRtp(transceiver))
+                if transceiver.currentDirection in ['recvonly', 'sendrecv']:
                     await transceiver.receiver.receive(self.__remoteRtp[transceiver])
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
@@ -574,7 +595,7 @@ class RTCPeerConnection(EventEmitter):
         def on_datachannel(channel):
             self.emit('datachannel', channel)
 
-    def __createSdp(self):
+    def __createSdp(self, type):
         ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
         description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
@@ -590,7 +611,11 @@ class RTCPeerConnection(EventEmitter):
                 profile='UDP/TLS/RTP/SAVPF',
                 fmt=[c.payloadType for c in transceiver._codecs])
             media.host = default_candidate.ip
-            media.direction = transceiver.direction
+            if type in ['answer', 'pranswer']:
+                media.direction = and_direction(transceiver.direction, transceiver._offerDirection)
+            else:
+                media.direction = transceiver.direction
+
             media.rtp = self.__localRtp(transceiver)
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
