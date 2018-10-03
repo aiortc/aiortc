@@ -9,7 +9,7 @@ from av import VideoFrame
 
 from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_bgr, video_frame_to_bgr)
+                                  video_frame_from_bgr)
 
 from .utils import run
 
@@ -178,8 +178,3 @@ class VideoFrameTest(TestCase):
         self.assertEqual(frame.width, 640)
         self.assertEqual(frame.height, 480)
         self.assertEqual(frame.pts, 123)
-
-    def test_video_frame_to_bgr(self):
-        frame = VideoFrame(width=640, height=480)
-        image = video_frame_to_bgr(frame)
-        self.assertEqual(image.shape, (480, 640, 3))

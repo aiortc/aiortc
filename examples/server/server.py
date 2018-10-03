@@ -9,7 +9,7 @@ from aiohttp import web
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_bgr, video_frame_to_bgr)
+                                  video_frame_from_bgr)
 
 ROOT = os.path.dirname(__file__)
 
@@ -27,11 +27,11 @@ class VideoTransformTrack(VideoStreamTrack):
 
         # apply image processing to frame
         if self.transform == 'edges':
-            img = video_frame_to_bgr(frame)
+            img = frame.to_ndarray(format='bgr24')
             edges = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
             return video_frame_from_bgr(edges, timestamp=frame.pts)
         elif self.transform == 'rotate':
-            img = video_frame_to_bgr(frame)
+            img = frame.to_ndarray(format='bgr24')
             rows, cols, _ = img.shape
             M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 1.8, 1)
             rotated = cv2.warpAffine(img, M, (cols, rows))

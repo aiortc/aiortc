@@ -16,10 +16,6 @@ def video_frame_from_bgr(data_bgr, timestamp):
     return frame
 
 
-def video_frame_to_bgr(frame):
-    return frame.to_ndarray(format='bgr24')
-
-
 async def blackhole_consume(track):
     while True:
         await track.recv()
