@@ -1,6 +1,6 @@
 from .exceptions import InvalidAccessError, InvalidStateError  # noqa
-from .mediastreams import (AudioFrame, AudioStreamTrack,  # noqa
-                           MediaStreamTrack, VideoFrame,
+from .mediastreams import (AudioStreamTrack,  # noqa
+                           MediaStreamTrack,
                            VideoStreamTrack)
 from .rtcconfiguration import RTCConfiguration, RTCIceServer  # noqa
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters  # noqa
