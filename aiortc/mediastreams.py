@@ -76,7 +76,7 @@ class VideoStreamTrack(MediaStreamTrack):
             await asyncio.sleep(VIDEO_PTIME)
         else:
             self._timestamp = 0
-        return self._timestamp
+        return self._timestamp, VIDEO_TIME_BASE
 
     async def recv(self):
         """
@@ -85,10 +85,11 @@ class VideoStreamTrack(MediaStreamTrack):
         The base implementation just reads a 640x480 green frame at 30fps,
         subclass :class:`VideoStreamTrack` to provide a useful implementation.
         """
-        timestamp = await self.next_timestamp()
+        pts, time_base = await self.next_timestamp()
+
         frame = VideoFrame(width=640, height=480)
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
-        frame.pts = timestamp
-        frame.time_base = VIDEO_TIME_BASE
+        frame.pts = pts
+        frame.time_base = time_base
         return frame

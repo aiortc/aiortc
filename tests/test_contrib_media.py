@@ -5,11 +5,9 @@ from unittest import TestCase
 
 import cv2
 import numpy
-from av import VideoFrame
 
 from aiortc import AudioStreamTrack, VideoStreamTrack
-from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_bgr)
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
 from .utils import run
 
@@ -169,12 +167,3 @@ class MediaRecorderTest(TestCase):
         recorder.start()
         run(asyncio.sleep(2))
         recorder.stop()
-
-
-class VideoFrameTest(TestCase):
-    def test_video_frame_from_bgr(self):
-        image = numpy.full((480, 640, 3), (0, 0, 0), numpy.uint8)
-        frame = video_frame_from_bgr(image, timestamp=123)
-        self.assertEqual(frame.width, 640)
-        self.assertEqual(frame.height, 480)
-        self.assertEqual(frame.pts, 123)

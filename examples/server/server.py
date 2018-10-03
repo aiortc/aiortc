@@ -6,10 +6,10 @@ import os
 
 import cv2
 from aiohttp import web
+from av import VideoFrame
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
-from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_bgr)
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
 ROOT = os.path.dirname(__file__)
 
@@ -25,17 +25,28 @@ class VideoTransformTrack(VideoStreamTrack):
         frame = await self.track.recv()
         self.counter += 1
 
-        # apply image processing to frame
         if self.transform == 'edges':
+            # perform edge detection
             img = frame.to_ndarray(format='bgr24')
-            edges = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
-            return video_frame_from_bgr(edges, timestamp=frame.pts)
+            img = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
+
+            # rebuild a VideoFrame, preserving timing information
+            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
+            new_frame.pts = frame.pts
+            new_frame.time_base = frame.time_base
+            return new_frame
         elif self.transform == 'rotate':
+            # rotate image
             img = frame.to_ndarray(format='bgr24')
             rows, cols, _ = img.shape
-            M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter * 1.8, 1)
-            rotated = cv2.warpAffine(img, M, (cols, rows))
-            return video_frame_from_bgr(rotated, timestamp=frame.pts)
+            M = cv2.getRotationMatrix2D((cols / 2, rows / 2), frame.time * 45, 1)
+            img = cv2.warpAffine(img, M, (cols, rows))
+
+            # rebuild a VideoFrame, preserving timing information
+            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
+            new_frame.pts = frame.pts
+            new_frame.time_base = frame.time_base
+            return new_frame
         else:
             return frame
 

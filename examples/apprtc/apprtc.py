@@ -8,11 +8,11 @@ import random
 import aiohttp
 import cv2
 import websockets
+from av import VideoFrame
 
 from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
-from aiortc.contrib.media import (MediaBlackhole, MediaPlayer, MediaRecorder,
-                                  video_frame_from_bgr)
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.sdp import candidate_from_sdp
 
 ROOT = os.path.dirname(__file__)
@@ -49,18 +49,20 @@ class Signaling:
 
 class VideoImageTrack(VideoStreamTrack):
     def __init__(self):
-        self.counter = 0
         self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
 
     async def recv(self):
-        timestamp = await self.next_timestamp()
+        pts, time_base = await self.next_timestamp()
 
         # rotate image
         rows, cols, _ = self.img.shape
-        M = cv2.getRotationMatrix2D((cols / 2, rows / 2), self.counter / 2, 1)
-        rotated = cv2.warpAffine(self.img, M, (cols, rows))
-        frame = video_frame_from_bgr(rotated, timestamp=timestamp)
-        self.counter += 1
+        M = cv2.getRotationMatrix2D((cols / 2, rows / 2), int(pts * time_base * 45), 1)
+        img = cv2.warpAffine(self.img, M, (cols, rows))
+
+        # create video frame
+        frame = VideoFrame.from_ndarray(img, format='bgr24')
+        frame.pts = pts
+        frame.time_base = time_base
 
         return frame
 

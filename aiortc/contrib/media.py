@@ -9,13 +9,6 @@ from av import AudioFrame, VideoFrame
 from ..mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamTrack
 
 
-def video_frame_from_bgr(data_bgr, timestamp):
-    frame = VideoFrame.from_ndarray(data_bgr, format='bgr24')
-    frame.pts = timestamp
-    frame.time_base = VIDEO_TIME_BASE
-    return frame
-
-
 async def blackhole_consume(track):
     while True:
         await track.recv()

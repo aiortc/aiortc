@@ -4,9 +4,10 @@ import logging
 import os
 
 import numpy
+from av import VideoFrame
 
 from aiortc import RTCPeerConnection, VideoStreamTrack
-from aiortc.contrib.media import MediaRecorder, video_frame_from_bgr
+from aiortc.contrib.media import MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output-%3d.jpg')
@@ -27,8 +28,12 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         ])
 
     async def recv(self):
-        timestamp = await self.next_timestamp()
-        return video_frame_from_bgr(self.data_bgr, timestamp=timestamp)
+        pts, time_base = await self.next_timestamp()
+
+        frame = VideoFrame.from_ndarray(self.data_bgr, format='bgr24')
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
 
 
 async def run_answer(pc, signaling):
