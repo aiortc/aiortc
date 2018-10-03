@@ -17,7 +17,7 @@ def video_frame_from_bgr(data_bgr, timestamp):
 
 
 def video_frame_to_bgr(frame):
-    return frame.to_nd_array(format='bgr24')
+    return frame.to_ndarray(format='bgr24')
 
 
 async def blackhole_consume(track):
@@ -275,9 +275,6 @@ class MediaRecorder:
                     context.task.cancel()
                     context.task = None
                     for packet in context.stream.encode(None):
-                        # FIXME : for some reason these "flush" packets do not have
-                        # their time_base set, so let's fix this
-                        packet.time_base = context.stream.time_base
                         self.__container.mux(packet)
             self.__tracks = {}
 
