@@ -75,6 +75,8 @@ function negotiate() {
     }).then(function(answer) {
         document.getElementById('answer-sdp').textContent = answer.sdp;
         return pc.setRemoteDescription(answer);
+    }).catch(function(e) {
+        alert(e);
     });
 }
 
