@@ -6,7 +6,6 @@ from unittest import TestCase
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.jitterbuffer import JitterFrame
-from aiortc.mediastreams import VIDEO_TIME_BASE, VideoFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
@@ -64,9 +63,7 @@ class H264Test(CodecTestCase):
         encoder = get_encoder(H264_CODEC)
         self.assertTrue(isinstance(encoder, H264Encoder))
 
-        frame = VideoFrame(width=640, height=480)
-        frame.pts = 0
-        frame.time_base = VIDEO_TIME_BASE
+        frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
@@ -120,9 +117,7 @@ class H264Test(CodecTestCase):
     def test_frame_encoder(self):
         encoder = get_encoder(H264_CODEC)
 
-        frame = VideoFrame(width=640, height=480)
-        frame.pts = 0
-        frame.time_base = VIDEO_TIME_BASE
+        frame = self.create_video_frame(width=640, height=480, pts=0)
         packages = list(encoder._encode_frame(frame, False))
 
         self.assertGreaterEqual(len(packages), 3)
@@ -133,15 +128,11 @@ class H264Test(CodecTestCase):
             5,  # IDR (aka key frame)
         })
 
-        frame = VideoFrame(width=640, height=480)
-        frame.pts = 3000
-        frame.time_base = VIDEO_TIME_BASE
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)
 
         # change resolution
-        frame = VideoFrame(width=320, height=240)
-        frame.pts = 6000
-        frame.time_base = VIDEO_TIME_BASE
+        frame = self.create_video_frame(width=320, height=240, pts=6000)
         packages = list(encoder._encode_frame(frame, False))
         self.assertGreaterEqual(len(packages), 1)
