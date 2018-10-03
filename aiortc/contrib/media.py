@@ -6,42 +6,9 @@ import time
 import av
 import av.audio.stream
 import av.video.stream
+from av import AudioFrame, VideoFrame
 
-from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, AudioFrame,
-                            MediaStreamTrack, VideoFrame)
-
-
-def audio_frame_from_avframe(av_frame):
-    """
-    Convert an av.AudioFrame to aiortc.AudioFrame.
-    """
-    assert av_frame.format.name == 's16'
-    assert len(av_frame.planes) == 1
-    frame = AudioFrame(
-        channels=len(av_frame.layout.channels),
-        data=av_frame.planes[0].to_bytes(),
-        sample_rate=av_frame.sample_rate)
-    frame.pts = av_frame.pts
-    frame.time_base = av_frame.time_base
-    return frame
-
-
-def audio_frame_to_avframe(frame):
-    """
-    Convert an aiortc.AudioFrame to av.AudioFrame.
-    """
-    assert frame.channels in [1, 2]
-    assert frame.sample_width in [1, 2, 4]
-
-    samples = len(frame.data) // (frame.channels * frame.sample_width)
-    av_frame = av.AudioFrame(
-        format='s%d' % (8 * frame.sample_width),
-        layout='stereo' if frame.channels == 2 else 'mono',
-        samples=samples)
-    av_frame.planes[0].update(frame.data)
-    av_frame.sample_rate = frame.sample_rate
-    av_frame.time_base = frame.time_base
-    return av_frame
+from ..mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamTrack
 
 
 def video_frame_from_bgr(data_bgr, timestamp):
@@ -130,7 +97,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
         if frame_time and frame_time > elapsed_time + 1:
             time.sleep(0.1)
 
-        if isinstance(frame, av.AudioFrame) and audio_track:
+        if isinstance(frame, AudioFrame) and audio_track:
             if frame.format != audio_format or frame.sample_rate != audio_sample_rate:
                 frame.pts = None
                 frame = audio_resampler.resample(frame)
@@ -145,11 +112,10 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 frame = audio_fifo.read(audio_samples_per_frame)
                 if frame:
                     frame_time = frame.time
-                    frame = audio_frame_from_avframe(frame)
                     asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
                 else:
                     break
-        elif isinstance(frame, av.VideoFrame) and video_track:
+        elif isinstance(frame, VideoFrame) and video_track:
             # video from a webcam doesn't start at pts 0, cancel out offset
             if frame.pts is not None:
                 if video_first_pts is None:
@@ -251,9 +217,8 @@ class MediaPlayer:
 
 
 class MediaRecorderContext:
-    def __init__(self, stream, convert):
+    def __init__(self, stream):
         self.stream = stream
-        self.convert = convert
         self.task = None
 
 
@@ -272,7 +237,6 @@ class MediaRecorder:
         :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
         """
         if track.kind == 'audio':
-            convert = audio_frame_to_avframe
             if self.__container.format.name == 'wav':
                 codec_name = 'pcm_s16le'
             elif self.__container.format.name == 'mp3':
@@ -281,7 +245,6 @@ class MediaRecorder:
                 codec_name = 'aac'
             stream = self.__container.add_stream(codec_name)
         else:
-            convert = None
             if self.__container.format.name == 'image2':
                 stream = self.__container.add_stream('jpeg2000', rate=30)
                 stream.pix_fmt = 'rgb24'
@@ -289,7 +252,7 @@ class MediaRecorder:
                 stream = self.__container.add_stream('libx264', rate=30)
                 stream.pix_fmt = 'yuv420p'
             stream.time_base = VIDEO_TIME_BASE
-        self.__tracks[track] = MediaRecorderContext(stream, convert)
+        self.__tracks[track] = MediaRecorderContext(stream)
 
     def start(self):
         """
@@ -322,7 +285,5 @@ class MediaRecorder:
     async def __run_track(self, track, context):
         while True:
             frame = await track.recv()
-            if context.convert:
-                frame = context.convert(frame)
             for packet in context.stream.encode(frame):
                 self.__container.mux(packet)

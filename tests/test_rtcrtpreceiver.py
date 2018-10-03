@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
-from aiortc.mediastreams import AudioFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
                                    RTCRtpReceiver, StreamStatistics,
@@ -238,13 +237,11 @@ class RTCRtpReceiverTest(TestCase):
 
         # check remote track
         frame = run(receiver._track.recv())
-        self.assertTrue(isinstance(frame, AudioFrame))
         self.assertEqual(frame.pts, 0)
         self.assertEqual(frame.sample_rate, 8000)
         self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
 
         frame = run(receiver._track.recv())
-        self.assertTrue(isinstance(frame, AudioFrame))
         self.assertEqual(frame.pts, 160)
         self.assertEqual(frame.sample_rate, 8000)
         self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))

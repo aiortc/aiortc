@@ -93,10 +93,10 @@ class MediaPlayerTest(TestCase):
         player.start()
         for i in range(49):
             frame = run(player.audio.recv())
-            self.assertEqual(frame.channels, 1)
-            self.assertEqual(len(frame.data), 1920)
+            self.assertEqual(frame.format.name, 's16')
+            self.assertEqual(frame.layout.name, 'mono')
+            self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
-            self.assertEqual(frame.sample_width, 2)
         player.stop()
 
     def test_audio_file_48kHz(self):
@@ -111,10 +111,10 @@ class MediaPlayerTest(TestCase):
         player.start()
         for i in range(50):
             frame = run(player.audio.recv())
-            self.assertEqual(frame.channels, 1)
-            self.assertEqual(len(frame.data), 1920)
+            self.assertEqual(frame.format.name, 's16')
+            self.assertEqual(frame.layout.name, 'mono')
+            self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
-            self.assertEqual(frame.sample_width, 2)
         player.stop()
 
     def test_video_file(self):

@@ -2,7 +2,7 @@ import asyncio
 import fractions
 import uuid
 
-from av import VideoFrame
+from av import AudioFrame, VideoFrame
 from pyee import EventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
@@ -15,35 +15,6 @@ def convert_timebase(pts, from_base, to_base):
     if from_base != to_base:
         pts = int(pts * from_base / to_base)
     return pts
-
-
-class AudioFrame:
-    """
-    Audio frame, 16-bit PCM.
-    """
-    def __init__(self, channels, data, sample_rate):
-        self.channels = channels
-        "The number of channels (`1` for mono, `2` for stereo)."
-        self.data = data
-        "The bytes representing the PCM samples."
-        self.__sample_rate = sample_rate
-        self.sample_width = 2
-        "The sample width in bytes, always `2` (16-bit)."
-        self.pts = None
-        "The presentation timestamp in :attr:`time_base` units for this frame."
-        self.time_base = None
-        "The unit of time (in fractional seconds) in which timestamps are expressed."
-
-    @property
-    def sample_rate(self):
-        "The sample rate, for instance `48000` for 48kHz."
-        return self.__sample_rate
-
-    @property
-    def time(self):
-        "The presentation time in seconds for this frame."
-        if self.pts is not None and self.time_base is not None:
-            return float(self.pts * self.time_base)
 
 
 class MediaStreamTrack(EventEmitter):
@@ -84,11 +55,11 @@ class AudioStreamTrack(MediaStreamTrack):
         self._timestamp = timestamp + samples
         await asyncio.sleep(AUDIO_PTIME)
 
-        frame = AudioFrame(
-            channels=1,
-            data=bytes(2 * samples),
-            sample_rate=sample_rate)
+        frame = AudioFrame(format='s16', layout='mono', samples=samples)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
         frame.pts = timestamp
+        frame.sample_rate = sample_rate
         frame.time_base = fractions.Fraction(1, sample_rate)
         return frame
 

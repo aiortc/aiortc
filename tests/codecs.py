@@ -1,25 +1,24 @@
 import fractions
 from unittest import TestCase
 
-from av import VideoFrame
+from av import AudioFrame, VideoFrame
 
-from aiortc import AudioFrame
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE
 
 
 class CodecTestCase(TestCase):
-    def create_audio_frames(self, channels, sample_rate, count):
+    def create_audio_frames(self, layout, sample_rate, count):
         frames = []
         timestamp = 0
         samples_per_frame = int(AUDIO_PTIME * sample_rate)
         for i in range(count):
-            frame = AudioFrame(
-                channels=channels,
-                data=bytes(2 * channels * samples_per_frame),
-                sample_rate=sample_rate)
+            frame = AudioFrame(format='s16', layout=layout, samples=samples_per_frame)
+            for p in frame.planes:
+                p.update(bytes(p.buffer_size))
             frame.pts = timestamp
+            frame.sample_rate = sample_rate
             frame.time_base = fractions.Fraction(1, sample_rate)
             frames.append(frame)
             timestamp += samples_per_frame
@@ -49,20 +48,19 @@ class CodecTestCase(TestCase):
                 time_base=time_base))
         return frames
 
-    def roundtrip_audio(self, codec, output_channels, output_sample_rate, drop=[]):
+    def roundtrip_audio(self, codec, output_layout, output_sample_rate, drop=[]):
         """
         Round-trip an AudioFrame through encoder then decoder.
         """
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        input_frames = self.create_audio_frames(channels=1, sample_rate=8000, count=10)
+        input_frames = self.create_audio_frames(layout='mono', sample_rate=8000, count=10)
 
         output_sample_count = int(output_sample_rate * AUDIO_PTIME)
 
         for i, frame in enumerate(input_frames):
             # encode
-            self.assertEqual(len(frame.data), 320)
             packages, timestamp = encoder.encode(frame)
 
             if i not in drop:
@@ -74,11 +72,10 @@ class CodecTestCase(TestCase):
                 # decode
                 frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
                 self.assertEqual(len(frames), 1)
-                self.assertEqual(len(frames[0].data),
-                                 output_sample_rate * AUDIO_PTIME * output_channels * 2)
-                self.assertEqual(frames[0].channels, output_channels)
+                self.assertEqual(frames[0].format.name, 's16')
+                self.assertEqual(frames[0].layout.name, output_layout)
+                self.assertEqual(frames[0].samples, output_sample_rate * AUDIO_PTIME)
                 self.assertEqual(frames[0].sample_rate, output_sample_rate)
-                self.assertEqual(frames[0].sample_width, 2)
                 self.assertEqual(frames[0].pts, i * output_sample_count)
                 self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
 
