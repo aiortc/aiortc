@@ -8,11 +8,16 @@ Changelog
 
 *Under development*
 
+.. warning::
+
+  `aiortc` now uses PyAV's :class:`~av.audio.frame.AudioFrame` and
+  :class:`~av.video.frame.VideoFrame` classes instead of defining its own.
+
 Media
 .....
 
   * Use a jitter buffer for incoming audio.
-  * Add `aiortc.RTCPeerConnection.addTransceiver` method.
+  * Add :meth:`RTCPeerConnection.addTransceiver` method.
 
 Examples
 ........
