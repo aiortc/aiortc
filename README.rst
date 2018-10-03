@@ -85,7 +85,7 @@ Requirements
 ------------
 
 In addition to aiortc's Python dependencies you need a couple of libraries
-installed on your system for media codecs. FFmpeg 3.0 or greater is required.
+installed on your system for media codecs. FFmpeg 3.2 or greater is required.
 
 On Debian/Ubuntu run:
 
