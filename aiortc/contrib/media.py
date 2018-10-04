@@ -113,7 +113,8 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
                 frame.pts -= video_first_pts
 
             frame_time = frame.time
-
+            if frame.format.name != 'yuv420p':
+                frame = frame.reformat(format='yuv420p')
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
 

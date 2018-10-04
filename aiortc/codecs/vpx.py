@@ -192,6 +192,8 @@ class Vp8Encoder:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(self, frame, force_keyframe=False):
+        assert frame.format.name == 'yuv420p'
+
         if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
             lib.vpx_codec_destroy(self.codec)
             self.codec = None
@@ -208,7 +210,7 @@ class Vp8Encoder:
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_target_bitrate = 900
+            self.cfg.rc_target_bitrate = 500
             self.cfg.rc_min_quantizer = 2
             self.cfg.rc_max_quantizer = 56
             self.cfg.rc_undershoot_pct = 100
@@ -220,6 +222,12 @@ class Vp8Encoder:
             self.cfg.kf_max_dist = 600
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
+            lib.vpx_codec_control_(self.codec, lib.VP8E_SET_NOISE_SENSITIVITY, ffi.cast('int', 4))
+            lib.vpx_codec_control_(self.codec, lib.VP8E_SET_STATIC_THRESHOLD, ffi.cast('int', 1))
+            lib.vpx_codec_control_(self.codec, lib.VP8E_SET_CPUUSED, ffi.cast('int', -6))
+            lib.vpx_codec_control_(self.codec, lib.VP8E_SET_TOKEN_PARTITIONS,
+                                   ffi.cast('int', lib.VP8_ONE_TOKENPARTITION))
+
             # create image on a dummy buffer, we will fill the pointers during encoding
             self.image = ffi.new('vpx_image_t *')
             lib.vpx_img_wrap(self.image, lib.VPX_IMG_FMT_I420,
@@ -227,8 +235,6 @@ class Vp8Encoder:
                              ffi.cast('void*', 1))
 
         # setup image
-        if frame.format.name != 'yuv420p':
-            frame = frame.reformat(format='yuv420p')
         for p in range(3):
             self.image.planes[p] = ffi.cast('void*', frame.planes[p].buffer_ptr)
             self.image.stride[p] = frame.planes[p].line_size

@@ -29,6 +29,7 @@ vpx_codec_err_t vpx_codec_enc_init(vpx_codec_ctx_t *ctx,
     libraries=['vpx'])
 
 ffibuilder.cdef("""
+#define VPX_CODEC_USE_OUTPUT_PARTITION 0x20000
 #define VPX_DL_REALTIME 1
 #define VPX_EFLAG_FORCE_KF 1
 
@@ -39,6 +40,10 @@ ffibuilder.cdef("""
 #define VPX_PLANE_ALPHA 3
 
 #define VP8_SET_POSTPROC 3
+#define VP8E_SET_CPUUSED 13
+#define VP8E_SET_NOISE_SENSITIVITY 15
+#define VP8E_SET_STATIC_THRESHOLD 17
+#define VP8E_SET_TOKEN_PARTITIONS 18
 
 typedef enum {
   VPX_CODEC_OK,
@@ -172,6 +177,13 @@ enum vp8_postproc_level {
   VP8_DEBLOCK = 1,
   VP8_DEMACROBLOCK = 2
 };
+
+typedef enum {
+  VP8_ONE_TOKENPARTITION = 0,
+  VP8_TWO_TOKENPARTITION = 1,
+  VP8_FOUR_TOKENPARTITION = 2,
+  VP8_EIGHT_TOKENPARTITION = 3
+} vp8e_token_partitions;
 
 typedef struct vp8_postproc_cfg {
   int post_proc_flag;
