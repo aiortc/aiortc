@@ -49,6 +49,7 @@ class Signaling:
 
 class VideoImageTrack(VideoStreamTrack):
     def __init__(self):
+        super().__init__()  # don't forget this!
         self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
 
     async def recv(self):

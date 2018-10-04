@@ -21,6 +21,7 @@ def create_rectangle(width, height, color):
 
 class FlagVideoStreamTrack(VideoStreamTrack):
     def __init__(self):
+        super().__init__()  # don't forget this!
         self.data_bgr = numpy.hstack([
             create_rectangle(width=213, height=480, color=(255, 0, 0)),      # blue
             create_rectangle(width=214, height=480, color=(255, 255, 255)),  # white

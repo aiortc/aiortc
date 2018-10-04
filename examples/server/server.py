@@ -16,6 +16,7 @@ ROOT = os.path.dirname(__file__)
 
 class VideoTransformTrack(VideoStreamTrack):
     def __init__(self, track, transform):
+        super().__init__()  # don't forget this!
         self.counter = 0
         self.received = asyncio.Queue(maxsize=1)
         self.track = track
