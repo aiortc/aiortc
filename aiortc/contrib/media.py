@@ -79,6 +79,10 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
     frame_time = None
     start_time = time.time()
 
+    # check whether this is a live capture
+    container_format = set(container.format.name.split(','))
+    throttle_playback = not container_format.intersection(['dshow', 'v4l2', 'vfwcap'])
+
     while not quit_event.is_set():
         try:
             frame = next(container.decode())
@@ -90,9 +94,10 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
             break
 
         # read up to 1 second ahead
-        elapsed_time = (time.time() - start_time)
-        if frame_time and frame_time > elapsed_time + 1:
-            time.sleep(0.1)
+        if throttle_playback:
+            elapsed_time = (time.time() - start_time)
+            if frame_time and frame_time > elapsed_time + 1:
+                time.sleep(0.1)
 
         if isinstance(frame, AudioFrame) and audio_track:
             if frame.format != audio_format or frame.sample_rate != audio_sample_rate:
