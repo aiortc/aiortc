@@ -99,7 +99,6 @@ async def offer(request):
         def on_ended():
             print('Track %s ended' % track.kind)
             recorder.stop()
-            player.stop()
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()

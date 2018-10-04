@@ -170,8 +170,6 @@ async def join_room(room, play_from, record_to):
 
     # shutdown
     print('Shutting down')
-    if player:
-        player.stop()
     recorder.stop()
     await signaling.send_message({'type': 'bye'})
     await pc.close()

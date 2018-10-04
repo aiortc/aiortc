@@ -1,12 +1,16 @@
 import asyncio
 import fractions
+import logging
 import threading
 import time
 
 import av
 from av import AudioFrame, VideoFrame
 
-from ..mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamTrack
+from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamError,
+                            MediaStreamTrack)
+
+logger = logging.getLogger('media')
 
 
 async def blackhole_consume(track):
@@ -77,9 +81,9 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
             frame = next(container.decode())
         except StopIteration:
             if audio_track:
-                audio_track.stop()
+                asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
             if video_track:
-                video_track.stop()
+                asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
             break
 
         # read up to 1 second ahead
@@ -127,8 +131,14 @@ class PlayerStreamTrack(MediaStreamTrack):
         self._start = None
 
     async def recv(self):
-        self._player._start()
+        if self.readyState != 'live':
+            raise MediaStreamError
+
+        self._player._start(self)
         frame = await self._queue.get()
+        if frame is None:
+            self.stop()
+            raise MediaStreamError
         frame_time = frame.time
 
         # control playback rate
@@ -140,6 +150,10 @@ class PlayerStreamTrack(MediaStreamTrack):
                 await asyncio.sleep(wait)
 
         return frame
+
+    def stop(self):
+        super().stop()
+        self._player._stop(self)
 
 
 class MediaPlayer:
@@ -154,6 +168,7 @@ class MediaPlayer:
         self.__thread_quit = None
 
         # examine streams
+        self.__started = set()
         self.__audio = None
         self.__video = None
         for stream in self.__container.streams:
@@ -176,8 +191,10 @@ class MediaPlayer:
         """
         return self.__video
 
-    def _start(self):
+    def _start(self, track):
+        self.__started.add(track)
         if self.__thread is None:
+            self.__log_debug('Starting worker thread')
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(
                 target=player_worker,
@@ -187,19 +204,16 @@ class MediaPlayer:
                     self.__thread_quit))
             self.__thread.start()
 
-    def stop(self):
-        """
-        Stop playback.
-        """
-        if self.__thread is not None:
+    def _stop(self, track):
+        self.__started.discard(track)
+        if not self.__started and self.__thread is not None:
+            self.__log_debug('Stopping worker thread')
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
 
-        if self.__audio:
-            self.__audio.stop()
-        if self.__video:
-            self.__video.stop()
+    def __log_debug(self, msg, *args):
+        logger.debug('player(%s) ' + msg, self.__container.name, *args)
 
 
 class MediaRecorderContext:

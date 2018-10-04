@@ -17,6 +17,10 @@ def convert_timebase(pts, from_base, to_base):
     return pts
 
 
+class MediaStreamError(Exception):
+    pass
+
+
 class MediaStreamTrack(EventEmitter):
     """
     A single media track within a stream.

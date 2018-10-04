@@ -8,6 +8,7 @@ import numpy
 
 from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.mediastreams import MediaStreamError
 
 from .utils import run
 
@@ -88,13 +89,20 @@ class MediaPlayerTest(TestCase):
         self.assertIsNone(player.video)
 
         # read all frames
+        self.assertEqual(player.audio.readyState, 'live')
         for i in range(49):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
             self.assertEqual(frame.layout.name, 'mono')
             self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
-        player.stop()
+        with self.assertRaises(MediaStreamError):
+            run(player.audio.recv())
+        self.assertEqual(player.audio.readyState, 'ended')
+
+        # try reading again
+        with self.assertRaises(MediaStreamError):
+            run(player.audio.recv())
 
     def test_audio_file_48kHz(self):
         create_audio(self.audio_path, sample_rate=48000)
@@ -105,13 +113,16 @@ class MediaPlayerTest(TestCase):
         self.assertIsNone(player.video)
 
         # read all frames
+        self.assertEqual(player.audio.readyState, 'live')
         for i in range(50):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
             self.assertEqual(frame.layout.name, 'mono')
             self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
-        player.stop()
+        with self.assertRaises(MediaStreamError):
+            run(player.audio.recv())
+        self.assertEqual(player.audio.readyState, 'ended')
 
     def test_video_file(self):
         player = MediaPlayer(path=self.video_path)
@@ -121,11 +132,14 @@ class MediaPlayerTest(TestCase):
         self.assertIsNotNone(player.video)
 
         # read all frames
+        self.assertEqual(player.video.readyState, 'live')
         for i in range(20):
             frame = run(player.video.recv())
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
-        player.stop()
+        with self.assertRaises(MediaStreamError):
+            run(player.video.recv())
+        self.assertEqual(player.video.readyState, 'ended')
 
 
 class MediaRecorderTest(TestCase):
