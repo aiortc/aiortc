@@ -9,7 +9,7 @@ from . import clock
 from .codecs import depayload, get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
-from .mediastreams import MediaStreamTrack
+from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rate import RemoteBitrateEstimator
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
@@ -29,6 +29,7 @@ def decoder_worker(loop, input_q, output_q):
     while True:
         task = input_q.get()
         if task is None:
+            asyncio.run_coroutine_threadsafe(output_q.put(None), loop)
             break
         codec, encoded_frame = task
 
@@ -149,7 +150,14 @@ class RemoteStreamTrack(MediaStreamTrack):
         """
         Receive the next frame.
         """
-        return await self._queue.get()
+        if self.readyState != 'live':
+            raise MediaStreamError
+
+        frame = await self._queue.get()
+        if frame is None:
+            self.stop()
+            raise MediaStreamError
+        return frame
 
 
 class TimestampMapper:

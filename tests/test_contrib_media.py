@@ -41,7 +41,19 @@ class MediaBlackholeTest(TestCase):
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
         recorder.start()
-        run(asyncio.sleep(2))
+        run(asyncio.sleep(1))
+        recorder.stop()
+
+    def test_audio_ended(self):
+        track = AudioStreamTrack()
+
+        recorder = MediaBlackhole()
+        recorder.addTrack(track)
+        recorder.start()
+        run(asyncio.sleep(1))
+        track.stop()
+        run(asyncio.sleep(1))
+
         recorder.stop()
 
     def test_audio_remove_track(self):
@@ -57,6 +69,7 @@ class MediaBlackholeTest(TestCase):
     def test_audio_and_video(self):
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
+        recorder.addTrack(VideoStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
         recorder.stop()
@@ -66,6 +79,18 @@ class MediaBlackholeTest(TestCase):
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_video_ended(self):
+        track = VideoStreamTrack()
+
+        recorder = MediaBlackhole()
+        recorder.addTrack(track)
+        recorder.start()
+        run(asyncio.sleep(1))
+        track.stop()
+        run(asyncio.sleep(1))
+
         recorder.stop()
 
 
@@ -155,6 +180,18 @@ class MediaRecorderTest(TestCase):
         recorder.addTrack(AudioStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
+        recorder.stop()
+
+    def test_audio_wav_ended(self):
+        track = AudioStreamTrack()
+
+        recorder = MediaRecorder(path='foo.wav')
+        recorder.addTrack(track)
+        recorder.start()
+        run(asyncio.sleep(1))
+        track.stop()
+        run(asyncio.sleep(1))
+
         recorder.stop()
 
     def test_audio_and_video(self):

@@ -15,7 +15,10 @@ logger = logging.getLogger('media')
 
 async def blackhole_consume(track):
     while True:
-        await track.recv()
+        try:
+            await track.recv()
+        except MediaStreamError:
+            return
 
 
 class MediaBlackhole:
@@ -281,6 +284,9 @@ class MediaRecorder:
 
     async def __run_track(self, track, context):
         while True:
-            frame = await track.recv()
+            try:
+                frame = await track.recv()
+            except MediaStreamError:
+                return
             for packet in context.stream.encode(frame):
                 self.__container.mux(packet)

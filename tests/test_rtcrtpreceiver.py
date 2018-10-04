@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
+from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
                                    RTCRtpReceiver, StreamStatistics,
@@ -249,6 +250,15 @@ class RTCRtpReceiverTest(TestCase):
         # shutdown
         run(receiver.stop())
         self.assertEqual(receiver._track.readyState, 'ended')
+
+        # read until end
+        with self.assertRaises(MediaStreamError):
+            while True:
+                run(receiver._track.recv())
+
+        # try reading again
+        with self.assertRaises(MediaStreamError):
+            run(receiver._track.recv())
 
     def test_rtp_empty_video_packet(self):
         transport, remote = dummy_dtls_transport_pair()

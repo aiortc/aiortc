@@ -62,6 +62,9 @@ class AudioStreamTrack(MediaStreamTrack):
         The base implementation just reads silence, subclass
         :class:`AudioStreamTrack` to provide a useful implementation.
         """
+        if self.readyState != 'live':
+            raise MediaStreamError
+
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
 
@@ -85,6 +88,9 @@ class VideoStreamTrack(MediaStreamTrack):
     kind = 'video'
 
     async def next_timestamp(self):
+        if self.readyState != 'live':
+            raise MediaStreamError
+
         if hasattr(self, '_timestamp'):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
             await asyncio.sleep(VIDEO_PTIME)
