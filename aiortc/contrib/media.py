@@ -122,7 +122,6 @@ class PlayerStreamTrack(MediaStreamTrack):
     def __init__(self, player, kind):
         super().__init__()
         self.kind = kind
-        self._ended = False
         self._player = player
         self._queue = asyncio.Queue()
         self._start = None
@@ -141,11 +140,6 @@ class PlayerStreamTrack(MediaStreamTrack):
                 await asyncio.sleep(wait)
 
         return frame
-
-    def stop(self):
-        if not self._ended:
-            self._ended = True
-            self.emit('ended')
 
 
 class MediaPlayer:

@@ -25,6 +25,7 @@ class MediaStreamTrack(EventEmitter):
     """
     def __init__(self):
         super().__init__()
+        self.__ended = False
         self.__id = str(uuid.uuid4())
 
     @property
@@ -33,6 +34,15 @@ class MediaStreamTrack(EventEmitter):
         An automatically generated globally unique ID.
         """
         return self.__id
+
+    @property
+    def readyState(self):
+        return 'ended' if self.__ended else 'live'
+
+    def stop(self):
+        if not self.__ended:
+            self.__ended = True
+            self.emit('ended')
 
 
 class AudioStreamTrack(MediaStreamTrack):

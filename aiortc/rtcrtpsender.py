@@ -290,6 +290,10 @@ class RTCRtpSender:
         encoder_queue.put(None)
         encoder_thread.join()
 
+        # stop track
+        if self.__track:
+            self.__track.stop()
+
         self.__log_debug('- RTP finished')
         self.__rtp_exited.set()
 

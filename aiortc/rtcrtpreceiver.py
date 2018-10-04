@@ -143,23 +143,13 @@ class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind):
         super().__init__()
         self.kind = kind
-        self._ended = False
         self._queue = asyncio.Queue()
-
-    @property
-    def readyState(self):
-        return 'ended' if self._ended else 'live'
 
     async def recv(self):
         """
         Receive the next frame.
         """
         return await self._queue.get()
-
-    def stop(self):
-        if not self._ended:
-            self._ended = True
-            self.emit('ended')
 
 
 class TimestampMapper:
