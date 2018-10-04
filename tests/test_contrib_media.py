@@ -88,7 +88,6 @@ class MediaPlayerTest(TestCase):
         self.assertIsNone(player.video)
 
         # read all frames
-        player.start()
         for i in range(49):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
@@ -106,7 +105,6 @@ class MediaPlayerTest(TestCase):
         self.assertIsNone(player.video)
 
         # read all frames
-        player.start()
         for i in range(50):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
@@ -123,7 +121,6 @@ class MediaPlayerTest(TestCase):
         self.assertIsNotNone(player.video)
 
         # read all frames
-        player.start()
         for i in range(20):
             frame = run(player.video.recv())
             self.assertEqual(frame.width, 640)

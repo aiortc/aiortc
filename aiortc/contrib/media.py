@@ -119,14 +119,16 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
 
 
 class PlayerStreamTrack(MediaStreamTrack):
-    def __init__(self, kind):
+    def __init__(self, player, kind):
         super().__init__()
         self.kind = kind
         self._ended = False
+        self._player = player
         self._queue = asyncio.Queue()
         self._start = None
 
     async def recv(self):
+        self._player._start()
         frame = await self._queue.get()
         frame_time = frame.time
 
@@ -162,9 +164,9 @@ class MediaPlayer:
         self.__video = None
         for stream in self.__container.streams:
             if isinstance(stream, av.audio.stream.AudioStream) and not self.__audio:
-                self.__audio = PlayerStreamTrack(kind='audio')
+                self.__audio = PlayerStreamTrack(self, kind='audio')
             elif isinstance(stream, av.video.stream.VideoStream) and not self.__video:
-                self.__video = PlayerStreamTrack(kind='video')
+                self.__video = PlayerStreamTrack(self, kind='video')
 
     @property
     def audio(self):
@@ -180,10 +182,7 @@ class MediaPlayer:
         """
         return self.__video
 
-    def start(self):
-        """
-        Start playback.
-        """
+    def _start(self):
         if self.__thread is None:
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(

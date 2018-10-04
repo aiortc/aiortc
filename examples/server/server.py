@@ -103,7 +103,6 @@ async def offer(request):
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-    player.start()
     recorder.start()
 
     return web.Response(

@@ -159,8 +159,6 @@ async def join_room(room, play_from, record_to):
         print('Please point a browser at %s' % params['room_link'])
 
     def start_media():
-        if player:
-            player.start()
         recorder.start()
 
     # receive 60s of media

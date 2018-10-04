@@ -38,8 +38,6 @@ async def offer(request):
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
-    player.start()
-
     return web.Response(
         content_type='application/json',
         text=json.dumps({
