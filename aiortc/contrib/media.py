@@ -43,7 +43,7 @@ class MediaBlackhole:
             if task is not None:
                 task.cancel()
 
-    def start(self):
+    async def start(self):
         """
         Start discarding media.
         """
@@ -51,7 +51,7 @@ class MediaBlackhole:
             if task is None:
                 self.__tracks[track] = asyncio.ensure_future(blackhole_consume(track))
 
-    def stop(self):
+    async def stop(self):
         """
         Stop discarding media.
         """
@@ -262,7 +262,7 @@ class MediaRecorder:
             stream.time_base = VIDEO_TIME_BASE
         self.__tracks[track] = MediaRecorderContext(stream)
 
-    def start(self):
+    async def start(self):
         """
         Start recording.
         """
@@ -270,7 +270,7 @@ class MediaRecorder:
             if context.task is None:
                 context.task = asyncio.ensure_future(self.__run_track(track, context))
 
-    def stop(self):
+    async def stop(self):
         """
         Stop recording.
         """

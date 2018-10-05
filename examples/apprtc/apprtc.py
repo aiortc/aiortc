@@ -79,10 +79,10 @@ async def consume_signaling(signaling, pc, params, start_media):
             await pc.setRemoteDescription(RTCSessionDescription(**message))
             await pc.setLocalDescription(await pc.createAnswer())
             await signaling.send_message(description_to_dict(pc.localDescription))
-            start_media()
+            await start_media()
         elif message['type'] == 'answer':
             await pc.setRemoteDescription(RTCSessionDescription(**message))
-            start_media()
+            await start_media()
         elif message['type'] == 'candidate':
             candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
             candidate.sdpMid = message['id']
@@ -159,18 +159,15 @@ async def join_room(room, play_from, record_to):
         await signaling.send_message(description_to_dict(pc.localDescription))
         print('Please point a browser at %s' % params['room_link'])
 
-    def start_media():
-        recorder.start()
-
     # receive 60s of media
     try:
-        await asyncio.wait_for(consume_signaling(signaling, pc, params, start_media), timeout=60)
+        await asyncio.wait_for(consume_signaling(signaling, pc, params, recorder.start), timeout=60)
     except asyncio.TimeoutError:
         pass
 
     # shutdown
     print('Shutting down')
-    recorder.stop()
+    await recorder.stop()
     await signaling.send_message({'type': 'bye'})
     await pc.close()
 

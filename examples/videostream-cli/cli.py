@@ -46,16 +46,15 @@ async def run_answer(pc, signaling):
         print('Receiving video')
         assert track.kind == 'video'
         recorder.addTrack(track)
-        recorder.start()
 
         @track.on('ended')
         def on_ended():
-            recorder.stop()
             done.set()
 
     # receive offer
     offer = await signaling.receive()
     await pc.setRemoteDescription(offer)
+    await recorder.start()
 
     # send answer
     await pc.setLocalDescription(await pc.createAnswer())
@@ -63,6 +62,7 @@ async def run_answer(pc, signaling):
 
     # wait for completion
     await done.wait()
+    await recorder.stop()
 
 
 async def run_offer(pc, signaling):

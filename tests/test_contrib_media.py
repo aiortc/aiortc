@@ -61,58 +61,58 @@ class MediaBlackholeTest(TestCase):
     def test_audio(self):
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(1))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_ended(self):
         track = AudioStreamTrack()
 
         recorder = MediaBlackhole()
         recorder.addTrack(track)
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(1))
         track.stop()
         run(asyncio.sleep(1))
 
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_remove_track(self):
         recorder = MediaBlackhole()
         track = AudioStreamTrack()
         recorder.addTrack(track)
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(1))
         recorder.removeTrack(track)
         run(asyncio.sleep(1))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_and_video(self):
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_video(self):
         recorder = MediaBlackhole()
         recorder.addTrack(VideoStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_video_ended(self):
         track = VideoStreamTrack()
 
         recorder = MediaBlackhole()
         recorder.addTrack(track)
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(1))
         track.stop()
         run(asyncio.sleep(1))
 
-        recorder.stop()
+        run(recorder.stop())
 
 
 class MediaPlayerTest(MediaTestCase):
@@ -201,47 +201,47 @@ class MediaRecorderTest(MediaTestCase):
     def test_audio_mp3(self):
         recorder = MediaRecorder(path=self.temporary_path('test.mp3'))
         recorder.addTrack(AudioStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_wav(self):
         recorder = MediaRecorder(path=self.temporary_path('test.wav'))
         recorder.addTrack(AudioStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_wav_ended(self):
         track = AudioStreamTrack()
 
         recorder = MediaRecorder(path=self.temporary_path('test.wav'))
         recorder.addTrack(track)
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(1))
         track.stop()
         run(asyncio.sleep(1))
 
-        recorder.stop()
+        run(recorder.stop())
 
     def test_audio_and_video(self):
         recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_video_png(self):
         recorder = MediaRecorder(path=self.temporary_path('test-%3d.png'))
         recorder.addTrack(VideoStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())
 
     def test_video_mp4(self):
         recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
         recorder.addTrack(VideoStreamTrack())
-        recorder.start()
+        run(recorder.start())
         run(asyncio.sleep(2))
-        recorder.stop()
+        run(recorder.stop())

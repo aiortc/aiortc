@@ -96,14 +96,14 @@ async def offer(request):
             pc.addTrack(local_video)
 
         @track.on('ended')
-        def on_ended():
+        async def on_ended():
             print('Track %s ended' % track.kind)
-            recorder.stop()
+            await recorder.stop()
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-    recorder.start()
+    await recorder.start()
 
     return web.Response(
         content_type='application/json',
