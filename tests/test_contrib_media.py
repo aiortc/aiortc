@@ -107,7 +107,7 @@ class MediaBlackholeTest(TestCase):
 class MediaPlayerTest(MediaTestCase):
     def test_audio_file_8kHz(self):
         path = self.create_audio_file('test.wav')
-        player = MediaPlayer(path=path)
+        player = MediaPlayer(path)
 
         # check tracks
         self.assertIsNotNone(player.audio)
@@ -131,7 +131,7 @@ class MediaPlayerTest(MediaTestCase):
 
     def test_audio_file_48kHz(self):
         path = self.create_audio_file('test.wav', sample_rate=48000)
-        player = MediaPlayer(path=path)
+        player = MediaPlayer(path)
 
         # check tracks
         self.assertIsNotNone(player.audio)
@@ -151,7 +151,7 @@ class MediaPlayerTest(MediaTestCase):
 
     def test_video_file_png(self):
         path = self.create_video_file('test-%3d.png', duration=3)
-        player = MediaPlayer(path=path)
+        player = MediaPlayer(path)
 
         # check tracks
         self.assertIsNone(player.audio)
@@ -169,7 +169,7 @@ class MediaPlayerTest(MediaTestCase):
 
     def test_video_file_mp4(self):
         path = self.create_video_file('test.mp4', duration=3)
-        player = MediaPlayer(path=path)
+        player = MediaPlayer(path)
 
         # check tracks
         self.assertIsNone(player.audio)
@@ -188,14 +188,14 @@ class MediaPlayerTest(MediaTestCase):
 
 class MediaRecorderTest(MediaTestCase):
     def test_audio_mp3(self):
-        recorder = MediaRecorder(path=self.temporary_path('test.mp3'))
+        recorder = MediaRecorder(self.temporary_path('test.mp3'))
         recorder.addTrack(AudioStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
 
     def test_audio_wav(self):
-        recorder = MediaRecorder(path=self.temporary_path('test.wav'))
+        recorder = MediaRecorder(self.temporary_path('test.wav'))
         recorder.addTrack(AudioStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
@@ -204,7 +204,7 @@ class MediaRecorderTest(MediaTestCase):
     def test_audio_wav_ended(self):
         track = AudioStreamTrack()
 
-        recorder = MediaRecorder(path=self.temporary_path('test.wav'))
+        recorder = MediaRecorder(self.temporary_path('test.wav'))
         recorder.addTrack(track)
         run(recorder.start())
         run(asyncio.sleep(1))
@@ -214,7 +214,7 @@ class MediaRecorderTest(MediaTestCase):
         run(recorder.stop())
 
     def test_audio_and_video(self):
-        recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
+        recorder = MediaRecorder(self.temporary_path('test.mp4'))
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
@@ -222,14 +222,14 @@ class MediaRecorderTest(MediaTestCase):
         run(recorder.stop())
 
     def test_video_png(self):
-        recorder = MediaRecorder(path=self.temporary_path('test-%3d.png'))
+        recorder = MediaRecorder(self.temporary_path('test-%3d.png'))
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
 
     def test_video_mp4(self):
-        recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
+        recorder = MediaRecorder(self.temporary_path('test.mp4'))
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))

@@ -75,7 +75,8 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
 
     # check whether this is a live capture
     container_format = set(container.format.name.split(','))
-    throttle_playback = not container_format.intersection(['dshow', 'v4l2', 'vfwcap'])
+    throttle_playback = not container_format.intersection([
+        'avfoundation', 'dshow', 'v4l2', 'vfwcap'])
 
     while not quit_event.is_set():
         try:
@@ -159,11 +160,32 @@ class PlayerStreamTrack(MediaStreamTrack):
 class MediaPlayer:
     """
     A media source that reads audio and/or video from a file.
+
+    Examples:
+
+    .. code-block:: python
+
+        # Open a video file.
+        player = MediaPlayer('/path/to/some.mp4')
+
+        # Open an HTTP stream.
+        player = MediaPlayer(
+            'http://download.tsi.telecom-paristech.fr/'
+            'gpac/dataset/dash/uhd/mux_sources/hevcds_720p30_2M.mp4')
+
+        # Open webcam on Linux.
+        player = MediaPlayer('/dev/video0', options={
+            'video_size': 'vga'
+        })
+
+    :param: file: The path to a file, or a file-like object.
+    :param: format: The format to use, defaults to autodect.
+    :param: options: Additional options to pass to FFmpeg.
     """
-    def __init__(self, path, options={}):
+    def __init__(self, file, format=None, options={}):
         import av.audio.stream
         import av.video.stream
-        self.__container = av.open(file=path, mode='r', options=options)
+        self.__container = av.open(file=file, format=format, mode='r', options=options)
         self.__thread = None
         self.__thread_quit = None
 
@@ -225,9 +247,23 @@ class MediaRecorderContext:
 class MediaRecorder:
     """
     A media sink that writes audio and/or video to a file.
+
+    Examples:
+
+    .. code-block:: python
+
+        # Write to a video file.
+        player = MediaRecorder('/path/to/file.mp4')
+
+        # Write to a set of images.
+        player = MediaRecorder('/path/to/file-%3d.png')
+
+    :param: file: The path to a file, or a file-like object.
+    :param: format: The format to use, defaults to autodect.
+    :param: options: Additional options to pass to FFmpeg.
     """
-    def __init__(self, path):
-        self.__container = av.open(file=path, mode='w')
+    def __init__(self, file, format=None, options={}):
+        self.__container = av.open(file=file, format=format, mode='w', options=options)
         self.__tracks = {}
 
     def addTrack(self, track):

@@ -72,9 +72,9 @@ async def offer(request):
     pcs.append(pc)
 
     # prepare local media
-    player = MediaPlayer(path=os.path.join(ROOT, 'demo-instruct.wav'))
+    player = MediaPlayer(os.path.join(ROOT, 'demo-instruct.wav'))
     if args.write_audio:
-        recorder = MediaRecorder(path=args.write_audio)
+        recorder = MediaRecorder(args.write_audio)
     else:
         recorder = MediaBlackhole()
 
