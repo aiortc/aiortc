@@ -5,7 +5,6 @@ import wave
 from unittest import TestCase
 
 import av
-import numpy
 
 from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
