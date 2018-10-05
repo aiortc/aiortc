@@ -29,4 +29,4 @@ To run the example, you will need instances of the `cli` example:
 
    $ python cli.py answer
 
-Check `output-*.jpg` for the result of the stream.
+Check `output-*.png` for the result of the stream.

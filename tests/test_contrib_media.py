@@ -39,7 +39,11 @@ class MediaTestCase(CodecTestCase):
         path = self.temporary_path(name)
 
         container = av.open(path, 'w')
-        stream = container.add_stream('mpeg4', rate=rate)
+        if name.endswith('.png'):
+            stream = container.add_stream('png', rate=rate)
+            stream.pix_fmt = 'rgb24'
+        else:
+            stream = container.add_stream('mpeg4', rate=rate)
         for frame in self.create_video_frames(width=width, height=height, count=duration * rate):
             for packet in stream.encode(frame):
                 container.mux(packet)
@@ -156,7 +160,25 @@ class MediaPlayerTest(MediaTestCase):
             run(player.audio.recv())
         self.assertEqual(player.audio.readyState, 'ended')
 
-    def test_video_file(self):
+    def test_video_file_png(self):
+        path = self.create_video_file('test-%3d.png', duration=3)
+        player = MediaPlayer(path=path)
+
+        # check tracks
+        self.assertIsNone(player.audio)
+        self.assertIsNotNone(player.video)
+
+        # read all frames
+        self.assertEqual(player.video.readyState, 'live')
+        for i in range(90):
+            frame = run(player.video.recv())
+            self.assertEqual(frame.width, 640)
+            self.assertEqual(frame.height, 480)
+        with self.assertRaises(MediaStreamError):
+            run(player.video.recv())
+        self.assertEqual(player.video.readyState, 'ended')
+
+    def test_video_file_mp4(self):
         path = self.create_video_file('test.mp4', duration=3)
         player = MediaPlayer(path=path)
 
@@ -210,8 +232,8 @@ class MediaRecorderTest(MediaTestCase):
         run(asyncio.sleep(2))
         recorder.stop()
 
-    def test_video_jpg(self):
-        recorder = MediaRecorder(path=self.temporary_path('test-%3d.jpg'))
+    def test_video_png(self):
+        recorder = MediaRecorder(path=self.temporary_path('test-%3d.png'))
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))

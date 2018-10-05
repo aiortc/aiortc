@@ -10,7 +10,7 @@ from aiortc import RTCPeerConnection, VideoStreamTrack
 from aiortc.contrib.media import MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output-%3d.jpg')
+OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output-%3d.png')
 
 
 def create_rectangle(width, height, color):
@@ -31,7 +31,7 @@ class FlagVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         pts, time_base = await self.next_timestamp()
 
-        frame = VideoFrame.from_ndarray(self.data_bgr, format='bgr24')
+        frame = VideoFrame.from_ndarray(self.data_bgr, format='bgr24').reformat(format='yuv420p')
         frame.pts = pts
         frame.time_base = time_base
         return frame

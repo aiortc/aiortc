@@ -254,7 +254,7 @@ class MediaRecorder:
             stream = self.__container.add_stream(codec_name)
         else:
             if self.__container.format.name == 'image2':
-                stream = self.__container.add_stream('jpeg2000', rate=30)
+                stream = self.__container.add_stream('png', rate=30)
                 stream.pix_fmt = 'rgb24'
             else:
                 stream = self.__container.add_stream('libx264', rate=30)
