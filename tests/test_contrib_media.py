@@ -4,17 +4,18 @@ import tempfile
 import wave
 from unittest import TestCase
 
-import cv2
+import av
 import numpy
 
 from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.mediastreams import MediaStreamError
 
+from .codecs import CodecTestCase
 from .utils import run
 
 
-class MediaTestCase(TestCase):
+class MediaTestCase(CodecTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
 
@@ -34,19 +35,17 @@ class MediaTestCase(TestCase):
 
         return path
 
-    def create_video_file(self, name, width=640, height=480, fps=30, duration=1):
+    def create_video_file(self, name, width=640, height=480, rate=30, duration=1):
         path = self.temporary_path(name)
 
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        out = cv2.VideoWriter(path, fourcc, fps, (width, height))
-
-        frames = duration * fps
-        for i in range(frames):
-            s = i * 256 // frames
-            pixel = (s, 256 - s, (128 - 2 * s) % 256)
-            image = numpy.full((height, width, 3), pixel, numpy.uint8)
-            out.write(image)
-        out.release()
+        container = av.open(path, 'w')
+        stream = container.add_stream('mpeg4', rate=rate)
+        for frame in self.create_video_frames(width=width, height=height, count=duration * rate):
+            for packet in stream.encode(frame):
+                container.mux(packet)
+        for packet in stream.encode(None):
+            container.mux(packet)
+        container.close()
 
         return path
 
@@ -158,7 +157,7 @@ class MediaPlayerTest(MediaTestCase):
         self.assertEqual(player.audio.readyState, 'ended')
 
     def test_video_file(self):
-        path = self.create_video_file('test.avi', duration=3)
+        path = self.create_video_file('test.mp4', duration=3)
         player = MediaPlayer(path=path)
 
         # check tracks
