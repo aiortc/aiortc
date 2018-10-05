@@ -29,4 +29,9 @@ To run the example, you will need instances of the `cli` example:
 
    $ python cli.py answer
 
-Check `output-*.png` for the result of the stream.
+If you want to recording the received video you can run one of the following:
+
+.. code-block:: console
+
+   $ python cli.py answer --record-to video.mp4
+   $ python cli.py answer --record-to video-%3d.png

@@ -10,44 +10,65 @@ import cv2
 import websockets
 from av import VideoFrame
 
-from aiortc import (AudioStreamTrack, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import (AudioStreamTrack, RTCIceCandidate, RTCPeerConnection,
+                    RTCSessionDescription, VideoStreamTrack)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.sdp import candidate_from_sdp
+from aiortc.contrib.signaling import object_from_string, object_to_string
 
 ROOT = os.path.dirname(__file__)
 PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
 
 
-def description_to_dict(description):
-    return {
-        'sdp': description.sdp,
-        'type': description.type
-    }
+class ApprtcSignaling:
+    async def connect(self, room):
+        # fetch room parameters
+        async with aiohttp.ClientSession() as session:
+            async with session.post('https://appr.tc/join/' + room) as response:
+                # we cannot use response.json() due to:
+                # https://github.com/webrtc/apprtc/issues/562
+                data = json.loads(await response.text())
+        assert data['result'] == 'SUCCESS'
+        params = data['params']
 
-
-class Signaling:
-    async def connect(self, params):
+        # join room
         self.websocket = await websockets.connect(params['wss_url'], extra_headers={
             'Origin': 'https://appr.tc'
         })
+        await self.websocket.send(json.dumps({
+            'clientid': params['client_id'],
+            'cmd': 'register',
+            'roomid': params['room_id'],
+        }))
+        self.__messages = params['messages']
 
-    async def recv(self):
-        data = await self.websocket.recv()
-        return json.loads(data)
+        return params
 
-    async def send(self, data):
-        await self.websocket.send(json.dumps(data))
+    async def close(self):
+        await self.send(None)
+        self.websocket.close()
 
-    async def send_message(self, message):
+    async def receive(self):
+        if self.__messages:
+            message = self.__messages.pop(0)
+        else:
+            message = await self.websocket.recv()
+            message = json.loads(message)['msg']
+        print('<', message)
+        return object_from_string(message)
+
+    async def send(self, obj):
+        message = object_to_string(obj)
         print('>', message)
-        await self.send({
+        await self.websocket.send(json.dumps({
             'cmd': 'send',
-            'msg': json.dumps(message)
-        })
+            'msg': message,
+        }))
 
 
 class VideoImageTrack(VideoStreamTrack):
+    """
+    A video stream track that returns a rotating image.
+    """
     def __init__(self):
         super().__init__()  # don't forget this!
         self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
@@ -68,108 +89,52 @@ class VideoImageTrack(VideoStreamTrack):
         return frame
 
 
-async def consume_signaling(signaling, pc, params, start_media):
-    async def handle_message(message):
-        print('<', message)
+async def run(pc, player, recorder, room, signaling):
+    def add_tracks():
+        if player and player.audio:
+            pc.addTrack(player.audio)
+        else:
+            pc.addTrack(AudioStreamTrack())
 
-        if message['type'] == 'bye':
-            return True
-
-        if message['type'] == 'offer':
-            await pc.setRemoteDescription(RTCSessionDescription(**message))
-            await pc.setLocalDescription(await pc.createAnswer())
-            await signaling.send_message(description_to_dict(pc.localDescription))
-            await start_media()
-        elif message['type'] == 'answer':
-            await pc.setRemoteDescription(RTCSessionDescription(**message))
-            await start_media()
-        elif message['type'] == 'candidate':
-            candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
-            candidate.sdpMid = message['id']
-            candidate.sdpMLineIndex = message['label']
-            pc.addIceCandidate(candidate)
-        return False
-
-    for data in params['messages']:
-        message = json.loads(data)
-        await handle_message(message)
-
-    stop = False
-    while not stop:
-        data = await signaling.recv()
-        message = json.loads(data['msg'])
-        stop = await handle_message(message)
-
-
-async def join_room(room, play_from, record_to):
-    # fetch room parameters
-    async with aiohttp.ClientSession() as session:
-        async with session.post('https://appr.tc/join/' + room) as response:
-            # we cannot use response.json() due to:
-            # https://github.com/webrtc/apprtc/issues/562
-            data = json.loads(await response.text())
-    assert data['result'] == 'SUCCESS'
-    params = data['params']
-
-    # create peer conection
-    pc = RTCPeerConnection()
-
-    # setup media source
-    if play_from:
-        player = MediaPlayer(play_from)
-    else:
-        player = None
-
-    if player and player.audio:
-        pc.addTrack(player.audio)
-    else:
-        pc.addTrack(AudioStreamTrack())
-
-    if player and player.video:
-        pc.addTrack(player.video)
-    else:
-        pc.addTrack(VideoImageTrack())
-
-    # setup media sink
-    if record_to:
-        recorder = MediaRecorder(record_to)
-    else:
-        recorder = MediaBlackhole()
+        if player and player.video:
+            pc.addTrack(player.video)
+        else:
+            pc.addTrack(VideoImageTrack())
 
     @pc.on('track')
     def on_track(track):
         print('Track %s received' % track.kind)
         recorder.addTrack(track)
 
-        def on_ended():
-            print('Track %s ended' % track.kind)
-
     # connect to websocket and join
-    signaling = Signaling()
-    await signaling.connect(params)
-    await signaling.send({
-        'clientid': params['client_id'],
-        'cmd': 'register',
-        'roomid': params['room_id'],
-    })
+    params = await signaling.connect(room)
 
     if params['is_initiator'] == 'true':
         # send offer
+        add_tracks()
         await pc.setLocalDescription(await pc.createOffer())
-        await signaling.send_message(description_to_dict(pc.localDescription))
+        await signaling.send(pc.localDescription)
         print('Please point a browser at %s' % params['room_link'])
 
-    # receive 60s of media
-    try:
-        await asyncio.wait_for(consume_signaling(signaling, pc, params, recorder.start), timeout=60)
-    except asyncio.TimeoutError:
-        pass
+    # consume signaling
+    while True:
+        obj = await signaling.receive()
 
-    # shutdown
-    print('Shutting down')
-    await recorder.stop()
-    await signaling.send_message({'type': 'bye'})
-    await pc.close()
+        if isinstance(obj, RTCSessionDescription):
+            await pc.setRemoteDescription(obj)
+            await recorder.start()
+
+            if obj.type == 'offer':
+                # send answer
+                add_tracks()
+                await pc.setLocalDescription(await pc.createAnswer())
+                await signaling.send(pc.localDescription)
+        elif isinstance(obj, RTCIceCandidate):
+            pc.addIceCandidate(obj)
+        else:
+            print('Exiting')
+            break
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AppRTC')
@@ -185,8 +150,35 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    asyncio.get_event_loop().run_until_complete(join_room(
-        room=args.room,
-        play_from=args.play_from,
-        record_to=args.record_to,
-    ))
+    # create signaling and peer connection
+    signaling = ApprtcSignaling()
+    pc = RTCPeerConnection()
+
+    # create media source
+    if args.play_from:
+        player = MediaPlayer(args.play_from)
+    else:
+        player = None
+
+    # create media sink
+    if args.record_to:
+        recorder = MediaRecorder(args.record_to)
+    else:
+        recorder = MediaBlackhole()
+
+    # run event loop
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(run(
+            pc=pc,
+            player=player,
+            recorder=recorder,
+            room=args.room,
+            signaling=signaling))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # cleanup
+        loop.run_until_complete(recorder.stop())
+        loop.run_until_complete(signaling.close())
+        loop.run_until_complete(pc.close())

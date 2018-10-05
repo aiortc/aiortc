@@ -1,16 +1,13 @@
 import argparse
 import asyncio
 import logging
-import os
 
 import numpy
 from av import VideoFrame
 
-from aiortc import RTCPeerConnection, VideoStreamTrack
-from aiortc.contrib.media import MediaRecorder
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc.contrib.media import MediaBlackhole, MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
-
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), 'output-%3d.png')
 
 
 def create_rectangle(width, height, color):
@@ -37,54 +34,41 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return frame
 
 
-async def run_answer(pc, signaling):
-    done = asyncio.Event()
-    recorder = MediaRecorder(path=OUTPUT_PATH)
-
+async def run(pc, signaling, recorder, role):
     @pc.on('track')
     def on_track(track):
         print('Receiving video')
         assert track.kind == 'video'
         recorder.addTrack(track)
 
-        @track.on('ended')
-        def on_ended():
-            done.set()
+    if role == 'offer':
+        # send offer
+        pc.addTrack(FlagVideoStreamTrack())
+        await pc.setLocalDescription(await pc.createOffer())
+        await signaling.send(pc.localDescription)
 
-    # receive offer
-    offer = await signaling.receive()
-    await pc.setRemoteDescription(offer)
-    await recorder.start()
+    # consume signaling
+    while True:
+        obj = await signaling.receive()
 
-    # send answer
-    await pc.setLocalDescription(await pc.createAnswer())
-    await signaling.send(pc.localDescription)
+        if isinstance(obj, RTCSessionDescription):
+            await pc.setRemoteDescription(obj)
+            await recorder.start()
 
-    # wait for completion
-    await done.wait()
-    await recorder.stop()
-
-
-async def run_offer(pc, signaling):
-    # add video track
-    local_video = FlagVideoStreamTrack()
-    pc.addTrack(local_video)
-
-    # send offer
-    await pc.setLocalDescription(await pc.createOffer())
-    await signaling.send(pc.localDescription)
-
-    # receive answer
-    answer = await signaling.receive()
-    await pc.setRemoteDescription(answer)
-
-    print('Sending video for 10s')
-    await asyncio.sleep(10)
+            if obj.type == 'offer':
+                # send answer
+                pc.addTrack(FlagVideoStreamTrack())
+                await pc.setLocalDescription(await pc.createAnswer())
+                await signaling.send(pc.localDescription)
+        else:
+            print('Exiting')
+            break
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Video stream from the command line')
     parser.add_argument('role', choices=['offer', 'answer'])
+    parser.add_argument('--record-to', help='Write received media to a file.'),
     parser.add_argument('--verbose', '-v', action='count')
     add_signaling_arguments(parser)
     args = parser.parse_args()
@@ -92,19 +76,28 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    # create signaling and peer connection
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
-    if args.role == 'offer':
-        coro = run_offer(pc, signaling)
+
+    # create media sink
+    if args.record_to:
+        recorder = MediaRecorder(args.record_to)
     else:
-        coro = run_answer(pc, signaling)
+        recorder = MediaBlackhole()
 
     # run event loop
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(coro)
+        loop.run_until_complete(run(
+            pc=pc,
+            recorder=recorder,
+            role=args.role,
+            signaling=signaling))
     except KeyboardInterrupt:
         pass
     finally:
-        loop.run_until_complete(pc.close())
+        # cleanup
+        loop.run_until_complete(recorder.stop())
         loop.run_until_complete(signaling.close())
+        loop.run_until_complete(pc.close())

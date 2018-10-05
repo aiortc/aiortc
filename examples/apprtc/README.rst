@@ -24,6 +24,21 @@ to join the room:
 You will be given a URL which you can point your browser to in order to join
 the room.
 
+Additional options
+------------------
+
+If you want to play a media file instead of sending the rotating image, run:
+
+.. code-block:: console
+
+   $ python apprtc.py --play-from video.mp4
+
+If you want to record the received media you can run the following:
+
+.. code-block:: console
+
+   $ python apprtc.py --record-to video.mp4
+
 Credits
 -------
 

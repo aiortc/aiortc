@@ -2,8 +2,10 @@ import argparse
 import asyncio
 from unittest import TestCase
 
-from aiortc import RTCSessionDescription
-from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
+from aiortc import RTCIceCandidate, RTCSessionDescription
+from aiortc.contrib.signaling import (add_signaling_arguments,
+                                      create_signaling, object_from_string,
+                                      object_to_string)
 
 from .utils import run
 
@@ -85,3 +87,39 @@ class SignalingTest(TestCase):
         self.assertEqual(res[1], answer)
 
         run(asyncio.gather(sig_server.close(), sig_client.close()))
+
+
+class SignalingUtilsTest(TestCase):
+    def test_bye_from_string(self):
+        self.assertEqual(object_from_string('{"type": "bye"}'), None)
+
+    def test_bye_to_string(self):
+        self.assertEqual(object_to_string(None), '{"type": "bye"}')
+
+    def test_candidate_from_string(self):
+        candidate = object_from_string(
+            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}')  # noqa
+        self.assertEqual(candidate.component, 1)
+        self.assertEqual(candidate.foundation, '0')
+        self.assertEqual(candidate.ip, '192.168.99.7')
+        self.assertEqual(candidate.port, 33543)
+        self.assertEqual(candidate.priority, 2122252543)
+        self.assertEqual(candidate.protocol, 'UDP')
+        self.assertEqual(candidate.sdpMid, 'audio')
+        self.assertEqual(candidate.sdpMLineIndex, 0)
+        self.assertEqual(candidate.type, 'host')
+
+    def test_candidate_to_string(self):
+        candidate = RTCIceCandidate(
+            component=1,
+            foundation='0',
+            ip='192.168.99.7',
+            port=33543,
+            priority=2122252543,
+            protocol='UDP',
+            type='host')
+        candidate.sdpMid = 'audio'
+        candidate.sdpMLineIndex = 0
+        self.assertEqual(
+            object_to_string(candidate),
+            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}')  # noqa

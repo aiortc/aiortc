@@ -2,21 +2,37 @@ import asyncio
 import json
 import os
 
-from aiortc import RTCSessionDescription
+from aiortc import RTCIceCandidate, RTCSessionDescription
+from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 
 
-def description_from_string(descr_str):
-    descr_dict = json.loads(descr_str)
-    return RTCSessionDescription(
-        sdp=descr_dict['sdp'],
-        type=descr_dict['type'])
+def object_from_string(message_str):
+    message = json.loads(message_str)
+    if message['type'] in ['answer', 'offer']:
+        return RTCSessionDescription(**message)
+    elif message['type'] == 'candidate':
+        candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
+        candidate.sdpMid = message['id']
+        candidate.sdpMLineIndex = message['label']
+        return candidate
 
 
-def description_to_string(descr):
-    return json.dumps({
-        'sdp': descr.sdp,
-        'type': descr.type
-    })
+def object_to_string(obj):
+    if isinstance(obj, RTCSessionDescription):
+        message = {
+            'sdp': obj.sdp,
+            'type': obj.type
+        }
+    elif isinstance(obj, RTCIceCandidate):
+        message = {
+            'candidate': 'candidate:' + candidate_to_sdp(obj),
+            'id': obj.sdpMid,
+            'label': obj.sdpMLineIndex,
+            'type': 'candidate',
+        }
+    else:
+        message = {'type': 'bye'}
+    return json.dumps(message)
 
 
 class CopyAndPasteSignaling:
@@ -24,14 +40,14 @@ class CopyAndPasteSignaling:
         pass
 
     async def receive(self):
-        print('-- Please enter remote description --')
+        print('-- Please enter a message from remote party --')
         descr_str = input()
         print()
-        return description_from_string(descr_str)
+        return object_from_string(descr_str)
 
     async def send(self, descr):
-        print('-- Your description --')
-        print(description_to_string(descr))
+        print('-- Please send this message to the remote party --')
+        print(object_to_string(descr))
         print()
 
 
@@ -67,6 +83,7 @@ class TcpSocketSignaling:
 
     async def close(self):
         if self._writer is not None:
+            await self.send(None)
             self._writer.close()
             self._reader = None
             self._writer = None
@@ -76,12 +93,15 @@ class TcpSocketSignaling:
 
     async def receive(self):
         await self._connect(False)
-        data = await self._reader.readuntil()
-        return description_from_string(data.decode('utf8'))
+        try:
+            data = await self._reader.readuntil()
+        except asyncio.IncompleteReadError:
+            return
+        return object_from_string(data.decode('utf8'))
 
     async def send(self, descr):
         await self._connect(True)
-        data = description_to_string(descr).encode('utf8')
+        data = object_to_string(descr).encode('utf8')
         self._writer.write(data + b'\n')
 
 
@@ -111,6 +131,7 @@ class UnixSocketSignaling:
 
     async def close(self):
         if self._writer is not None:
+            await self.send(None)
             self._writer.close()
             self._reader = None
             self._writer = None
@@ -121,12 +142,15 @@ class UnixSocketSignaling:
 
     async def receive(self):
         await self._connect(False)
-        data = await self._reader.readuntil()
-        return description_from_string(data.decode('utf8'))
+        try:
+            data = await self._reader.readuntil()
+        except asyncio.IncompleteReadError:
+            return
+        return object_from_string(data.decode('utf8'))
 
     async def send(self, descr):
         await self._connect(True)
-        data = description_to_string(descr).encode('utf8')
+        data = object_to_string(descr).encode('utf8')
         self._writer.write(data + b'\n')
 
 
