@@ -31,7 +31,7 @@ class FlagVideoStreamTrack(VideoStreamTrack):
     async def recv(self):
         pts, time_base = await self.next_timestamp()
 
-        frame = VideoFrame.from_ndarray(self.data_bgr, format='bgr24').reformat(format='yuv420p')
+        frame = VideoFrame.from_ndarray(self.data_bgr, format='bgr24')
         frame.pts = pts
         frame.time_base = time_base
         return frame

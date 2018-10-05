@@ -192,7 +192,8 @@ class Vp8Encoder:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(self, frame, force_keyframe=False):
-        assert frame.format.name == 'yuv420p'
+        if frame.format.name != 'yuv420p':
+            frame = frame.reformat(format='yuv420p')
 
         if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
             lib.vpx_codec_destroy(self.codec)
