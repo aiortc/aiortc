@@ -29,6 +29,7 @@ def decoder_worker(loop, input_q, output_q):
     while True:
         task = input_q.get()
         if task is None:
+            # inform the track that is has ended
             asyncio.run_coroutine_threadsafe(output_q.put(None), loop)
             break
         codec, encoded_frame = task
@@ -38,6 +39,7 @@ def decoder_worker(loop, input_q, output_q):
             codec_name = codec.name
 
         for frame in decoder.decode(encoded_frame):
+            # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
     if decoder is not None:
@@ -279,17 +281,13 @@ class RTCRtpReceiver:
         Irreversibly stop the receiver.
         """
         if self.__started:
-            # stop decoder thread
-            self.__decoder_queue.put(None)
-            self.__decoder_thread.join()
-
-            self._track.stop()
             self.__transport._unregister_rtp_receiver(self)
+            self.__stop_decoder()
             self.__stopped.set()
             await self.__rtcp_exited.wait()
 
     def _handle_disconnect(self):
-        self._track.stop()
+        self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet):
         self.__log_debug('< %s', packet)
@@ -313,7 +311,7 @@ class RTCRtpReceiver:
             self.__lsr = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time = time.time()
         elif isinstance(packet, RtcpByePacket):
-            self._track.stop()
+            self.__stop_decoder()
 
         # FIXME: could this be done at the DTLS level?
         if self.__sender:
@@ -359,7 +357,7 @@ class RTCRtpReceiver:
             encoded_frame = self.__jitter_buffer.add(packet)
 
             # if we have a complete encoded frame, decode it
-            if encoded_frame is not None:
+            if encoded_frame is not None and self.__decoder_thread:
                 encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
                 self.__decoder_queue.put((codec, encoded_frame))
 
@@ -425,6 +423,15 @@ class RTCRtpReceiver:
 
     def _set_sender(self, sender):
         self.__sender = sender
+
+    def __stop_decoder(self):
+        """
+        Stop the decoder thread, which will in turn stop the track.
+        """
+        if self.__decoder_thread:
+            self.__decoder_queue.put(None)
+            self.__decoder_thread.join()
+            self.__decoder_thread = None
 
     def __log_debug(self, msg, *args):
         logger.debug('receiver(%s) ' + msg, self.__kind, *args)

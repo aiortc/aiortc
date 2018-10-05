@@ -249,12 +249,12 @@ class RTCRtpReceiverTest(TestCase):
 
         # shutdown
         run(receiver.stop())
-        self.assertEqual(receiver._track.readyState, 'ended')
 
         # read until end
         with self.assertRaises(MediaStreamError):
             while True:
                 run(receiver._track.recv())
+        self.assertEqual(receiver._track.readyState, 'ended')
 
         # try reading again
         with self.assertRaises(MediaStreamError):
