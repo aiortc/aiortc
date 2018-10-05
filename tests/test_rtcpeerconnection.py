@@ -232,13 +232,25 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(transceiver.currentDirection, None)
         self.assertEqual(transceiver.direction, 'inactive')
         self.assertEqual(transceiver.sender.track, None)
+        self.assertEqual(transceiver.stopped, False)
         self.assertEqual(pc.getSenders(), [transceiver.sender])
         self.assertEqual(len(pc.getTransceivers()), 1)
 
         # add track
-        pc.addTrack(AudioStreamTrack())
+        track = AudioStreamTrack()
+        pc.addTrack(track)
         self.assertEqual(transceiver.currentDirection, None)
         self.assertEqual(transceiver.direction, 'sendonly')
+        self.assertEqual(transceiver.sender.track, track)
+        self.assertEqual(transceiver.stopped, False)
+        self.assertEqual(len(pc.getTransceivers()), 1)
+
+        # stop transceiver
+        run(transceiver.stop())
+        self.assertEqual(transceiver.currentDirection, None)
+        self.assertEqual(transceiver.direction, 'sendonly')
+        self.assertEqual(transceiver.sender.track, track)
+        self.assertEqual(transceiver.stopped, True)
 
     def test_addTransceiver_audio_sendrecv(self):
         pc = RTCPeerConnection()
@@ -246,14 +258,20 @@ class RTCPeerConnectionTest(TestCase):
         # add transceiver
         transceiver = pc.addTransceiver('audio')
         self.assertIsNotNone(transceiver)
+        self.assertEqual(transceiver.currentDirection, None)
         self.assertEqual(transceiver.direction, 'sendrecv')
         self.assertEqual(transceiver.sender.track, None)
+        self.assertEqual(transceiver.stopped, False)
         self.assertEqual(pc.getSenders(), [transceiver.sender])
         self.assertEqual(len(pc.getTransceivers()), 1)
 
         # add track
-        pc.addTrack(AudioStreamTrack())
+        track = AudioStreamTrack()
+        pc.addTrack(track)
+        self.assertEqual(transceiver.currentDirection, None)
         self.assertEqual(transceiver.direction, 'sendrecv')
+        self.assertEqual(transceiver.sender.track, track)
+        self.assertEqual(transceiver.stopped, False)
         self.assertEqual(len(pc.getTransceivers()), 1)
 
     def test_addTransceiver_audio_track(self):
@@ -263,7 +281,10 @@ class RTCPeerConnectionTest(TestCase):
         track1 = AudioStreamTrack()
         transceiver1 = pc.addTransceiver(track1)
         self.assertIsNotNone(transceiver1)
+        self.assertEqual(transceiver1.currentDirection, None)
+        self.assertEqual(transceiver1.direction, 'sendrecv')
         self.assertEqual(transceiver1.sender.track, track1)
+        self.assertEqual(transceiver1.stopped, False)
         self.assertEqual(pc.getSenders(), [transceiver1.sender])
         self.assertEqual(len(pc.getTransceivers()), 1)
 
@@ -276,7 +297,10 @@ class RTCPeerConnectionTest(TestCase):
         track2 = AudioStreamTrack()
         transceiver2 = pc.addTransceiver(track2)
         self.assertIsNotNone(transceiver2)
+        self.assertEqual(transceiver2.currentDirection, None)
+        self.assertEqual(transceiver2.direction, 'sendrecv')
         self.assertEqual(transceiver2.sender.track, track2)
+        self.assertEqual(transceiver2.stopped, False)
         self.assertEqual(pc.getSenders(), [transceiver1.sender, transceiver2.sender])
         self.assertEqual(len(pc.getTransceivers()), 2)
 
