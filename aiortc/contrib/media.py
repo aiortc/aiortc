@@ -86,7 +86,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
     while not quit_event.is_set():
         try:
             frame = next(container.decode())
-        except StopIteration:
+        except (av.AVError, StopIteration):
             if audio_track:
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
             if video_track:
