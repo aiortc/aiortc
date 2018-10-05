@@ -18,6 +18,7 @@ Media
 
   * Use a jitter buffer for incoming audio.
   * Add :meth:`RTCPeerConnection.addTransceiver` method.
+  * Add :attr:`RTCRtpTransceiver.direction` to manage transceiver direction.
 
 Examples
 ........
@@ -25,8 +26,10 @@ Examples
   * `apprtc` : demonstrate the use of :class:`aiortc.contrib.media.MediaPlayer`
     and :class:`aiortc.contrib.media.MediaRecorder`.
   * `webcam` : new examples illustrating sending video from a webcam to a browser.
-  * :class:`aiortc.contrib.media.MediaRecorder` : don't sleep if a frame lacks timing information.
+  * :class:`aiortc.contrib.media.MediaPlayer` : don't sleep if a frame lacks timing information.
+  * :class:`aiortc.contrib.media.MediaPlayer` : remove `start()` and `stop()` methods.
   * :class:`aiortc.contrib.media.MediaRecorder` : use `libx264` for encoding.
+  * :class:`aiortc.contrib.media.MediaRecorder` : make `start()` and `stop()` coroutines.
 
 0.9.8
 -----
