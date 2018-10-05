@@ -217,3 +217,15 @@ class RTCRtpSenderTest(TestCase):
         transport, _ = dummy_dtls_transport_pair()
         sender = RTCRtpSender(AudioStreamTrack(), transport)
         run(sender.stop())
+
+    def test_track_ended(self):
+        transport, _ = dummy_dtls_transport_pair()
+
+        track = AudioStreamTrack()
+        sender = RTCRtpSender(track, transport)
+        run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
+
+        track.stop()
+        run(asyncio.sleep(0.5))
+
+        run(transport.stop())

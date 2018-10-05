@@ -8,6 +8,7 @@ import time
 from . import clock, rtp
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
+from .mediastreams import MediaStreamError
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
@@ -249,8 +250,12 @@ class RTCRtpSender:
         timestamp_origin = random32()
         while not self.__stopped.is_set():
             if self.__track:
-                result = await first_completed(self._next_encoded_frame(codec, encoder_queue),
-                                               self.__stopped.wait())
+                try:
+                    result = await first_completed(self._next_encoded_frame(codec, encoder_queue),
+                                                   self.__stopped.wait())
+                except MediaStreamError:
+                    self.__stopped.set()
+                    break
                 if result is True:
                     break
                 payloads, timestamp = result
