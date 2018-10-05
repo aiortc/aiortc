@@ -32,7 +32,7 @@ def object_to_string(obj):
         }
     else:
         message = {'type': 'bye'}
-    return json.dumps(message)
+    return json.dumps(message, sort_keys=True)
 
 
 class CopyAndPasteSignaling:
