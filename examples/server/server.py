@@ -100,10 +100,13 @@ async def offer(request):
             print('Track %s ended' % track.kind)
             await recorder.stop()
 
+    # handle offer
     await pc.setRemoteDescription(offer)
+    await recorder.start()
+
+    # send answer
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-    await recorder.start()
 
     return web.Response(
         content_type='application/json',
