@@ -1,5 +1,6 @@
 import asyncio
 import os
+import tempfile
 import wave
 from unittest import TestCase
 
@@ -13,27 +14,44 @@ from aiortc.mediastreams import MediaStreamError
 from .utils import run
 
 
-def create_audio(path, channels=1, sample_rate=8000, sample_width=2):
-    writer = wave.open(path, 'wb')
-    writer.setnchannels(channels)
-    writer.setframerate(sample_rate)
-    writer.setsampwidth(sample_width)
+class MediaTestCase(TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
 
-    writer.writeframes(b'\x00' * sample_rate * sample_width * channels)
-    writer.close()
+    def tearDown(self):
+        self.directory.cleanup()
 
+    def create_audio_file(self, name, channels=1, sample_rate=8000, sample_width=2):
+        path = self.temporary_path(name)
 
-def create_video(path, width=640, height=480, fps=20, duration=1):
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(path, fourcc, fps, (width, height))
+        writer = wave.open(path, 'wb')
+        writer.setnchannels(channels)
+        writer.setframerate(sample_rate)
+        writer.setsampwidth(sample_width)
 
-    frames = duration * fps
-    for i in range(frames):
-        s = i * 256 // frames
-        pixel = (s, 256 - s, (128 - 2 * s) % 256)
-        image = numpy.full((height, width, 3), pixel, numpy.uint8)
-        out.write(image)
-    out.release()
+        writer.writeframes(b'\x00' * sample_rate * sample_width * channels)
+        writer.close()
+
+        return path
+
+    def create_video_file(self, name, width=640, height=480, fps=30, duration=1):
+        path = self.temporary_path(name)
+
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        out = cv2.VideoWriter(path, fourcc, fps, (width, height))
+
+        frames = duration * fps
+        for i in range(frames):
+            s = i * 256 // frames
+            pixel = (s, 256 - s, (128 - 2 * s) % 256)
+            image = numpy.full((height, width, 3), pixel, numpy.uint8)
+            out.write(image)
+        out.release()
+
+        return path
+
+    def temporary_path(self, name):
+        return os.path.join(self.directory.name, name)
 
 
 class MediaBlackholeTest(TestCase):
@@ -94,20 +112,10 @@ class MediaBlackholeTest(TestCase):
         recorder.stop()
 
 
-class MediaPlayerTest(TestCase):
-    def setUp(self):
-        self.audio_path = os.path.join(os.path.dirname(__file__), 'test.wav')
-        create_audio(self.audio_path)
-
-        self.video_path = os.path.join(os.path.dirname(__file__), 'test.avi')
-        create_video(self.video_path)
-
-    def tearDown(self):
-        os.unlink(self.audio_path)
-        os.unlink(self.video_path)
-
+class MediaPlayerTest(MediaTestCase):
     def test_audio_file_8kHz(self):
-        player = MediaPlayer(path=self.audio_path)
+        path = self.create_audio_file('test.wav')
+        player = MediaPlayer(path=path)
 
         # check tracks
         self.assertIsNotNone(player.audio)
@@ -130,8 +138,8 @@ class MediaPlayerTest(TestCase):
             run(player.audio.recv())
 
     def test_audio_file_48kHz(self):
-        create_audio(self.audio_path, sample_rate=48000)
-        player = MediaPlayer(path=self.audio_path)
+        path = self.create_audio_file('test.wav', sample_rate=48000)
+        player = MediaPlayer(path=path)
 
         # check tracks
         self.assertIsNotNone(player.audio)
@@ -150,7 +158,8 @@ class MediaPlayerTest(TestCase):
         self.assertEqual(player.audio.readyState, 'ended')
 
     def test_video_file(self):
-        player = MediaPlayer(path=self.video_path)
+        path = self.create_video_file('test.avi', duration=3)
+        player = MediaPlayer(path=path)
 
         # check tracks
         self.assertIsNone(player.audio)
@@ -158,7 +167,7 @@ class MediaPlayerTest(TestCase):
 
         # read all frames
         self.assertEqual(player.video.readyState, 'live')
-        for i in range(20):
+        for i in range(90):
             frame = run(player.video.recv())
             self.assertEqual(frame.width, 640)
             self.assertEqual(frame.height, 480)
@@ -167,16 +176,16 @@ class MediaPlayerTest(TestCase):
         self.assertEqual(player.video.readyState, 'ended')
 
 
-class MediaRecorderTest(TestCase):
+class MediaRecorderTest(MediaTestCase):
     def test_audio_mp3(self):
-        recorder = MediaRecorder(path='foo.mp3')
+        recorder = MediaRecorder(path=self.temporary_path('test.mp3'))
         recorder.addTrack(AudioStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
         recorder.stop()
 
     def test_audio_wav(self):
-        recorder = MediaRecorder(path='foo.wav')
+        recorder = MediaRecorder(path=self.temporary_path('test.wav'))
         recorder.addTrack(AudioStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
@@ -185,7 +194,7 @@ class MediaRecorderTest(TestCase):
     def test_audio_wav_ended(self):
         track = AudioStreamTrack()
 
-        recorder = MediaRecorder(path='foo.wav')
+        recorder = MediaRecorder(path=self.temporary_path('test.wav'))
         recorder.addTrack(track)
         recorder.start()
         run(asyncio.sleep(1))
@@ -195,7 +204,7 @@ class MediaRecorderTest(TestCase):
         recorder.stop()
 
     def test_audio_and_video(self):
-        recorder = MediaRecorder(path='foo.mp4')
+        recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
@@ -203,14 +212,14 @@ class MediaRecorderTest(TestCase):
         recorder.stop()
 
     def test_video_jpg(self):
-        recorder = MediaRecorder(path='foo-%3d.jpg')
+        recorder = MediaRecorder(path=self.temporary_path('test-%3d.jpg'))
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
         recorder.stop()
 
     def test_video_mp4(self):
-        recorder = MediaRecorder(path='foo.mp4')
+        recorder = MediaRecorder(path=self.temporary_path('test.mp4'))
         recorder.addTrack(VideoStreamTrack())
         recorder.start()
         run(asyncio.sleep(2))
