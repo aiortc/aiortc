@@ -77,16 +77,6 @@ class MediaBlackholeTest(TestCase):
 
         run(recorder.stop())
 
-    def test_audio_remove_track(self):
-        recorder = MediaBlackhole()
-        track = AudioStreamTrack()
-        recorder.addTrack(track)
-        run(recorder.start())
-        run(asyncio.sleep(1))
-        recorder.removeTrack(track)
-        run(asyncio.sleep(1))
-        run(recorder.stop())
-
     def test_audio_and_video(self):
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
