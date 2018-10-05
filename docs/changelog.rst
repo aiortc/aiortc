@@ -6,8 +6,6 @@ Changelog
 0.9.9
 -----
 
-*Under development*
-
 .. warning::
 
   `aiortc` now uses PyAV's :class:`~av.audio.frame.AudioFrame` and
