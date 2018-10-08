@@ -6,6 +6,7 @@ from pyee import EventEmitter
 
 from . import clock, rtp, sdp
 from .codecs import MEDIA_CODECS
+from .events import RTCTrackEvent
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -423,6 +424,8 @@ class RTCPeerConnection(EventEmitter):
         :param: sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
+        trackEvents = []
+
         # check description is compatible with signaling state
         if sessionDescription.type == 'offer':
             if self.signalingState not in ['stable', 'have-remote-offer']:
@@ -473,7 +476,11 @@ class RTCPeerConnection(EventEmitter):
                 # create remote stream track
                 if direction in ['recvonly', 'sendrecv'] and not transceiver.receiver._track:
                     transceiver.receiver._track = RemoteStreamTrack(kind=media.kind)
-                    self.emit('track', transceiver.receiver._track)
+                    trackEvents.append(RTCTrackEvent(
+                        receiver=transceiver.receiver,
+                        track=transceiver.receiver._track,
+                        transceiver=transceiver,
+                    ))
 
             elif media.kind == 'application':
                 if not self.__sctp:
@@ -528,6 +535,10 @@ class RTCPeerConnection(EventEmitter):
                 await dtlsTransport.stop()
                 await dtlsTransport.transport.stop()
                 self.__iceTransports.discard(dtlsTransport.transport)
+
+        # FIXME: in aiortc 1.0.0 emit RTCTrackEvent directly
+        for event in trackEvents:
+            self.emit('track', event.track)
 
         # connect
         asyncio.ensure_future(self.__connect())
