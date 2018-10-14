@@ -33,6 +33,11 @@ ffibuilder.cdef("""
 #define VPX_DL_REALTIME 1
 #define VPX_EFLAG_FORCE_KF 1
 
+#define VPX_FRAME_IS_KEY 0x1
+#define VPX_FRAME_IS_DROPPABLE 0x2
+#define VPX_FRAME_IS_INVISIBLE 0x4
+#define VPX_FRAME_IS_FRAGMENT 0x8
+
 #define VPX_PLANE_PACKED 0
 #define VPX_PLANE_Y 0
 #define VPX_PLANE_U 1

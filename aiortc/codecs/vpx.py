@@ -183,6 +183,7 @@ class Vp8Encoder:
         self.cfg = ffi.new('vpx_codec_enc_cfg_t *')
         lib.vpx_codec_enc_config_default(self.cx, self.cfg, 0)
 
+        self.buffer = bytearray(8000)
         self.codec = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
         self.timestamp_increment = VIDEO_CLOCK_RATE // MAX_FRAME_RATE
@@ -249,20 +250,32 @@ class Vp8Encoder:
             flags, lib.VPX_DL_REALTIME))
 
         it = ffi.new('vpx_codec_iter_t *')
-        payloads = []
+        length = 0
         while True:
             pkt = lib.vpx_codec_get_cx_data(self.codec, it)
             if not pkt:
                 break
-            if pkt and pkt.kind == lib.VPX_CODEC_CX_FRAME_PKT:
-                buf = ffi.buffer(pkt.data.frame.buf, pkt.data.frame.sz)
-                descr = VpxPayloadDescriptor(partition_start=1, partition_id=0,
-                                             picture_id=self.picture_id)
-                for pos in range(0, len(buf), PACKET_MAX):
-                    data = buf[pos:pos + PACKET_MAX]
-                    payloads.append(bytes(descr) + data)
-                    descr.partition_start = 0
-                self.picture_id = (self.picture_id + 1) % (1 << 15)
+            elif pkt.kind == lib.VPX_CODEC_CX_FRAME_PKT:
+                # resize buffer if needed
+                if length + pkt.data.frame.sz > len(self.buffer):
+                    new_buffer = bytearray(length + pkt.data.frame.sz)
+                    new_buffer[0:length] = self.buffer[0:length]
+                    self.buffer = new_buffer
+
+                # append new data
+                self.buffer[length:length + pkt.data.frame.sz] = ffi.buffer(
+                    pkt.data.frame.buf, pkt.data.frame.sz)
+                length += pkt.data.frame.sz
+
+        # packetize
+        payloads = []
+        descr = VpxPayloadDescriptor(partition_start=1, partition_id=0,
+                                     picture_id=self.picture_id)
+        for pos in range(0, length, PACKET_MAX):
+            data = self.buffer[pos:min(length, pos + PACKET_MAX)]
+            payloads.append(bytes(descr) + data)
+            descr.partition_start = 0
+        self.picture_id = (self.picture_id + 1) % (1 << 15)
 
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         return payloads, timestamp
