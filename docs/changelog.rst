@@ -12,6 +12,20 @@ Peer connection
 ...............
 
   * Send `raddr` and `rport` parameters for server reflexive and relayed candidates.
+    This is required for Firefox to accept our STUN / TURN candidates.
+
+Media
+.....
+
+  * Revert to using asyncio's `run_in_executor` to send data to the encoder, it greatly
+    reduces the response time.
+  * Adjust package requirements to accept PyAV < 7.0.0.
+
+Examples
+........
+
+  * :class:`aiortc.contrib.media.MediaPlayer` : don't sleep at all when playing from webcam.
+    This eliminates the constant one-second lag in the `webcam` demo.
 
 0.9.9
 -----
