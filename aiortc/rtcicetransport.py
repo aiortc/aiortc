@@ -21,6 +21,8 @@ class RTCIceCandidate:
     priority = attr.ib()
     protocol = attr.ib()
     type = attr.ib()
+    relatedAddress = attr.ib(default=None)
+    relatedPort = attr.ib(default=None)
     sdpMid = attr.ib(default=None)
     sdpMLineIndex = attr.ib(default=None)
     tcpType = attr.ib(default=None)
@@ -34,6 +36,8 @@ def candidate_from_aioice(x):
         port=x.port,
         priority=x.priority,
         protocol=x.transport,
+        relatedAddress=x.related_address,
+        relatedPort=x.related_port,
         tcpType=x.tcptype,
         type=x.type)
 
@@ -45,6 +49,8 @@ def candidate_to_aioice(x):
         host=x.ip,
         port=x.port,
         priority=x.priority,
+        related_address=x.relatedAddress,
+        related_port=x.relatedPort,
         transport=x.protocol,
         tcptype=x.tcpType,
         type=x.type)

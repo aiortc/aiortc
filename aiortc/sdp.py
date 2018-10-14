@@ -38,7 +38,11 @@ def candidate_from_sdp(sdp):
         type=bits[7])
 
     for i in range(8, len(bits) - 1, 2):
-        if bits[i] == 'tcptype':
+        if bits[i] == 'raddr':
+            candidate.relatedAddress = bits[i + 1]
+        elif bits[i] == 'rport':
+            candidate.relatedPort = int(bits[i + 1])
+        elif bits[i] == 'tcptype':
             candidate.tcpType = bits[i + 1]
 
     return candidate
@@ -54,7 +58,11 @@ def candidate_to_sdp(candidate):
         candidate.port,
         candidate.type)
 
-    if candidate.tcpType:
+    if candidate.relatedAddress is not None:
+        sdp += ' raddr %s' % candidate.relatedAddress
+    if candidate.relatedPort is not None:
+        sdp += ' rport %s' % candidate.relatedPort
+    if candidate.tcpType is not None:
         sdp += ' tcptype %s' % candidate.tcpType
     return sdp
 

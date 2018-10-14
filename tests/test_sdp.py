@@ -167,13 +167,15 @@ a=msid-semantic:WMS *
 m=audio 45274 UDP/TLS/RTP/SAVPF 109 9 0 8 101
 c=IN IP4 192.168.99.58
 a=candidate:0 1 UDP 2122187007 192.168.99.58 45274 typ host
-a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 47387 typ host
-a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
-a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:2 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 47387 typ host
+a=candidate:3 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:4 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
 a=candidate:0 2 UDP 2122187006 192.168.99.58 38612 typ host
-a=candidate:1 2 UDP 2122252542 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 54301 typ host
-a=candidate:2 2 TCP 2105458942 192.168.99.58 9 typ host tcptype active
-a=candidate:3 2 TCP 2105524478 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:2 2 UDP 2122252542 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 54301 typ host
+a=candidate:3 2 TCP 2105458942 192.168.99.58 9 typ host tcptype active
+a=candidate:4 2 TCP 2105524478 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:1 1 UDP 1685921791 1.2.3.4 37264 typ srflx raddr 192.168.99.58 rport 37264
+a=candidate:1 2 UDP 1685921790 1.2.3.4 52902 typ srflx raddr 192.168.99.58 rport 52902
 a=sendrecv
 a=end-of-candidates
 a=extmap:1/sendonly urn:ietf:params:rtp-hdrext:ssrc-audio-level
@@ -239,7 +241,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
-        self.assertEqual(len(d.media[0].ice_candidates), 8)
+        self.assertEqual(len(d.media[0].ice_candidates), 10)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice.usernameFragment, '403a81e1')
         self.assertEqual(d.media[0].ice.password, 'f9b83487285016f7492197a5790ceee5')
@@ -274,13 +276,15 @@ a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
 a=fmtp:101 0-15
 a=candidate:0 1 UDP 2122187007 192.168.99.58 45274 typ host
-a=candidate:1 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 47387 typ host
-a=candidate:2 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
-a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:2 1 UDP 2122252543 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 47387 typ host
+a=candidate:3 1 TCP 2105458943 192.168.99.58 9 typ host tcptype active
+a=candidate:4 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
 a=candidate:0 2 UDP 2122187006 192.168.99.58 38612 typ host
-a=candidate:1 2 UDP 2122252542 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 54301 typ host
-a=candidate:2 2 TCP 2105458942 192.168.99.58 9 typ host tcptype active
-a=candidate:3 2 TCP 2105524478 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:2 2 UDP 2122252542 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 54301 typ host
+a=candidate:3 2 TCP 2105458942 192.168.99.58 9 typ host tcptype active
+a=candidate:4 2 TCP 2105524478 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ host tcptype active
+a=candidate:1 1 UDP 1685921791 1.2.3.4 37264 typ srflx raddr 192.168.99.58 rport 37264
+a=candidate:1 2 UDP 1685921790 1.2.3.4 52902 typ srflx raddr 192.168.99.58 rport 52902
 a=end-of-candidates
 a=ice-ufrag:403a81e1
 a=ice-pwd:f9b83487285016f7492197a5790ceee5

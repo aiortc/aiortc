@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.10
+------
+
+*under development*
+
+Peer connection
+...............
+
+  * Send `raddr` and `rport` parameters for server reflexive and relayed candidates.
+
 0.9.9
 -----
 
