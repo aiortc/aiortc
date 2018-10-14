@@ -219,6 +219,7 @@ class MediaPlayer:
             self.__log_debug('Starting worker thread')
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(
+                name='media-player',
                 target=player_worker,
                 args=(
                     asyncio.get_event_loop(), self.__container,
