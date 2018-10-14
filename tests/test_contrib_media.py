@@ -188,18 +188,34 @@ class MediaPlayerTest(MediaTestCase):
 
 class MediaRecorderTest(MediaTestCase):
     def test_audio_mp3(self):
-        recorder = MediaRecorder(self.temporary_path('test.mp3'))
+        path = self.temporary_path('test.mp3')
+        recorder = MediaRecorder(path)
         recorder.addTrack(AudioStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
 
+        # check output media
+        container = av.open(path, 'r')
+        self.assertEqual(len(container.streams), 1)
+        self.assertIn(container.streams[0].codec.name, ('mp3', 'mp3float'))
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 1)
+
     def test_audio_wav(self):
-        recorder = MediaRecorder(self.temporary_path('test.wav'))
+        path = self.temporary_path('test.wav')
+        recorder = MediaRecorder(path)
         recorder.addTrack(AudioStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
+
+        # check output media
+        container = av.open(path, 'r')
+        self.assertEqual(len(container.streams), 1)
+        self.assertEqual(container.streams[0].codec.name, 'pcm_s16le')
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 1)
 
     def test_audio_wav_ended(self):
         track = AudioStreamTrack()
@@ -214,23 +230,58 @@ class MediaRecorderTest(MediaTestCase):
         run(recorder.stop())
 
     def test_audio_and_video(self):
-        recorder = MediaRecorder(self.temporary_path('test.mp4'))
+        path = self.temporary_path('test.mp4')
+        recorder = MediaRecorder(path)
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
 
+        # check output media
+        container = av.open(path, 'r')
+        self.assertEqual(len(container.streams), 2)
+
+        self.assertEqual(container.streams[0].codec.name, 'aac')
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 1)
+
+        self.assertEqual(container.streams[1].codec.name, 'h264')
+        self.assertEqual(container.streams[1].width, 640)
+        self.assertEqual(container.streams[1].height, 480)
+        self.assertGreater(
+            float(container.streams[1].duration * container.streams[1].time_base), 1)
+
     def test_video_png(self):
-        recorder = MediaRecorder(self.temporary_path('test-%3d.png'))
+        path = self.temporary_path('test-%3d.png')
+        recorder = MediaRecorder(path)
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
 
+        # check output media
+        container = av.open(path, 'r')
+        self.assertEqual(len(container.streams), 1)
+        self.assertEqual(container.streams[0].codec.name, 'png')
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 1)
+        self.assertEqual(container.streams[0].width, 640)
+        self.assertEqual(container.streams[0].height, 480)
+
     def test_video_mp4(self):
-        recorder = MediaRecorder(self.temporary_path('test.mp4'))
+        path = self.temporary_path('test.mp4')
+        recorder = MediaRecorder(path)
         recorder.addTrack(VideoStreamTrack())
         run(recorder.start())
         run(asyncio.sleep(2))
         run(recorder.stop())
+
+        # check output media
+        container = av.open(path, 'r')
+        self.assertEqual(len(container.streams), 1)
+        self.assertEqual(container.streams[0].codec.name, 'h264')
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 1)
+        self.assertEqual(container.streams[0].width, 640)
+        self.assertEqual(container.streams[0].height, 480)
