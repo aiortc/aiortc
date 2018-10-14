@@ -55,7 +55,7 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
-def player_worker(loop, container, audio_track, video_track, quit_event):
+def player_worker(loop, container, audio_track, video_track, quit_event, throttle_playback):
     import av.audio.fifo
     import av.audio.format
     import av.audio.resampler
@@ -72,11 +72,6 @@ def player_worker(loop, container, audio_track, video_track, quit_event):
 
     frame_time = None
     start_time = time.time()
-
-    # check whether this is a live capture
-    container_format = set(container.format.name.split(','))
-    throttle_playback = not container_format.intersection([
-        'avfoundation', 'dshow', 'v4l2', 'vfwcap'])
 
     while not quit_event.is_set():
         try:
@@ -143,7 +138,7 @@ class PlayerStreamTrack(MediaStreamTrack):
         frame_time = frame.time
 
         # control playback rate
-        if frame_time is not None:
+        if self._player._throttle_playback and frame_time is not None:
             if self._start is None:
                 self._start = time.time() - frame_time
             else:
@@ -199,6 +194,11 @@ class MediaPlayer:
             elif isinstance(stream, av.video.stream.VideoStream) and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind='video')
 
+        # check whether we need to throttle playback
+        container_format = set(self.__container.format.name.split(','))
+        self._throttle_playback = not container_format.intersection([
+            'avfoundation', 'dshow', 'v4l2', 'vfwcap'])
+
     @property
     def audio(self):
         """
@@ -224,7 +224,8 @@ class MediaPlayer:
                 args=(
                     asyncio.get_event_loop(), self.__container,
                     self.__audio, self.__video,
-                    self.__thread_quit))
+                    self.__thread_quit,
+                    self._throttle_playback))
             self.__thread.start()
 
     def _stop(self, track):
