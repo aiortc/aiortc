@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import queue
 import random
-import threading
 import time
 
 from . import clock, rtp
@@ -21,31 +19,6 @@ logger = logging.getLogger('rtp')
 
 RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
-
-
-def encoder_worker(input_q):
-    codec_name = None
-    encoder = None
-
-    while True:
-        task = input_q.get()
-        if task is None:
-            break
-        codec, frame, force_keyframe, future = task
-
-        if codec.name != codec_name:
-            encoder = get_encoder(codec)
-            codec_name = codec.name
-
-        result = encoder.encode(frame, force_keyframe)
-        try:
-            future.set_result(result)
-        except asyncio.InvalidStateError:
-            # the future was cancelled
-            pass
-
-    if encoder is not None:
-        del encoder
 
 
 class RTCRtpSender:
@@ -70,6 +43,7 @@ class RTCRtpSender:
             self.__track = None
         self.__cname = None
         self._ssrc = random32()
+        self.__encoder = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
         self.__mid = None
@@ -210,15 +184,15 @@ class RTCRtpSender:
             except ValueError:
                 pass
 
-    async def _next_encoded_frame(self, codec, encoder_queue):
+    async def _next_encoded_frame(self, codec):
         # get frame
         frame = await self.__track.recv()
 
         # encode frame
-        future = self.__loop.create_future()
-        encoder_queue.put((codec, frame, self.__force_keyframe, future))
-        self.__force_keyframe = False
-        return await future
+        if self.__encoder is None:
+            self.__encoder = get_encoder(codec)
+        return await self.__loop.run_in_executor(None, self.__encoder.encode,
+                                                 frame, self.__force_keyframe)
 
     async def _retransmit(self, sequence_number):
         """
@@ -237,21 +211,12 @@ class RTCRtpSender:
     async def _run_rtp(self, codec):
         self.__log_debug('- RTP started')
 
-        # start encoder thread
-        encoder_queue = queue.Queue()
-        encoder_thread = None
-        encoder_thread = threading.Thread(
-            target=encoder_worker,
-            name=self.__kind + '-encoder',
-            args=(encoder_queue,))
-        encoder_thread.start()
-
         sequence_number = random16()
         timestamp_origin = random32()
         while not self.__stopped.is_set():
             if self.__track:
                 try:
-                    result = await first_completed(self._next_encoded_frame(codec, encoder_queue),
+                    result = await first_completed(self._next_encoded_frame(codec),
                                                    self.__stopped.wait())
                 except MediaStreamError:
                     self.__stopped.set()
@@ -290,10 +255,6 @@ class RTCRtpSender:
                     sequence_number = uint16_add(sequence_number, 1)
             else:
                 await asyncio.sleep(0.02)
-
-        # stop encoder thread
-        encoder_queue.put(None)
-        encoder_thread.join()
 
         # stop track
         if self.__track:
