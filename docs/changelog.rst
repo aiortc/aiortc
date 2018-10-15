@@ -6,8 +6,6 @@ Changelog
 0.9.10
 ------
 
-*under development*
-
 Peer connection
 ...............
 
