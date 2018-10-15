@@ -5,6 +5,7 @@ import attr
 from aioice import Candidate, Connection
 from pyee import EventEmitter
 
+from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer
 
 STUN_REGEX = re.compile('(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
@@ -265,6 +266,9 @@ class RTCIceTransport(EventEmitter):
         :param: remoteParameters: The :class:`RTCIceParameters` associated with
                                   the remote :class:`RTCIceTransport`.
         """
+        if self.state == 'closed':
+            raise InvalidStateError('RTCIceTransport is closed')
+
         # handle the case where start is already in progress
         if self.__start is not None:
             return await self.__start.wait()
@@ -273,8 +277,12 @@ class RTCIceTransport(EventEmitter):
         self.__setState('checking')
         self._connection.remote_username = remoteParameters.usernameFragment
         self._connection.remote_password = remoteParameters.password
-        await self._connection.connect()
-        self.__setState('completed')
+        try:
+            await self._connection.connect()
+        except ConnectionError:
+            self.__setState('failed')
+        else:
+            self.__setState('completed')
         self.__start.set()
 
     async def stop(self):
