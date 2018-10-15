@@ -24,6 +24,7 @@ Media
 Examples
 ........
 
+  * `webcam` : force Chrome to use "unified-plan" semantics to enabled `addTransceiver`.
   * :class:`aiortc.contrib.media.MediaPlayer` : don't sleep at all when playing from webcam.
     This eliminates the constant one-second lag in the `webcam` demo.
 

@@ -1,4 +1,6 @@
-var pc = new RTCPeerConnection();
+var pc = new RTCPeerConnection({
+    sdpSemantics: 'unified-plan'
+});
 
 // connect audio / video
 pc.addEventListener('track', function(evt) {
