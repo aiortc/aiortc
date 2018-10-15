@@ -1,5 +1,6 @@
 import asyncio
 import fractions
+import time
 import uuid
 
 from av import AudioFrame, VideoFrame
@@ -93,8 +94,10 @@ class VideoStreamTrack(MediaStreamTrack):
 
         if hasattr(self, '_timestamp'):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
-            await asyncio.sleep(VIDEO_PTIME)
+            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+            await asyncio.sleep(wait)
         else:
+            self._start = time.time()
             self._timestamp = 0
         return self._timestamp, VIDEO_TIME_BASE
 
