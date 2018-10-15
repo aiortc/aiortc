@@ -200,7 +200,7 @@ class MediaRecorderTest(MediaTestCase):
         self.assertEqual(len(container.streams), 1)
         self.assertIn(container.streams[0].codec.name, ('mp3', 'mp3float'))
         self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 1)
+            float(container.streams[0].duration * container.streams[0].time_base), 0)
 
     def test_audio_wav(self):
         path = self.temporary_path('test.wav')
@@ -215,7 +215,7 @@ class MediaRecorderTest(MediaTestCase):
         self.assertEqual(len(container.streams), 1)
         self.assertEqual(container.streams[0].codec.name, 'pcm_s16le')
         self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 1)
+            float(container.streams[0].duration * container.streams[0].time_base), 0)
 
     def test_audio_wav_ended(self):
         track = AudioStreamTrack()
@@ -244,13 +244,13 @@ class MediaRecorderTest(MediaTestCase):
 
         self.assertEqual(container.streams[0].codec.name, 'aac')
         self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 1)
+            float(container.streams[0].duration * container.streams[0].time_base), 0)
 
         self.assertEqual(container.streams[1].codec.name, 'h264')
         self.assertEqual(container.streams[1].width, 640)
         self.assertEqual(container.streams[1].height, 480)
         self.assertGreater(
-            float(container.streams[1].duration * container.streams[1].time_base), 1)
+            float(container.streams[1].duration * container.streams[1].time_base), 0)
 
     def test_video_png(self):
         path = self.temporary_path('test-%3d.png')
@@ -265,7 +265,7 @@ class MediaRecorderTest(MediaTestCase):
         self.assertEqual(len(container.streams), 1)
         self.assertEqual(container.streams[0].codec.name, 'png')
         self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 1)
+            float(container.streams[0].duration * container.streams[0].time_base), 0)
         self.assertEqual(container.streams[0].width, 640)
         self.assertEqual(container.streams[0].height, 480)
 
@@ -282,6 +282,6 @@ class MediaRecorderTest(MediaTestCase):
         self.assertEqual(len(container.streams), 1)
         self.assertEqual(container.streams[0].codec.name, 'h264')
         self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 1)
+            float(container.streams[0].duration * container.streams[0].time_base), 0)
         self.assertEqual(container.streams[0].width, 640)
         self.assertEqual(container.streams[0].height, 480)
