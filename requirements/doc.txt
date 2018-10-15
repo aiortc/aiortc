@@ -3,7 +3,6 @@ attrs
 cffi
 crcmod
 cryptography
-numpy
 pyee
 pylibsrtp
 pyopenssl
