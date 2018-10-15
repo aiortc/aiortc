@@ -34,6 +34,15 @@ to the browser, optionally applying a transform to it.
 In parallel to media streams, the browser sends a 'ping' message over the data
 channel, and the server replies with 'pong'.
 
+Additional options
+------------------
+
+If you want to enable verbose logging, run:
+
+.. code-block:: console
+
+    $ python server.py -v
+
 Credits
 -------
 

@@ -69,7 +69,7 @@ async def offer(request):
         type=params['type'])
 
     pc = RTCPeerConnection()
-    pcs.append(pc)
+    pcs.add(pc)
 
     # prepare local media
     player = MediaPlayer(os.path.join(ROOT, 'demo-instruct.wav'))
@@ -83,6 +83,13 @@ async def offer(request):
         @channel.on('message')
         def on_message(message):
             channel.send('pong')
+
+    @pc.on('iceconnectionstatechange')
+    async def on_iceconnectionstatechange():
+        print('ICE connection state is %s' % pc.iceConnectionState)
+        if pc.iceConnectionState == 'failed':
+            await pc.close()
+            pcs.discard(pc)
 
     @pc.on('track')
     def on_track(track):
@@ -116,7 +123,7 @@ async def offer(request):
         }))
 
 
-pcs = []
+pcs = set()
 
 
 async def on_shutdown(app):
