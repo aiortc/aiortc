@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 
 import attr
@@ -11,6 +12,8 @@ from .rtcconfiguration import RTCIceServer
 STUN_REGEX = re.compile('(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
 TURN_REGEX = re.compile('(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
                         '(\?transport=(?P<transport>.*))?')
+
+logger = logging.getLogger('ice')
 
 
 @attr.s
@@ -297,6 +300,11 @@ class RTCIceTransport(EventEmitter):
     def _connection(self):
         return self.iceGatherer._connection
 
+    def __log_debug(self, msg, *args):
+        logger.debug(self.role + ' ' + msg, *args)
+
     def __setState(self, state):
-        self.__state = state
-        self.emit('statechange')
+        if state != self.__state:
+            self.__log_debug('- %s -> %s', self.__state, state)
+            self.__state = state
+            self.emit('statechange')
