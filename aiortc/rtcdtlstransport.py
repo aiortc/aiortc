@@ -311,20 +311,25 @@ class RTCDtlsTransport(EventEmitter):
             lib.SSL_set_connect_state(self.ssl)
 
         self._set_state(State.CONNECTING)
-        while not self.encrypted:
-            result = lib.SSL_do_handshake(self.ssl)
-            await self._write_ssl()
+        try:
+            while not self.encrypted:
+                result = lib.SSL_do_handshake(self.ssl)
+                await self._write_ssl()
 
-            if result > 0:
-                self.encrypted = True
-                break
+                if result > 0:
+                    self.encrypted = True
+                    break
 
-            error = lib.SSL_get_error(self.ssl, result)
-            if error == lib.SSL_ERROR_WANT_READ:
-                await self._recv_next()
-            else:
-                self._set_state(State.FAILED)
-                raise DtlsError('DTLS handshake failed (error %d)' % error)
+                error = lib.SSL_get_error(self.ssl, result)
+                if error == lib.SSL_ERROR_WANT_READ:
+                    await self._recv_next()
+                else:
+                    self._set_state(State.FAILED)
+                    raise DtlsError('DTLS handshake failed (error %d)' % error)
+        except ConnectionError:
+            self.__log_debug('x DTLS handshake failed (connection error)')
+            self._set_state(State.FAILED)
+            return
 
         # check remote fingerprint
         x509 = lib.SSL_get_peer_certificate(self.ssl)

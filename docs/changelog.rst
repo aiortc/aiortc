@@ -13,6 +13,7 @@ Peer connection
 
   * Send `raddr` and `rport` parameters for server reflexive and relayed candidates.
     This is required for Firefox to accept our STUN / TURN candidates.
+  * Do not raise an exception if ICE or DTLS connection fails, just change state.
 
 Media
 .....

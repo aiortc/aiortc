@@ -1415,6 +1415,98 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_connect_audio_and_video_and_data_channel_ice_fail(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        pc1.addTrack(VideoStreamTrack())
+        pc1.createDataChannel('chat', protocol='bob')
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertTrue('m=video ' in offer.sdp)
+        self.assertTrue('m=application ' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0', '1', '2'])
+
+        # close one side
+        pc1_description = pc1.localDescription
+        run(pc1.close())
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1_description))
+        self.assertEqual(pc2.remoteDescription, pc1_description)
+        self.assertEqual(len(pc2.getReceivers()), 2)
+        self.assertEqual(len(pc2.getSenders()), 2)
+        self.assertEqual(len(pc2.getTransceivers()), 2)
+        self.assertEqual(mids(pc2), ['0', '1', '2'])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        pc2.addTrack(VideoStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertTrue('m=video ' in answer.sdp)
+        self.assertTrue('m=application ' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+
+        # check outcome
+        done = asyncio.Event()
+
+        @pc2.on('iceconnectionstatechange')
+        def iceconnectionstatechange():
+            done.set()
+
+        run(done.wait())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'failed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'failed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_connect_video_bidirectional(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)

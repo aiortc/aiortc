@@ -557,18 +557,22 @@ class RTCPeerConnection(EventEmitter):
             iceTransport = dtlsTransport.transport
             if iceTransport.iceGatherer.getLocalCandidates() and transceiver in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[transceiver])
-                await dtlsTransport.start(self.__remoteDtls[transceiver])
-                if transceiver.currentDirection in ['sendonly', 'sendrecv']:
-                    await transceiver.sender.send(self.__localRtp(transceiver))
-                if transceiver.currentDirection in ['recvonly', 'sendrecv']:
-                    await transceiver.receiver.receive(self.__remoteRtp[transceiver])
+                if dtlsTransport.state in ['new', 'connecting']:
+                    await dtlsTransport.start(self.__remoteDtls[transceiver])
+                if dtlsTransport.state == 'connected':
+                    if transceiver.currentDirection in ['sendonly', 'sendrecv']:
+                        await transceiver.sender.send(self.__localRtp(transceiver))
+                    if transceiver.currentDirection in ['recvonly', 'sendrecv']:
+                        await transceiver.receiver.receive(self.__remoteRtp[transceiver])
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
             iceTransport = dtlsTransport.transport
             if iceTransport.iceGatherer.getLocalCandidates() and self.__sctp in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[self.__sctp])
-                await dtlsTransport.start(self.__remoteDtls[self.__sctp])
-                await self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
+                if dtlsTransport.state in ['new', 'connecting']:
+                    await dtlsTransport.start(self.__remoteDtls[self.__sctp])
+                if dtlsTransport.state == 'connected':
+                    await self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
 
     async def __gather(self):
         coros = map(lambda t: t.iceGatherer.gather(), self.__iceTransports)
@@ -714,6 +718,8 @@ class RTCPeerConnection(EventEmitter):
         states = set(map(lambda x: x.state, self.__iceTransports))
         if self.__isClosed:
             state = 'closed'
+        elif 'failed' in states:
+            state = 'failed'
         elif states == set(['completed']):
             state = 'completed'
         elif 'checking' in states:
