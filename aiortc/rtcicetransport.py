@@ -300,6 +300,22 @@ class RTCIceTransport(EventEmitter):
     def _connection(self):
         return self.iceGatherer._connection
 
+    async def _recv(self):
+        try:
+            return await self._connection.recv()
+        except ConnectionError:
+            if self.state == 'completed':
+                self.__setState('failed')
+            raise
+
+    async def _send(self, data):
+        try:
+            await self._connection.send(data)
+        except ConnectionError:
+            if self.state == 'completed':
+                self.__setState('failed')
+            raise
+
     def __log_debug(self, msg, *args):
         logger.debug(self.role + ' ' + msg, *args)
 

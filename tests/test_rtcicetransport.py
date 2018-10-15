@@ -10,6 +10,10 @@ from aiortc.rtcicetransport import (RTCIceCandidate, RTCIceGatherer,
 from .utils import run
 
 
+async def noop():
+    pass
+
+
 class ConnectionKwargsTest(TestCase):
     def test_empty(self):
         self.assertEqual(connection_kwargs([]), {})
@@ -314,3 +318,35 @@ class RTCIceTransportTest(TestCase):
                 usernameFragment='foo',
                 password='bar')))
         self.assertEqual(str(cm.exception), 'RTCIceTransport is closed')
+
+    def test_recv_connection_error(self):
+        gatherer = RTCIceGatherer()
+        transport = RTCIceTransport(gatherer)
+        self.assertEqual(transport.state, 'new')
+
+        # fake connection
+        gatherer._connection.connect = noop
+        run(transport.start(RTCIceParameters(
+            usernameFragment='foo',
+            password='bar')))
+        self.assertEqual(transport.state, 'completed')
+
+        with self.assertRaises(ConnectionError):
+            run(transport._recv())
+        self.assertEqual(transport.state, 'failed')
+
+    def test_send_connection_error(self):
+        gatherer = RTCIceGatherer()
+        transport = RTCIceTransport(gatherer)
+        self.assertEqual(transport.state, 'new')
+
+        # fake connection
+        gatherer._connection.connect = noop
+        run(transport.start(RTCIceParameters(
+            usernameFragment='foo',
+            password='bar')))
+        self.assertEqual(transport.state, 'completed')
+
+        with self.assertRaises(ConnectionError):
+            run(transport._send(b'foo'))
+        self.assertEqual(transport.state, 'failed')

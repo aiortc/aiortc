@@ -452,7 +452,7 @@ class RTCDtlsTransport(EventEmitter):
             timeout = None
 
         try:
-            data = await first_completed(self.transport._connection.recv(), self.closed.wait(),
+            data = await first_completed(self.transport._recv(), self.closed.wait(),
                                          timeout=timeout)
         except TimeoutError:
             self.__log_debug('x DTLS handling timeout')
@@ -519,7 +519,7 @@ class RTCDtlsTransport(EventEmitter):
             data = self._tx_srtp.protect_rtcp(data)
         else:
             data = self._tx_srtp.protect(data)
-        await self.transport._connection.send(data)
+        await self.transport._send(data)
         self.__tx_bytes += len(data)
         self.__tx_packets += 1
 
@@ -546,7 +546,7 @@ class RTCDtlsTransport(EventEmitter):
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
             result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
-            await self.transport._connection.send(ffi.buffer(self.write_cdata)[0:result])
+            await self.transport._send(ffi.buffer(self.write_cdata)[0:result])
             self.__tx_bytes += result
             self.__tx_packets += 1
 

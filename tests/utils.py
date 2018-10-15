@@ -45,6 +45,12 @@ class DummyIceTransport:
     async def stop(self):
         await self._connection.close()
 
+    async def _recv(self):
+        return await self._connection.recv()
+
+    async def _send(self, data):
+        await self._connection.send(data)
+
 
 class DummyDtlsTransport:
     def __init__(self, transport, state='connected'):
