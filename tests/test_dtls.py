@@ -233,13 +233,11 @@ class RTCDtlsTransportTest(TestCase):
 
         bogus_parameters = RTCDtlsParameters(
             fingerprints=[RTCDtlsFingerprint(algorithm='sha-256', value='bogus_fingerprint')])
-        with self.assertRaises(DtlsError) as cm:
-            run(asyncio.gather(
-                session1.start(bogus_parameters),
-                session2.start(session1.getLocalParameters())))
-        self.assertEqual(str(cm.exception), 'DTLS fingerprint does not match')
+        run(asyncio.gather(
+            session1.start(bogus_parameters),
+            session2.start(session1.getLocalParameters())))
         self.assertEqual(session1.state, 'failed')
-        self.assertEqual(session2.state, 'connecting')
+        self.assertEqual(session2.state, 'connected')
 
         run(session1.stop())
         run(session2.stop())
@@ -258,11 +256,9 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        with self.assertRaises(DtlsError) as cm:
-            run(asyncio.gather(
-                session1.start(session2.getLocalParameters()),
-                session2.start(session1.getLocalParameters())))
-        self.assertEqual(str(cm.exception), 'DTLS handshake failed (error 1)')
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
         self.assertEqual(session1.state, 'failed')
         self.assertEqual(session2.state, 'failed')
 

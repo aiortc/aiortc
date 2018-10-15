@@ -324,8 +324,9 @@ class RTCDtlsTransport(EventEmitter):
                 if error == lib.SSL_ERROR_WANT_READ:
                     await self._recv_next()
                 else:
+                    self.__log_debug('x DTLS handshake failed (error %d)', error)
                     self._set_state(State.FAILED)
-                    raise DtlsError('DTLS handshake failed (error %d)' % error)
+                    return
         except ConnectionError:
             self.__log_debug('x DTLS handshake failed (connection error)')
             self._set_state(State.FAILED)
@@ -340,8 +341,9 @@ class RTCDtlsTransport(EventEmitter):
                 fingerprint_is_valid = True
                 break
         if not fingerprint_is_valid:
+            self.__log_debug('x DTLS handshake failed (fingerprint mismatch)')
             self._set_state(State.FAILED)
-            raise DtlsError('DTLS fingerprint does not match')
+            return
 
         # generate keying material
         buf = ffi.new('unsigned char[]', 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
