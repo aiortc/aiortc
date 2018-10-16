@@ -24,11 +24,11 @@ class CodecTestCase(TestCase):
             timestamp += samples_per_frame
         return frames
 
-    def create_video_frame(self, width, height, pts, time_base=VIDEO_TIME_BASE):
+    def create_video_frame(self, width, height, pts, format='yuv420p', time_base=VIDEO_TIME_BASE):
         """
         Create a single blank video frame.
         """
-        frame = VideoFrame(width=width, height=height)
+        frame = VideoFrame(width=width, height=height, format=format)
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
         frame.pts = pts

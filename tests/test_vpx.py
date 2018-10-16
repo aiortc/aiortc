@@ -144,6 +144,16 @@ class Vp8Test(CodecTestCase):
         self.assertTrue(len(payloads[0]) < 1300)
         self.assertEqual(timestamp, 3000)
 
+    def test_encoder_rgb(self):
+        encoder = get_encoder(VP8_CODEC)
+        self.assertTrue(isinstance(encoder, Vp8Encoder))
+
+        frame = self.create_video_frame(width=640, height=480, pts=0, format='rgb24')
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
     def test_encoder_large(self):
         encoder = get_encoder(VP8_CODEC)
         self.assertTrue(isinstance(encoder, Vp8Encoder))
