@@ -557,7 +557,7 @@ class RTCPeerConnection(EventEmitter):
             iceTransport = dtlsTransport.transport
             if iceTransport.iceGatherer.getLocalCandidates() and transceiver in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[transceiver])
-                if dtlsTransport.state in ['new', 'connecting']:
+                if dtlsTransport.state == 'new':
                     await dtlsTransport.start(self.__remoteDtls[transceiver])
                 if dtlsTransport.state == 'connected':
                     if transceiver.currentDirection in ['sendonly', 'sendrecv']:
@@ -569,7 +569,7 @@ class RTCPeerConnection(EventEmitter):
             iceTransport = dtlsTransport.transport
             if iceTransport.iceGatherer.getLocalCandidates() and self.__sctp in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[self.__sctp])
-                if dtlsTransport.state in ['new', 'connecting']:
+                if dtlsTransport.state == 'new':
                     await dtlsTransport.start(self.__remoteDtls[self.__sctp])
                 if dtlsTransport.state == 'connected':
                     await self.__sctp.start(self.__sctpRemoteCaps, self.__sctpRemotePort)
