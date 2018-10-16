@@ -26,4 +26,4 @@ else
 fi
 
 pip3 install -U setuptools
-pip3 install coveralls flake8 isort opencv-python
+pip3 install coverage flake8 isort opencv-python
