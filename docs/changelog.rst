@@ -3,6 +3,21 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.11
+------
+
+*under development*
+
+Media
+.....
+
+  * Make AudioStreamTrack and VideoStreamTrack produce empty frames more regularly.
+
+Examples
+........
+
+  * Fix a regession in copy-and-paste signaling which blocked the event loop.
+
 0.9.10
 ------
 
