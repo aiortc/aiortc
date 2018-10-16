@@ -21,20 +21,11 @@ answer = RTCSessionDescription(sdp='some-answer', type='answer')
 
 class SignalingTest(TestCase):
     def test_copy_and_paste(self):
-        captured_sdp = None
-
-        def mock_input():
-            return captured_sdp
-
         def mock_print(v=''):
-            nonlocal captured_sdp
-            if v.startswith('{'):
-                captured_sdp = v
+            pass
 
         # hijack builtins
-        original_input = __builtins__['input']
         original_print = __builtins__['print']
-        __builtins__['input'] = mock_input
         __builtins__['print'] = mock_print
 
         parser = argparse.ArgumentParser()
@@ -43,6 +34,30 @@ class SignalingTest(TestCase):
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
+
+        class MockReader:
+            def __init__(self, queue):
+                self.queue = queue
+
+            async def readline(self):
+                return await self.queue.get()
+
+        class MockWritePipe:
+            def __init__(self, queue):
+                self.queue = queue
+
+            def write(self, msg):
+                asyncio.ensure_future(self.queue.put(msg))
+
+        def dummy_stdio():
+            queue = asyncio.Queue()
+            return MockReader(queue), MockWritePipe(queue)
+
+        # mock out reader / write pipe
+        run(sig_server._connect())
+        run(sig_client._connect())
+        sig_server._reader, sig_client._write_pipe = dummy_stdio()
+        sig_client._reader, sig_server._write_pipe = dummy_stdio()
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
@@ -53,7 +68,6 @@ class SignalingTest(TestCase):
         run(asyncio.gather(sig_server.close(), sig_client.close()))
 
         # restore builtins
-        __builtins__['input'] = original_input
         __builtins__['print'] = original_print
 
     def test_tcp_socket(self):

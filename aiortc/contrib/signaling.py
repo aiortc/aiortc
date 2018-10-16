@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
@@ -36,18 +37,37 @@ def object_to_string(obj):
 
 
 class CopyAndPasteSignaling:
+    def __init__(self):
+        self._read_pipe = sys.stdin
+        self._read_transport = None
+        self._reader = None
+        self._write_pipe = sys.stdout
+
+    async def _connect(self):
+        if self._reader is not None:
+            return
+
+        loop = asyncio.get_event_loop()
+        self._reader = asyncio.StreamReader(loop=loop)
+        self._read_transport, _ = await loop.connect_read_pipe(
+            lambda: asyncio.StreamReaderProtocol(self._reader),
+            self._read_pipe)
+
     async def close(self):
-        pass
+        if self._reader is not None:
+            self._read_transport.close()
+            self._reader = None
 
     async def receive(self):
+        await self._connect()
         print('-- Please enter a message from remote party --')
-        descr_str = input()
+        descr_str = await self._reader.readline()
         print()
         return object_from_string(descr_str)
 
     async def send(self, descr):
         print('-- Please send this message to the remote party --')
-        print(object_to_string(descr))
+        self._write_pipe.write(object_to_string(descr) + '\n')
         print()
 
 
