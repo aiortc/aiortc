@@ -7,8 +7,7 @@ import time
 import av
 from av import AudioFrame, VideoFrame
 
-from ..mediastreams import (AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamError,
-                            MediaStreamTrack)
+from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 
 logger = logging.getLogger('media')
 
@@ -289,7 +288,6 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream('libx264', rate=30)
                 stream.pix_fmt = 'yuv420p'
-            stream.time_base = VIDEO_TIME_BASE
         self.__tracks[track] = MediaRecorderContext(stream)
 
     async def start(self):
