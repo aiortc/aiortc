@@ -69,14 +69,18 @@ class AudioStreamTrack(MediaStreamTrack):
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
 
-        timestamp = getattr(self, '_timestamp', 0)
-        self._timestamp = timestamp + samples
-        await asyncio.sleep(AUDIO_PTIME)
+        if hasattr(self, '_timestamp'):
+            self._timestamp += samples
+            wait = self._start + (self._timestamp / sample_rate) - time.time()
+            await asyncio.sleep(wait)
+        else:
+            self._start = time.time()
+            self._timestamp = 0
 
         frame = AudioFrame(format='s16', layout='mono', samples=samples)
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
-        frame.pts = timestamp
+        frame.pts = self._timestamp
         frame.sample_rate = sample_rate
         frame.time_base = fractions.Fraction(1, sample_rate)
         return frame
