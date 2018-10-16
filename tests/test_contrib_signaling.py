@@ -86,6 +86,29 @@ class SignalingTest(TestCase):
 
         run(asyncio.gather(sig_server.close(), sig_client.close()))
 
+    def test_tcp_socket_abrupt_disconnect(self):
+        parser = argparse.ArgumentParser()
+        add_signaling_arguments(parser)
+        args = parser.parse_args(['-s', 'tcp-socket'])
+
+        sig_server = create_signaling(args)
+        sig_client = create_signaling(args)
+
+        res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
+        self.assertEqual(res[1], offer)
+
+        # break connection
+        sig_client._writer.close()
+        sig_server._writer.close()
+
+        res = run(sig_server.receive())
+        self.assertIsNone(res)
+
+        res = run(sig_client.receive())
+        self.assertIsNone(res)
+
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
+
     def test_unix_socket(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
@@ -99,6 +122,29 @@ class SignalingTest(TestCase):
 
         res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
         self.assertEqual(res[1], answer)
+
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
+
+    def test_unix_socket_abrupt_disconnect(self):
+        parser = argparse.ArgumentParser()
+        add_signaling_arguments(parser)
+        args = parser.parse_args(['-s', 'unix-socket'])
+
+        sig_server = create_signaling(args)
+        sig_client = create_signaling(args)
+
+        res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
+        self.assertEqual(res[1], offer)
+
+        # break connection
+        sig_client._writer.close()
+        sig_server._writer.close()
+
+        res = run(sig_server.receive())
+        self.assertIsNone(res)
+
+        res = run(sig_client.receive())
+        self.assertIsNone(res)
 
         run(asyncio.gather(sig_server.close(), sig_client.close()))
 
