@@ -49,6 +49,10 @@ class MediaStreamTrack(EventEmitter):
             self.__ended = True
             self.emit('ended')
 
+            # no more events will be emitted, so remove all event listeners
+            # to facilitate garbage collection.
+            self.remove_all_listeners()
+
 
 class AudioStreamTrack(MediaStreamTrack):
     """
