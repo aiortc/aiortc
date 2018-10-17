@@ -324,3 +324,9 @@ class RTCIceTransport(EventEmitter):
             self.__log_debug('- %s -> %s', self.__state, state)
             self.__state = state
             self.emit('statechange')
+
+            # no more events will be emitted, so remove all event listeners
+            # to facilitate garbage collection.
+            if state == 'closed':
+                self.iceGatherer.remove_all_listeners()
+                self.remove_all_listeners()

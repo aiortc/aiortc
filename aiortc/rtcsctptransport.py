@@ -647,8 +647,8 @@ class RTCSctpTransport(EventEmitter):
         """
         if self._association_state != self.State.CLOSED:
             await self._abort()
-        self._set_state(self.State.CLOSED)
         self.__transport._unregister_data_receiver(self)
+        self._set_state(self.State.CLOSED)
 
     async def _abort(self):
         """
@@ -1148,6 +1148,10 @@ class RTCSctpTransport(EventEmitter):
             self._t2_cancel()
             self._t3_cancel()
             self.__state = 'closed'
+
+            # no more events will be emitted, so remove all event listeners
+            # to facilitate garbage collection.
+            self.remove_all_listeners()
 
     # timers
 

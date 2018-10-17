@@ -269,7 +269,6 @@ class RTCPeerConnection(EventEmitter):
             return
         self.__isClosed = True
         self.__setSignalingState('closed')
-        self.__updateIceConnectionState()
 
         # stop senders / receivers
         for transceiver in self.__transceivers:
@@ -284,6 +283,11 @@ class RTCPeerConnection(EventEmitter):
         if self.__sctp:
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
+        self.__updateIceConnectionState()
+
+        # no more events will be emitted, so remove all event listeners
+        # to facilitate garbage collection.
+        self.remove_all_listeners()
 
     async def createAnswer(self):
         """
