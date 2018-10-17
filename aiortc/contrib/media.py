@@ -148,7 +148,9 @@ class PlayerStreamTrack(MediaStreamTrack):
 
     def stop(self):
         super().stop()
-        self._player._stop(self)
+        if self._player is not None:
+            self._player._stop(self)
+            self._player = None
 
 
 class MediaPlayer:
