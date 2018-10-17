@@ -57,11 +57,10 @@ def uint32_gte(a: int, b: int) -> bool:
     return (a == b) or uint32_gt(a, b)
 
 
-async def first_completed(*coros, timeout=None):
+async def first_completed(*coros):
     tasks = [asyncio.ensure_future(x) for x in coros]
     try:
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED,
-                                           timeout=timeout)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     except asyncio.CancelledError:
         for task in tasks:
             task.cancel()
@@ -71,4 +70,3 @@ async def first_completed(*coros, timeout=None):
     for task in tasks:
         if task in done:
             return task.result()
-    raise TimeoutError

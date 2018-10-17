@@ -22,7 +22,6 @@ from pylibsrtp import Policy, Session
 from . import clock, rtp
 from .rtp import RtcpPacket, RtpPacket, is_rtcp
 from .stats import RTCStatsReport, RTCTransportStats
-from .utils import first_completed
 
 binding = Binding()
 binding.init_static_locks()
@@ -232,7 +231,6 @@ class RTCDtlsTransport(EventEmitter):
         certificate = certificates[0]
 
         super().__init__()
-        self.closed = asyncio.Event()
         self.encrypted = False
         self._data_receiver = None
         self._role = 'auto'
@@ -241,6 +239,7 @@ class RTCDtlsTransport(EventEmitter):
         self._rtp_senders = set()
         self._state = State.NEW
         self._stats_id = 'transport_' + str(id(self))
+        self._task = None
         self._transport = transport
 
         # counters
@@ -366,12 +365,16 @@ class RTCDtlsTransport(EventEmitter):
         # start data pump
         self.__log_debug('- DTLS handshake complete')
         self._set_state(State.CONNECTED)
-        asyncio.ensure_future(self.__run())
+        self._task = asyncio.ensure_future(self.__run())
 
     async def stop(self):
         """
         Stop and close the DTLS transport.
         """
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
+
         if self._state in [State.CONNECTING, State.CONNECTED]:
             lib.SSL_shutdown(self.ssl)
             try:
@@ -379,7 +382,6 @@ class RTCDtlsTransport(EventEmitter):
             except ConnectionError:
                 pass
             self.__log_debug('- DTLS shutdown complete')
-            self.closed.set()
 
     async def __run(self):
         try:
@@ -390,7 +392,6 @@ class RTCDtlsTransport(EventEmitter):
                 receiver._handle_disconnect()
         finally:
             self._set_state(State.CLOSED)
-            self.closed.set()
 
     def _get_stats(self):
         report = RTCStatsReport()
@@ -447,17 +448,12 @@ class RTCDtlsTransport(EventEmitter):
             timeout = None
 
         try:
-            data = await first_completed(self.transport._recv(), self.closed.wait(),
-                                         timeout=timeout)
-        except TimeoutError:
+            data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
+        except asyncio.TimeoutError:
             self.__log_debug('x DTLS handling timeout')
             lib.DTLSv1_handle_timeout(self.ssl)
             await self._write_ssl()
             return
-
-        if data is True:
-            # session was closed
-            raise ConnectionError
 
         arrival_time_ms = clock.current_ms()
         self.__rx_bytes += len(data)
