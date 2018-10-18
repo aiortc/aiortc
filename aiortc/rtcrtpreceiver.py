@@ -286,6 +286,9 @@ class RTCRtpReceiver:
             self.__stopped.set()
             await self.__rtcp_exited.wait()
 
+        # break reference cycle
+        self.__nack_generator = None
+
     def _handle_disconnect(self):
         self.__stop_decoder()
 
