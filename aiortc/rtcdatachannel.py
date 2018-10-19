@@ -122,6 +122,10 @@ class RTCDataChannel(EventEmitter):
             elif state == 'closed':
                 self.emit('close')
 
+                # no more events will be emitted, so remove all event listeners
+                # to facilitate garbage collection.
+                self.remove_all_listeners()
+
     def __log_debug(self, msg, *args):
         logger.debug(str(self.id) + ' ' + msg, *args)
 

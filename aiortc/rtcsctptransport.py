@@ -1149,6 +1149,10 @@ class RTCSctpTransport(EventEmitter):
             self._t3_cancel()
             self.__state = 'closed'
 
+            # close data channels
+            for stream_id in list(self._data_channels.keys()):
+                self._data_channel_closed(stream_id)
+
             # no more events will be emitted, so remove all event listeners
             # to facilitate garbage collection.
             self.remove_all_listeners()
