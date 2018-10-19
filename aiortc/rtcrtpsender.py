@@ -13,7 +13,7 @@ from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtpPacket, unpack_remb_fci)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
-from .utils import first_completed, random16, random32, uint16_add, uint32_add
+from .utils import random16, random32, uint16_add, uint32_add
 
 logger = logging.getLogger('rtp')
 
@@ -49,11 +49,12 @@ class RTCRtpSender:
         self.__mid = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
+        self.__rtp_task = None
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
+        self.__rtcp_task = None
         self.__started = False
         self.__stats = RTCStatsReport()
-        self.__stopped = asyncio.Event()
         self.__transport = transport
 
         # stats
@@ -129,17 +130,18 @@ class RTCRtpSender:
             self.__transport._register_rtp_sender(self, parameters)
             self.__rtp_header_extensions_map.configure(parameters)
 
-            asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
-            asyncio.ensure_future(self._run_rtcp())
+            self.__rtp_task = asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
+            self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
     async def stop(self):
         """
         Irreversibly stop the sender.
         """
-        self.__stopped.set()
         if self.__started:
             self.__transport._unregister_rtp_sender(self)
+            self.__rtp_task.cancel()
+            self.__rtcp_task.cancel()
             await asyncio.gather(
                 self.__rtp_exited.wait(),
                 self.__rtcp_exited.wait())
@@ -213,17 +215,13 @@ class RTCRtpSender:
 
         sequence_number = random16()
         timestamp_origin = random32()
-        while not self.__stopped.is_set():
-            if self.__track:
-                try:
-                    result = await first_completed(self._next_encoded_frame(codec),
-                                                   self.__stopped.wait())
-                except MediaStreamError:
-                    self.__stopped.set()
-                    break
-                if result is True:
-                    break
-                payloads, timestamp = result
+        try:
+            while True:
+                if not self.__track:
+                    await asyncio.sleep(0.02)
+                    continue
+
+                payloads, timestamp = await self._next_encoded_frame(codec)
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
                 for i, payload in enumerate(payloads):
@@ -239,26 +237,25 @@ class RTCRtpSender:
                     packet.extensions.abs_send_time = (clock.current_ntp_time() >> 14) & 0x00ffffff
                     packet.extensions.mid = self.__mid
 
-                    try:
-                        self.__log_debug('> %s', packet)
-                        packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
-                        self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
-                            packet.sequence_number, packet_bytes)
-                        await self.transport._send_rtp(packet_bytes)
-                    except ConnectionError:
-                        self.__stopped.set()
-                        break
+                    # send packet
+                    self.__log_debug('> %s', packet)
+                    packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
+                    self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
+                        packet.sequence_number, packet_bytes)
+                    await self.transport._send_rtp(packet_bytes)
+
                     self.__ntp_timestamp = clock.current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
-            else:
-                await asyncio.sleep(0.02)
+        except (asyncio.CancelledError, ConnectionError, MediaStreamError):
+            pass
 
         # stop track
         if self.__track:
             self.__track.stop()
+            self.__track = None
 
         self.__log_debug('- RTP finished')
         self.__rtp_exited.set()
@@ -266,32 +263,32 @@ class RTCRtpSender:
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')
 
-        while not self.__stopped.is_set():
-            # The interval between RTCP packets is varied randomly over the
-            # range [0.5, 1.5] times the calculated interval.
-            sleep = 0.5 + random.random()
-            result = await first_completed(asyncio.sleep(sleep), self.__stopped.wait())
-            if result is True:
-                break
+        try:
+            while True:
+                # The interval between RTCP packets is varied randomly over the
+                # range [0.5, 1.5] times the calculated interval.
+                await asyncio.sleep(0.5 + random.random())
 
-            # RTCP SR
-            packets = [RtcpSrPacket(
-                ssrc=self._ssrc,
-                sender_info=RtcpSenderInfo(
-                    ntp_timestamp=self.__ntp_timestamp,
-                    rtp_timestamp=self.__rtp_timestamp,
-                    packet_count=self.__packet_count,
-                    octet_count=self.__octet_count))]
-            self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xffffffff
-            self.__lsr_time = time.time()
-
-            # RTCP SDES
-            if self.__cname is not None:
-                packets.append(RtcpSdesPacket(chunks=[RtcpSourceInfo(
+                # RTCP SR
+                packets = [RtcpSrPacket(
                     ssrc=self._ssrc,
-                    items=[(1, self.__cname.encode('utf8'))])]))
+                    sender_info=RtcpSenderInfo(
+                        ntp_timestamp=self.__ntp_timestamp,
+                        rtp_timestamp=self.__rtp_timestamp,
+                        packet_count=self.__packet_count,
+                        octet_count=self.__octet_count))]
+                self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xffffffff
+                self.__lsr_time = time.time()
 
-            await self._send_rtcp(packets)
+                # RTCP SDES
+                if self.__cname is not None:
+                    packets.append(RtcpSdesPacket(chunks=[RtcpSourceInfo(
+                        ssrc=self._ssrc,
+                        items=[(1, self.__cname.encode('utf8'))])]))
+
+                await self._send_rtcp(packets)
+        except asyncio.CancelledError:
+            pass
 
         # RTCP BYE
         packet = RtcpByePacket(sources=[self._ssrc])
