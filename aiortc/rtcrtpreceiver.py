@@ -17,7 +17,7 @@ from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   pack_remb_fci)
 from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
                     RTCStatsReport)
-from .utils import first_completed, uint16_add, uint16_gt
+from .utils import uint16_add, uint16_gt
 
 logger = logging.getLogger('rtp')
 
@@ -205,10 +205,10 @@ class RTCRtpReceiver:
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track = None
         self.__rtcp_exited = asyncio.Event()
+        self.__rtcp_task = None
         self.__sender = None
         self.__started = False
         self.__stats = RTCStatsReport()
-        self.__stopped = asyncio.Event()
         self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
 
@@ -270,7 +270,7 @@ class RTCRtpReceiver:
             self.__decoder_thread.start()
 
             self.__transport._register_rtp_receiver(self, parameters)
-            asyncio.ensure_future(self._run_rtcp())
+            self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
     def setTransport(self, transport):
@@ -283,7 +283,7 @@ class RTCRtpReceiver:
         if self.__started:
             self.__transport._unregister_rtp_receiver(self)
             self.__stop_decoder()
-            self.__stopped.set()
+            self.__rtcp_task.cancel()
             await self.__rtcp_exited.wait()
 
         # break reference cycle
@@ -367,35 +367,35 @@ class RTCRtpReceiver:
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')
 
-        while not self.__stopped.is_set():
-            # The interval between RTCP packets is varied randomly over the
-            # range [0.5, 1.5] times the calculated interval.
-            sleep = 0.5 + random.random()
-            result = await first_completed(asyncio.sleep(sleep), self.__stopped.wait())
-            if result is True:
-                break
+        try:
+            while True:
+                # The interval between RTCP packets is varied randomly over the
+                # range [0.5, 1.5] times the calculated interval.
+                await asyncio.sleep(0.5 + random.random())
 
-            # RTCP RR
-            if self._ssrc is not None and self.__remote_counter is not None:
-                lsr = 0
-                dlsr = 0
-                if self.__lsr is not None:
-                    lsr = self.__lsr
-                    delay = time.time() - self.__lsr_time
-                    if delay > 0 and delay < 65536:
-                        dlsr = int(delay * 65536)
+                # RTCP RR
+                if self._ssrc is not None and self.__remote_counter is not None:
+                    lsr = 0
+                    dlsr = 0
+                    if self.__lsr is not None:
+                        lsr = self.__lsr
+                        delay = time.time() - self.__lsr_time
+                        if delay > 0 and delay < 65536:
+                            dlsr = int(delay * 65536)
 
-                packet = RtcpRrPacket(
-                    ssrc=self._ssrc,
-                    reports=[RtcpReceiverInfo(
-                        ssrc=self.__remote_counter.ssrc,
-                        fraction_lost=self.__remote_counter.fraction_lost,
-                        packets_lost=self.__remote_counter.packets_lost,
-                        highest_sequence=self.__remote_counter.max_seq,
-                        jitter=self.__remote_counter.jitter,
-                        lsr=lsr,
-                        dlsr=dlsr)])
-                await self._send_rtcp(packet)
+                    packet = RtcpRrPacket(
+                        ssrc=self._ssrc,
+                        reports=[RtcpReceiverInfo(
+                            ssrc=self.__remote_counter.ssrc,
+                            fraction_lost=self.__remote_counter.fraction_lost,
+                            packets_lost=self.__remote_counter.packets_lost,
+                            highest_sequence=self.__remote_counter.max_seq,
+                            jitter=self.__remote_counter.jitter,
+                            lsr=lsr,
+                            dlsr=dlsr)])
+                    await self._send_rtcp(packet)
+        except asyncio.CancelledError:
+            pass
 
         self.__log_debug('- RTCP finished')
         self.__rtcp_exited.set()
