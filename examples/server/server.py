@@ -129,6 +129,7 @@ async def on_shutdown(app):
     # close peer connections
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
+    pcs.clear()
 
 
 if __name__ == '__main__':

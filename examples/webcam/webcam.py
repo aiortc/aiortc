@@ -29,7 +29,14 @@ async def offer(request):
         type=params['type'])
 
     pc = RTCPeerConnection()
-    pcs.append(pc)
+    pcs.add(pc)
+
+    @pc.on('iceconnectionstatechange')
+    async def on_iceconnectionstatechange():
+        print('ICE connection state is %s' % pc.iceConnectionState)
+        if pc.iceConnectionState == 'failed':
+            await pc.close()
+            pcs.discard(pc)
 
     player = MediaPlayer('/dev/video0', options={'video_size': 'vga'})
     pc.addTrack(player.video)
@@ -46,13 +53,14 @@ async def offer(request):
         }))
 
 
-pcs = []
+pcs = set()
 
 
 async def on_shutdown(app):
     # close peer connections
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
+    pcs.clear()
 
 
 if __name__ == '__main__':
