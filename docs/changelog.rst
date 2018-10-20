@@ -3,6 +3,11 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.12
+------
+
+  * Rework code in order to facilitate garbage collection and avoid memory leaks.
+
 0.9.11
 ------
 
