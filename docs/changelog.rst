@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.13
+------
+
+*under development*
+
+Media
+.....
+
+  * Set VP8 target bitrate according to Receiver Estimated Maximum Bandwidth.
+
 0.9.12
 ------
 

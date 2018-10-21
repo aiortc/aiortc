@@ -179,6 +179,27 @@ class Vp8Test(CodecTestCase):
         self.assertEqual(len(payloads[0]), 1300)
         self.assertEqual(timestamp, 6000)
 
+    def test_encoder_target_bitrate(self):
+        encoder = get_encoder(VP8_CODEC)
+        self.assertTrue(isinstance(encoder, Vp8Encoder))
+        self.assertEqual(encoder.target_bitrate, 500000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+        # change target bitrate
+        encoder.target_bitrate = 600000
+        self.assertEqual(encoder.target_bitrate, 600000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 3000)
+
     def test_number_of_threads(self):
         self.assertEqual(number_of_threads(1920 * 1080, 16), 8)
         self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
