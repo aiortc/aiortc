@@ -5,8 +5,6 @@ set -e
 PREFIX=$HOME/.local
 
 if [ "$(uname -s)" = "Darwin" ]; then
-    brew update
-    brew upgrade python3
     brew install ffmpeg opus libvpx
 else
     if [ ! -e "$PREFIX/bin/ffmpeg" ]; then
