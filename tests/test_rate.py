@@ -4,7 +4,7 @@ from numpy import random
 
 from aiortc.rate import (AimdRateControl, BandwidthUsage, InterArrival,
                          OveruseDetector, OveruseEstimator, RateBucket,
-                         RateControlState, RateCounter)
+                         RateControlState, RateCounter, RemoteBitrateEstimator)
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20
@@ -754,3 +754,52 @@ class RateCounterTest(TestCase):
         self.assertEqual(counter._origin_ms, 126)
         self.assertEqual(counter._total, RateBucket(4, 2018))
         self.assertEqual(counter.rate(135), 1614400)
+
+
+class Stream:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.framerate = 30
+        self.payload_size = 1500
+
+        self.send_time_us = 0
+        self.arrival_time_us = 0
+
+    def generate_frames(self, count):
+        for i in range(count):
+            abs_send_time = self.send_time_us * (1 << 18) // 1000000
+            self.arrival_time_us = (
+                max(self.arrival_time_us, self.send_time_us) +
+                round((self.payload_size * 8000000) / self.capacity))
+            self.send_time_us += (1000000 // self.framerate)
+            yield abs_send_time, self.arrival_time_us // 1000, self.payload_size
+
+
+class RemoteBitrateEstimatorTest(TestCase):
+    def test_capacity_drop(self):
+        estimator = RemoteBitrateEstimator()
+        stream = Stream(capacity=500000)
+        target_bitrate = None
+
+        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(1000):
+            res = estimator.add(
+                abs_send_time=abs_send_time,
+                arrival_time_ms=arrival_time_ms,
+                payload_size=payload_size,
+                ssrc=1234)
+            if res is not None:
+                target_bitrate = res[0]
+        self.assertEqual(target_bitrate, 550000)
+
+        # reduce capacity
+        stream.capacity = 250000
+
+        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(1000):
+            res = estimator.add(
+                abs_send_time=abs_send_time,
+                arrival_time_ms=arrival_time_ms,
+                payload_size=payload_size,
+                ssrc=1234)
+            if res is not None:
+                target_bitrate = res[0]
+        self.assertEqual(target_bitrate, 214200)
