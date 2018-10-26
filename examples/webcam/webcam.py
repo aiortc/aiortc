@@ -39,9 +39,14 @@ async def offer(request):
             pcs.discard(pc)
 
     player = MediaPlayer('/dev/video0', options={'video_size': 'vga'})
-    pc.addTrack(player.video)
 
     await pc.setRemoteDescription(offer)
+    for t in pc.getTransceivers():
+        if t.kind == 'audio' and player.audio:
+            pc.addTrack(player.audio)
+        elif t.kind == 'video' and player.video:
+            pc.addTrack(player.video)
+
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 

@@ -13,6 +13,7 @@ pc.addEventListener('track', function(evt) {
 
 function negotiate() {
     pc.addTransceiver('video', {direction: 'recvonly'});
+    pc.addTransceiver('audio', {direction: 'recvonly'});
     return pc.createOffer().then(function(offer) {
         return pc.setLocalDescription(offer);
     }).then(function() {
