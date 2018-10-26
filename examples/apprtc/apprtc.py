@@ -10,8 +10,8 @@ import cv2
 import websockets
 from av import VideoFrame
 
-from aiortc import (AudioStreamTrack, RTCIceCandidate, RTCPeerConnection,
-                    RTCSessionDescription, VideoStreamTrack)
+from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
+                    VideoStreamTrack)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.contrib.signaling import object_from_string, object_to_string
 
@@ -93,8 +93,6 @@ async def run(pc, player, recorder, room, signaling):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
-        else:
-            pc.addTrack(AudioStreamTrack())
 
         if player and player.video:
             pc.addTrack(player.video)
