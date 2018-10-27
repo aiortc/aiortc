@@ -9,9 +9,9 @@ from pyee import EventEmitter
 from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer
 
-STUN_REGEX = re.compile('(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
-TURN_REGEX = re.compile('(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
-                        '(\?transport=(?P<transport>.*))?')
+STUN_REGEX = re.compile(r'(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?')
+TURN_REGEX = re.compile(r'(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?'
+                        r'(\?transport=(?P<transport>.*))?')
 
 logger = logging.getLogger('ice')
 
