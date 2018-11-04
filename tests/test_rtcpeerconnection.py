@@ -1746,15 +1746,17 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        dc.send('hello')
-        dc.send('')
-        dc.send(b'\x00\x01\x02\x03')
-        dc.send(b'')
-        dc.send(LONG_DATA)
-        with self.assertRaises(ValueError) as cm:
-            dc.send(1234)
-        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
-        self.assertEqual(dc.bufferedAmount, 2011)
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+            dc.send('')
+            dc.send(b'\x00\x01\x02\x03')
+            dc.send(b'')
+            dc.send(LONG_DATA)
+            with self.assertRaises(ValueError) as cm:
+                dc.send(1234)
+            self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+            self.assertEqual(dc.bufferedAmount, 2011)
 
         @dc.on('message')
         def on_message(message):
@@ -1899,14 +1901,16 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        dc.send('hello')
-        dc.send('')
-        dc.send(b'\x00\x01\x02\x03')
-        dc.send(b'')
-        dc.send(LONG_DATA)
-        with self.assertRaises(ValueError) as cm:
-            dc.send(1234)
-        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+            dc.send('')
+            dc.send(b'\x00\x01\x02\x03')
+            dc.send(b'')
+            dc.send(LONG_DATA)
+            with self.assertRaises(ValueError) as cm:
+                dc.send(1234)
+            self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')
         def on_message(message):
@@ -2018,6 +2022,12 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_datachannel_send_invalid_state(self):
+        pc = RTCPeerConnection()
+        dc = pc.createDataChannel('chat')
+        with self.assertRaises(InvalidStateError):
+            dc.send('hello')
+
     def test_connect_datachannel_trickle(self):
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
@@ -2049,14 +2059,16 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send messages
-        dc.send('hello')
-        dc.send('')
-        dc.send(b'\x00\x01\x02\x03')
-        dc.send(b'')
-        dc.send(LONG_DATA)
-        with self.assertRaises(ValueError) as cm:
-            dc.send(1234)
-        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+            dc.send('')
+            dc.send(b'\x00\x01\x02\x03')
+            dc.send(b'')
+            dc.send(LONG_DATA)
+            with self.assertRaises(ValueError) as cm:
+                dc.send(1234)
+            self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
 
         @dc.on('message')
         def on_message(message):
@@ -2208,7 +2220,9 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(dc.readyState, 'connecting')
 
         # send message
-        dc.send('hello')
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
 
         @dc.on('message')
         def on_message(message):

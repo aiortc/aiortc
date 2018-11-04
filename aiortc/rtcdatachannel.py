@@ -3,6 +3,8 @@ import logging
 import attr
 from pyee import EventEmitter
 
+from .exceptions import InvalidStateError
+
 logger = logging.getLogger('datachannel')
 
 
@@ -95,6 +97,9 @@ class RTCDataChannel(EventEmitter):
         """
         Send `data` across the data channel to the remote peer.
         """
+        if self.readyState != 'open':
+            raise InvalidStateError
+
         if not isinstance(data, (str, bytes)):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 

@@ -46,8 +46,7 @@ async def run_offer(pc, signaling, fp):
     done_reading = False
     channel = pc.createDataChannel('filexfer')
 
-    @channel.on('bufferedamountlow')
-    def on_bufferedamountlow():
+    def send_data():
         nonlocal done_reading
 
         while (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) and not done_reading:
@@ -55,6 +54,9 @@ async def run_offer(pc, signaling, fp):
             channel.send(data)
             if not data:
                 done_reading = True
+
+    channel.on('bufferedamountlow', send_data)
+    channel.on('open', send_data)
 
     @channel.on('message')
     def on_message(message):
@@ -69,9 +71,6 @@ async def run_offer(pc, signaling, fp):
     # receive answer
     answer = await signaling.receive()
     await pc.setRemoteDescription(answer)
-
-    # start sending file
-    on_bufferedamountlow()
 
     await done.wait()
 

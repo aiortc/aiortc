@@ -8,6 +8,11 @@ Changelog
 
 *under development*
 
+Data channels
+.............
+
+  * Raise an exception if :meth:`RTCDataChannel.send` is called when readyState is not `'open'`.
+
 Media
 .....
 
