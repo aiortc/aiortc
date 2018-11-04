@@ -542,7 +542,7 @@ class RTCSctpTransport(EventEmitter):
         self._remote_verification_tag = 0
 
         # inbound
-        self._advertised_rwnd = 131072
+        self._advertised_rwnd = 1024 * 1024
         self._inbound_streams = {}
         self._inbound_streams_count = 0
         self._inbound_streams_max = MAX_STREAMS
