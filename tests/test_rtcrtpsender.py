@@ -14,61 +14,38 @@ from aiortc.stats import RTCStatsReport
 from .utils import dummy_dtls_transport_pair, load, run
 
 
-class ClosedDtlsTransport:
-    state = 'closed'
-
-
-class FakeDtlsTransport:
-    def __init__(self):
-        self.queue = asyncio.Queue()
-        self.state = 'connected'
-
-    def _register_rtp_sender(self, sender, parameters):
-        pass
-
-    def _unregister_rtp_sender(self, sender):
-        pass
-
-    async def _send_rtp(self, data):
-        if not is_rtcp(data):
-            packet = RtpPacket.parse(data)
-            await self.queue.put(packet)
-
-
 class RTCRtpSenderTest(TestCase):
-    def test_construct(self):
-        transport, _ = dummy_dtls_transport_pair()
+    def setUp(self):
+        self.local_transport, self.remote_transport = dummy_dtls_transport_pair()
 
-        sender = RTCRtpSender('audio', transport)
+    def tearDown(self):
+        run(self.local_transport.stop())
+        run(self.remote_transport.stop())
+
+    def test_construct(self):
+        sender = RTCRtpSender('audio', self.local_transport)
         self.assertEqual(sender.kind, 'audio')
-        self.assertEqual(sender.transport, transport)
+        self.assertEqual(sender.transport, self.local_transport)
 
     def test_construct_invalid_dtls_transport_state(self):
-        transport = ClosedDtlsTransport()
-
+        run(self.local_transport.stop())
         with self.assertRaises(InvalidStateError):
-            RTCRtpSender('audio', transport)
+            RTCRtpSender('audio', self.local_transport)
 
     def test_connection_error(self):
         """
         Close the underlying transport before the sender.
         """
-        transport, _ = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(AudioStreamTrack(), transport)
+        sender = RTCRtpSender(AudioStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'audio')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
-        run(transport.stop())
+        run(self.local_transport.stop())
 
     def test_handle_rtcp_nack(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
@@ -83,11 +60,8 @@ class RTCRtpSenderTest(TestCase):
         run(sender.stop())
 
     def test_handle_rtcp_pli(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
@@ -101,11 +75,8 @@ class RTCRtpSenderTest(TestCase):
         run(sender.stop())
 
     def test_handle_rtcp_remb(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
@@ -125,11 +96,8 @@ class RTCRtpSenderTest(TestCase):
         run(sender.stop())
 
     def test_handle_rtcp_rr(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
@@ -153,18 +121,22 @@ class RTCRtpSenderTest(TestCase):
         """
         Ask for a keyframe.
         """
-        transport = FakeDtlsTransport()
+        queue = asyncio.Queue()
 
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        async def mock_send_rtp(data):
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+        self.local_transport._send_rtp = mock_send_rtp
+
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
         ])))
 
         # wait for one packet to be transmitted, and ask for keyframe
-        run(transport.queue.get())
+        run(queue.get())
         sender._send_keyframe()
 
         # wait for packet to be transmitted, then shutdown
@@ -175,18 +147,22 @@ class RTCRtpSenderTest(TestCase):
         """
         Ask for an RTP packet retransmission.
         """
-        transport = FakeDtlsTransport()
+        queue = asyncio.Queue()
 
-        sender = RTCRtpSender(VideoStreamTrack(), transport)
+        async def mock_send_rtp(data):
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+        self.local_transport._send_rtp = mock_send_rtp
+
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[
             RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
         ])))
 
         # wait for one packet to be transmitted, and ask to retransmit
-        packet = run(transport.queue.get())
+        packet = run(queue.get())
         run(sender._retransmit(packet.sequence_number))
 
         # wait for packet to be retransmitted, then shutdown
@@ -195,18 +171,15 @@ class RTCRtpSenderTest(TestCase):
 
         # check packet was retransmitted
         found_rtx = False
-        while not transport.queue.empty():
-            queue_packet = transport.queue.get_nowait()
+        while not queue.empty():
+            queue_packet = queue.get_nowait()
             if queue_packet.sequence_number == packet.sequence_number:
                 found_rtx = True
         self.assertTrue(found_rtx)
 
     def test_stop(self):
-        transport, _ = dummy_dtls_transport_pair()
-
-        sender = RTCRtpSender(AudioStreamTrack(), transport)
+        sender = RTCRtpSender(AudioStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'audio')
-        self.assertEqual(sender.transport, transport)
 
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
@@ -214,18 +187,13 @@ class RTCRtpSenderTest(TestCase):
         run(sender.stop())
 
     def test_stop_before_send(self):
-        transport, _ = dummy_dtls_transport_pair()
-        sender = RTCRtpSender(AudioStreamTrack(), transport)
+        sender = RTCRtpSender(AudioStreamTrack(), self.local_transport)
         run(sender.stop())
 
     def test_track_ended(self):
-        transport, _ = dummy_dtls_transport_pair()
-
         track = AudioStreamTrack()
-        sender = RTCRtpSender(track, transport)
+        sender = RTCRtpSender(track, self.local_transport)
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         track.stop()
         run(asyncio.sleep(0.5))
-
-        run(transport.stop())

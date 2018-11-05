@@ -2,8 +2,7 @@ import asyncio
 import logging
 import os
 
-from aiortc import clock
-from aiortc.stats import RTCStatsReport, RTCTransportStats
+from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 
 class DummyConnection:
@@ -56,74 +55,6 @@ class DummyIceTransport:
         await self._connection.send(data)
 
 
-class DummyDtlsTransport:
-    def __init__(self, transport, state='connected'):
-        self.data = transport._connection
-        self.state = state
-        self.transport = transport
-        self._data_handle = None
-        self._data_receiver = None
-        self._stats_id = 'transport_' + str(id(self))
-
-    async def stop(self):
-        await self.transport.stop()
-        self.state = 'closed'
-
-    def _get_stats(self):
-        report = RTCStatsReport()
-        report.add(RTCTransportStats(
-            # RTCStats
-            timestamp=clock.current_datetime(),
-            type='transport',
-            id=self._stats_id,
-            # RTCTransportStats,
-            packetsSent=0,
-            packetsReceived=0,
-            bytesSent=0,
-            bytesReceived=0,
-            iceRole=self.transport.role,
-            dtlsState=self.state,
-        ))
-        return report
-
-    def _register_data_receiver(self, receiver):
-        assert self._data_receiver is None
-        self._data_receiver = receiver
-        self._data_handle = asyncio.ensure_future(self.__run())
-
-    def _register_rtp_receiver(self, receiver, parameters):
-        pass
-
-    def _register_rtp_sender(self, sender, parameters):
-        pass
-
-    async def _send_data(self, data):
-        await self.transport._connection.send(data)
-
-    async def _send_rtp(self, data):
-        await self.transport._connection.send(data)
-
-    def _unregister_data_receiver(self, receiver):
-        if self._data_receiver == receiver:
-            self._data_receiver = None
-            self._data_handle.cancel()
-            self._data_handle = None
-
-    def _unregister_rtp_receiver(self, receiver):
-        pass
-
-    def _unregister_rtp_sender(self, sender):
-        pass
-
-    async def __run(self):
-        while True:
-            try:
-                data = await self.transport._connection.recv()
-            except ConnectionError:
-                break
-            await self._data_receiver._handle_data(data)
-
-
 def dummy_connection_pair(loss=None):
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
@@ -141,12 +72,15 @@ def dummy_ice_transport_pair(loss=None):
     )
 
 
-def dummy_dtls_transport_pair(loss=None):
-    ice_a, ice_b = dummy_ice_transport_pair(loss=loss)
-    return (
-        DummyDtlsTransport(ice_a),
-        DummyDtlsTransport(ice_b)
-    )
+def dummy_dtls_transport_pair():
+    ice_a, ice_b = dummy_ice_transport_pair()
+    dtls_a = RTCDtlsTransport(ice_a, [RTCCertificate.generateCertificate()])
+    dtls_b = RTCDtlsTransport(ice_b, [RTCCertificate.generateCertificate()])
+    run(asyncio.gather(
+        dtls_b.start(dtls_a.getLocalParameters()),
+        dtls_a.start(dtls_b.getLocalParameters())
+    ))
+    return (dtls_a, dtls_b)
 
 
 def load(name):

@@ -182,14 +182,19 @@ class StreamStatisticsTest(TestCase):
 
 
 class RTCRtpReceiverTest(TestCase):
+    def setUp(self):
+        self.local_transport, self.remote_transport = dummy_dtls_transport_pair()
+
+    def tearDown(self):
+        run(self.local_transport.stop())
+        run(self.remote_transport.stop())
+
     def test_connection_error(self):
         """
         Close the underlying transport before the receiver.
         """
-        transport, _ = dummy_dtls_transport_pair()
-
-        receiver = RTCRtpReceiver('audio', transport)
-        self.assertEqual(receiver.transport, transport)
+        receiver = RTCRtpReceiver('audio', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='audio')
         receiver._ssrc = 1234
@@ -200,7 +205,7 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # break connection
-        run(transport.stop())
+        run(self.local_transport.stop())
 
         # give RTCP time to send a report
         run(asyncio.sleep(2))
@@ -209,10 +214,8 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver.stop())
 
     def test_rtp_and_rtcp(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        receiver = RTCRtpReceiver('audio', transport)
-        self.assertEqual(receiver.transport, transport)
+        receiver = RTCRtpReceiver('audio', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='audio')
         self.assertEqual(receiver._track.readyState, 'live')
@@ -261,10 +264,8 @@ class RTCRtpReceiverTest(TestCase):
             run(receiver._track.recv())
 
     def test_rtp_empty_video_packet(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        receiver = RTCRtpReceiver('video', transport)
-        self.assertEqual(receiver.transport, transport)
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='video')
         run(receiver.receive(RTCRtpParameters(codecs=[
@@ -279,9 +280,7 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver.stop())
 
     def test_send_rtcp_nack(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        receiver = RTCRtpReceiver('video', transport)
+        receiver = RTCRtpReceiver('video', self.local_transport)
         receiver._ssrc = 1234
         receiver._track = RemoteStreamTrack(kind='video')
 
@@ -296,9 +295,7 @@ class RTCRtpReceiverTest(TestCase):
         run(receiver.stop())
 
     def test_send_rtcp_pli(self):
-        transport, remote = dummy_dtls_transport_pair()
-
-        receiver = RTCRtpReceiver('video', transport)
+        receiver = RTCRtpReceiver('video', self.local_transport)
         receiver._ssrc = 1234
         receiver._track = RemoteStreamTrack(kind='video')
 

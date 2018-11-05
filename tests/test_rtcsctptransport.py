@@ -486,6 +486,13 @@ class SctpUtilTest(TestCase):
 
 
 class RTCSctpTransportTest(TestCase):
+    def setUp(self):
+        self.client_transport, self.server_transport = dummy_dtls_transport_pair()
+
+    def tearDown(self):
+        run(self.client_transport.stop())
+        run(self.server_transport.stop())
+
     def assertTimerPreserved(self, client):
         test = self
 
@@ -525,26 +532,27 @@ class RTCSctpTransportTest(TestCase):
         return Ctx()
 
     def test_construct(self):
-        dtlsTransport, _ = dummy_dtls_transport_pair()
-        sctpTransport = RTCSctpTransport(dtlsTransport)
-        self.assertEqual(sctpTransport.transport, dtlsTransport)
+        sctpTransport = RTCSctpTransport(self.client_transport)
+        self.assertEqual(sctpTransport.transport, self.client_transport)
         self.assertEqual(sctpTransport.port, 5000)
 
     def test_construct_invalid_dtls_transport_state(self):
-        dtlsTransport, _ = dummy_dtls_transport_pair()
-        run(dtlsTransport.stop())
+        run(self.client_transport.stop())
         with self.assertRaises(InvalidStateError):
-            RTCSctpTransport(dtlsTransport)
+            RTCSctpTransport(self.client_transport)
 
     def test_connect_broken_transport(self):
         """
         Transport with 100% loss never connects.
         """
-        client_transport, server_transport = dummy_dtls_transport_pair(loss=[True])
-        client = RTCSctpTransport(client_transport)
+        loss_pattern = [True]
+        self.client_transport.transport._connection.loss_pattern = loss_pattern
+        self.server_transport.transport._connection.loss_pattern = loss_pattern
+
+        client = RTCSctpTransport(self.client_transport)
         client._rto = 0.1
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         server._rto = 0.1
         self.assertTrue(server.is_server)
 
@@ -571,13 +579,14 @@ class RTCSctpTransportTest(TestCase):
         """
         Transport with 25% loss eventually connects.
         """
-        client_transport, server_transport = dummy_dtls_transport_pair(
-            loss=[True, False, False, False])
+        loss_pattern = [True, False, False, False]
+        self.client_transport.transport._connection.loss_pattern = loss_pattern
+        self.server_transport.transport._connection.loss_pattern = loss_pattern
 
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._rto = 0.1
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         server._rto = 0.1
         self.assertTrue(server.is_server)
 
@@ -615,12 +624,11 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server.state, 'closed')
 
     def test_connect_client_limits_streams(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._inbound_streams_max = 2048
         client._outbound_streams_count = 256
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         self.assertTrue(server.is_server)
 
         # connect
@@ -656,10 +664,9 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_server_limits_streams(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         server._inbound_streams_max = 2048
         server._outbound_streams_count = 256
         self.assertTrue(server.is_server)
@@ -688,10 +695,9 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_client_creates_data_channel(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         self.assertTrue(server.is_server)
 
         client_channels = track_channels(client)
@@ -732,10 +738,9 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_server_creates_data_channel(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         self.assertTrue(server.is_server)
 
         client_channels = track_channels(client)
@@ -773,10 +778,8 @@ class RTCSctpTransportTest(TestCase):
         """
         Abrupt disconnect causes sending ABORT chunk to fail.
         """
-        client_transport, server_transport = dummy_dtls_transport_pair()
-
-        client = RTCSctpTransport(client_transport)
-        server = RTCSctpTransport(server_transport)
+        client = RTCSctpTransport(self.client_transport)
+        server = RTCSctpTransport(self.server_transport)
 
         # connect
         run(server.start(client.getCapabilities(), client.port))
@@ -788,18 +791,17 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
 
         # break connection
-        run(client_transport.stop())
-        run(server_transport.stop())
+        run(self.client_transport.stop())
+        run(self.server_transport.stop())
 
         # stop
         run(client.stop())
         run(server.stop())
 
     def test_garbage(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
-        asyncio.ensure_future(client_transport._send_data(b'garbage'))
+        asyncio.ensure_future(self.client_transport._send_data(b'garbage'))
 
         # check outcome
         run(asyncio.sleep(0.5))
@@ -812,10 +814,9 @@ class RTCSctpTransportTest(TestCase):
         # verification tag is 12345 instead of 0
         data = load('sctp_init_bad_verification.bin')
 
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        server = RTCSctpTransport(server_transport)
+        server = RTCSctpTransport(self.server_transport)
         run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
-        asyncio.ensure_future(client_transport._send_data(data))
+        asyncio.ensure_future(self.client_transport._send_data(data))
 
         # check outcome
         run(asyncio.sleep(0.5))
@@ -825,9 +826,8 @@ class RTCSctpTransportTest(TestCase):
         run(server.stop())
 
     def test_bad_cookie(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
-        server = RTCSctpTransport(server_transport)
+        client = RTCSctpTransport(self.client_transport)
+        server = RTCSctpTransport(self.server_transport)
 
         # corrupt cookie
         real_send_chunk = client._send_chunk
@@ -863,9 +863,8 @@ class RTCSctpTransportTest(TestCase):
 
         mock_timestamp.calls = 0
 
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
-        server = RTCSctpTransport(server_transport)
+        client = RTCSctpTransport(self.client_transport)
+        server = RTCSctpTransport(self.server_transport)
 
         server._get_timestamp = mock_timestamp
         run(server.start(client.getCapabilities(), client.port))
@@ -883,8 +882,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_receive_data(self):
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
 
         # receive chunk
@@ -905,8 +903,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._last_received_tsn, 1)
 
     def test_receive_data_out_of_order(self):
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
 
         # build chunks
@@ -960,10 +957,16 @@ class RTCSctpTransportTest(TestCase):
         client._sack_needed = False
 
     def test_receive_heartbeat(self):
-        client_transport, server_transport = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        ack = None
+
+        async def mock_send_chunk(chunk):
+            nonlocal ack
+            ack = chunk
+
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
         client._remote_port = 5000
+        client._send_chunk = mock_send_chunk
 
         # receive heartbeat
         chunk = HeartbeatChunk()
@@ -972,15 +975,11 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(chunk))
 
         # check response
-        data = run(server_transport.data.recv())
-        packet = Packet.parse(data)
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], HeartbeatAckChunk))
-        self.assertEqual(packet.chunks[0].params, [(1, b'\x01\x02\x03\x04')])
+        self.assertTrue(isinstance(ack, HeartbeatAckChunk))
+        self.assertEqual(ack.params, [(1, b'\x01\x02\x03\x04')])
 
     def test_receive_sack_discard(self):
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
 
         # receive sack
@@ -996,8 +995,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             pass
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
         client._send_chunk = mock_send_chunk
         client._set_state(RTCSctpTransport.State.ESTABLISHED)
@@ -1014,8 +1012,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_mark_received(self):
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
 
         # receive 1
@@ -1050,8 +1047,7 @@ class RTCSctpTransportTest(TestCase):
             nonlocal sack
             sack = c
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 123
         client._send_chunk = mock_send_chunk
 
@@ -1068,8 +1064,7 @@ class RTCSctpTransportTest(TestCase):
             nonlocal sack
             sack = c
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 123
         client._sack_duplicates = [125, 127]
         client._send_chunk = mock_send_chunk
@@ -1087,8 +1082,7 @@ class RTCSctpTransportTest(TestCase):
             nonlocal sack
             sack = c
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 12
         client._sack_misordered = [14, 15, 17]
         client._send_chunk = mock_send_chunk
@@ -1103,8 +1097,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             pass
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._send_chunk = mock_send_chunk
 
         # no data
@@ -1124,8 +1117,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._cwnd = 4800
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
@@ -1197,8 +1189,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
         client._ssthresh = 131072
@@ -1263,8 +1254,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
         client._ssthresh = 131072
@@ -1330,8 +1320,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
         client._ssthresh = 131072
@@ -1399,8 +1388,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
         client._ssthresh = 131072
@@ -1479,8 +1467,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_sacked_tsn = 4294967295
         client._local_tsn = 0
         client._ssthresh = 131072
@@ -1572,8 +1559,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_send_chunk(chunk):
             pass
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._last_received_tsn = 0
         client._send_chunk = mock_send_chunk
 
@@ -1610,8 +1596,7 @@ class RTCSctpTransportTest(TestCase):
         async def mock_transmit():
             pass
 
-        client_transport, _ = dummy_dtls_transport_pair()
-        client = RTCSctpTransport(client_transport)
+        client = RTCSctpTransport(self.client_transport)
         client._send_chunk = mock_send_chunk
 
         # 1 chunk
