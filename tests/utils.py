@@ -4,28 +4,32 @@ import os
 
 from aiortc import clock
 from aiortc.stats import RTCStatsReport, RTCTransportStats
-from aiortc.utils import first_completed
 
 
 class DummyConnection:
     def __init__(self, rx_queue, tx_queue, loss):
-        self.closed = asyncio.Event()
+        self.closed = False
         self.loss_cursor = 0
         self.loss_pattern = loss
         self.rx_queue = rx_queue
         self.tx_queue = tx_queue
 
     async def close(self):
-        self.closed.set()
+        if not self.closed:
+            await self.rx_queue.put(None)
+            self.closed = True
 
     async def recv(self):
-        data = await first_completed(self.rx_queue.get(), self.closed.wait())
-        if data is True:
+        if self.closed:
+            raise ConnectionError
+
+        data = await self.rx_queue.get()
+        if data is None:
             raise ConnectionError
         return data
 
     async def send(self, data):
-        if self.closed.is_set():
+        if self.closed:
             raise ConnectionError
 
         if self.loss_pattern is not None:
