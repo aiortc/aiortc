@@ -18,6 +18,11 @@ Media
 
   * Set VP8 target bitrate according to Receiver Estimated Maximum Bandwidth.
 
+Examples
+........
+
+  * Correctly handle encoding in copy-and-paste signaling.
+
 0.9.12
 ------
 

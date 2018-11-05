@@ -43,21 +43,22 @@ class SignalingTest(TestCase):
                 return await self.queue.get()
 
         class MockWritePipe:
-            def __init__(self, queue):
+            def __init__(self, queue, encoding):
+                self.encoding = encoding
                 self.queue = queue
 
             def write(self, msg):
-                asyncio.ensure_future(self.queue.put(msg))
+                asyncio.ensure_future(self.queue.put(msg.encode(self.encoding)))
 
-        def dummy_stdio():
+        def dummy_stdio(encoding):
             queue = asyncio.Queue()
-            return MockReader(queue), MockWritePipe(queue)
+            return MockReader(queue), MockWritePipe(queue, encoding=encoding)
 
         # mock out reader / write pipe
         run(sig_server._connect())
         run(sig_client._connect())
-        sig_server._reader, sig_client._write_pipe = dummy_stdio()
-        sig_client._reader, sig_server._write_pipe = dummy_stdio()
+        sig_server._reader, sig_client._write_pipe = dummy_stdio(sig_server._read_pipe.encoding)
+        sig_client._reader, sig_server._write_pipe = dummy_stdio(sig_client._read_pipe.encoding)
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)

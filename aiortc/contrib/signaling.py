@@ -61,9 +61,9 @@ class CopyAndPasteSignaling:
     async def receive(self):
         await self._connect()
         print('-- Please enter a message from remote party --')
-        descr_str = await self._reader.readline()
+        data = await self._reader.readline()
         print()
-        return object_from_string(descr_str)
+        return object_from_string(data.decode(self._read_pipe.encoding))
 
     async def send(self, descr):
         print('-- Please send this message to the remote party --')
