@@ -6,10 +6,10 @@ from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 
 class DummyConnection:
-    def __init__(self, rx_queue, tx_queue, loss):
+    def __init__(self, rx_queue, tx_queue):
         self.closed = False
         self.loss_cursor = 0
-        self.loss_pattern = loss
+        self.loss_pattern = None
         self.rx_queue = rx_queue
         self.tx_queue = tx_queue
 
@@ -55,17 +55,17 @@ class DummyIceTransport:
         await self._connection.send(data)
 
 
-def dummy_connection_pair(loss=None):
+def dummy_connection_pair():
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
     return (
-        DummyConnection(rx_queue=queue_a, tx_queue=queue_b, loss=loss),
-        DummyConnection(rx_queue=queue_b, tx_queue=queue_a, loss=loss),
+        DummyConnection(rx_queue=queue_a, tx_queue=queue_b),
+        DummyConnection(rx_queue=queue_b, tx_queue=queue_a),
     )
 
 
-def dummy_ice_transport_pair(loss=None):
-    connection_a, connection_b = dummy_connection_pair(loss=loss)
+def dummy_ice_transport_pair():
+    connection_a, connection_b = dummy_connection_pair()
     return (
         DummyIceTransport(connection_a, 'controlling'),
         DummyIceTransport(connection_b, 'controlled')

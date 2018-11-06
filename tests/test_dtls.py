@@ -73,9 +73,12 @@ class RTCDtlsTransportTest(TestCase):
     @patch('aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate')
     def test_broken_ssl(self, mock_use_certificate):
         mock_use_certificate.return_value = 0
+
+        transport1, transport2 = dummy_ice_transport_pair()
+
         certificate = RTCCertificate.generateCertificate()
         with self.assertRaises(DtlsError):
-            RTCDtlsTransport(None, [certificate])
+            RTCDtlsTransport(transport1, [certificate])
 
     def test_data(self):
         transport1, transport2 = dummy_ice_transport_pair()
@@ -269,7 +272,10 @@ class RTCDtlsTransportTest(TestCase):
         """
         Transport with 25% loss eventually connects.
         """
-        transport1, transport2 = dummy_ice_transport_pair(loss=[True, False, False, False])
+        transport1, transport2 = dummy_ice_transport_pair()
+        loss_pattern = [True, False, False, False]
+        transport1._connection.loss_pattern = loss_pattern
+        transport2._connection.loss_pattern = loss_pattern
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
