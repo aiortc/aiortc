@@ -90,7 +90,7 @@ class H264Decoder:
 
     def decode(self, encoded_frame):
         try:
-            packet = av.packet.Packet(encoded_frame.data)
+            packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
             frames = self.codec.decode(packet)

@@ -55,15 +55,12 @@ class MediaBlackhole:
 
 
 def player_worker(loop, container, audio_track, video_track, quit_event, throttle_playback):
-    import av.audio.fifo
-    import av.audio.format
-    import av.audio.resampler
-    audio_fifo = av.audio.fifo.AudioFifo()
-    audio_format = av.audio.format.AudioFormat('s16')
+    audio_fifo = av.AudioFifo()
+    audio_format = av.AudioFormat('s16')
     audio_sample_rate = 48000
     audio_samples = 0
     audio_samples_per_frame = int(audio_sample_rate * AUDIO_PTIME)
-    audio_resampler = av.audio.resampler.AudioResampler(
+    audio_resampler = av.AudioResampler(
         format=audio_format,
         rate=audio_sample_rate)
 
@@ -179,8 +176,6 @@ class MediaPlayer:
     :param: options: Additional options to pass to FFmpeg.
     """
     def __init__(self, file, format=None, options={}):
-        import av.audio.stream
-        import av.video.stream
         self.__container = av.open(file=file, format=format, mode='r', options=options)
         self.__thread = None
         self.__thread_quit = None
@@ -190,9 +185,9 @@ class MediaPlayer:
         self.__audio = None
         self.__video = None
         for stream in self.__container.streams:
-            if isinstance(stream, av.audio.stream.AudioStream) and not self.__audio:
+            if stream.type == 'audio' and not self.__audio:
                 self.__audio = PlayerStreamTrack(self, kind='audio')
-            elif isinstance(stream, av.video.stream.VideoStream) and not self.__video:
+            elif stream.type == 'video' and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind='video')
 
         # check whether we need to throttle playback
