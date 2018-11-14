@@ -213,11 +213,36 @@ class RTCDtlsTransportTest(TestCase):
             session1.start(session2.getLocalParameters()),
             session2.start(session1.getLocalParameters())))
 
-        # break connections
+        # break connections -> tasks exits
         run(transport1.stop())
         run(transport2.stop())
 
-        # close DTLS -> raises ConnectionError
+        # close DTLS
+        run(session1.stop())
+        run(session2.stop())
+
+        # check outcome
+        self.assertEqual(session1.state, 'closed')
+        self.assertEqual(session2.state, 'closed')
+
+    def test_abrupt_disconnect_2(self):
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+
+        run(asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters())))
+
+        def fake_write_ssl():
+            raise ConnectionError
+        session1._write_ssl = fake_write_ssl
+
+        # close DTLS -> ConnectionError
         run(session1.stop())
         run(session2.stop())
 
