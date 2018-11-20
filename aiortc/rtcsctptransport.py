@@ -453,11 +453,13 @@ class InboundStream:
         self.sequence_number = 0
 
     def add_chunk(self, chunk):
-        pos = None
-
         # should never happen, this would mean receiving a chunk
         # for a message that has already been fully re-assembled
         assert uint16_gte(chunk.stream_seq, self.sequence_number)
+
+        if not self.reassembly or tsn_gt(chunk.tsn, self.reassembly[-1].tsn):
+            self.reassembly.append(chunk)
+            return
 
         for i, rchunk in enumerate(self.reassembly):
             # should never happen, the chunk should have been eliminated
@@ -465,12 +467,8 @@ class InboundStream:
             assert rchunk.tsn != chunk.tsn
 
             if tsn_gt(rchunk.tsn, chunk.tsn):
-                pos = i
+                self.reassembly.insert(i, chunk)
                 break
-        if pos is None:
-            pos = len(self.reassembly)
-
-        self.reassembly.insert(pos, chunk)
 
     def pop_messages(self):
         pos = 0
@@ -483,13 +481,11 @@ class InboundStream:
                 if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
                     break
                 expected_tsn = chunk.tsn
-                user_data = chunk.user_data
-            else:
-                if chunk.tsn != expected_tsn:
-                    break
-                user_data += chunk.user_data
+            elif chunk.tsn != expected_tsn:
+                break
 
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
+                user_data = b''.join([c.user_data for c in self.reassembly[0:pos + 1]])
                 self.reassembly = self.reassembly[pos + 1:]
                 self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = 0
