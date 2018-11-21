@@ -12,6 +12,7 @@ Data channels
 .............
 
   * Raise an exception if :meth:`RTCDataChannel.send` is called when readyState is not `'open'`.
+  * Do not use stream sequence number for unordered data channels.
 
 Media
 .....
