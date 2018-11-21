@@ -13,7 +13,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .utils import random32, uint16_add, uint16_gte
+from .utils import random32, uint16_add
 
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
@@ -453,10 +453,6 @@ class InboundStream:
         self.sequence_number = 0
 
     def add_chunk(self, chunk):
-        # should never happen, this would mean receiving a chunk
-        # for a message that has already been fully re-assembled
-        assert uint16_gte(chunk.stream_seq, self.sequence_number)
-
         if not self.reassembly or tsn_gt(chunk.tsn, self.reassembly[-1].tsn):
             self.reassembly.append(chunk)
             return
@@ -474,11 +470,11 @@ class InboundStream:
         pos = 0
         while pos < len(self.reassembly):
             chunk = self.reassembly[pos]
-            if chunk.stream_seq != self.sequence_number:
-                break
-
             if not pos:
                 if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
+                    break
+                ordered = not (chunk.flags & SCTP_DATA_UNORDERED)
+                if ordered and chunk.stream_seq != self.sequence_number:
                     break
                 expected_tsn = chunk.tsn
             elif chunk.tsn != expected_tsn:
@@ -487,7 +483,8 @@ class InboundStream:
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
                 user_data = b''.join([c.user_data for c in self.reassembly[0:pos + 1]])
                 self.reassembly = self.reassembly[pos + 1:]
-                self.sequence_number = uint16_add(self.sequence_number, 1)
+                if ordered:
+                    self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = 0
                 yield (chunk.stream_id, chunk.protocol, user_data)
             else:
@@ -1044,7 +1041,10 @@ class RTCSctpTransport(EventEmitter):
         """
         Send data ULP -> stream.
         """
-        stream_seq = self._outbound_stream_seq.get(stream_id, 0)
+        if ordered:
+            stream_seq = self._outbound_stream_seq.get(stream_id, 0)
+        else:
+            stream_seq = 0
 
         fragments = math.ceil(len(user_data) / USERDATA_MAX_LENGTH)
         pos = 0
@@ -1074,7 +1074,9 @@ class RTCSctpTransport(EventEmitter):
             pos += USERDATA_MAX_LENGTH
             self._local_tsn = tsn_plus_one(self._local_tsn)
             self._outbound_queue.append(chunk)
-        self._outbound_stream_seq[stream_id] = uint16_add(stream_seq, 1)
+
+        if ordered:
+            self._outbound_stream_seq[stream_id] = uint16_add(stream_seq, 1)
 
         # transmit outbound data
         if not self._t3_handle:

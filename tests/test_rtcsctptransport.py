@@ -1104,12 +1104,28 @@ class RTCSctpTransportTest(TestCase):
         run(client._transmit())
         self.assertIsNone(client._t3_handle)
         self.assertEqual(client._outbound_queue_pos, 0)
+        self.assertEqual(client._outbound_stream_seq, {})
 
         # 1 chunk
         run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH))
         self.assertIsNotNone(client._t3_handle)
         self.assertEqual(len(client._outbound_queue), 1)
         self.assertEqual(client._outbound_queue_pos, 1)
+        self.assertEqual(client._outbound_stream_seq, {123: 1})
+
+    def test_send_data_unordered(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client = RTCSctpTransport(self.client_transport)
+        client._send_chunk = mock_send_chunk
+
+        # 1 chunk
+        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH, ordered=False))
+        self.assertIsNotNone(client._t3_handle)
+        self.assertEqual(len(client._outbound_queue), 1)
+        self.assertEqual(client._outbound_queue_pos, 1)
+        self.assertEqual(client._outbound_stream_seq, {})
 
     def test_send_data_congestion_control(self):
         sent_tsns = []
