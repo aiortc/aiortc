@@ -6,8 +6,6 @@ Changelog
 0.9.13
 ------
 
-*under development*
-
 Data channels
 .............
 
