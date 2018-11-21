@@ -22,6 +22,7 @@ Examples
 ........
 
   * Correctly handle encoding in copy-and-paste signaling.
+  * `webcam` : add code to open webcam on OS X.
 
 0.9.12
 ------

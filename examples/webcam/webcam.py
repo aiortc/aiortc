@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import platform
 
 from aiohttp import web
 
@@ -38,7 +39,12 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)
 
-    player = MediaPlayer('/dev/video0', options={'video_size': 'vga'})
+    # open webcam
+    options = {'video_size': '640x480'}
+    if platform.system() == 'Darwin':
+        player = MediaPlayer('default:none', format='avfoundation', options=options)
+    else:
+        player = MediaPlayer('/dev/video0', format='v4l2', options=options)
 
     await pc.setRemoteDescription(offer)
     for t in pc.getTransceivers():

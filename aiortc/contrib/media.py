@@ -167,8 +167,13 @@ class MediaPlayer:
             'gpac/dataset/dash/uhd/mux_sources/hevcds_720p30_2M.mp4')
 
         # Open webcam on Linux.
-        player = MediaPlayer('/dev/video0', options={
-            'video_size': 'vga'
+        player = MediaPlayer('/dev/video0', format='v4l2', options={
+            'video_size': '640x480'
+        })
+
+        # Open webcam on OS X.
+        player = MediaPlayer('default:none', format='avfoundation', options={
+            'video_size': '640x480'
         })
 
     :param: file: The path to a file, or a file-like object.
