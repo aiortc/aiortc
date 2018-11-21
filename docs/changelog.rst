@@ -22,6 +22,8 @@ Examples
 ........
 
   * Correctly handle encoding in copy-and-paste signaling.
+  * `server` : add command line options to use HTTPS.
+  * `webcam` : add command line options to use HTTPS.
   * `webcam` : add code to open webcam on OS X.
 
 0.9.12
