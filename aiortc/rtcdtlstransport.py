@@ -330,7 +330,7 @@ class RTCDtlsTransport(EventEmitter):
         remote_fingerprint = certificate_digest(x509)
         fingerprint_is_valid = False
         for f in remoteParameters.fingerprints:
-            if f.algorithm == 'sha-256' and f.value.lower() == remote_fingerprint.lower():
+            if f.algorithm.lower() == 'sha-256' and f.value.lower() == remote_fingerprint.lower():
                 fingerprint_is_valid = True
                 break
         if not fingerprint_is_valid:
