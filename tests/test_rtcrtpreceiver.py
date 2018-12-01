@@ -197,7 +197,7 @@ class RTCRtpReceiverTest(TestCase):
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='audio')
-        receiver._ssrc = 1234
+        receiver._set_rtcp_ssrc(1234)
         run(receiver.receive(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
         # receive a packet to prime RTCP
@@ -281,7 +281,7 @@ class RTCRtpReceiverTest(TestCase):
 
     def test_send_rtcp_nack(self):
         receiver = RTCRtpReceiver('video', self.local_transport)
-        receiver._ssrc = 1234
+        receiver._set_rtcp_ssrc(1234)
         receiver._track = RemoteStreamTrack(kind='video')
 
         run(receiver.receive(RTCRtpParameters(codecs=[
@@ -296,7 +296,7 @@ class RTCRtpReceiverTest(TestCase):
 
     def test_send_rtcp_pli(self):
         receiver = RTCRtpReceiver('video', self.local_transport)
-        receiver._ssrc = 1234
+        receiver._set_rtcp_ssrc(1234)
         receiver._track = RemoteStreamTrack(kind='video')
 
         run(receiver.receive(RTCRtpParameters(codecs=[

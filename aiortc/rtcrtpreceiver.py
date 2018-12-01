@@ -213,10 +213,10 @@ class RTCRtpReceiver:
         self.__transport = transport
 
         # RTCP
-        self._ssrc = None
         self.__lsr = None
         self.__lsr_time = None
         self.__remote_counter = None
+        self.__rtcp_ssrc = None
 
     @property
     def transport(self):
@@ -332,9 +332,10 @@ class RTCRtpReceiver:
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
-                if remb is not None:
+                if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
-                    rtcp_packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=self._ssrc, media_ssrc=0)
+                    rtcp_packet = RtcpPsfbPacket(
+                        fmt=RTCP_PSFB_APP, ssrc=self.__rtcp_ssrc, media_ssrc=0)
                     rtcp_packet.fci = pack_remb_fci(*remb)
                     await self._send_rtcp(rtcp_packet)
 
@@ -374,7 +375,7 @@ class RTCRtpReceiver:
                 await asyncio.sleep(0.5 + random.random())
 
                 # RTCP RR
-                if self._ssrc is not None and self.__remote_counter is not None:
+                if self.__rtcp_ssrc is not None and self.__remote_counter is not None:
                     lsr = 0
                     dlsr = 0
                     if self.__lsr is not None:
@@ -384,7 +385,7 @@ class RTCRtpReceiver:
                             dlsr = int(delay * 65536)
 
                     packet = RtcpRrPacket(
-                        ssrc=self._ssrc,
+                        ssrc=self.__rtcp_ssrc,
                         reports=[RtcpReceiverInfo(
                             ssrc=self.__remote_counter.ssrc,
                             fraction_lost=self.__remote_counter.fraction_lost,
@@ -411,8 +412,9 @@ class RTCRtpReceiver:
         """
         Send an RTCP packet to report missing RTP packets.
         """
-        if self._ssrc is not None:
-            packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=self._ssrc, media_ssrc=media_ssrc)
+        if self.__rtcp_ssrc is not None:
+            packet = RtcpRtpfbPacket(
+                fmt=RTCP_RTPFB_NACK, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc)
             packet.lost = lost
             await self._send_rtcp(packet)
 
@@ -420,9 +422,12 @@ class RTCRtpReceiver:
         """
         Send an RTCP packet to report picture loss.
         """
-        if self._ssrc is not None:
-            packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=self._ssrc, media_ssrc=media_ssrc)
+        if self.__rtcp_ssrc is not None:
+            packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc)
             await self._send_rtcp(packet)
+
+    def _set_rtcp_ssrc(self, ssrc):
+        self.__rtcp_ssrc = ssrc
 
     def _set_sender(self, sender):
         self.__sender = sender
