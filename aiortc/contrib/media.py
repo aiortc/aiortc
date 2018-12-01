@@ -198,7 +198,7 @@ class MediaPlayer:
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(','))
         self._throttle_playback = not container_format.intersection([
-            'avfoundation', 'dshow', 'v4l2', 'vfwcap'])
+            'avfoundation', 'dshow', 'rtsp', 'v4l2', 'vfwcap'])
 
     @property
     def audio(self):
