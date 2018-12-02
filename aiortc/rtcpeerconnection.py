@@ -95,6 +95,19 @@ def add_remote_candidates(iceTransport, media):
         iceTransport.addRemoteCandidate(None)
 
 
+def allocate_mid(mids):
+    """
+    Allocate a MID which has not been used yet.
+    """
+    i = 0
+    while True:
+        mid = str(i)
+        if mid not in mids:
+            mids.add(mid)
+            return mid
+        i += 1
+
+
 def get_default_candidate(iceTransport):
     candidates = iceTransport.iceGatherer.getLocalCandidates()
     if candidates:
@@ -133,10 +146,10 @@ class RTCPeerConnection(EventEmitter):
         self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports = set()
         self.__initialOfferer = None
-        self.__midCounter = 0
         self.__remoteDtls = {}
         self.__remoteIce = {}
         self.__remoteRtp = {}
+        self.__seenMids = set()
         self.__sctp = None
         self._sctpLegacySdp = True
         self.__sctpRemotePort = None
@@ -347,9 +360,9 @@ class RTCPeerConnection(EventEmitter):
         # assign MIDs
         for transceiver in self.__transceivers:
             if transceiver.mid is None:
-                transceiver.mid = self.__nextAvailableMid()
+                transceiver._set_mid(allocate_mid(self.__seenMids))
         if self.__sctp and self.__sctp.mid is None:
-            self.__sctp.mid = self.__nextAvailableMid()
+            self.__sctp.mid = allocate_mid(self.__seenMids)
 
         return RTCSessionDescription(
             sdp=self.__createSdp('offer'),
@@ -445,6 +458,7 @@ class RTCPeerConnection(EventEmitter):
 
         # apply description
         for media in parsedRemoteDescription.media:
+            self.__seenMids.add(media.rtp.muxId)
             if media.kind in ['audio', 'video']:
                 # find transceiver
                 transceiver = None
@@ -454,7 +468,7 @@ class RTCPeerConnection(EventEmitter):
                 if transceiver is None:
                     transceiver = self.__createTransceiver(direction='recvonly', kind=media.kind)
                 if transceiver.mid is None:
-                    transceiver.mid = media.rtp.muxId
+                    transceiver._set_mid(media.rtp.muxId)
 
                 # negotiate codecs
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
@@ -697,21 +711,6 @@ class RTCPeerConnection(EventEmitter):
         rtp.rtcp.ssrc = transceiver.sender._ssrc
         rtp.rtcp.mux = True
         return rtp
-
-    def __nextAvailableMid(self):
-        # collect existing MIDs
-        mids = set()
-        for transceiver in self.__transceivers:
-            mids.add(transceiver.mid)
-        if self.__sctp:
-            mids.add(self.__sctp.mid)
-
-        # find an available MID
-        while True:
-            mid = str(self.__midCounter)
-            self.__midCounter += 1
-            if mid not in mids:
-                return mid
 
     def __setSignalingState(self, state):
         self.__signalingState = state

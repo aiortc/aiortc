@@ -570,7 +570,7 @@ class RTCPeerConnectionTest(TestCase):
 
         # add audio tracks immediately
         pc1.addTrack(AudioStreamTrack())
-        pc1.getTransceivers()[0].mid = 'sdparta_0'  # pretend we're Firefox!
+        pc1.getTransceivers()[0]._set_mid('sdparta_0')  # pretend we're Firefox!
 
         pc2.addTrack(AudioStreamTrack())
 

@@ -13,9 +13,9 @@ class RTCRtpTransceiver:
     """
 
     def __init__(self, kind, receiver, sender, direction='sendrecv'):
-        self.mid = None
         self.__direction = direction
         self.__kind = kind
+        self.__mid = None
         self.__receiver = receiver
         self.__sender = sender
         self.__stopped = False
@@ -52,6 +52,10 @@ class RTCRtpTransceiver:
         return self.__kind
 
     @property
+    def mid(self):
+        return self.__mid
+
+    @property
     def receiver(self):
         """
         The :class:`RTCRtpReceiver` that handles receiving and decoding
@@ -78,3 +82,6 @@ class RTCRtpTransceiver:
         await self.__receiver.stop()
         await self.__sender.stop()
         self.__stopped = True
+
+    def _set_mid(self, mid):
+        self.__mid = mid
