@@ -8,7 +8,8 @@ from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
                         RtcpSrPacket, RtpPacket, clamp_packets_lost,
                         pack_header_extensions, pack_packets_lost,
                         pack_remb_fci, unpack_header_extensions,
-                        unpack_packets_lost, unpack_remb_fci)
+                        unpack_packets_lost, unpack_remb_fci, unwrap_rtx,
+                        wrap_rtx)
 
 from .utils import load
 
@@ -381,7 +382,7 @@ class RtpUtilTest(TestCase):
                     uri='urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'),
                 RTCRtpHeaderExtensionParameters(
                     id=13,
-                    uri='urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id'),
+                    uri='urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id'),
             ]))
 
         packet = RtpPacket.parse(data, extensions_map)
@@ -397,3 +398,30 @@ class RtpUtilTest(TestCase):
 
         # TODO: check
         packet.serialize(extensions_map)
+
+    def test_rtx(self):
+        extensions_map = rtp.HeaderExtensionsMap()
+        extensions_map.configure(RTCRtpParameters(
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=9,
+                    uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+            ]))
+
+        data = load('rtp_with_sdes_mid.bin')
+        packet = RtpPacket.parse(data, extensions_map)
+
+        # wrap / unwrap RTX
+        rtx = wrap_rtx(packet, payload_type=112, sequence_number=12345, ssrc=1234)
+        recovered = unwrap_rtx(rtx, payload_type=111, ssrc=4084547440)
+
+        # check roundtrip
+        self.assertEqual(recovered.version, packet.version)
+        self.assertEqual(recovered.marker, packet.marker)
+        self.assertEqual(recovered.payload_type, packet.payload_type)
+        self.assertEqual(recovered.sequence_number, packet.sequence_number)
+        self.assertEqual(recovered.timestamp, packet.timestamp)
+        self.assertEqual(recovered.ssrc, packet.ssrc)
+        self.assertEqual(recovered.csrc, packet.csrc)
+        self.assertEqual(recovered.extensions, packet.extensions)
+        self.assertEqual(recovered.payload, packet.payload)

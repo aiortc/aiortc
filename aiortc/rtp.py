@@ -50,7 +50,7 @@ class HeaderExtensionsMap:
         for ext in parameters.headerExtensions:
             if ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:mid':
                 self.__ids.mid = ext.id
-            elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-sream-id':
+            elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id':
                 self.__ids.repaired_rtp_stream_id = ext.id
             elif ext.uri == 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id':
                 self.__ids.rtp_stream_id = ext.id
@@ -277,6 +277,38 @@ def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, by
 
     extension_value += b'\x00' * padl(len(extension_value))
     return extension_profile, extension_value
+
+
+def unwrap_rtx(rtx, payload_type, ssrc):
+    """
+    Recover initial packet from a retransmission packet.
+    """
+    packet = RtpPacket(
+        payload_type=payload_type,
+        marker=rtx.marker,
+        sequence_number=unpack('!H', rtx.payload[0:2])[0],
+        timestamp=rtx.timestamp,
+        ssrc=ssrc,
+        payload=rtx.payload[2:])
+    packet.csrc = rtx.csrc
+    packet.extensions = rtx.extensions
+    return packet
+
+
+def wrap_rtx(packet, payload_type, sequence_number, ssrc):
+    """
+    Create a retransmission packet from a lost packet.
+    """
+    rtx = RtpPacket(
+        payload_type=payload_type,
+        marker=packet.marker,
+        sequence_number=sequence_number,
+        timestamp=packet.timestamp,
+        ssrc=ssrc,
+        payload=pack('!H', packet.sequence_number) + packet.payload)
+    rtx.csrc = packet.csrc
+    rtx.extensions = packet.extensions
+    return rtx
 
 
 @attr.s
