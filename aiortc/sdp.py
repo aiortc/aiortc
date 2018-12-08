@@ -23,6 +23,16 @@ DTLS_ROLE_SETUP = {
 }
 DTLS_SETUP_ROLE = dict([(v, k) for (k, v) in DTLS_ROLE_SETUP.items()])
 
+FMTP_INT_PARAMETERS = [
+    'apt',
+    'max-fr',
+    'max-fs',
+    'maxplaybackrate',
+    'minptime',
+    'stereo',
+    'useinbandfec',
+]
+
 
 def candidate_from_sdp(sdp):
     bits = sdp.split()
@@ -347,7 +357,10 @@ class SessionDescription:
                         for param in format_desc.split(';'):
                             if '=' in param:
                                 k, v = param.split('=', 1)
-                                codec.parameters[k] = v
+                                if k in FMTP_INT_PARAMETERS:
+                                    codec.parameters[k] = int(v)
+                                else:
+                                    codec.parameters[k] = v
                             else:
                                 codec.parameters[param] = None
                     elif attr == 'rtcp-fb':

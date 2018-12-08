@@ -5,6 +5,10 @@ import os
 from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 
+def lf2crlf(x):
+    return x.replace('\n', '\r\n')
+
+
 class DummyConnection:
     def __init__(self, rx_queue, tx_queue):
         self.closed = False

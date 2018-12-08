@@ -4,9 +4,7 @@ from aiortc.rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
                                      RTCRtpHeaderExtensionParameters)
 from aiortc.sdp import SessionDescription
 
-
-def lf2crlf(x):
-    return x.replace('\n', '\r\n')
+from .utils import lf2crlf
 
 
 class SdpTest(TestCase):
@@ -71,7 +69,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111,
                                   rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')],
-                                  parameters={'minptime': '10', 'useinbandfec': '1'}),
+                                  parameters={'minptime': 10, 'useinbandfec': 1}),
             RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
             RTCRtpCodecParameters(name='ISAC', clockRate=32000, payloadType=104),
             RTCRtpCodecParameters(name='G722', clockRate=8000, payloadType=9),
@@ -214,7 +212,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             RTCRtpCodecParameters(
                 name='opus', clockRate=48000, channels=2, payloadType=109,
                 parameters={
-                    'maxplaybackrate': '48000', 'stereo': '1', 'useinbandfec': '1'
+                    'maxplaybackrate': 48000, 'stereo': 1, 'useinbandfec': 1
                 }),
             RTCRtpCodecParameters(name='G722', clockRate=8000, channels=1, payloadType=9),
             RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
@@ -706,7 +704,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
                 RTCRtcpFeedback(type='nack', parameter='pli'),
             ]),
             RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
-                                  parameters={'apt': '96'}),
+                                  parameters={'apt': 96}),
             RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98, rtcpFeedback=[
                 RTCRtcpFeedback(type='goog-remb'),
                 RTCRtcpFeedback(type='transport-cc'),
@@ -715,10 +713,10 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
                 RTCRtcpFeedback(type='nack', parameter='pli'),
             ]),
             RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99,
-                                  parameters={'apt': '98'}),
+                                  parameters={'apt': 98}),
             RTCRtpCodecParameters(name='red', clockRate=90000, payloadType=100),
             RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
-                                  parameters={'apt': '100'}),
+                                  parameters={'apt': 100}),
             RTCRtpCodecParameters(name='ulpfec', clockRate=90000, payloadType=102)
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
@@ -769,6 +767,53 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
             d.media[0].dtls.fingerprints[0].value,
             '30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E')  # noqa
         self.assertEqual(d.media[0].dtls.role, 'auto')
+
+        self.assertEqual(str(d), lf2crlf("""v=0
+o=- 5195484278799753993 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE video
+m=video 34955 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102
+c=IN IP4 10.101.2.67
+a=sendrecv
+a=extmap:2 urn:ietf:params:rtp-hdrext:toffset
+a=extmap:3 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:4 urn:3gpp:video-orientation
+a=extmap:5 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01
+a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+a=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type
+a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/video-timing
+a=mid:video
+a=rtcp:9 IN IP4 0.0.0.0
+a=rtcp-mux
+a=ssrc:1845476211 cname:9iW3jspLCZJ5WjOZ
+a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 goog-remb
+a=rtcp-fb:96 transport-cc
+a=rtcp-fb:96 ccm fir
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtpmap:98 VP9/90000
+a=rtcp-fb:98 goog-remb
+a=rtcp-fb:98 transport-cc
+a=rtcp-fb:98 ccm fir
+a=rtcp-fb:98 nack
+a=rtcp-fb:98 nack pli
+a=rtpmap:99 rtx/90000
+a=fmtp:99 apt=98
+a=rtpmap:100 red/90000
+a=rtpmap:101 rtx/90000
+a=fmtp:101 apt=100
+a=rtpmap:102 ulpfec/90000
+a=candidate:638323114 1 udp 2122260223 10.101.2.67 34955 typ host
+a=candidate:1754264922 1 tcp 1518280447 10.101.2.67 9 typ host tcptype active
+a=ice-ufrag:9KhP
+a=ice-pwd:mlPea2xBCmFmNLfmy/jlqw1D
+a=fingerprint:sha-256 30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E
+a=setup:actpass
+"""))  # noqa
 
     def test_video_firefox(self):
         d = SessionDescription.parse(lf2crlf("""v=0
@@ -833,13 +878,13 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='ccm', parameter='fir'),
                 RTCRtcpFeedback(type='goog-remb'),
-            ], parameters={'max-fs': '12288', 'max-fr': '60'}),
+            ], parameters={'max-fs': 12288, 'max-fr': 60}),
             RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121, rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='ccm', parameter='fir'),
                 RTCRtcpFeedback(type='goog-remb'),
-            ], parameters={'max-fs': '12288', 'max-fr': '60'}),
+            ], parameters={'max-fs': 12288, 'max-fr': 60}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(
