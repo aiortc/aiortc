@@ -40,7 +40,8 @@ MEDIA_CODECS = {
             clockRate=90000,
             rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack pli'),
+                RTCRtcpFeedback(type='nack', parameter='pli'),
+                RTCRtcpFeedback(type='goog-remb'),
             ],
             parameters=OrderedDict({
                 'packetization-mode': '1',
