@@ -12,7 +12,7 @@ from .rtcrtpparameters import RTCRtpSendParameters
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
-                  RtpPacket, unpack_remb_fci)
+                  RtpPacket, unpack_remb_fci, wrap_rtx)
 from .stats import (RTCOutboundRtpStreamStats, RTCRemoteInboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import random16, random32, uint16_add, uint32_add
@@ -45,6 +45,7 @@ class RTCRtpSender:
             self.__track = None
         self.__cname = None
         self._ssrc = random32()
+        self._rtx_ssrc = random32()
         # FIXME: this should come from the track
         self._stream_id = str(uuid.uuid4())
         self._track_id = str(uuid.uuid4())
@@ -58,6 +59,8 @@ class RTCRtpSender:
         self.__rtp_history = {}
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_task = None
+        self.__rtx_payload_type = None
+        self.__rtx_sequence_number = random16()
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
@@ -135,6 +138,13 @@ class RTCRtpSender:
             self.__transport._register_rtp_sender(self, parameters)
             self.__rtp_header_extensions_map.configure(parameters)
 
+            # make note of RTX payload type
+            for codec in parameters.codecs:
+                if (codec.name == 'rtx' and
+                   codec.parameters['apt'] == parameters.codecs[0].payloadType):
+                    self.__rtx_payload_type = codec.payloadType
+                    break
+
             self.__rtp_task = asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
@@ -209,6 +219,14 @@ class RTCRtpSender:
         """
         packet = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
         if packet and packet.sequence_number == sequence_number:
+            if self.__rtx_payload_type is not None:
+                packet = wrap_rtx(packet,
+                                  payload_type=self.__rtx_payload_type,
+                                  sequence_number=self.__rtx_sequence_number,
+                                  ssrc=self._rtx_ssrc)
+                self.__rtx_sequence_number = uint16_add(self.__rtx_sequence_number, 1)
+
+            self.__log_debug('> %s', packet)
             packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
             await self.transport._send_rtp(packet_bytes)
 

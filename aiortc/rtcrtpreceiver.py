@@ -14,8 +14,8 @@ from .rate import RemoteBitrateEstimator
 from .rtcrtpparameters import RTCRtpReceiveParameters
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
-                  pack_remb_fci)
+                  RtcpRtpfbPacket, RtcpSrPacket, RtpPacket, clamp_packets_lost,
+                  pack_remb_fci, unwrap_rtx)
 from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
                     RTCStatsReport)
 from .utils import uint16_add, uint16_gt
@@ -206,6 +206,7 @@ class RTCRtpReceiver:
         self._track = None
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_task = None
+        self.__rtx_ssrc = {}
         self.__sender = None
         self.__started = False
         self.__stats = RTCStatsReport()
@@ -261,6 +262,9 @@ class RTCRtpReceiver:
         if not self.__started:
             for codec in parameters.codecs:
                 self.__codecs[codec.payloadType] = codec
+            for encoding in parameters.encodings:
+                if encoding.rtx:
+                    self.__rtx_ssrc[encoding.rtx.ssrc] = encoding.ssrc
 
             # start decoder thread
             self.__decoder_thread = threading.Thread(
@@ -320,7 +324,10 @@ class RTCRtpReceiver:
         if self.__sender:
             await self.__sender._handle_rtcp_packet(packet)
 
-    async def _handle_rtp_packet(self, packet, arrival_time_ms):
+    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int):
+        """
+        Handle an incoming RTP packet.
+        """
         self.__log_debug('< %s', packet)
 
         # feed bitrate estimator
@@ -339,31 +346,46 @@ class RTCRtpReceiver:
                     rtcp_packet.fci = pack_remb_fci(*remb)
                     await self._send_rtcp(rtcp_packet)
 
-        if packet.payload_type in self.__codecs:
-            codec = self.__codecs[packet.payload_type]
+        # check the codec is known
+        codec = self.__codecs.get(packet.payload_type)
+        if codec is None:
+            self.__log_debug('x RTP packet with unknown payload type %d', packet.payload_type)
+            return
 
-            # feed RTCP statistics
-            if packet.ssrc not in self.__remote_streams:
-                self.__remote_streams[packet.ssrc] = StreamStatistics(codec.clockRate)
-            self.__remote_streams[packet.ssrc].add(packet)
+        # feed RTCP statistics
+        if packet.ssrc not in self.__remote_streams:
+            self.__remote_streams[packet.ssrc] = StreamStatistics(codec.clockRate)
+        self.__remote_streams[packet.ssrc].add(packet)
 
-            # parse codec-specific information
-            if packet.payload:
-                packet._data = depayload(codec, packet.payload)
-            else:
-                packet._data = b''
+        # unwrap retransmission packet
+        if codec.name == 'rtx':
+            original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
+            if original_ssrc is None:
+                self.__log_debug('x RTX packet from unknown SSRC %d', packet.ssrc)
+                return
 
-            # send NACKs for any missing any packets
-            if self.__nack_generator is not None:
-                await self.__nack_generator.add(packet)
+            codec = self.__codecs[codec.parameters['apt']]
+            packet = unwrap_rtx(packet,
+                                payload_type=codec.payloadType,
+                                ssrc=original_ssrc)
 
-            # try to re-assemble encoded frame
-            encoded_frame = self.__jitter_buffer.add(packet)
+        # parse codec-specific information
+        if packet.payload:
+            packet._data = depayload(codec, packet.payload)
+        else:
+            packet._data = b''
 
-            # if we have a complete encoded frame, decode it
-            if encoded_frame is not None and self.__decoder_thread:
-                encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
-                self.__decoder_queue.put((codec, encoded_frame))
+        # send NACKs for any missing any packets
+        if self.__nack_generator is not None:
+            await self.__nack_generator.add(packet)
+
+        # try to re-assemble encoded frame
+        encoded_frame = self.__jitter_buffer.add(packet)
+
+        # if we have a complete encoded frame, decode it
+        if encoded_frame is not None and self.__decoder_thread:
+            encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
+            self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')

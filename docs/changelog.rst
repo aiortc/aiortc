@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.14
+------
+
+*under development*
+
+Media
+.....
+
+  * Add support for RTX retransmission packets.
+
 0.9.13
 ------
 

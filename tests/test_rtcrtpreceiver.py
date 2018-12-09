@@ -7,7 +7,9 @@ from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
-                                     RTCRtpReceiveParameters)
+                                     RTCRtpEncodingParameters,
+                                     RTCRtpReceiveParameters,
+                                     RTCRtpRtxParameters)
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
                                    RTCRtpReceiver, StreamStatistics,
                                    TimestampMapper)
@@ -275,6 +277,64 @@ class RTCRtpReceiverTest(TestCase):
 
         # receive RTP with empty payload
         packet = RtpPacket(payload_type=100)
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+
+        # shutdown
+        run(receiver.stop())
+
+    def test_rtp_unknown_payload_type(self):
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
+
+        receiver._track = RemoteStreamTrack(kind='video')
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+        ])))
+
+        # receive RTP with unknown payload type
+        packet = RtpPacket(payload_type=123)
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+
+        # shutdown
+        run(receiver.stop())
+
+    def test_rtp_rtx(self):
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
+
+        receiver._track = RemoteStreamTrack(kind='video')
+        run(receiver.receive(RTCRtpReceiveParameters(
+            codecs=[
+                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                                      parameters={'apt': 100}),
+            ],
+            encodings=[
+                RTCRtpEncodingParameters(ssrc=1234, payloadType=100,
+                                         rtx=RTCRtpRtxParameters(ssrc=2345))
+            ])))
+
+        # receive RTX with unknown SSRC
+        packet = RtpPacket(payload_type=101, ssrc=2345, payload=b'\x00\x00')
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+
+        # shutdown
+        run(receiver.stop())
+
+    def test_rtp_rtx_unknown_ssrc(self):
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
+
+        receiver._track = RemoteStreamTrack(kind='video')
+        run(receiver.receive(RTCRtpReceiveParameters(
+            codecs=[
+                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                                      parameters={'apt': 100}),
+            ])))
+
+        # receive RTX with unknown SSRC
+        packet = RtpPacket(payload_type=101, ssrc=1234)
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # shutdown

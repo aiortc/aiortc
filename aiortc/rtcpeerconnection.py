@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import uuid
+from collections import OrderedDict
 
 from pyee import EventEmitter
 
@@ -12,9 +13,10 @@ from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
-from .rtcrtpparameters import (RTCRtpDecodingParameters,
+from .rtcrtpparameters import (RTCRtpCodecParameters, RTCRtpDecodingParameters,
                                RTCRtpHeaderExtensionParameters,
-                               RTCRtpParameters, RTCRtpReceiveParameters)
+                               RTCRtpParameters, RTCRtpReceiveParameters,
+                               RTCRtpRtxParameters)
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -45,7 +47,17 @@ MEDIA_KINDS = ['audio', 'video']
 
 def find_common_codecs(local_codecs, remote_codecs):
     common = []
+    common_base = {}
     for c in remote_codecs:
+        # for RTX, check we accepted the base codec
+        if c.name == 'rtx':
+            if c.parameters.get('apt') in common_base:
+                base = common_base[c.parameters['apt']]
+                if c.clockRate == base.clockRate:
+                    common.append(copy.deepcopy(c))
+            continue
+
+        # handle other codecs
         for codec in local_codecs:
             if codec.name == c.name and codec.clockRate == c.clockRate:
                 if codec.name == 'H264':
@@ -62,6 +74,7 @@ def find_common_codecs(local_codecs, remote_codecs):
                     codec.payloadType = c.payloadType
                 codec.rtcpFeedback = list(filter(lambda x: x in c.rtcpFeedback, codec.rtcpFeedback))
                 common.append(codec)
+                common_base[codec.payloadType] = codec
                 break
     return common
 
@@ -356,6 +369,18 @@ class RTCPeerConnection(EventEmitter):
                     codec.payloadType = dynamic_pt
                     dynamic_pt += 1
                 codecs.append(codec)
+
+                # for video, offer the corresponding RTX
+                if transceiver.kind == 'video':
+                    codecs.append(RTCRtpCodecParameters(
+                        name='rtx',
+                        clockRate=codec.clockRate,
+                        payloadType=dynamic_pt,
+                        parameters={
+                            'apt': codec.payloadType
+                        }
+                    ))
+                    dynamic_pt += 1
             transceiver._codecs = codecs
             transceiver._headerExtensions = HEADER_EXTENSIONS[transceiver.kind][:]
 
@@ -491,11 +516,19 @@ class RTCPeerConnection(EventEmitter):
                     headerExtensions=transceiver._headerExtensions,
                     muxId=media.rtp.muxId,
                     rtcp=media.rtp.rtcp)
+                encodings = OrderedDict()
                 for codec in transceiver._codecs:
-                    receiveParameters.encodings.append(RTCRtpDecodingParameters(
+                    if codec.name == 'rtx':
+                        if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
+                            encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
+                                ssrc=media.ssrc[1].ssrc)
+                        continue
+
+                    encodings[codec.payloadType] = RTCRtpDecodingParameters(
                         ssrc=media.ssrc[0].ssrc,
                         payloadType=codec.payloadType
-                    ))
+                    )
+                receiveParameters.encodings = list(encodings.values())
                 self.__remoteRtp[transceiver] = receiveParameters
 
                 # configure direction
@@ -680,6 +713,24 @@ class RTCPeerConnection(EventEmitter):
                     mslabel=transceiver.sender._stream_id,
                     label=transceiver.sender._track_id),
             ]
+
+            # if RTX is enabled, add corresponding SSRC
+            if next((x for x in media.rtp.codecs if x.name == 'rtx'), None):
+                media.ssrc.append(sdp.SsrcDescription(
+                    ssrc=transceiver.sender._rtx_ssrc,
+                    cname=self.__cname,
+                    msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
+                    mslabel=transceiver.sender._stream_id,
+                    label=transceiver.sender._track_id))
+                media.ssrc_group = [
+                    sdp.GroupDescription(
+                        semantic='FID',
+                        items=[
+                            transceiver.sender._ssrc,
+                            transceiver.sender._rtx_ssrc,
+                        ])
+                ]
+
             add_transport_description(media, iceTransport, dtlsTransport)
 
             description.media.append(media)

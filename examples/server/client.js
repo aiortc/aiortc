@@ -1,4 +1,6 @@
-var pc = new RTCPeerConnection();
+var pc = new RTCPeerConnection({
+    sdpSemantics: 'unified-plan'
+});
 
 // get DOM elements
 var dataChannelLog = document.getElementById('data-channel'),

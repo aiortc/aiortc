@@ -1,4 +1,5 @@
 import asyncio
+from struct import pack
 from unittest import TestCase
 
 from aiortc.codecs import PCMU_CODEC
@@ -155,6 +156,7 @@ class RTCRtpSenderTest(TestCase):
         self.local_transport._send_rtp = mock_send_rtp
 
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
+        sender._ssrc = 1234
         self.assertEqual(sender.kind, 'video')
 
         run(sender.send(RTCRtpParameters(codecs=[
@@ -170,12 +172,58 @@ class RTCRtpSenderTest(TestCase):
         run(sender.stop())
 
         # check packet was retransmitted
-        found_rtx = False
+        found_rtx = None
         while not queue.empty():
             queue_packet = queue.get_nowait()
             if queue_packet.sequence_number == packet.sequence_number:
-                found_rtx = True
-        self.assertTrue(found_rtx)
+                found_rtx = queue_packet
+                break
+        self.assertIsNotNone(found_rtx)
+        self.assertEqual(found_rtx.payload_type, 100)
+        self.assertEqual(found_rtx.ssrc, 1234)
+
+    def test_retransmit_with_rtx(self):
+        """
+        Ask for an RTP packet retransmission.
+        """
+        queue = asyncio.Queue()
+
+        async def mock_send_rtp(data):
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+        self.local_transport._send_rtp = mock_send_rtp
+
+        sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
+        sender._ssrc = 1234
+        sender._rtx_ssrc = 2345
+        self.assertEqual(sender.kind, 'video')
+
+        run(sender.send(RTCRtpParameters(
+            codecs=[
+                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
+                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                                      parameters={'apt': 100})
+            ])))
+
+        # wait for one packet to be transmitted, and ask to retransmit
+        packet = run(queue.get())
+        run(sender._retransmit(packet.sequence_number))
+
+        # wait for packet to be retransmitted, then shutdown
+        run(asyncio.sleep(0.5))
+        run(sender.stop())
+
+        # check packet was retransmitted
+        found_rtx = None
+        while not queue.empty():
+            queue_packet = queue.get_nowait()
+            if queue_packet.payload_type == 101:
+                found_rtx = queue_packet
+                break
+        self.assertIsNotNone(found_rtx)
+        self.assertEqual(found_rtx.payload_type, 101)
+        self.assertEqual(found_rtx.ssrc, 2345)
+        self.assertEqual(found_rtx.payload[0:2], pack('!H', packet.sequence_number))
 
     def test_stop(self):
         sender = RTCRtpSender(AudioStreamTrack(), self.local_transport)

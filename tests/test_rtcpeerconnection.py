@@ -121,6 +121,25 @@ class RTCRtpCodecParametersTest(TestCase):
             RTCRtcpFeedback(type='nack'),
         ])
 
+    def test_common_rtx(self):
+        local_codecs = [
+            RTCRtpCodecParameters(name='VP8', clockRate=90000),
+        ]
+        remote_codecs = [
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+                                  parameters={'apt': 96}),
+            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99,
+                                  parameters={'apt': 98}),
+        ]
+        common = find_common_codecs(local_codecs, remote_codecs)
+        self.assertEqual(common, [
+            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
+            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+                                  parameters={'apt': 96}),
+        ])
+
 
 class RTCPeerConnectionTest(TestCase):
     def assertBundled(self, pc):
@@ -1543,16 +1562,22 @@ a=rtpmap:8 PCMA/8000
 a=rtcp-fb:96 nack
 a=rtcp-fb:96 nack pli
 a=rtcp-fb:96 goog-remb
-a=rtpmap:97 H264/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=fmtp:97 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
 a=rtpmap:98 H264/90000
 a=rtcp-fb:98 nack
 a=rtcp-fb:98 nack pli
 a=rtcp-fb:98 goog-remb
-a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:99 rtx/90000
+a=fmtp:99 apt=98
+a=rtpmap:100 H264/90000
+a=rtcp-fb:100 nack
+a=rtcp-fb:100 nack pli
+a=rtcp-fb:100 goog-remb
+a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:101 rtx/90000
+a=fmtp:101 apt=100
 """) in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
@@ -1584,16 +1609,22 @@ a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
 a=rtcp-fb:96 nack
 a=rtcp-fb:96 nack pli
 a=rtcp-fb:96 goog-remb
-a=rtpmap:97 H264/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=fmtp:97 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
 a=rtpmap:98 H264/90000
 a=rtcp-fb:98 nack
 a=rtcp-fb:98 nack pli
 a=rtcp-fb:98 goog-remb
-a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:99 rtx/90000
+a=fmtp:99 apt=98
+a=rtpmap:100 H264/90000
+a=rtcp-fb:100 nack
+a=rtcp-fb:100 nack pli
+a=rtcp-fb:100 goog-remb
+a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:101 rtx/90000
+a=fmtp:101 apt=100
 """) in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
