@@ -5,8 +5,10 @@ from unittest.mock import patch
 
 from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsFingerprint, RTCDtlsParameters,
-                                     RTCDtlsTransport)
-from aiortc.rtcrtpparameters import RTCRtcpParameters, RTCRtpParameters
+                                     RTCDtlsTransport, RtpRouter)
+from aiortc.rtcrtpparameters import (RTCRtcpParameters, RTCRtpCodecParameters,
+                                     RTCRtpParameters)
+from aiortc.rtp import RtpPacket
 
 from .utils import dummy_ice_transport_pair, load, run
 
@@ -127,12 +129,14 @@ class RTCDtlsTransportTest(TestCase):
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
         session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
             rtcp=RTCRtcpParameters(ssrc=1831097322)))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
         session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
             rtcp=RTCRtcpParameters(ssrc=4028317929)))
 
         run(asyncio.gather(
@@ -176,12 +180,14 @@ class RTCDtlsTransportTest(TestCase):
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
         session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
             rtcp=RTCRtcpParameters(ssrc=1831097322)))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
         session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
             rtcp=RTCRtcpParameters(ssrc=4028317929)))
 
         run(asyncio.gather(
@@ -314,3 +320,26 @@ class RTCDtlsTransportTest(TestCase):
 
         run(session1.stop())
         run(session2.stop())
+
+
+class RtpRouterTest(TestCase):
+    def test_route_rtp(self):
+        receiver1 = object()
+        receiver2 = object()
+
+        router = RtpRouter()
+        router.register(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])
+        router.register(receiver2, ssrcs=[3456, 4567], payload_types=[98, 99])
+
+        # known SSRC and payload type
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), receiver1)
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=2345, payload_type=97)), receiver1)
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=3456, payload_type=98)), receiver2)
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=4567, payload_type=99)), receiver2)
+
+        # unknown SSRC, known payload type
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1)
+        self.assertEqual(router.ssrc_table[5678], receiver1)
+
+        # unknown SSRC and payload type
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=6789, payload_type=100)), None)

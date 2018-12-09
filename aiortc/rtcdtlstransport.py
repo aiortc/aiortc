@@ -192,25 +192,60 @@ class RTCDtlsParameters:
 
 
 class RtpRouter:
+    """
+    Router to associate RTP/RTCP packets with streams.
+
+    https://tools.ietf.org/html/draft-ietf-mmusic-sdp-bundle-negotiation-53
+    """
     def __init__(self):
         self.receivers = set()
         self.mid_table = {}
         self.ssrc_table = {}
+        self.payload_type_table = {}
 
-    def register(self, receiver, parameters):
+    def register(self, receiver, ssrcs, payload_types, mid=None):
         self.receivers.add(receiver)
-        if parameters.muxId:
-            self.mid_table[parameters.muxId] = receiver
-        if parameters.rtcp.ssrc:
-            self.ssrc_table[parameters.rtcp.ssrc] = receiver
+        if mid is not None:
+            self.mid_table[mid] = receiver
+        for ssrc in ssrcs:
+            self.ssrc_table[ssrc] = receiver
+        for payload_type in payload_types:
+            self.payload_type_table[payload_type] = receiver
 
-    def route(self, ssrc, mid=None):
+    def route_rtcp(self, packet):
+        ssrc = None
+        if hasattr(packet, 'ssrc'):
+            # SR and RR
+            ssrc = packet.ssrc
+        elif getattr(packet, 'chunks', None):
+            # SDES
+            ssrc = packet.chunks[0].ssrc
+        elif getattr(packet, 'sources', None):
+            # BYE
+            ssrc = packet.sources[0]
         return self.ssrc_table.get(ssrc)
+
+    def route_rtp(self, packet):
+        ssrc_receiver = self.ssrc_table.get(packet.ssrc)
+        pt_receiver = self.payload_type_table.get(packet.payload_type)
+
+        # the SSRC and payload type are known and match
+        if ssrc_receiver is not None and ssrc_receiver == pt_receiver:
+            return ssrc_receiver
+
+        # the SSRC is unknown but the payload type matches, update the SSRC table
+        if ssrc_receiver is None and pt_receiver is not None:
+            self.ssrc_table[packet.ssrc] = pt_receiver
+            return pt_receiver
+
+        # discard the packet
+        return None
 
     def unregister(self, receiver):
         self.receivers.discard(receiver)
         self.__discard(self.mid_table, receiver)
         self.__discard(self.ssrc_table, receiver)
+        self.__discard(self.payload_type_table, receiver)
 
     def __discard(self, d, value):
         for k, v in list(d.items()):
@@ -417,16 +452,8 @@ class RTCDtlsTransport(EventEmitter):
     async def _handle_rtcp_data(self, data):
         packets = RtcpPacket.parse(data)
         for packet in packets:
-            receiver = None
-            if hasattr(packet, 'ssrc'):
-                # SR and RR
-                receiver = self._rtp_router.route(packet.ssrc)
-            elif getattr(packet, 'chunks', None):
-                # SDES
-                receiver = self._rtp_router.route(packet.chunks[0].ssrc)
-            elif getattr(packet, 'sources', None):
-                # BYE
-                receiver = self._rtp_router.route(packet.sources[0])
+            # route RTCP packet
+            receiver = self._rtp_router.route_rtcp(packet)
             if receiver is not None:
                 await receiver._handle_rtcp_packet(packet)
 
@@ -434,7 +461,7 @@ class RTCDtlsTransport(EventEmitter):
         packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
 
         # route RTP packet
-        receiver = self._rtp_router.route(packet.ssrc, mid=packet.extensions.mid)
+        receiver = self._rtp_router.route_rtp(packet)
         if receiver is not None:
             await receiver._handle_rtp_packet(packet, arrival_time_ms=arrival_time_ms)
 
@@ -489,7 +516,11 @@ class RTCDtlsTransport(EventEmitter):
 
     def _register_rtp_receiver(self, receiver, parameters):
         self._rtp_header_extensions_map.configure(parameters)
-        self._rtp_router.register(receiver, parameters)
+        self._rtp_router.register(receiver,
+                                  # FIXME: not right when using RTX
+                                  ssrcs=[parameters.rtcp.ssrc],
+                                  payload_types=[codec.payloadType for codec in parameters.codecs],
+                                  mid=parameters.muxId)
 
     def _register_rtp_sender(self, sender, parameters):
         self._rtp_header_extensions_map.configure(parameters)
