@@ -12,7 +12,7 @@ from aiortc.rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
 from aiortc.sdp import SessionDescription
 from aiortc.stats import RTCStatsReport
 
-from .utils import run
+from .utils import lf2crlf, run
 
 LONG_DATA = b'\xff' * 2000
 STRIP_CANDIDATES_RE = re.compile('^a=(candidate:.*|end-of-candidates)\r\n', re.M)
@@ -69,13 +69,10 @@ class RTCRtpCodecParametersTest(TestCase):
             RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
-        self.assertEqual(len(common), 2)
-        self.assertEqual(common[0].clockRate, 8000)
-        self.assertEqual(common[0].name, 'PCMA')
-        self.assertEqual(common[0].payloadType, 8)
-        self.assertEqual(common[1].clockRate, 8000)
-        self.assertEqual(common[1].name, 'PCMU')
-        self.assertEqual(common[1].payloadType, 0)
+        self.assertEqual(common, [
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
+        ])
 
     def test_common_dynamic(self):
         local_codecs = [
@@ -88,13 +85,10 @@ class RTCRtpCodecParametersTest(TestCase):
             RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
-        self.assertEqual(len(common), 2)
-        self.assertEqual(common[0].clockRate, 48000)
-        self.assertEqual(common[0].name, 'opus')
-        self.assertEqual(common[0].payloadType, 100)
-        self.assertEqual(common[1].clockRate, 8000)
-        self.assertEqual(common[1].name, 'PCMA')
-        self.assertEqual(common[1].payloadType, 8)
+        self.assertEqual(common, [
+            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=100),
+            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
+        ])
 
     def test_common_feedback(self):
         local_codecs = [
@@ -370,6 +364,10 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:96 opus/48000/2
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+""") in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
@@ -397,6 +395,10 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:96 opus/48000/2
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+""") in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
@@ -1537,6 +1539,21 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=video ' in pc1.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtcp-fb:96 goog-remb
+a=rtpmap:97 H264/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=fmtp:97 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:98 H264/90000
+a=rtcp-fb:98 nack
+a=rtcp-fb:98 nack pli
+a=rtcp-fb:98 goog-remb
+a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+""") in pc1.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
@@ -1563,6 +1580,21 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:96 VP8/90000
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtcp-fb:96 goog-remb
+a=rtpmap:97 H264/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=fmtp:97 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:98 H264/90000
+a=rtcp-fb:98 nack
+a=rtcp-fb:98 nack pli
+a=rtcp-fb:98 goog-remb
+a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+""") in pc2.localDescription.sdp)
         self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
         self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
