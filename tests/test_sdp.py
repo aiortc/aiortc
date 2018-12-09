@@ -91,11 +91,11 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
                                             uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'audio')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, '/vC4ULAr8vHNjXmq')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1944796561)
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
         self.assertEqual(d.media[0].ssrc, [
             SsrcDescription(
                 ssrc=1944796561,
@@ -248,11 +248,11 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             RTCRtpHeaderExtensionParameters(id=2, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, '{ed463ac5-dabf-44d4-8b9f-e14318427b2b}')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 882128807)
         self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
         self.assertEqual(d.media[0].rtcp_port, 38612)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
         self.assertEqual(d.media[0].ssrc, [
             SsrcDescription(ssrc=882128807, cname='{ed463ac5-dabf-44d4-8b9f-e14318427b2b}'),
         ])
@@ -364,11 +364,11 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, '')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, 'rbaag6w9fGmRXQm6')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 2690029308)
         self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
         self.assertEqual(d.media[0].rtcp_port, 16628)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
         self.assertEqual(d.media[0].ssrc, [
             SsrcDescription(
                 ssrc=2690029308,
@@ -465,11 +465,20 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, '')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, 'rbaag6w9fGmRXQm6')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 2690029308)
         self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
         self.assertEqual(d.media[0].rtcp_port, 16628)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
+        self.assertEqual(d.media[0].ssrc, [
+            SsrcDescription(
+                ssrc=2690029308,
+                cname='rbaag6w9fGmRXQm6',
+                msid='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0',
+                mslabel='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys',
+                label='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0'),
+        ])
+        self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
         self.assertEqual(d.media[0].fmt, [8, 101])
@@ -810,11 +819,11 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
                 uri='http://www.webrtc.org/experiments/rtp-hdrext/video-timing')
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'video')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, '9iW3jspLCZJ5WjOZ')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1845476211)
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
         self.assertEqual(d.media[0].ssrc, [
             SsrcDescription(
                 ssrc=1845476211,
@@ -995,11 +1004,9 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
                 uri='urn:ietf:params:rtp-hdrext:toffset'),
         ])
         self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
-        self.assertEqual(d.media[0].rtp.rtcp.cname, '{6f52d07e-17ef-42c5-932b-3b57c64fe049}')
-        self.assertEqual(d.media[0].rtp.rtcp.mux, True)
-        self.assertEqual(d.media[0].rtp.rtcp.ssrc, 3408404552)
         self.assertEqual(d.media[0].rtcp_host, '192.168.99.7')
         self.assertEqual(d.media[0].rtcp_port, 52914)
+        self.assertEqual(d.media[0].rtcp_mux, True)
 
         # formats
         self.assertEqual(d.media[0].fmt, [120, 121])

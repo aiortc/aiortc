@@ -657,6 +657,7 @@ class RTCPeerConnection(EventEmitter):
             media.rtp = self.__localRtp(transceiver)
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
+            media.rtcp_mux = True
             media.ssrc = [
                 sdp.SsrcDescription(
                     ssrc=transceiver.sender._ssrc,

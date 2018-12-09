@@ -151,12 +151,15 @@ class MediaDescription:
         # rtcp
         self.rtcp_port = None
         self.rtcp_host = None
+        self.rtcp_mux = False
+
+        # ssrc
+        self.ssrc = []
+        self.ssrc_group = []
 
         # formats
         self.fmt = fmt
         self.rtp = RTCRtpParameters()
-        self.ssrc = []
-        self.ssrc_group = []
 
         # SCTP
         self.sctpCapabilities = None
@@ -193,7 +196,7 @@ class MediaDescription:
 
         if self.rtcp_port is not None and self.rtcp_host is not None:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
-            if self.rtp.rtcp.mux:
+            if self.rtcp_mux:
                 lines.append('a=rtcp-mux')
 
         for group in self.ssrc_group:
@@ -364,7 +367,7 @@ class SessionDescription:
                         current_media.rtcp_port = int(port)
                         current_media.rtcp_host = ipaddress_from_sdp(rest)
                     elif attr == 'rtcp-mux':
-                        current_media.rtp.rtcp.mux = True
+                        current_media.rtcp_mux = True
                     elif attr == 'setup':
                         current_media.dtls.role = DTLS_SETUP_ROLE[value]
                     elif attr in DIRECTIONS:
@@ -398,12 +401,6 @@ class SessionDescription:
                             current_media.ssrc.append(ssrc_info)
                         if ssrc_attr in SSRC_INFO_ATTRS:
                             setattr(ssrc_info, ssrc_attr, ssrc_value)
-
-                        # NOTE: Chrome send us multiple SSRC, which we cannot store in
-                        # RTCRtcpParameters, so keep the first rather than the last.
-                        if ssrc_attr == 'cname' and not current_media.rtp.rtcp.cname:
-                            current_media.rtp.rtcp.cname = ssrc_value
-                            current_media.rtp.rtcp.ssrc = ssrc
 
             if current_media.dtls.role is None:
                 current_media.dtls = None
