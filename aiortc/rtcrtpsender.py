@@ -202,9 +202,10 @@ class RTCRtpSender:
         """
         Retransmit an RTP packet which was reported as lost.
         """
-        cache = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
-        if cache and cache[0] == sequence_number:
-            await self.transport._send_rtp(cache[1])
+        packet = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
+        if packet and packet.sequence_number == sequence_number:
+            packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
+            await self.transport._send_rtp(packet_bytes)
 
     def _send_keyframe(self):
         """
@@ -241,9 +242,8 @@ class RTCRtpSender:
 
                     # send packet
                     self.__log_debug('> %s', packet)
+                    self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = packet
                     packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
-                    self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
-                        packet.sequence_number, packet_bytes)
                     await self.transport._send_rtp(packet_bytes)
 
                     self.__ntp_timestamp = clock.current_ntp_time()
