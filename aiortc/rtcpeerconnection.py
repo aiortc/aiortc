@@ -522,9 +522,10 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteIce[self.__sctp] = media.ice
 
         # remove bundled transports
-        if parsedRemoteDescription.bundle:
+        bundle = next((x for x in parsedRemoteDescription.group if x.semantic == 'BUNDLE'), None)
+        if bundle and bundle.items:
             # find main media stream
-            masterMid = parsedRemoteDescription.bundle[0]
+            masterMid = bundle.items[0]
             masterTransport = None
             for transceiver in self.__transceivers:
                 if transceiver.mid == masterMid:
@@ -535,7 +536,7 @@ class RTCPeerConnection(EventEmitter):
 
             # replace transport for bundled media
             oldTransports = set()
-            slaveMids = parsedRemoteDescription.bundle[1:]
+            slaveMids = bundle.items[1:]
             for transceiver in self.__transceivers:
                 if transceiver.mid in slaveMids and not transceiver._bundled:
                     oldTransports.add(transceiver._transport)
@@ -632,7 +633,11 @@ class RTCPeerConnection(EventEmitter):
         ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
         description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
+        description.msid_semantic.append(sdp.GroupDescription(
+            semantic='WMS',
+            items=['*']))
 
+        bundle = sdp.GroupDescription(semantic='BUNDLE', items=[])
         for transceiver in self.__transceivers:
             dtlsTransport = transceiver._transport
             iceTransport = dtlsTransport.transport
@@ -652,10 +657,18 @@ class RTCPeerConnection(EventEmitter):
             media.rtp = self.__localRtp(transceiver)
             media.rtcp_host = '0.0.0.0'
             media.rtcp_port = 9
+            media.ssrc = [
+                sdp.SsrcDescription(
+                    ssrc=transceiver.sender._ssrc,
+                    cname=self.__cname,
+                    msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
+                    mslabel=transceiver.sender._stream_id,
+                    label=transceiver.sender._track_id),
+            ]
             add_transport_description(media, iceTransport, dtlsTransport)
 
             description.media.append(media)
-            description.bundle.append(media.rtp.muxId)
+            bundle.items.append(media.rtp.muxId)
 
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
@@ -684,8 +697,9 @@ class RTCPeerConnection(EventEmitter):
             add_transport_description(media, iceTransport, dtlsTransport)
 
             description.media.append(media)
-            description.bundle.append(media.rtp.muxId)
+            bundle.items.append(media.rtp.muxId)
 
+        description.group.append(bundle)
         return str(description)
 
     def __createTransceiver(self, direction, kind, sender_track=None):

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import time
+import uuid
 
 from . import clock, rtp
 from .codecs import get_encoder
@@ -43,6 +44,9 @@ class RTCRtpSender:
             self.__track = None
         self.__cname = None
         self._ssrc = random32()
+        # FIXME: this should come from the track
+        self._stream_id = str(uuid.uuid4())
+        self._track_id = str(uuid.uuid4())
         self.__encoder = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()

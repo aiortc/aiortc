@@ -1,6 +1,8 @@
 import ipaddress
 import re
 
+import attr
+
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
@@ -108,6 +110,35 @@ def parse_attr(line):
         return line[2:], None
 
 
+def parse_group(dest, value, type=str):
+    bits = value.split()
+    if bits:
+        dest.append(GroupDescription(
+            semantic=bits[0],
+            items=list(map(type, bits[1:]))))
+
+
+@attr.s
+class GroupDescription:
+    semantic = attr.ib()
+    items = attr.ib()
+
+    def __str__(self):
+        return '%s %s' % (self.semantic, ' '.join(map(str, self.items)))
+
+
+@attr.s
+class SsrcDescription:
+    ssrc = attr.ib()
+    cname = attr.ib(default=None)
+    msid = attr.ib(default=None)
+    mslabel = attr.ib(default=None)
+    label = attr.ib(default=None)
+
+
+SSRC_INFO_ATTRS = ['cname', 'msid', 'mslabel', 'label']
+
+
 class MediaDescription:
     def __init__(self, kind, port, profile, fmt):
         # rtp
@@ -124,6 +155,8 @@ class MediaDescription:
         # formats
         self.fmt = fmt
         self.rtp = RTCRtpParameters()
+        self.ssrc = []
+        self.ssrc_group = []
 
         # SCTP
         self.sctpCapabilities = None
@@ -137,6 +170,7 @@ class MediaDescription:
         self.ice = RTCIceParameters()
         self.ice_candidates = []
         self.ice_candidates_complete = False
+        self.ice_options = None
 
     def __str__(self):
         lines = []
@@ -161,8 +195,14 @@ class MediaDescription:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
             if self.rtp.rtcp.mux:
                 lines.append('a=rtcp-mux')
-            if self.rtp.rtcp.ssrc and self.rtp.rtcp.cname:
-                lines.append('a=ssrc:%d cname:%s' % (self.rtp.rtcp.ssrc, self.rtp.rtcp.cname))
+
+        for group in self.ssrc_group:
+            lines.append('a=ssrc-group:%s' % group)
+        for ssrc_info in self.ssrc:
+            for ssrc_attr in SSRC_INFO_ATTRS:
+                ssrc_value = getattr(ssrc_info, ssrc_attr)
+                if ssrc_value is not None:
+                    lines.append('a=ssrc:%d %s:%s' % (ssrc_info.ssrc, ssrc_attr, ssrc_value))
 
         for codec in self.rtp.codecs:
             lines.append('a=rtpmap:%d %s' % (codec.payloadType, codec))
@@ -200,6 +240,8 @@ class MediaDescription:
             lines.append('a=ice-ufrag:' + self.ice.usernameFragment)
         if self.ice.password is not None:
             lines.append('a=ice-pwd:' + self.ice.password)
+        if self.ice_options is not None:
+            lines.append('a=ice-options:' + self.ice_options)
 
         # dtls
         if self.dtls:
@@ -217,13 +259,15 @@ class SessionDescription:
         self.name = '-'
         self.time = '0 0'
         self.host = None
-        self.bundle = []
+        self.group = []
+        self.msid_semantic = []
         self.media = []
 
     @classmethod
     def parse(cls, sdp):
         current_media = None
         dtls_fingerprints = []
+        ice_options = None
 
         def find_codec(pt):
             for codec in current_media.rtp.codecs:
@@ -252,10 +296,12 @@ class SessionDescription:
                     dtls_fingerprints.append(RTCDtlsFingerprint(
                         algorithm=algorithm,
                         value=fingerprint))
+                elif attr == 'ice-options':
+                    ice_options = value
                 elif attr == 'group':
-                    bits = value.split()
-                    if bits and bits[0] == 'BUNDLE':
-                        session.bundle = bits[1:]
+                    parse_group(session.group, value)
+                elif attr == 'msid-semantic':
+                    parse_group(session.msid_semantic, value)
 
         # parse media
         for media_lines in media_groups:
@@ -279,6 +325,7 @@ class SessionDescription:
             current_media.dtls = RTCDtlsParameters(
                 fingerprints=dtls_fingerprints[:],
                 role=None)
+            current_media.ice_options = ice_options
             session.media.append(current_media)
 
             for line in media_lines[1:]:
@@ -305,6 +352,8 @@ class SessionDescription:
                         current_media.ice.usernameFragment = value
                     elif attr == 'ice-pwd':
                         current_media.ice.password = value
+                    elif attr == 'ice-options':
+                        current_media.ice_options = value
                     elif attr == 'max-message-size':
                         current_media.sctpCapabilities = RTCSctpCapabilities(
                             maxMessageSize=int(value))
@@ -335,14 +384,26 @@ class SessionDescription:
                         getattr(current_media, attr)[int(format_id)] = format_desc
                     elif attr == 'sctp-port':
                         current_media.sctp_port = int(value)
+                    elif attr == 'ssrc-group':
+                        parse_group(current_media.ssrc_group, value, type=int)
                     elif attr == 'ssrc':
                         ssrc, ssrc_desc = value.split(' ', 1)
+                        ssrc = int(ssrc)
                         ssrc_attr, ssrc_value = ssrc_desc.split(':')
+
+                        try:
+                            ssrc_info = next((x for x in current_media.ssrc if x.ssrc == ssrc))
+                        except StopIteration:
+                            ssrc_info = SsrcDescription(ssrc=ssrc)
+                            current_media.ssrc.append(ssrc_info)
+                        if ssrc_attr in SSRC_INFO_ATTRS:
+                            setattr(ssrc_info, ssrc_attr, ssrc_value)
+
                         # NOTE: Chrome send us multiple SSRC, which we cannot store in
                         # RTCRtcpParameters, so keep the first rather than the last.
                         if ssrc_attr == 'cname' and not current_media.rtp.rtcp.cname:
                             current_media.rtp.rtcp.cname = ssrc_value
-                            current_media.rtp.rtcp.ssrc = int(ssrc)
+                            current_media.rtp.rtcp.ssrc = ssrc
 
             if current_media.dtls.role is None:
                 current_media.dtls = None
@@ -381,6 +442,8 @@ class SessionDescription:
         if self.host is not None:
             lines += ['c=%s' % ipaddress_to_sdp(self.host)]
         lines += ['t=%s' % self.time]
-        if self.bundle:
-            lines += ['a=group:BUNDLE ' + (' '.join(self.bundle))]
+        for group in self.group:
+            lines += ['a=group:%s' % group]
+        for group in self.msid_semantic:
+            lines += ['a=msid-semantic:%s' % group]
         return '\r\n'.join(lines) + '\r\n' + ''.join([str(m) for m in self.media])

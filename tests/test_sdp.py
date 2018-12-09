@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from aiortc.rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
                                      RTCRtpHeaderExtensionParameters)
-from aiortc.sdp import SessionDescription
+from aiortc.sdp import GroupDescription, SessionDescription, SsrcDescription
 
 from .utils import lf2crlf
 
@@ -53,7 +53,10 @@ a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-a
 a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
 a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
 
-        self.assertEqual(d.bundle, ['audio'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['audio'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin, '- 863426017819471768 2 IN IP4 127.0.0.1')
@@ -93,6 +96,15 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1944796561)
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].ssrc, [
+            SsrcDescription(
+                ssrc=1944796561,
+                cname='/vC4ULAr8vHNjXmq',
+                msid='TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12',
+                mslabel='TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU',
+                label='ec1eb8de-8df8-4956-ae81-879e5d062d12'),
+        ])
+        self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
         self.assertEqual(d.media[0].fmt, [
@@ -103,6 +115,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '5+Ix')
         self.assertEqual(d.media[0].ice.password, 'uK8IlylxzDMUhrkVzdmj0M+v')
 
@@ -119,6 +132,7 @@ o=- 863426017819471768 2 IN IP4 127.0.0.1
 s=-
 t=0 0
 a=group:BUNDLE audio
+a=msid-semantic:WMS TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
 m=audio 45076 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126
 c=IN IP4 192.168.99.58
 a=sendrecv
@@ -127,6 +141,9 @@ a=mid:audio
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
 a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
+a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12
+a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
+a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12
 a=rtpmap:111 opus/48000/2
 a=rtcp-fb:111 transport-cc
 a=fmtp:111 minptime=10;useinbandfec=1
@@ -148,6 +165,7 @@ a=candidate:3496416974 1 tcp 1518283007 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 
 a=candidate:1936595596 1 tcp 1518214911 192.168.99.58 9 typ host tcptype active
 a=ice-ufrag:5+Ix
 a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+a=ice-options:trickle
 a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
 a=setup:actpass
 """))  # noqa
@@ -182,6 +200,7 @@ a=fmtp:109 maxplaybackrate=48000;stereo=1;useinbandfec=1
 a=fmtp:101 0-15
 a=ice-pwd:f9b83487285016f7492197a5790ceee5
 a=ice-ufrag:403a81e1
+a=ice-options:trickle
 a=mid:sdparta_0
 a=msid:{dee771c7-671a-451e-b847-f86f8e87c7d8} {12692dea-686c-47ca-b3e9-48f38fc92b78}
 a=rtcp:38612 IN IP4 192.168.99.58
@@ -194,7 +213,10 @@ a=rtpmap:101 telephone-event/8000
 a=setup:actpass
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
 """))  # noqa
-        self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['*'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin,
@@ -231,6 +253,10 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].rtp.rtcp.ssrc, 882128807)
         self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
         self.assertEqual(d.media[0].rtcp_port, 38612)
+        self.assertEqual(d.media[0].ssrc, [
+            SsrcDescription(ssrc=882128807, cname='{ed463ac5-dabf-44d4-8b9f-e14318427b2b}'),
+        ])
+        self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
         self.assertEqual(d.media[0].fmt, [
@@ -241,6 +267,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 10)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '403a81e1')
         self.assertEqual(d.media[0].ice.password, 'f9b83487285016f7492197a5790ceee5')
 
@@ -257,6 +284,7 @@ o=mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0
 s=-
 t=0 0
 a=group:BUNDLE sdparta_0
+a=msid-semantic:WMS *
 m=audio 45274 UDP/TLS/RTP/SAVPF 109 9 0 8 101
 c=IN IP4 192.168.99.58
 a=sendrecv
@@ -286,6 +314,7 @@ a=candidate:1 2 UDP 1685921790 1.2.3.4 52902 typ srflx raddr 192.168.99.58 rport
 a=end-of-candidates
 a=ice-ufrag:403a81e1
 a=ice-pwd:f9b83487285016f7492197a5790ceee5
+a=ice-options:trickle
 a=fingerprint:sha-256 EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17
 a=setup:actpass
 """))  # noqa
@@ -314,7 +343,9 @@ a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
 a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
 a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
 
-        self.assertEqual(d.bundle, [])
+        self.assertEqual(d.group, [])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys'])])
         self.assertEqual(d.host, '1.2.3.4')
         self.assertEqual(d.name, 'FreeSWITCH')
         self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
@@ -338,6 +369,15 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(d.media[0].rtp.rtcp.ssrc, 2690029308)
         self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
         self.assertEqual(d.media[0].rtcp_port, 16628)
+        self.assertEqual(d.media[0].ssrc, [
+            SsrcDescription(
+                ssrc=2690029308,
+                cname='rbaag6w9fGmRXQm6',
+                msid='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0',
+                mslabel='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys',
+                label='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0'),
+        ])
+        self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
         self.assertEqual(d.media[0].fmt, [8, 101])
@@ -347,6 +387,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, None)
         self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
         self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
 
@@ -363,10 +404,14 @@ o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
 t=0 0
+a=msid-semantic:WMS lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
 m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
 a=rtcp:16628 IN IP4 1.2.3.4
 a=rtcp-mux
 a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
+a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0
 a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
 a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
@@ -399,7 +444,9 @@ a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
 a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
 a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
 
-        self.assertEqual(d.bundle, [])
+        self.assertEqual(d.group, [])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys'])])
         self.assertEqual(d.host, '1.2.3.4')
         self.assertEqual(d.name, 'FreeSWITCH')
         self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
@@ -432,6 +479,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, None)
         self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
         self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
 
@@ -443,10 +491,14 @@ o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
 t=0 0
+a=msid-semantic:WMS lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
 m=audio 16628 UDP/TLS/RTP/SAVPF 8 101
 a=rtcp:16628 IN IP4 1.2.3.4
 a=rtcp-mux
 a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
+a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
+a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0
 a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
 a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
@@ -481,7 +533,10 @@ a=setup:actpass
 a=max-message-size:1073741823
 """))  # noqa
 
-        self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['*'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin,
@@ -507,6 +562,7 @@ a=max-message-size:1073741823
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
         self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
 
@@ -523,6 +579,7 @@ o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
 a=group:BUNDLE sdparta_0
+a=msid-semantic:WMS *
 m=application 45791 DTLS/SCTP 5000
 c=IN IP4 192.168.99.58
 a=sendrecv
@@ -536,6 +593,7 @@ a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ hos
 a=end-of-candidates
 a=ice-ufrag:9889e0c4
 a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=ice-options:trickle
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
 a=setup:actpass
 """))  # noqa
@@ -566,7 +624,10 @@ a=setup:actpass
 a=max-message-size:1073741823
 """))  # noqa
 
-        self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['*'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin,
@@ -590,6 +651,7 @@ a=max-message-size:1073741823
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
         self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
 
@@ -606,6 +668,7 @@ o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
 a=group:BUNDLE sdparta_0
+a=msid-semantic:WMS *
 m=application 45791 UDP/DTLS/SCTP webrtc-datachannel
 c=IN IP4 192.168.99.58
 a=sendrecv
@@ -619,6 +682,7 @@ a=candidate:3 1 TCP 2105524479 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 9 typ hos
 a=end-of-candidates
 a=ice-ufrag:9889e0c4
 a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
+a=ice-options:trickle
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
 a=setup:actpass
 """))  # noqa
@@ -682,7 +746,10 @@ a=ssrc:3305256354 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
 a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
 """))  # noqa
 
-        self.assertEqual(d.bundle, ['video'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['video'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin, '- 5195484278799753993 2 IN IP4 127.0.0.1')
@@ -748,6 +815,22 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(d.media[0].rtp.rtcp.ssrc, 1845476211)
         self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
         self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].ssrc, [
+            SsrcDescription(
+                ssrc=1845476211,
+                cname='9iW3jspLCZJ5WjOZ',
+                msid='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4',
+                mslabel='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ',
+                label='420c6f28-439d-4ead-b93c-94e14c0a16b4'),
+            SsrcDescription(
+                ssrc=3305256354,
+                cname='9iW3jspLCZJ5WjOZ',
+                msid='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4',
+                mslabel='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ',
+                label='420c6f28-439d-4ead-b93c-94e14c0a16b4'),
+        ])
+        self.assertEqual(d.media[0].ssrc_group, [
+            GroupDescription(semantic='FID', items=[1845476211, 3305256354])])
 
         # formats
         self.assertEqual(d.media[0].fmt, [96, 97, 98, 99, 100, 101, 102])
@@ -757,6 +840,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 2)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '9KhP')
         self.assertEqual(d.media[0].ice.password, 'mlPea2xBCmFmNLfmy/jlqw1D')
 
@@ -773,6 +857,7 @@ o=- 5195484278799753993 2 IN IP4 127.0.0.1
 s=-
 t=0 0
 a=group:BUNDLE video
+a=msid-semantic:WMS bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
 m=video 34955 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102
 c=IN IP4 10.101.2.67
 a=sendrecv
@@ -786,7 +871,15 @@ a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/video-timing
 a=mid:video
 a=rtcp:9 IN IP4 0.0.0.0
 a=rtcp-mux
+a=ssrc-group:FID 1845476211 3305256354
 a=ssrc:1845476211 cname:9iW3jspLCZJ5WjOZ
+a=ssrc:1845476211 msid:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:1845476211 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
+a=ssrc:1845476211 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:3305256354 cname:9iW3jspLCZJ5WjOZ
+a=ssrc:3305256354 msid:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4
+a=ssrc:3305256354 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
+a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
 a=rtpmap:96 VP8/90000
 a=rtcp-fb:96 goog-remb
 a=rtcp-fb:96 transport-cc
@@ -811,6 +904,7 @@ a=candidate:638323114 1 udp 2122260223 10.101.2.67 34955 typ host
 a=candidate:1754264922 1 tcp 1518280447 10.101.2.67 9 typ host tcptype active
 a=ice-ufrag:9KhP
 a=ice-pwd:mlPea2xBCmFmNLfmy/jlqw1D
+a=ice-options:trickle
 a=fingerprint:sha-256 30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E
 a=setup:actpass
 """))  # noqa
@@ -858,7 +952,10 @@ a=setup:actpass
 a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
 """))  # noqa
 
-        self.assertEqual(d.bundle, ['sdparta_0'])
+        self.assertEqual(d.group, [
+            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
+        self.assertEqual(d.msid_semantic, [
+            GroupDescription(semantic='WMS', items=['*'])])
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, '-')
         self.assertEqual(d.origin,
@@ -912,6 +1009,7 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
+        self.assertEqual(d.media[0].ice_options, 'trickle')
         self.assertEqual(d.media[0].ice.usernameFragment, '1a0e6b24')
         self.assertEqual(d.media[0].ice.password, 'c43b0306087bb4de15f70e4405c4dafe')
 
@@ -928,6 +1026,7 @@ o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
 s=-
 t=0 0
 a=group:BUNDLE sdparta_0
+a=msid-semantic:WMS *
 m=video 42738 UDP/TLS/RTP/SAVPF 120 121
 c=IN IP4 192.168.99.7
 a=sendrecv
@@ -957,6 +1056,7 @@ a=candidate:1 2 TCP 2105524478 192.168.99.7 9 typ host tcptype active
 a=end-of-candidates
 a=ice-ufrag:1a0e6b24
 a=ice-pwd:c43b0306087bb4de15f70e4405c4dafe
+a=ice-options:trickle
 a=fingerprint:sha-256 AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5
 a=setup:actpass
 """))  # noqa
