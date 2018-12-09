@@ -29,11 +29,11 @@ MEDIA_CODECS = {
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='goog-remb'),
             ],
-            parameters=OrderedDict({
-                'packetization-mode': '1',
-                'level-asymmetry-allowed': '1',
-                'profile-level-id': '42001f',
-            })
+            parameters=OrderedDict((
+                ('packetization-mode', '1'),
+                ('level-asymmetry-allowed', '1'),
+                ('profile-level-id', '42001f'),
+            ))
         ),
         RTCRtpCodecParameters(
             name='H264',
@@ -43,11 +43,11 @@ MEDIA_CODECS = {
                 RTCRtcpFeedback(type='nack', parameter='pli'),
                 RTCRtcpFeedback(type='goog-remb'),
             ],
-            parameters=OrderedDict({
-                'packetization-mode': '1',
-                'level-asymmetry-allowed': '1',
-                'profile-level-id': '42e01f',
-            })
+            parameters=OrderedDict((
+                ('packetization-mode', '1'),
+                ('level-asymmetry-allowed', '1'),
+                ('profile-level-id', '42e01f'),
+            ))
         ),
     ]
 }

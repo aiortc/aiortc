@@ -31,6 +31,28 @@ class RTCRtpCodecParameters:
 
 
 @attr.s
+class RTCRtpRtxParameters:
+    ssrc = attr.ib(type=int)  # type: int
+
+
+@attr.s
+class RTCRtpCodingParameters:
+    ssrc = attr.ib(type=int)  # type: int
+    payloadType = attr.ib(type=int)  # type: int
+    rtx = attr.ib(default=None)  # type: RTCRtpRtxParameters
+
+
+@attr.s
+class RTCRtpDecodingParameters(RTCRtpCodingParameters):
+    pass
+
+
+@attr.s
+class RTCRtpEncodingParameters(RTCRtpCodingParameters):
+    pass
+
+
+@attr.s
 class RTCRtpHeaderExtensionParameters:
     """
     The :class:`RTCRtpHeaderExtensionParameters` dictionary enables a header
@@ -85,3 +107,13 @@ class RTCRtpParameters:
     "The muxId assigned to the RTP stream, if any, empty string if unset."
     rtcp = attr.ib(default=attr.Factory(RTCRtcpParameters))  # type: RTCRtcpParameters
     "Parameters to configure RTCP."
+
+
+@attr.s
+class RTCRtpReceiveParameters(RTCRtpParameters):
+    encodings = attr.ib(default=attr.Factory(list))  # type: List[RTCRtpDecodingParameters]
+
+
+@attr.s
+class RTCRtpSendParameters(RTCRtpParameters):
+    encodings = attr.ib(default=attr.Factory(list))  # type: List[RTCRtpEncodingParameters]

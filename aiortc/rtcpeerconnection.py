@@ -12,7 +12,9 @@ from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
-from .rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
+from .rtcrtpparameters import (RTCRtpDecodingParameters,
+                               RTCRtpHeaderExtensionParameters,
+                               RTCRtpParameters, RTCRtpReceiveParameters)
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -482,7 +484,19 @@ class RTCPeerConnection(EventEmitter):
                 add_remote_candidates(iceTransport, media)
                 self.__remoteDtls[transceiver] = media.dtls
                 self.__remoteIce[transceiver] = media.ice
-                self.__remoteRtp[transceiver] = media.rtp
+
+                # configure receiver
+                receiveParameters = RTCRtpReceiveParameters(
+                    codecs=transceiver._codecs,
+                    headerExtensions=transceiver._headerExtensions,
+                    muxId=media.rtp.muxId,
+                    rtcp=media.rtp.rtcp)
+                for codec in transceiver._codecs:
+                    receiveParameters.encodings.append(RTCRtpDecodingParameters(
+                        ssrc=media.ssrc[0].ssrc,
+                        payloadType=codec.payloadType
+                    ))
+                self.__remoteRtp[transceiver] = receiveParameters
 
                 # configure direction
                 direction = reverse_direction(media.direction)

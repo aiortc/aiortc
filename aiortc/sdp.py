@@ -1,5 +1,6 @@
 import ipaddress
 import re
+from typing import List  # noqa
 
 import attr
 
@@ -167,7 +168,7 @@ class MediaDescription:
         self.sctp_port = None
 
         # DTLS
-        self.dtls = None
+        self.dtls = None  # type: RTCDtlsParameters
 
         # ICE
         self.ice = RTCIceParameters()
@@ -262,9 +263,9 @@ class SessionDescription:
         self.name = '-'
         self.time = '0 0'
         self.host = None
-        self.group = []
-        self.msid_semantic = []
-        self.media = []
+        self.group = []  # type: List[GroupDescription]
+        self.msid_semantic = []  # type: List[GroupDescription]
+        self.media = []  # type: List[MediaDescription]
 
     @classmethod
     def parse(cls, sdp):

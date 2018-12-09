@@ -6,8 +6,9 @@ from unittest.mock import patch
 from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
                                      RTCDtlsFingerprint, RTCDtlsParameters,
                                      RTCDtlsTransport, RtpRouter)
-from aiortc.rtcrtpparameters import (RTCRtcpParameters, RTCRtpCodecParameters,
-                                     RTCRtpParameters)
+from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
+                                     RTCRtpDecodingParameters,
+                                     RTCRtpReceiveParameters)
 from aiortc.rtp import RtpPacket
 
 from .utils import dummy_ice_transport_pair, load, run
@@ -128,16 +129,16 @@ class RTCDtlsTransportTest(TestCase):
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
-        session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+        session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
             codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
-            rtcp=RTCRtcpParameters(ssrc=1831097322)))
+            encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
-        session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+        session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
             codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
-            rtcp=RTCRtcpParameters(ssrc=4028317929)))
+            encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),
@@ -179,16 +180,16 @@ class RTCDtlsTransportTest(TestCase):
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
-        session1._register_rtp_receiver(receiver1, RTCRtpParameters(
+        session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
             codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
-            rtcp=RTCRtcpParameters(ssrc=1831097322)))
+            encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
-        session2._register_rtp_receiver(receiver2, RTCRtpParameters(
+        session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
             codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
-            rtcp=RTCRtcpParameters(ssrc=4028317929)))
+            encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
 
         run(asyncio.gather(
             session1.start(session2.getLocalParameters()),

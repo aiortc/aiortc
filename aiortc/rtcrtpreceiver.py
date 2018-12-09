@@ -11,6 +11,7 @@ from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rate import RemoteBitrateEstimator
+from .rtcrtpparameters import RTCRtpReceiveParameters
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
                   RtcpRtpfbPacket, RtcpSrPacket, clamp_packets_lost,
@@ -251,7 +252,7 @@ class RTCRtpReceiver:
 
         return self.__stats
 
-    async def receive(self, parameters):
+    async def receive(self, parameters: RTCRtpReceiveParameters):
         """
         Attempt to set the parameters controlling the receiving of media.
 

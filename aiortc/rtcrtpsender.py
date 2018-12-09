@@ -8,6 +8,7 @@ from . import clock, rtp
 from .codecs import get_encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError
+from .rtcrtpparameters import RTCRtpSendParameters
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
                   RtcpPsfbPacket, RtcpRrPacket, RtcpRtpfbPacket,
                   RtcpSdesPacket, RtcpSenderInfo, RtcpSourceInfo, RtcpSrPacket,
@@ -120,7 +121,7 @@ class RTCRtpSender:
     def setTransport(self, transport):
         self.__transport = transport
 
-    async def send(self, parameters):
+    async def send(self, parameters: RTCRtpSendParameters):
         """
         Attempt to set the parameters controlling the sending of media.
 
