@@ -81,7 +81,7 @@ class NackGeneratorTest(TestCase):
 
 class StreamStatisticsTest(TestCase):
     def create_counter(self):
-        return StreamStatistics(clockrate=8000, ssrc=0)
+        return StreamStatistics(clockrate=8000)
 
     def test_no_loss(self):
         counter = self.create_counter()
