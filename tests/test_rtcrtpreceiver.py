@@ -3,7 +3,7 @@ import fractions
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.codecs import PCMU_CODEC
+from aiortc.codecs import PCMU_CODEC, get_encoder
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
@@ -17,7 +17,10 @@ from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
 
+from .codecs import CodecTestCase
 from .utils import dummy_dtls_transport_pair, load, run
+
+VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100)
 
 
 def create_rtp_packets(count, seq=0):
@@ -31,54 +34,54 @@ def create_rtp_packets(count, seq=0):
     return packets
 
 
+def create_rtp_video_packets(self, codec, frames, seq=0):
+    encoder = get_encoder(codec)
+    packets = []
+    for frame in self.create_video_frames(width=640, height=480, count=frames):
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        packet = RtpPacket(
+            payload_type=codec.payloadType,
+            sequence_number=seq,
+            ssrc=1234,
+            timestamp=timestamp)
+        packet.payload = payloads[0]
+        packet.marker = 1
+        packets.append(packet)
+
+        seq = uint16_add(seq, 1)
+    return packets
+
+
 class ClosedDtlsTransport:
     state = 'closed'
 
 
 class NackGeneratorTest(TestCase):
-    def create_generator(self):
-        class FakeReceiver:
-            def __init__(self):
-                self.nack = []
-                self.pli = []
-
-            async def _send_rtcp_nack(self, media_ssrc, lost):
-                self.nack.append((media_ssrc, lost))
-
-            async def _send_rtcp_pli(self, media_ssrc, lost):
-                self.pli.append(media_ssrc)
-
-        receiver = FakeReceiver()
-        return NackGenerator(receiver), receiver
-
     def test_no_loss(self):
-        generator, receiver = self.create_generator()
+        generator = NackGenerator()
 
         for packet in create_rtp_packets(20, 0):
-            run(generator.add(packet))
+            missed = generator.add(packet)
+            self.assertEqual(missed, False)
 
-        self.assertEqual(receiver.nack, [])
-        self.assertEqual(receiver.pli, [])
         self.assertEqual(generator.missing, set())
 
     def test_with_loss(self):
-        generator, receiver = self.create_generator()
+        generator = NackGenerator()
 
         # receive packets: 0, <1 missing>, 2
         packets = create_rtp_packets(3, 0)
         missing = packets.pop(1)
         for packet in packets:
-            run(generator.add(packet))
+            missed = generator.add(packet)
+            self.assertEqual(missed, packet.sequence_number == 2)
 
-        self.assertEqual(receiver.nack, [(1234, [1])])
-        self.assertEqual(receiver.pli, [])
         self.assertEqual(generator.missing, set([1]))
-        receiver.nack.clear()
 
         # late arrival
-        run(generator.add(missing))
-        self.assertEqual(receiver.nack, [])
-        self.assertEqual(receiver.pli, [])
+        missed = generator.add(missing)
+        self.assertEqual(missed, False)
         self.assertEqual(generator.missing, set())
 
 
@@ -184,7 +187,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.jitter, 4)
 
 
-class RTCRtpReceiverTest(TestCase):
+class RTCRtpReceiverTest(CodecTestCase):
     def setUp(self):
         self.local_transport, self.remote_transport = dummy_dtls_transport_pair()
 
@@ -266,14 +269,38 @@ class RTCRtpReceiverTest(TestCase):
         with self.assertRaises(MediaStreamError):
             run(receiver._track.recv())
 
+    def test_rtp_missing_video_packet(self):
+        nacks = []
+
+        async def mock_send_rtcp_nack(*args):
+            nacks.append(args)
+
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
+
+        receiver._send_rtcp_nack = mock_send_rtcp_nack
+        receiver._track = RemoteStreamTrack(kind='video')
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
+
+        # generate some packets
+        packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=3)
+
+        # receive RTP with a with a gap
+        run(receiver._handle_rtp_packet(packets[0], arrival_time_ms=0))
+        run(receiver._handle_rtp_packet(packets[2], arrival_time_ms=0))
+
+        # check NACK was triggered
+        self.assertEqual(nacks, [(1234, [1])])
+
+        # shutdown
+        run(receiver.stop())
+
     def test_rtp_empty_video_packet(self):
         receiver = RTCRtpReceiver('video', self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='video')
-        run(receiver.receive(RTCRtpReceiveParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # receive RTP with empty payload
         packet = RtpPacket(payload_type=100)
@@ -287,9 +314,7 @@ class RTCRtpReceiverTest(TestCase):
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind='video')
-        run(receiver.receive(RTCRtpReceiveParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # receive RTP with unknown payload type
         packet = RtpPacket(payload_type=123)
@@ -345,9 +370,7 @@ class RTCRtpReceiverTest(TestCase):
         receiver._set_rtcp_ssrc(1234)
         receiver._track = RemoteStreamTrack(kind='video')
 
-        run(receiver.receive(RTCRtpReceiveParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # send RTCP feedback NACK
         run(receiver._send_rtcp_nack(5678, [7654]))
@@ -360,9 +383,7 @@ class RTCRtpReceiverTest(TestCase):
         receiver._set_rtcp_ssrc(1234)
         receiver._track = RemoteStreamTrack(kind='video')
 
-        run(receiver.receive(RTCRtpReceiveParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # send RTCP feedback PLI
         run(receiver._send_rtcp_pli(5678))

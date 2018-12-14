@@ -48,34 +48,29 @@ def decoder_worker(loop, input_q, output_q):
 
 
 class NackGenerator:
-    def __init__(self, receiver):
-        self.receiver = receiver
+    def __init__(self):
         self.max_seq = None
-        self.missing = None
-        self.ssrc = None
+        self.missing = set()
 
-    async def add(self, packet):
-        if packet.ssrc != self.ssrc:
+    def add(self, packet):
+        missed = False
+
+        if self.max_seq is None:
             self.max_seq = packet.sequence_number
-            self.missing = set()
-            self.ssrc = packet.ssrc
-            return
+            return missed
 
+        # mark missing packets
         if uint16_gt(packet.sequence_number, self.max_seq):
-            # mark missing packets
-            missed = 0
             seq = uint16_add(self.max_seq, 1)
             while uint16_gt(packet.sequence_number, seq):
                 self.missing.add(seq)
-                missed += 1
+                missed = True
                 seq = uint16_add(seq, 1)
             self.max_seq = packet.sequence_number
-
-            # trigger a NACK if needed
-            if missed:
-                await self.receiver._send_rtcp_nack(self.ssrc, sorted(self.missing))
         else:
             self.missing.discard(packet.sequence_number)
+
+        return missed
 
 
 class StreamStatistics:
@@ -201,7 +196,7 @@ class RTCRtpReceiver:
             self.__remote_bitrate_estimator = None
         else:
             self.__jitter_buffer = JitterBuffer(capacity=128)
-            self.__nack_generator = NackGenerator(self)
+            self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track = None
         self.__rtcp_exited = asyncio.Event()
@@ -290,9 +285,6 @@ class RTCRtpReceiver:
             self.__rtcp_task.cancel()
             await self.__rtcp_exited.wait()
 
-        # break reference cycle
-        self.__nack_generator = None
-
     def _handle_disconnect(self):
         self.__stop_decoder()
 
@@ -376,8 +368,8 @@ class RTCRtpReceiver:
             packet._data = b''
 
         # send NACKs for any missing any packets
-        if self.__nack_generator is not None:
-            await self.__nack_generator.add(packet)
+        if self.__nack_generator is not None and self.__nack_generator.add(packet):
+            await self._send_rtcp_nack(packet.ssrc, sorted(self.__nack_generator.missing))
 
         # try to re-assemble encoded frame
         encoded_frame = self.__jitter_buffer.add(packet)
