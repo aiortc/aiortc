@@ -225,12 +225,12 @@ def unpack_header_extensions(extension_profile: int,
             pos += x_length
     elif extension_profile == 0x1000:
         # Two-Byte Header
-        while pos < len(extension_value):
+        while pos < len(extension_value) - 1:
             if extension_value[pos] == 0:
                 pos += 1
                 continue
 
-            x_id, x_length = unpack('!BB', extension_value[pos:pos+2])
+            x_id, x_length = unpack_from('!BB', extension_value, pos)
             pos += 2
 
             x_value = extension_value[pos:pos + x_length]
