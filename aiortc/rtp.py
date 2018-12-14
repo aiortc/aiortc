@@ -599,6 +599,8 @@ class RtpPacket:
         cc = (v_p_x_cc & 0x0f)
         if version != 2:
             raise ValueError('RTP packet has invalid version')
+        if len(data) < RTP_HEADER_LENGTH + 4 * cc:
+            raise ValueError('RTP packet has truncated CSRC')
 
         packet = cls(
             marker=(m_pt >> 7),
@@ -607,16 +609,22 @@ class RtpPacket:
             timestamp=timestamp,
             ssrc=ssrc)
 
-        pos = 12
+        pos = RTP_HEADER_LENGTH
         for i in range(0, cc):
-            packet.csrc.append(unpack('!L', data[pos:pos+4])[0])
+            packet.csrc.append(unpack_from('!L', data, pos)[0])
             pos += 4
 
         if extension:
-            extension_profile, x_length = unpack('!HH', data[pos:pos+4])
+            if len(data) < pos + 4:
+                raise ValueError('RTP packet has truncated extension profile / length')
+            extension_profile, extension_length = unpack_from('!HH', data, pos)
+            extension_length *= 4
             pos += 4
-            extension_value = data[pos:pos+x_length*4]
-            pos += x_length * 4
+
+            if len(data) < pos + extension_length:
+                raise ValueError('RTP packet has truncated extension value')
+            extension_value = data[pos:pos + extension_length]
+            pos += extension_length
             packet.extensions = extensions_map.get(extension_profile, extension_value)
 
         if padding:

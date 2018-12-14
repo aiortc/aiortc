@@ -200,6 +200,13 @@ class RtpPacketTest(TestCase):
         self.assertEqual(len(packet.payload), 160)
         self.assertEqual(packet.serialize(), data)
 
+    def test_with_csrc_truncated(self):
+        data = load('rtp_with_csrc.bin')
+        for length in range(12, 20):
+            with self.assertRaises(ValueError) as cm:
+                RtpPacket.parse(data[0:length])
+            self.assertEqual(str(cm.exception), 'RTP packet has truncated CSRC')
+
     def test_with_sdes_mid(self):
         extensions_map = rtp.HeaderExtensionsMap()
         extensions_map.configure(RTCRtpParameters(
@@ -220,6 +227,20 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.extensions, rtp.HeaderExtensions(mid='0'))
         self.assertEqual(len(packet.payload), 54)
         self.assertEqual(packet.serialize(extensions_map), data)
+
+    def test_with_sdes_mid_truncated(self):
+        data = load('rtp_with_sdes_mid.bin')
+
+        for length in range(12, 16):
+            with self.assertRaises(ValueError) as cm:
+                RtpPacket.parse(data[0:length])
+            self.assertEqual(str(cm.exception),
+                             'RTP packet has truncated extension profile / length')
+
+        for length in range(16, 20):
+            with self.assertRaises(ValueError) as cm:
+                RtpPacket.parse(data[0:length])
+            self.assertEqual(str(cm.exception), 'RTP packet has truncated extension value')
 
     def test_truncated(self):
         data = load('rtp.bin')[0:11]
