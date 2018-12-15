@@ -174,6 +174,18 @@ class RTCDtlsTransportTest(TestCase):
         with self.assertRaises(ConnectionError):
             run(session1._send_rtp(RTP))
 
+    def test_rtp_malformed(self):
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+
+        # receive truncated RTP
+        run(session1._handle_rtp_data(RTP[0:8], 0))
+
+        # receive truncated RTCP
+        run(session1._handle_rtcp_data(RTCP[0:8]))
+
     def test_srtp_unprotect_error(self):
         transport1, transport2 = dummy_ice_transport_pair()
 

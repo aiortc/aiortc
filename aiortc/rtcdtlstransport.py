@@ -451,7 +451,12 @@ class RTCDtlsTransport(EventEmitter):
             await self._data_receiver._handle_data(data)
 
     async def _handle_rtcp_data(self, data):
-        packets = RtcpPacket.parse(data)
+        try:
+            packets = RtcpPacket.parse(data)
+        except ValueError as exc:
+            self.__log_debug('x RTCP parsing failed: %s', exc)
+            return
+
         for packet in packets:
             # route RTCP packet
             receiver = self._rtp_router.route_rtcp(packet)
@@ -459,7 +464,11 @@ class RTCDtlsTransport(EventEmitter):
                 await receiver._handle_rtcp_packet(packet)
 
     async def _handle_rtp_data(self, data, arrival_time_ms):
-        packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
+        try:
+            packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
+        except ValueError as exc:
+            self.__log_debug('x RTP parsing failed: %s', exc)
+            return
 
         # route RTP packet
         receiver = self._rtp_router.route_rtp(packet)
