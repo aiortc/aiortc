@@ -11,7 +11,7 @@ FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
 DYNAMIC_PAYLOAD_TYPES = range(96, 128)
 
 RTP_HEADER_LENGTH = 12
-RTCP_HEADER_LENGTH = 8
+RTCP_HEADER_LENGTH = 4
 
 PACKETS_LOST_MIN = - (1 << 23)
 PACKETS_LOST_MAX = (1 << 23) - 1
@@ -380,19 +380,27 @@ class RtcpPacket:
         packets = []
 
         while pos < len(data):
-            if len(data) < RTCP_HEADER_LENGTH:
+            if len(data) < pos + RTCP_HEADER_LENGTH:
                 raise ValueError('RTCP packet length is less than %d bytes' % RTCP_HEADER_LENGTH)
 
             v_p_count, packet_type, length = unpack('!BBH', data[pos:pos + 4])
             version = (v_p_count >> 6)
-            # padding = ((v_p_count >> 5) & 1)
+            padding = ((v_p_count >> 5) & 1)
             count = (v_p_count & 0x1f)
             if version != 2:
                 raise ValueError('RTCP packet has invalid version')
             pos += 4
+
             end = pos + length * 4
+            if len(data) < end:
+                raise ValueError('RTCP packet is truncated')
             payload = data[pos:end]
             pos = end
+
+            if padding:
+                if not payload or not payload[-1] or payload[-1] > len(payload):
+                    raise ValueError('RTCP packet padding length is invalid')
+                payload = payload[0:-payload[-1]]
 
             if packet_type == RTCP_BYE:
                 packets.append(RtcpByePacket.parse(payload, count))
@@ -420,7 +428,12 @@ class RtcpByePacket:
 
     @classmethod
     def parse(cls, data, count):
-        sources = list(unpack('!' + ('L' * count), data))
+        if len(data) < 4 * count:
+            raise ValueError('RTCP bye length is invalid')
+        if count > 0:
+            sources = list(unpack_from('!' + ('L' * count), data, 0))
+        else:
+            sources = []
         return cls(sources=sources)
 
 
@@ -440,6 +453,9 @@ class RtcpPsfbPacket:
 
     @classmethod
     def parse(cls, data, fmt):
+        if len(data) < 8:
+            raise ValueError('RTCP payload-specific feedback length is invalid')
+
         ssrc, media_ssrc = unpack('!LL', data[0:8])
         fci = data[8:]
         return cls(fmt=fmt, ssrc=ssrc, media_ssrc=media_ssrc, fci=fci)
@@ -458,6 +474,9 @@ class RtcpRrPacket:
 
     @classmethod
     def parse(cls, data, count):
+        if len(data) != 4 + 24 * count:
+            raise ValueError('RTCP receiver report length is invalid')
+
         ssrc = unpack('!L', data[0:4])[0]
         pos = 4
         reports = []
@@ -497,6 +516,9 @@ class RtcpRtpfbPacket:
 
     @classmethod
     def parse(cls, data, fmt):
+        if len(data) < 8 or len(data) % 4:
+            raise ValueError('RTCP RTP feedback length is invalid')
+
         ssrc, media_ssrc = unpack('!LL', data[0:8])
         lost = []
         for pos in range(8, len(data), 4):
@@ -528,12 +550,18 @@ class RtcpSdesPacket:
         pos = 0
         chunks = []
         for r in range(count):
-            ssrc = unpack('!L', data[pos:pos + 4])[0]
+            if len(data) < pos + 4:
+                raise ValueError('RTCP SDES source is truncated')
+            ssrc = unpack_from('!L', data, pos)[0]
             pos += 4
+
             items = []
-            while True:
-                d_type, d_length = unpack('!BB', data[pos:pos + 2])
+            while pos < len(data) - 1:
+                d_type, d_length = unpack_from('!BB', data, pos)
                 pos += 2
+
+                if len(data) < pos + d_length:
+                    raise ValueError('RTCP SDES item is truncated')
                 d_value = data[pos:pos + d_length]
                 pos += d_length
                 if d_type == 0:
@@ -559,7 +587,10 @@ class RtcpSrPacket:
 
     @classmethod
     def parse(cls, data, count):
-        ssrc = unpack('!L', data[0:4])[0]
+        if len(data) != 24 + 24 * count:
+            raise ValueError('RTCP sender report length is invalid')
+
+        ssrc = unpack_from('!L', data)[0]
         sender_info = RtcpSenderInfo.parse(data[4:24])
         pos = 24
         reports = []

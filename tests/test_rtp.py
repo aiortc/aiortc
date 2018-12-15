@@ -27,6 +27,51 @@ class RtcpPacketTest(TestCase):
 
         self.assertEqual(repr(packet), 'RtcpByePacket(sources=[2924645187])')
 
+    def test_bye_invalid(self):
+        data = load('rtcp_bye_invalid.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP bye length is invalid')
+
+    def test_bye_no_sources(self):
+        data = load('rtcp_bye_no_sources.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertEqual(packet.sources, [])
+        self.assertEqual(bytes(packet), data)
+
+        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[])')
+
+    def test_bye_only_padding(self):
+        data = load('rtcp_bye_padding.bin')
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+
+        packet = packets[0]
+        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertEqual(packet.sources, [])
+        self.assertEqual(bytes(packet), b'\x80\xcb\x00\x00')
+
+        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[])')
+
+    def test_bye_only_padding_zero(self):
+        data = load('rtcp_bye_padding.bin')[0:4] + b'\x00\x00\x00\x00'
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP packet padding length is invalid')
+
+    def test_psfb_invalid(self):
+        data = load('rtcp_psfb_invalid.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP payload-specific feedback length is invalid')
+
     def test_psfb_pli(self):
         data = load('rtcp_psfb_pli.bin')
         packets = RtcpPacket.parse(data)
@@ -57,6 +102,26 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.reports[0].dlsr, 0)
         self.assertEqual(bytes(packet), data)
 
+    def test_rr_invalid(self):
+        data = load('rtcp_rr_invalid.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP receiver report length is invalid')
+
+    def test_rr_truncated(self):
+        data = load('rtcp_rr.bin')
+
+        for length in range(1, 4):
+            with self.assertRaises(ValueError) as cm:
+                RtcpPacket.parse(data[0:length])
+            self.assertEqual(str(cm.exception), 'RTCP packet length is less than 4 bytes')
+
+        for length in range(4, 32):
+            with self.assertRaises(ValueError) as cm:
+                RtcpPacket.parse(data[0:length])
+            self.assertEqual(str(cm.exception), 'RTCP packet is truncated')
+
     def test_sdes(self):
         data = load('rtcp_sdes.bin')
         packets = RtcpPacket.parse(data)
@@ -69,6 +134,20 @@ class RtcpPacketTest(TestCase):
             (1, b'{63f459ea-41fe-4474-9d33-9707c9ee79d1}'),
         ])
         self.assertEqual(bytes(packet), data)
+
+    def test_sdes_item_truncated(self):
+        data = load('rtcp_sdes_item_truncated.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP SDES item is truncated')
+
+    def test_sdes_source_truncated(self):
+        data = load('rtcp_sdes_source_truncated.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP SDES source is truncated')
 
     def test_sr(self):
         data = load('rtcp_sr.bin')
@@ -92,6 +171,13 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.reports[0].dlsr, 0)
         self.assertEqual(bytes(packet), data)
 
+    def test_sr_invalid(self):
+        data = load('rtcp_sr_invalid.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP sender report length is invalid')
+
     def test_rtpfb(self):
         data = load('rtcp_rtpfb.bin')
         packets = RtcpPacket.parse(data)
@@ -106,6 +192,13 @@ class RtcpPacketTest(TestCase):
                          [12, 32, 39, 54, 76, 110, 123, 142, 183, 187, 223, 236, 271, 292])
         self.assertEqual(bytes(packet), data)
 
+    def test_rtpfb_invalid(self):
+        data = load('rtcp_rtpfb_invalid.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), 'RTCP RTP feedback length is invalid')
+
     def test_compound(self):
         data = load('rtcp_sr.bin') + load('rtcp_sdes.bin')
 
@@ -113,12 +206,6 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 2)
         self.assertTrue(isinstance(packets[0], RtcpSrPacket))
         self.assertTrue(isinstance(packets[1], RtcpSdesPacket))
-
-    def test_truncated(self):
-        data = load('rtcp_rr.bin')[0:7]
-        with self.assertRaises(ValueError) as cm:
-            RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP packet length is less than 8 bytes')
 
     def test_bad_version(self):
         data = b'\xc0' + load('rtcp_rr.bin')[1:]
