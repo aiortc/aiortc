@@ -204,7 +204,7 @@ def padl(l: int) -> int:
 def unpack_header_extensions(extension_profile: int,
                              extension_value: bytes) -> List[Tuple[int, bytes]]:
     """
-    Parse header extensions according to RFC5285.
+    Parse header extensions according to RFC 5285.
     """
     extensions = []
     pos = 0
@@ -212,6 +212,7 @@ def unpack_header_extensions(extension_profile: int,
     if extension_profile == 0xBEDE:
         # One-Byte Header
         while pos < len(extension_value):
+            # skip padding byte
             if extension_value[pos] == 0:
                 pos += 1
                 continue
@@ -220,19 +221,26 @@ def unpack_header_extensions(extension_profile: int,
             x_length = (extension_value[pos] & 0x0f) + 1
             pos += 1
 
+            if len(extension_value) < pos + x_length:
+                raise ValueError('RTP one-byte header extension value is truncated')
             x_value = extension_value[pos:pos + x_length]
             extensions.append((x_id,  x_value))
             pos += x_length
     elif extension_profile == 0x1000:
         # Two-Byte Header
-        while pos < len(extension_value) - 1:
+        while pos < len(extension_value):
+            # skip padding byte
             if extension_value[pos] == 0:
                 pos += 1
                 continue
 
+            if len(extension_value) < pos + 2:
+                raise ValueError('RTP two-byte header extension is truncated')
             x_id, x_length = unpack_from('!BB', extension_value, pos)
             pos += 2
 
+            if len(extension_value) < pos + x_length:
+                raise ValueError('RTP two-byte header extension value is truncated')
             x_value = extension_value[pos:pos + x_length]
             extensions.append((x_id,  x_value))
             pos += x_length
@@ -242,7 +250,7 @@ def unpack_header_extensions(extension_profile: int,
 
 def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, bytes]:
     """
-    Serialize header extensions according to RFC5285.
+    Serialize header extensions according to RFC 5285.
     """
     extension_profile = 0
     extension_value = b''

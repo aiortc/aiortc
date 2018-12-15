@@ -418,21 +418,49 @@ class RtpUtilTest(TestCase):
         # none
         self.assertEqual(unpack_header_extensions(0, None), [])
 
-        # one-byte, single value
-        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900\x00\x00'), [
+        # one-byte, value
+        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900'), [
             (9, b'0'),
         ])
 
-        # one-byte, two values
+        # one-byte, value, padding, value
+        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900\x00\x00\x301'), [
+            (9, b'0'),
+            (3, b'1'),
+        ])
+
+        # one-byte, value, value
         self.assertEqual(unpack_header_extensions(0xBEDE, b'\x10\xc18sdparta_0'), [
             (1, b'\xc1'),
             (3, b'sdparta_0'),
         ])
 
-        # two-byte, single value
-        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010\x00'), [
+        # two-byte, value
+        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010'), [
             (255, b'0'),
         ])
+
+        # two-byte, value (1 byte), padding, value (2 bytes)
+        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010\x00\xf0\x0212'), [
+            (255, b'0'),
+            (240, b'12'),
+        ])
+
+    def test_unpack_header_extensions_bad(self):
+        # one-byte, value (truncated)
+        with self.assertRaises(ValueError) as cm:
+            unpack_header_extensions(0xBEDE, b'\x90')
+        self.assertEqual(str(cm.exception), 'RTP one-byte header extension value is truncated')
+
+        # two-byte (truncated)
+        with self.assertRaises(ValueError) as cm:
+            unpack_header_extensions(0x1000, b'\xff')
+        self.assertEqual(str(cm.exception), 'RTP two-byte header extension is truncated')
+
+        # two-byte, value (truncated)
+        with self.assertRaises(ValueError) as cm:
+            unpack_header_extensions(0x1000, b'\xff\x020')
+        self.assertEqual(str(cm.exception), 'RTP two-byte header extension value is truncated')
 
     def test_pack_header_extensions(self):
         # none
