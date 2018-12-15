@@ -6,12 +6,13 @@ Changelog
 0.9.14
 ------
 
-*under development*
-
 Media
 .....
 
   * Add support for RTX retransmission packets.
+  * Fix RTP and RTCP parsing errors detected by fuzzing.
+  * Use case-insensitive comparison for hash algorithm in SDP, fixes interoperability with Asterisk.
+  * Offer NACK PLI and REMB feedback mechanisms for H.264.
 
 0.9.13
 ------
