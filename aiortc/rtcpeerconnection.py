@@ -88,12 +88,19 @@ def find_common_header_extensions(local_extensions, remote_extensions):
     return common
 
 
-def add_transport_description(media, iceTransport, dtlsTransport):
+def add_transport_description(media, dtlsTransport):
     # ice
+    iceTransport = dtlsTransport.transport
     iceGatherer = iceTransport.iceGatherer
     media.ice_candidates = iceGatherer.getLocalCandidates()
     media.ice_candidates_complete = (iceGatherer.state == 'completed')
     media.ice = iceGatherer.getLocalParameters()
+    if media.ice_candidates:
+        default_candidate = media.ice_candidates[0]
+    else:
+        default_candidate = DUMMY_CANDIDATE
+    media.host = default_candidate.ip
+    media.port = default_candidate.port
 
     # dtls
     media.dtls = dtlsTransport.getLocalParameters()
@@ -123,12 +130,77 @@ def allocate_mid(mids):
         i += 1
 
 
-def get_default_candidate(iceTransport):
-    candidates = iceTransport.iceGatherer.getLocalCandidates()
-    if candidates:
-        return candidates[0]
+def create_media_description_for_sctp(sctp, legacy, mid):
+    if legacy:
+        media = sdp.MediaDescription(
+            kind='application',
+            port=DUMMY_CANDIDATE.port,
+            profile='DTLS/SCTP',
+            fmt=[sctp.port])
+        media.sctpmap[sctp.port] = (
+            'webrtc-datachannel %d' % sctp._outbound_streams_count)
     else:
-        return DUMMY_CANDIDATE
+        media = sdp.MediaDescription(
+            kind='application',
+            port=DUMMY_CANDIDATE.port,
+            profile='UDP/DTLS/SCTP',
+            fmt=['webrtc-datachannel'])
+        media.sctp_port = sctp.port
+
+    media.rtp.muxId = mid
+    media.sctpCapabilities = sctp.getCapabilities()
+    add_transport_description(media, sctp.transport)
+
+    return media
+
+
+def create_media_description_for_transceiver(transceiver, cname, mid, type):
+    media = sdp.MediaDescription(
+        kind=transceiver.kind,
+        port=DUMMY_CANDIDATE.port,
+        profile='UDP/TLS/RTP/SAVPF',
+        fmt=[c.payloadType for c in transceiver._codecs])
+    if type in ['answer', 'pranswer']:
+        media.direction = and_direction(transceiver.direction, transceiver._offerDirection)
+    else:
+        media.direction = transceiver.direction
+
+    media.rtp = RTCRtpParameters(
+        codecs=transceiver._codecs,
+        headerExtensions=transceiver._headerExtensions,
+        muxId=mid)
+    media.rtcp_host = '0.0.0.0'
+    media.rtcp_port = 9
+    media.rtcp_mux = True
+    media.ssrc = [
+        sdp.SsrcDescription(
+            ssrc=transceiver.sender._ssrc,
+            cname=cname,
+            msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
+            mslabel=transceiver.sender._stream_id,
+            label=transceiver.sender._track_id),
+    ]
+
+    # if RTX is enabled, add corresponding SSRC
+    if next((x for x in media.rtp.codecs if x.name == 'rtx'), None):
+        media.ssrc.append(sdp.SsrcDescription(
+            ssrc=transceiver.sender._rtx_ssrc,
+            cname=cname,
+            msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
+            mslabel=transceiver.sender._stream_id,
+            label=transceiver.sender._track_id))
+        media.ssrc_group = [
+            sdp.GroupDescription(
+                semantic='FID',
+                items=[
+                    transceiver.sender._ssrc,
+                    transceiver.sender._rtx_ssrc,
+                ])
+        ]
+
+    add_transport_description(media, transceiver._transport)
+
+    return media
 
 
 def and_direction(a, b):
@@ -202,8 +274,7 @@ class RTCPeerConnection(EventEmitter):
         An :class:`RTCSessionDescription` describing the session for
         the local end of the connection.
         """
-        return wrap_session_description(
-            self.__pendingLocalDescription or self.__currentLocalDescription)
+        return wrap_session_description(self.__localDescription())
 
     @property
     def remoteDescription(self):
@@ -211,8 +282,7 @@ class RTCPeerConnection(EventEmitter):
         An :class:`RTCSessionDescription` describing the session for
         the remote end of the connection.
         """
-        return wrap_session_description(
-            self.__pendingRemoteDescription or self.__currentRemoteDescription)
+        return wrap_session_description(self.__remoteDescription())
 
     @property
     def sctp(self):
@@ -341,7 +411,30 @@ class RTCPeerConnection(EventEmitter):
             raise InvalidStateError('Cannot create answer in signaling state "%s"' %
                                     self.signalingState)
 
-        return wrap_session_description(self.__createDescription('answer'))
+        # create description
+        ntp_seconds = clock.current_ntp_time() >> 32
+        description = sdp.SessionDescription()
+        description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
+        description.msid_semantic.append(sdp.GroupDescription(
+            semantic='WMS',
+            items=['*']))
+        description.type = 'answer'
+
+        for remote_m in self.__remoteDescription().media:
+            if remote_m.kind in ['audio', 'video']:
+                transceiver = self.__getTransceiverByMid(remote_m.rtp.muxId)
+                description.media.append(create_media_description_for_transceiver(
+                    transceiver, cname=self.__cname, mid=transceiver.mid, type='answer'))
+            else:
+                description.media.append(create_media_description_for_sctp(
+                    self.__sctp, legacy=self._sctpLegacySdp, mid=self.__sctp.mid))
+
+        bundle = sdp.GroupDescription(semantic='BUNDLE', items=[])
+        for media in description.media:
+            bundle.items.append(media.rtp.muxId)
+        description.group.append(bundle)
+
+        return wrap_session_description(description)
 
     def createDataChannel(self, label, ordered=True, protocol=''):
         """
@@ -393,14 +486,34 @@ class RTCPeerConnection(EventEmitter):
             transceiver._codecs = codecs
             transceiver._headerExtensions = HEADER_EXTENSIONS[transceiver.kind][:]
 
-        # assign MIDs
-        for transceiver in self.__transceivers:
-            if transceiver.mid is None:
-                transceiver._set_mid(allocate_mid(self.__seenMids))
-        if self.__sctp and self.__sctp.mid is None:
-            self.__sctp.mid = allocate_mid(self.__seenMids)
+        mids = self.__seenMids.copy()
 
-        return wrap_session_description(self.__createDescription('offer'))
+        # create description
+        ntp_seconds = clock.current_ntp_time() >> 32
+        description = sdp.SessionDescription()
+        description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
+        description.msid_semantic.append(sdp.GroupDescription(
+            semantic='WMS',
+            items=['*']))
+        description.type = 'offer'
+
+        # FIXME: handle existing transceivers / sctp
+
+        # handle new transceivers / sctp
+        for transceiver in filter(lambda x: x.mid is None and not x.stopped, self.__transceivers):
+            transceiver._set_mline_index(len(description.media))
+            description.media.append(create_media_description_for_transceiver(
+                transceiver, cname=self.__cname, mid=allocate_mid(mids), type='offer'))
+        if self.__sctp and self.__sctp.mid is None:
+            description.media.append(create_media_description_for_sctp(
+                self.__sctp, legacy=self._sctpLegacySdp, mid=allocate_mid(mids)))
+
+        bundle = sdp.GroupDescription(semantic='BUNDLE', items=[])
+        for media in description.media:
+            bundle.items.append(media.rtp.muxId)
+        description.group.append(bundle)
+
+        return wrap_session_description(description)
 
     def getReceivers(self):
         """
@@ -443,35 +556,50 @@ class RTCPeerConnection(EventEmitter):
                                     by :meth:`createOffer` or :meth:`createAnswer()`.
         """
         # parse and validate description
-        parsedLocalDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
-        parsedLocalDescription.type = sessionDescription.type
-        self.__validate_description(parsedLocalDescription, is_local=True)
+        description = sdp.SessionDescription.parse(sessionDescription.sdp)
+        description.type = sessionDescription.type
+        self.__validate_description(description, is_local=True)
 
         # update signaling state
-        if sessionDescription.type == 'offer':
+        if description.type == 'offer':
             self.__setSignalingState('have-local-offer')
-        elif sessionDescription.type == 'answer':
+        elif description.type == 'answer':
             self.__setSignalingState('stable')
+
+        # assign MID
+        for i, media in enumerate(description.media):
+            mid = media.rtp.muxId
+            self.__seenMids.add(mid)
+            if media.kind in ['audio', 'video']:
+                transceiver = self.__getTransceiverByMLineIndex(i)
+                transceiver._set_mid(mid)
+            elif media.kind == 'application':
+                self.__sctp.mid = mid
 
         # set ICE role
         if self.__initialOfferer is None:
-            self.__initialOfferer = (sessionDescription.type == 'offer')
+            self.__initialOfferer = (description.type == 'offer')
             for iceTransport in self.__iceTransports:
                 iceTransport._connection.ice_controlling = self.__initialOfferer
 
         # configure direction
         for t in self.__transceivers:
-            if sessionDescription.type in ['answer', 'pranswer']:
+            if description.type in ['answer', 'pranswer']:
                 t._currentDirection = and_direction(t.direction, t._offerDirection)
 
-        # gather
+        # gather candidates
         await self.__gather()
+        for i, media in enumerate(description.media):
+            if media.kind in ['audio', 'video']:
+                transceiver = self.__getTransceiverByMLineIndex(i)
+                add_transport_description(media, transceiver._transport)
+            elif media.kind == 'application':
+                add_transport_description(media, self.__sctp.transport)
 
         # connect
         asyncio.ensure_future(self.__connect())
 
         # replace description
-        description = self.__createDescription(sessionDescription.type)
         if description.type == 'answer':
             self.__currentLocalDescription = description
             self.__pendingLocalDescription = None
@@ -486,13 +614,13 @@ class RTCPeerConnection(EventEmitter):
                                     information received over the signaling channel.
         """
         # parse and validate description
-        parsedRemoteDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
-        parsedRemoteDescription.type = sessionDescription.type
-        self.__validate_description(parsedRemoteDescription, is_local=False)
+        description = sdp.SessionDescription.parse(sessionDescription.sdp)
+        description.type = sessionDescription.type
+        self.__validate_description(description, is_local=False)
 
         # apply description
         trackEvents = []
-        for media in parsedRemoteDescription.media:
+        for i, media in enumerate(description.media):
             self.__seenMids.add(media.rtp.muxId)
             if media.kind in ['audio', 'video']:
                 # find transceiver
@@ -504,6 +632,7 @@ class RTCPeerConnection(EventEmitter):
                     transceiver = self.__createTransceiver(direction='recvonly', kind=media.kind)
                 if transceiver.mid is None:
                     transceiver._set_mid(media.rtp.muxId)
+                    transceiver._set_mline_index(i)
 
                 # negotiate codecs
                 common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
@@ -541,7 +670,7 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure direction
                 direction = reverse_direction(media.direction)
-                if parsedRemoteDescription.type in ['answer', 'pranswer']:
+                if description.type in ['answer', 'pranswer']:
                     transceiver._currentDirection = direction
                 else:
                     transceiver._offerDirection = direction
@@ -577,7 +706,7 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteIce[self.__sctp] = media.ice
 
         # remove bundled transports
-        bundle = next((x for x in parsedRemoteDescription.group if x.semantic == 'BUNDLE'), None)
+        bundle = next((x for x in description.group if x.semantic == 'BUNDLE'), None)
         if bundle and bundle.items:
             # find main media stream
             masterMid = bundle.items[0]
@@ -618,17 +747,17 @@ class RTCPeerConnection(EventEmitter):
         asyncio.ensure_future(self.__connect())
 
         # update signaling state
-        if parsedRemoteDescription.type == 'offer':
+        if description.type == 'offer':
             self.__setSignalingState('have-remote-offer')
-        elif parsedRemoteDescription.type == 'answer':
+        elif description.type == 'answer':
             self.__setSignalingState('stable')
 
         # replace description
-        if parsedRemoteDescription.type == 'answer':
-            self.__currentRemoteDescription = parsedRemoteDescription
+        if description.type == 'answer':
+            self.__currentRemoteDescription = description
             self.__pendingRemoteDescription = None
         else:
-            self.__pendingRemoteDescription = parsedRemoteDescription
+            self.__pendingRemoteDescription = description
 
     async def __connect(self):
         for transceiver in self.__transceivers:
@@ -689,99 +818,6 @@ class RTCPeerConnection(EventEmitter):
         def on_datachannel(channel):
             self.emit('datachannel', channel)
 
-    def __createDescription(self, type):
-        ntp_seconds = clock.current_ntp_time() >> 32
-        description = sdp.SessionDescription()
-        description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
-        description.msid_semantic.append(sdp.GroupDescription(
-            semantic='WMS',
-            items=['*']))
-        description.type = type
-
-        bundle = sdp.GroupDescription(semantic='BUNDLE', items=[])
-        for transceiver in self.__transceivers:
-            dtlsTransport = transceiver._transport
-            iceTransport = dtlsTransport.transport
-            default_candidate = get_default_candidate(iceTransport)
-
-            media = sdp.MediaDescription(
-                kind=transceiver.kind,
-                port=default_candidate.port,
-                profile='UDP/TLS/RTP/SAVPF',
-                fmt=[c.payloadType for c in transceiver._codecs])
-            media.host = default_candidate.ip
-            if type in ['answer', 'pranswer']:
-                media.direction = and_direction(transceiver.direction, transceiver._offerDirection)
-            else:
-                media.direction = transceiver.direction
-
-            media.rtp = self.__localRtp(transceiver)
-            media.rtcp_host = '0.0.0.0'
-            media.rtcp_port = 9
-            media.rtcp_mux = True
-            media.ssrc = [
-                sdp.SsrcDescription(
-                    ssrc=transceiver.sender._ssrc,
-                    cname=self.__cname,
-                    msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
-                    mslabel=transceiver.sender._stream_id,
-                    label=transceiver.sender._track_id),
-            ]
-
-            # if RTX is enabled, add corresponding SSRC
-            if next((x for x in media.rtp.codecs if x.name == 'rtx'), None):
-                media.ssrc.append(sdp.SsrcDescription(
-                    ssrc=transceiver.sender._rtx_ssrc,
-                    cname=self.__cname,
-                    msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
-                    mslabel=transceiver.sender._stream_id,
-                    label=transceiver.sender._track_id))
-                media.ssrc_group = [
-                    sdp.GroupDescription(
-                        semantic='FID',
-                        items=[
-                            transceiver.sender._ssrc,
-                            transceiver.sender._rtx_ssrc,
-                        ])
-                ]
-
-            add_transport_description(media, iceTransport, dtlsTransport)
-
-            description.media.append(media)
-            bundle.items.append(media.rtp.muxId)
-
-        if self.__sctp:
-            dtlsTransport = self.__sctp.transport
-            iceTransport = dtlsTransport.transport
-            default_candidate = get_default_candidate(iceTransport)
-
-            if self._sctpLegacySdp:
-                media = sdp.MediaDescription(
-                    kind='application',
-                    port=default_candidate.port,
-                    profile='DTLS/SCTP',
-                    fmt=[self.__sctp.port])
-                media.sctpmap[self.__sctp.port] = (
-                    'webrtc-datachannel %d' % self.__sctp._outbound_streams_count)
-            else:
-                media = sdp.MediaDescription(
-                    kind='application',
-                    port=default_candidate.port,
-                    profile='UDP/DTLS/SCTP',
-                    fmt=['webrtc-datachannel'])
-                media.sctp_port = self.__sctp.port
-
-            media.host = default_candidate.ip
-            media.rtp.muxId = self.__sctp.mid
-            media.sctpCapabilities = self.__sctp.getCapabilities()
-            add_transport_description(media, iceTransport, dtlsTransport)
-
-            description.media.append(media)
-            bundle.items.append(media.rtp.muxId)
-
-        description.group.append(bundle)
-        return description
-
     def __createTransceiver(self, direction, kind, sender_track=None):
         dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
@@ -796,6 +832,15 @@ class RTCPeerConnection(EventEmitter):
         self.__transceivers.append(transceiver)
         return transceiver
 
+    def __getTransceiverByMid(self, mid):
+        return next(filter(lambda x: x.mid == mid, self.__transceivers), None)
+
+    def __getTransceiverByMLineIndex(self, index):
+        return next(filter(lambda x: x._get_mline_index() == index, self.__transceivers), None)
+
+    def __localDescription(self):
+        return self.__pendingLocalDescription or self.__currentLocalDescription
+
     def __localRtp(self, transceiver):
         rtp = RTCRtpParameters(
             codecs=transceiver._codecs,
@@ -805,6 +850,9 @@ class RTCPeerConnection(EventEmitter):
         rtp.rtcp.ssrc = transceiver.sender._ssrc
         rtp.rtcp.mux = True
         return rtp
+
+    def __remoteDescription(self):
+        return self.__pendingRemoteDescription or self.__currentRemoteDescription
 
     def __setSignalingState(self, state):
         self.__signalingState = state
@@ -872,7 +920,7 @@ class RTCPeerConnection(EventEmitter):
 
         # check the number of media section matches
         if description.type in ['answer', 'pranswer']:
-            offer = self.__pendingRemoteDescription if is_local else self.__pendingLocalDescription
+            offer = self.__remoteDescription() if is_local else self.__localDescription()
             offer_media = [(media.kind, media.rtp.muxId) for media in offer.media]
             answer_media = [(media.kind, media.rtp.muxId) for media in description.media]
             if answer_media != offer_media:

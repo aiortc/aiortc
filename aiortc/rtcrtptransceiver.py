@@ -16,6 +16,7 @@ class RTCRtpTransceiver:
         self.__direction = direction
         self.__kind = kind
         self.__mid = None
+        self.__mline_index = None
         self.__receiver = receiver
         self.__sender = sender
         self.__stopped = False
@@ -85,3 +86,9 @@ class RTCRtpTransceiver:
 
     def _set_mid(self, mid):
         self.__mid = mid
+
+    def _get_mline_index(self):
+        return self.__mline_index
+
+    def _set_mline_index(self, idx):
+        self.__mline_index = idx

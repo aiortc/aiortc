@@ -598,8 +598,6 @@ a=rtpmap:8 PCMA/8000
 
         # add audio tracks immediately
         pc1.addTrack(AudioStreamTrack())
-        pc1.getTransceivers()[0]._set_mid('sdparta_0')  # pretend we're Firefox!
-
         pc2.addTrack(AudioStreamTrack())
 
         # create offer
@@ -608,6 +606,9 @@ a=rtpmap:8 PCMA/8000
         self.assertTrue('m=audio ' in offer.sdp)
         self.assertFalse('a=candidate:' in offer.sdp)
         self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        # pretend we're Firefox!
+        offer.sdp = offer.sdp.replace('a=mid:0', 'a=mid:sdparta_0')
 
         run(pc1.setLocalDescription(offer))
         self.assertEqual(pc1.iceConnectionState, 'new')
