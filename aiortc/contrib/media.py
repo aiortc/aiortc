@@ -12,6 +12,29 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 logger = logging.getLogger('media')
 
 
+REAL_TIME_FORMATS = [
+    'alsa',
+    'android_camera',
+    'avfoundation',
+    'bktr',
+    'decklink',
+    'dshow',
+    'fbdev',
+    'gdigrab',
+    'iec61883',
+    'jack',
+    'kmsgrab',
+    'openal',
+    'oss',
+    'pulse',
+    'sndio',
+    'rtsp',
+    'v4l2',
+    'vfwcap',
+    'x11grab',
+]
+
+
 async def blackhole_consume(track):
     while True:
         try:
@@ -197,8 +220,7 @@ class MediaPlayer:
 
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(','))
-        self._throttle_playback = not container_format.intersection([
-            'avfoundation', 'dshow', 'rtsp', 'v4l2', 'vfwcap'])
+        self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
 
     @property
     def audio(self):
