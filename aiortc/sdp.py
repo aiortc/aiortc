@@ -266,6 +266,7 @@ class SessionDescription:
         self.group = []  # type: List[GroupDescription]
         self.msid_semantic = []  # type: List[GroupDescription]
         self.media = []  # type: List[MediaDescription]
+        self.type = None  # type: str
 
     @classmethod
     def parse(cls, sdp):

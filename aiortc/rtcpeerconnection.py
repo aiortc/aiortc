@@ -147,6 +147,13 @@ def reverse_direction(direction):
     return direction
 
 
+def wrap_session_description(session_description: sdp.SessionDescription):
+    if session_description is not None:
+        return RTCSessionDescription(
+            sdp=str(session_description),
+            type=session_description.type)
+
+
 class RTCPeerConnection(EventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
@@ -176,8 +183,10 @@ class RTCPeerConnection(EventEmitter):
         self.__isClosed = False
         self.__signalingState = 'stable'
 
-        self.__currentLocalDescription = None
-        self.__currentRemoteDescription = None
+        self.__currentLocalDescription = None  # type: sdp.SessionDescription
+        self.__currentRemoteDescription = None  # type: sdp.SessionDescription
+        self.__pendingLocalDescription = None  # type: sdp.SessionDescription
+        self.__pendingRemoteDescription = None  # type: sdp.SessionDescription
 
     @property
     def iceConnectionState(self):
@@ -193,7 +202,8 @@ class RTCPeerConnection(EventEmitter):
         An :class:`RTCSessionDescription` describing the session for
         the local end of the connection.
         """
-        return self.__currentLocalDescription
+        return wrap_session_description(
+            self.__pendingLocalDescription or self.__currentLocalDescription)
 
     @property
     def remoteDescription(self):
@@ -201,7 +211,8 @@ class RTCPeerConnection(EventEmitter):
         An :class:`RTCSessionDescription` describing the session for
         the remote end of the connection.
         """
-        return self.__currentRemoteDescription
+        return wrap_session_description(
+            self.__pendingRemoteDescription or self.__currentRemoteDescription)
 
     @property
     def sctp(self):
@@ -330,9 +341,7 @@ class RTCPeerConnection(EventEmitter):
             raise InvalidStateError('Cannot create answer in signaling state "%s"' %
                                     self.signalingState)
 
-        return RTCSessionDescription(
-            sdp=self.__createSdp('answer'),
-            type='answer')
+        return wrap_session_description(self.__createDescription('answer'))
 
     def createDataChannel(self, label, ordered=True, protocol=''):
         """
@@ -391,9 +400,7 @@ class RTCPeerConnection(EventEmitter):
         if self.__sctp and self.__sctp.mid is None:
             self.__sctp.mid = allocate_mid(self.__seenMids)
 
-        return RTCSessionDescription(
-            sdp=self.__createSdp('offer'),
-            type='offer')
+        return wrap_session_description(self.__createDescription('offer'))
 
     def getReceivers(self):
         """
@@ -457,9 +464,13 @@ class RTCPeerConnection(EventEmitter):
         # connect
         asyncio.ensure_future(self.__connect())
 
-        self.__currentLocalDescription = RTCSessionDescription(
-            sdp=self.__createSdp(sessionDescription.type),
-            type=sessionDescription.type)
+        # replace description
+        description = self.__createDescription(sessionDescription.type)
+        if description.type == 'answer':
+            self.__currentLocalDescription = description
+            self.__pendingLocalDescription = None
+        else:
+            self.__pendingLocalDescription = description
 
     async def setRemoteDescription(self, sessionDescription):
         """
@@ -468,22 +479,22 @@ class RTCPeerConnection(EventEmitter):
         :param: sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
-        trackEvents = []
+        # parse description
+        parsedRemoteDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
+        parsedRemoteDescription.type = sessionDescription.type
 
         # check description is compatible with signaling state
-        if sessionDescription.type == 'offer':
+        if parsedRemoteDescription.type == 'offer':
             if self.signalingState not in ['stable', 'have-remote-offer']:
                 raise InvalidStateError('Cannot handle offer in signaling state "%s"' %
                                         self.signalingState)
-        elif sessionDescription.type == 'answer':
+        elif parsedRemoteDescription.type == 'answer':
             if self.signalingState not in ['have-local-offer', 'have-remote-pranswer']:
                 raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
                                         self.signalingState)
 
-        # parse description
-        parsedRemoteDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
-
         # apply description
+        trackEvents = []
         for media in parsedRemoteDescription.media:
             self.__seenMids.add(media.rtp.muxId)
             if media.kind in ['audio', 'video']:
@@ -533,7 +544,7 @@ class RTCPeerConnection(EventEmitter):
 
                 # configure direction
                 direction = reverse_direction(media.direction)
-                if sessionDescription.type in ['answer', 'pranswer']:
+                if parsedRemoteDescription.type in ['answer', 'pranswer']:
                     transceiver._currentDirection = direction
                 else:
                     transceiver._offerDirection = direction
@@ -610,12 +621,17 @@ class RTCPeerConnection(EventEmitter):
         asyncio.ensure_future(self.__connect())
 
         # update signaling state
-        if sessionDescription.type == 'offer':
+        if parsedRemoteDescription.type == 'offer':
             self.__setSignalingState('have-remote-offer')
-        elif sessionDescription.type == 'answer':
+        elif parsedRemoteDescription.type == 'answer':
             self.__setSignalingState('stable')
 
-        self.__currentRemoteDescription = sessionDescription
+        # replace description
+        if parsedRemoteDescription.type == 'answer':
+            self.__currentRemoteDescription = parsedRemoteDescription
+            self.__pendingRemoteDescription = None
+        else:
+            self.__pendingRemoteDescription = parsedRemoteDescription
 
     async def __connect(self):
         for transceiver in self.__transceivers:
@@ -676,13 +692,14 @@ class RTCPeerConnection(EventEmitter):
         def on_datachannel(channel):
             self.emit('datachannel', channel)
 
-    def __createSdp(self, type):
+    def __createDescription(self, type):
         ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
         description.origin = '- %d %d IN IP4 0.0.0.0' % (ntp_seconds, ntp_seconds)
         description.msid_semantic.append(sdp.GroupDescription(
             semantic='WMS',
             items=['*']))
+        description.type = type
 
         bundle = sdp.GroupDescription(semantic='BUNDLE', items=[])
         for transceiver in self.__transceivers:
@@ -766,7 +783,7 @@ class RTCPeerConnection(EventEmitter):
             bundle.items.append(media.rtp.muxId)
 
         description.group.append(bundle)
-        return str(description)
+        return description
 
     def __createTransceiver(self, direction, kind, sender_track=None):
         dtlsTransport = self.__createDtlsTransport()
