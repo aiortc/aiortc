@@ -16,6 +16,7 @@ from .utils import lf2crlf, run
 
 LONG_DATA = b'\xff' * 2000
 STRIP_CANDIDATES_RE = re.compile('^a=(candidate:.*|end-of-candidates)\r\n', re.M)
+STRIP_CREDENTIALS_RE = re.compile('^a=(ice-ufrag|ice-pwd):.*\r\n', re.M)
 
 
 class BogusStreamTrack(MediaStreamTrack):
@@ -29,9 +30,15 @@ def mids(pc):
     return mids
 
 
-def strip_candidates(description):
+def strip_ice_candidates(description):
     return RTCSessionDescription(
         sdp=STRIP_CANDIDATES_RE.sub('', description.sdp),
+        type=description.type)
+
+
+def strip_ice_credentials(description):
+    return RTCSessionDescription(
+        sdp=STRIP_CREDENTIALS_RE.sub('', description.sdp),
         type=description.type)
 
 
@@ -497,7 +504,7 @@ a=rtpmap:8 PCMA/8000
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
         # strip out candidates
-        desc1 = strip_candidates(pc1.localDescription)
+        desc1 = strip_ice_candidates(pc1.localDescription)
 
         # handle offer
         run(pc2.setRemoteDescription(desc1))
@@ -527,7 +534,7 @@ a=rtpmap:8 PCMA/8000
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # strip out candidates
-        desc2 = strip_candidates(pc2.localDescription)
+        desc2 = strip_ice_candidates(pc2.localDescription)
 
         # handle answer
         run(pc1.setRemoteDescription(desc2))
@@ -2155,7 +2162,7 @@ a=fmtp:101 apt=100
         self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
 
         # strip out candidates
-        desc1 = strip_candidates(pc1.localDescription)
+        desc1 = strip_ice_candidates(pc1.localDescription)
 
         # handle offer
         run(pc2.setRemoteDescription(desc1))
@@ -2182,7 +2189,7 @@ a=fmtp:101 apt=100
         self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
 
         # strip out candidates
-        desc2 = strip_candidates(pc2.localDescription)
+        desc2 = strip_ice_candidates(pc2.localDescription)
 
         # handle answer
         run(pc1.setRemoteDescription(desc2))
@@ -2409,6 +2416,64 @@ a=fmtp:101 apt=100
             run(pc.createOffer())
         self.assertEqual(str(cm.exception),
                          'Cannot create an offer with no media and no data channels')
+
+    def test_setLocalDescription_unexpected_answer(self):
+        pc = RTCPeerConnection()
+        pc.addTrack(AudioStreamTrack())
+        answer = run(pc.createOffer())
+        answer.type = 'answer'
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc.setLocalDescription(answer))
+        self.assertEqual(str(cm.exception), 'Cannot handle answer in signaling state "stable"')
+
+    def test_setLocalDescription_unexpected_offer(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # apply offer
+        pc1.addTrack(AudioStreamTrack())
+        run(pc1.setLocalDescription(run(pc1.createOffer())))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # mangle answer into an offer
+        offer = pc2.remoteDescription
+        offer.type = 'offer'
+        with self.assertRaises(InvalidStateError) as cm:
+            run(pc2.setLocalDescription(offer))
+        self.assertEqual(str(cm.exception),
+                         'Cannot handle offer in signaling state "have-remote-offer"')
+
+    def test_setRemoteDescription_media_mismatch(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # apply offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # apply answer
+        answer = run(pc2.createAnswer())
+        run(pc2.setLocalDescription(answer))
+        mangled = RTCSessionDescription(
+            sdp=pc2.localDescription.sdp.replace('m=audio', 'm=video'),
+            type=pc2.localDescription.type)
+        with self.assertRaises(ValueError) as cm:
+            run(pc1.setRemoteDescription(mangled))
+        self.assertEqual(str(cm.exception), 'Media sections in answer do not match offer')
+
+    def test_setRemoteDescription_without_ice_credentials(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+
+        with self.assertRaises(ValueError) as cm:
+            run(pc2.setRemoteDescription(strip_ice_credentials(pc1.localDescription)))
+        self.assertEqual(str(cm.exception), 'ICE username fragment or password is missing')
 
     def test_setRemoteDescription_unexpected_answer(self):
         pc = RTCPeerConnection()

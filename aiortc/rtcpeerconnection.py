@@ -442,6 +442,12 @@ class RTCPeerConnection(EventEmitter):
         :param: sessionDescription: An :class:`RTCSessionDescription` generated
                                     by :meth:`createOffer` or :meth:`createAnswer()`.
         """
+        # parse and validate description
+        parsedLocalDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
+        parsedLocalDescription.type = sessionDescription.type
+        self.__validate_description(parsedLocalDescription, is_local=True)
+
+        # update signaling state
         if sessionDescription.type == 'offer':
             self.__setSignalingState('have-local-offer')
         elif sessionDescription.type == 'answer':
@@ -479,19 +485,10 @@ class RTCPeerConnection(EventEmitter):
         :param: sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
-        # parse description
+        # parse and validate description
         parsedRemoteDescription = sdp.SessionDescription.parse(sessionDescription.sdp)
         parsedRemoteDescription.type = sessionDescription.type
-
-        # check description is compatible with signaling state
-        if parsedRemoteDescription.type == 'offer':
-            if self.signalingState not in ['stable', 'have-remote-offer']:
-                raise InvalidStateError('Cannot handle offer in signaling state "%s"' %
-                                        self.signalingState)
-        elif parsedRemoteDescription.type == 'answer':
-            if self.signalingState not in ['have-local-offer', 'have-remote-pranswer']:
-                raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
-                                        self.signalingState)
+        self.__validate_description(parsedRemoteDescription, is_local=False)
 
         # apply description
         trackEvents = []
@@ -846,3 +843,37 @@ class RTCPeerConnection(EventEmitter):
         if state != self.__iceGatheringState:
             self.__iceGatheringState = state
             self.emit('icegatheringstatechange')
+
+    def __validate_description(self, description, is_local):
+        # check description is compatible with signaling state
+        if is_local:
+            if description.type == 'offer':
+                if self.signalingState not in ['stable', 'have-local-offer']:
+                    raise InvalidStateError('Cannot handle offer in signaling state "%s"' %
+                                            self.signalingState)
+            elif description.type == 'answer':
+                if self.signalingState not in ['have-remote-offer', 'have-local-pranswer']:
+                    raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
+                                            self.signalingState)
+        else:
+            if description.type == 'offer':
+                if self.signalingState not in ['stable', 'have-remote-offer']:
+                    raise InvalidStateError('Cannot handle offer in signaling state "%s"' %
+                                            self.signalingState)
+            elif description.type == 'answer':
+                if self.signalingState not in ['have-local-offer', 'have-remote-pranswer']:
+                    raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
+                                            self.signalingState)
+
+        # check ICE credentials were provided
+        for media in description.media:
+            if not media.ice.usernameFragment or not media.ice.password:
+                raise ValueError('ICE username fragment or password is missing')
+
+        # check the number of media section matches
+        if description.type in ['answer', 'pranswer']:
+            offer = self.__pendingRemoteDescription if is_local else self.__pendingLocalDescription
+            offer_media = [(media.kind, media.rtp.muxId) for media in offer.media]
+            answer_media = [(media.kind, media.rtp.muxId) for media in description.media]
+            if answer_media != offer_media:
+                raise ValueError('Media sections in answer do not match offer')
