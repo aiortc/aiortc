@@ -930,10 +930,14 @@ class RTCPeerConnection(EventEmitter):
                     raise InvalidStateError('Cannot handle answer in signaling state "%s"' %
                                             self.signalingState)
 
-        # check ICE credentials were provided
         for media in description.media:
+            # check ICE credentials were provided
             if not media.ice.usernameFragment or not media.ice.password:
                 raise ValueError('ICE username fragment or password is missing')
+
+            # check RTCP mux is used
+            if media.kind in ['audio', 'video'] and not media.rtcp_mux:
+                raise ValueError('RTCP mux is not enabled')
 
         # check the number of media section matches
         if description.type in ['answer', 'pranswer']:

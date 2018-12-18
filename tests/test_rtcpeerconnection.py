@@ -16,7 +16,6 @@ from .utils import lf2crlf, run
 
 LONG_DATA = b'\xff' * 2000
 STRIP_CANDIDATES_RE = re.compile('^a=(candidate:.*|end-of-candidates)\r\n', re.M)
-STRIP_CREDENTIALS_RE = re.compile('^a=(ice-ufrag|ice-pwd):.*\r\n', re.M)
 
 
 class BogusStreamTrack(MediaStreamTrack):
@@ -33,12 +32,6 @@ def mids(pc):
 def strip_ice_candidates(description):
     return RTCSessionDescription(
         sdp=STRIP_CANDIDATES_RE.sub('', description.sdp),
-        type=description.type)
-
-
-def strip_ice_credentials(description):
-    return RTCSessionDescription(
-        sdp=STRIP_CREDENTIALS_RE.sub('', description.sdp),
         type=description.type)
 
 
@@ -2755,9 +2748,27 @@ a=fmtp:101 apt=100
         offer = run(pc1.createOffer())
         run(pc1.setLocalDescription(offer))
 
+        mangled = RTCSessionDescription(
+            sdp=re.sub('^a=(ice-ufrag|ice-pwd):.*\r\n', '', pc1.localDescription.sdp, flags=re.M),
+            type=pc1.localDescription.type)
         with self.assertRaises(ValueError) as cm:
-            run(pc2.setRemoteDescription(strip_ice_credentials(pc1.localDescription)))
+            run(pc2.setRemoteDescription(mangled))
         self.assertEqual(str(cm.exception), 'ICE username fragment or password is missing')
+
+    def test_setRemoteDescription_without_rtcp_mux(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+
+        mangled = RTCSessionDescription(
+            sdp=re.sub('^a=rtcp-mux\r\n', '', pc1.localDescription.sdp, flags=re.M),
+            type=pc1.localDescription.type)
+        with self.assertRaises(ValueError) as cm:
+            run(pc2.setRemoteDescription(mangled))
+        self.assertEqual(str(cm.exception), 'RTCP mux is not enabled')
 
     def test_setRemoteDescription_unexpected_answer(self):
         pc = RTCPeerConnection()
