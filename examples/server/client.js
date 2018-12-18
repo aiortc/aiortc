@@ -1,39 +1,52 @@
-var pc = new RTCPeerConnection({
-    sdpSemantics: 'unified-plan'
-});
-
 // get DOM elements
 var dataChannelLog = document.getElementById('data-channel'),
     iceConnectionLog = document.getElementById('ice-connection-state'),
     iceGatheringLog = document.getElementById('ice-gathering-state'),
     signalingLog = document.getElementById('signaling-state');
 
-// register some listeners to help debugging
-pc.addEventListener('icegatheringstatechange', function() {
-    iceGatheringLog.textContent += ' -> ' + pc.iceGatheringState;
-}, false);
-iceGatheringLog.textContent = pc.iceGatheringState;
-
-pc.addEventListener('iceconnectionstatechange', function() {
-    iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
-}, false);
-iceConnectionLog.textContent = pc.iceConnectionState;
-
-pc.addEventListener('signalingstatechange', function() {
-    signalingLog.textContent += ' -> ' + pc.signalingState;
-}, false);
-signalingLog.textContent = pc.signalingState;
-
-// connect audio / video
-pc.addEventListener('track', function(evt) {
-    if (evt.track.kind == 'video')
-        document.getElementById('video').srcObject = evt.streams[0];
-    else
-        document.getElementById('audio').srcObject = evt.streams[0];
-});
+// peer connection
+var pc = null;
 
 // data channel
 var dc = null, dcInterval = null;
+
+function createPeerConnection() {
+    var config = {
+        sdpSemantics: 'unified-plan'
+    };
+
+    if (document.getElementById('use-stun').checked) {
+        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
+    }
+
+    var pc = new RTCPeerConnection(config);
+
+    // register some listeners to help debugging
+    pc.addEventListener('icegatheringstatechange', function() {
+        iceGatheringLog.textContent += ' -> ' + pc.iceGatheringState;
+    }, false);
+    iceGatheringLog.textContent = pc.iceGatheringState;
+
+    pc.addEventListener('iceconnectionstatechange', function() {
+        iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
+    }, false);
+    iceConnectionLog.textContent = pc.iceConnectionState;
+
+    pc.addEventListener('signalingstatechange', function() {
+        signalingLog.textContent += ' -> ' + pc.signalingState;
+    }, false);
+    signalingLog.textContent = pc.signalingState;
+
+    // connect audio / video
+    pc.addEventListener('track', function(evt) {
+        if (evt.track.kind == 'video')
+            document.getElementById('video').srcObject = evt.streams[0];
+        else
+            document.getElementById('audio').srcObject = evt.streams[0];
+    });
+
+    return pc;
+}
 
 function negotiate() {
     return pc.createOffer().then(function(offer) {
@@ -84,6 +97,8 @@ function negotiate() {
 
 function start() {
     document.getElementById('start').style.display = 'none';
+
+    pc = createPeerConnection();
 
     if (document.getElementById('use-datachannel').checked) {
         dc = pc.createDataChannel('chat');
