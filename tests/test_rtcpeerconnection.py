@@ -2462,6 +2462,7 @@ a=fmtp:101 apt=100
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
             candidate.sdpMid = pc1.sctp.mid
             pc2.addIceCandidate(candidate)
+        run(asyncio.sleep(0.1))
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
