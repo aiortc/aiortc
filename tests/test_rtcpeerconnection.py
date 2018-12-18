@@ -27,7 +27,7 @@ def mids(pc):
     mids = [x.mid for x in pc.getTransceivers()]
     if pc.sctp:
         mids.append(pc.sctp.mid)
-    return mids
+    return sorted(mids)
 
 
 def strip_ice_candidates(description):
@@ -158,6 +158,14 @@ class RTCPeerConnectionTest(TestCase):
             self.assertEqual(transceivers[i].sender.transport, transport)
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
+
+    def assertHasIceCandidates(self, description):
+        self.assertTrue('a=candidate:' in description.sdp)
+        self.assertTrue('a=end-of-candidates' in description.sdp)
+
+    def assertHasDtls(self, description, setup):
+        self.assertTrue('a=fingerprint:sha-256' in description.sdp)
+        self.assertTrue('a=setup:' + setup in description.sdp)
 
     def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):
         pc = RTCPeerConnection()
@@ -394,11 +402,9 @@ class RTCPeerConnectionTest(TestCase):
 a=rtpmap:0 PCMU/8000
 a=rtpmap:8 PCMA/8000
 """) in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -425,11 +431,9 @@ a=rtpmap:8 PCMA/8000
 a=rtpmap:0 PCMU/8000
 a=rtpmap:8 PCMA/8000
 """) in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'sendrecv')
 
         # handle answer
@@ -497,11 +501,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # strip out candidates
         desc1 = strip_ice_candidates(pc1.localDescription)
@@ -527,11 +529,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # strip out candidates
         desc2 = strip_ice_candidates(pc2.localDescription)
@@ -615,11 +615,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['sdparta_0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
         self.assertTrue('a=mid:sdparta_0' in pc1.localDescription.sdp)
 
         # handle offer
@@ -641,11 +639,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertTrue('a=mid:sdparta_0' in pc2.localDescription.sdp)
 
         # handle answer
@@ -709,11 +705,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=recvonly' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -735,11 +729,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=inactive' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'inactive')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'recvonly')
 
@@ -809,11 +801,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=recvonly' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -836,11 +826,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendonly' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'sendonly')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'sendrecv')
 
@@ -910,11 +898,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendonly' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -936,11 +922,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=recvonly' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'recvonly')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'recvonly')
 
@@ -1009,11 +993,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -1034,11 +1016,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=recvonly' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'recvonly')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'recvonly')
 
@@ -1104,11 +1084,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'new')
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -1130,11 +1108,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendonly' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
         self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'sendonly')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'sendonly')
 
@@ -1202,11 +1178,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0', '1'])
         self.assertTrue('m=audio ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -1229,11 +1203,9 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertEqual(mids(pc2), ['0', '1'])
         self.assertTrue('m=audio ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -1536,6 +1508,142 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_connect_audio_then_video(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # 1. AUDIO ONLY
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertFalse('m=video ' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertFalse('m=video ' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertFalse('m=video ' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # check a single transport is used
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+
+        # 2. ADD VIDEO
+
+        # create offer
+        pc1.addTrack(VideoStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertTrue('m=video ' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0', '1'])
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 2)
+        self.assertEqual(len(pc2.getSenders()), 2)
+        self.assertEqual(len(pc2.getTransceivers()), 2)
+        self.assertEqual(mids(pc2), ['0', '1'])
+
+        # create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertTrue('m=video ' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue('m=video ' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # check a single transport is used
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'new', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete', 'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'new', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete', 'new', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_connect_video_bidirectional(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -1587,11 +1695,9 @@ a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01
 a=rtpmap:101 rtx/90000
 a=fmtp:101 apt=100
 """) in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -1634,11 +1740,9 @@ a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01
 a=rtpmap:101 rtx/90000
 a=fmtp:101 apt=100
 """) in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -1712,11 +1816,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=video ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # strip out vp8
         parsed = SessionDescription.parse(pc1.localDescription.sdp)
@@ -1748,11 +1850,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=video ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -1845,11 +1945,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -1870,11 +1968,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sctpmap:5000 webrtc-datachannel 65535' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -1999,11 +2095,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
         self.assertTrue('a=sctp-port:5000' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -2024,11 +2118,9 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
         self.assertTrue('a=sctp-port:5000' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
@@ -2099,6 +2191,205 @@ a=fmtp:101 apt=100
         with self.assertRaises(InvalidStateError):
             dc.send('hello')
 
+    def test_connect_datachannel_then_audio(self):
+        pc1 = RTCPeerConnection()
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        @pc2.on('datachannel')
+        def on_datachannel(channel):
+            self.assertEqual(channel.readyState, 'open')
+            pc2_data_channels.append(channel)
+
+            @channel.on('message')
+            def on_message(message):
+                pc2_data_messages.append(message)
+                if isinstance(message, str):
+                    channel.send('string-echo: ' + message)
+                else:
+                    channel.send(b'binary-echo: ' + message)
+
+        # create data channel
+        dc = pc1.createDataChannel('chat', protocol='bob')
+        self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.ordered, True)
+        self.assertEqual(dc.protocol, 'bob')
+        self.assertEqual(dc.readyState, 'connecting')
+
+        # send messages
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+            dc.send('')
+            dc.send(b'\x00\x01\x02\x03')
+            dc.send(b'')
+            dc.send(LONG_DATA)
+            with self.assertRaises(ValueError) as cm:
+                dc.send(1234)
+            self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+
+        @dc.on('message')
+        def on_message(message):
+            pc1_data_messages.append(message)
+
+        # 1. DATA CHANNEL ONLY
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=application ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=application ' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getTransceivers()), 0)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=application ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertEqual(dc.readyState, 'open')
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].ordered, True)
+        self.assertEqual(pc2_data_channels[0].protocol, 'bob')
+
+        # check pc2 got messages
+        run(asyncio.sleep(1))
+        self.assertEqual(pc2_data_messages, [
+            'hello',
+            '',
+            b'\x00\x01\x02\x03',
+            b'',
+            LONG_DATA,
+        ])
+
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, [
+            'string-echo: hello',
+            'string-echo: ',
+            b'binary-echo: \x00\x01\x02\x03',
+            b'binary-echo: ',
+            b'binary-echo: ' + LONG_DATA,
+        ])
+
+        # 2. ADD AUDIO
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=application ' in offer.sdp)
+        self.assertTrue('m=audio ' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0', '1'])
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0', '1'])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=application ' in answer.sdp)
+        self.assertTrue('m=audio ' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+
+        # check outcome
+        run(asyncio.sleep(1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
+        # check a single transport is used
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+
+        # 3. CLEANUP
+
+        # close data channel
+        dc.close()
+        self.assertEqual(dc.readyState, 'closing')
+        run(asyncio.sleep(0.5))
+        self.assertEqual(dc.readyState, 'closed')
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'new', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete', 'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'new', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete', 'new', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_connect_datachannel_trickle(self):
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
@@ -2157,10 +2448,8 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # strip out candidates
         desc1 = strip_ice_candidates(pc1.localDescription)
@@ -2184,10 +2473,8 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # strip out candidates
         desc2 = strip_ice_candidates(pc2.localDescription)
@@ -2311,10 +2598,8 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=application ' in pc1.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc1.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc1.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc1.localDescription.sdp)
-        self.assertTrue('a=setup:actpass' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -2335,10 +2620,8 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=application ' in pc2.localDescription.sdp)
-        self.assertTrue('a=candidate:' in pc2.localDescription.sdp)
-        self.assertTrue('a=end-of-candidates' in pc2.localDescription.sdp)
-        self.assertTrue('a=fingerprint:sha-256' in pc2.localDescription.sdp)
-        self.assertTrue('a=setup:active' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

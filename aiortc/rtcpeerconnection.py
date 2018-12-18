@@ -497,7 +497,22 @@ class RTCPeerConnection(EventEmitter):
             items=['*']))
         description.type = 'offer'
 
-        # FIXME: handle existing transceivers / sctp
+        # handle existing transceivers / sctp
+        local_media = self.__localDescription().media if self.__localDescription() else []
+        remote_media = self.__remoteDescription().media if self.__remoteDescription() else []
+        for i in range(max(len(local_media), len(remote_media))):
+            local_m = local_media[i] if i < len(local_media) else None
+            remote_m = remote_media[i] if i < len(remote_media) else None
+            media_kind = local_m.kind if local_m else remote_m.kind
+            mid = local_m.rtp.muxId if local_m else remote_m.rtp.muxId
+            if media_kind in ['audio', 'video']:
+                transceiver = self.__getTransceiverByMid(mid)
+                transceiver._set_mline_index(i)
+                description.media.append(create_media_description_for_transceiver(
+                    transceiver, cname=self.__cname, mid=mid, type='offer'))
+            elif media_kind == 'application':
+                description.media.append(create_media_description_for_sctp(
+                    self.__sctp, legacy=self._sctpLegacySdp, mid=mid))
 
         # handle new transceivers / sctp
         for transceiver in filter(lambda x: x.mid is None and not x.stopped, self.__transceivers):
@@ -738,6 +753,8 @@ class RTCPeerConnection(EventEmitter):
                 await dtlsTransport.stop()
                 await dtlsTransport.transport.stop()
                 self.__iceTransports.discard(dtlsTransport.transport)
+            self.__updateIceGatheringState()
+            self.__updateIceConnectionState()
 
         # FIXME: in aiortc 1.0.0 emit RTCTrackEvent directly
         for event in trackEvents:
