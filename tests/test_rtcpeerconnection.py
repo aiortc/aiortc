@@ -2,6 +2,8 @@ import asyncio
 import re
 from unittest import TestCase
 
+import aioice.stun
+
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
@@ -152,6 +154,11 @@ class RTCPeerConnectionTest(TestCase):
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
 
+    def assertIceCompleted(self, pc1, pc2):
+        run(asyncio.sleep(0.1))
+        self.assertEqual(pc1.iceConnectionState, 'completed')
+        self.assertEqual(pc2.iceConnectionState, 'completed')
+
     def assertHasIceCandidates(self, description):
         self.assertTrue('a=candidate:' in description.sdp)
         self.assertTrue('a=end-of-candidates' in description.sdp)
@@ -159,6 +166,23 @@ class RTCPeerConnectionTest(TestCase):
     def assertHasDtls(self, description, setup):
         self.assertTrue('a=fingerprint:sha-256' in description.sdp)
         self.assertTrue('a=setup:' + setup in description.sdp)
+
+    def closeDataChannel(self, dc):
+        dc.close()
+        self.assertEqual(dc.readyState, 'closing')
+        run(asyncio.sleep(0.1))
+        self.assertEqual(dc.readyState, 'closed')
+
+    def setUp(self):
+        # shorten retransmissions to run tests faster
+        self.retry_max = aioice.stun.RETRY_MAX
+        self.retry_rto = aioice.stun.RETRY_RTO
+        aioice.stun.RETRY_MAX = 1
+        aioice.stun.RETRY_RTO = 0.1
+
+    def tearDown(self):
+        aioice.stun.RETRY_MAX = self.retry_max
+        aioice.stun.RETRY_RTO = self.retry_rto
 
     def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):
         pc = RTCPeerConnection()
@@ -427,18 +451,18 @@ a=rtpmap:8 PCMA/8000
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, 'active')
+        self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'sendrecv')
         self.assertEqual(pc2.getTransceivers()[0].direction, 'sendrecv')
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))
         self.assertEqual(pc1.remoteDescription, pc2.localDescription)
         self.assertEqual(pc1.iceConnectionState, 'checking')
+        self.assertEqual(pc1.getTransceivers()[0].currentDirection, 'sendrecv')
         self.assertEqual(pc1.getTransceivers()[0].direction, 'sendrecv')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # allow media to flow long enough to collect stats
         run(asyncio.sleep(2))
@@ -547,9 +571,7 @@ a=rtpmap:8 PCMA/8000
                 pc2.addIceCandidate(candidate)
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -643,9 +665,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -736,9 +756,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.getTransceivers()[0].direction, 'recvonly')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # allow media to flow long enough to collect stats
         run(asyncio.sleep(2))
@@ -833,9 +851,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.getTransceivers()[0].direction, 'recvonly')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # allow media to flow long enough to collect stats
         run(asyncio.sleep(2))
@@ -929,9 +945,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.getTransceivers()[0].direction, 'sendonly')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # allow media to flow long enough to collect stats
         run(asyncio.sleep(2))
@@ -1023,9 +1037,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.getTransceivers()[0].direction, 'sendrecv')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -1115,9 +1127,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.getTransceivers()[0].direction, 'sendrecv')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -1206,9 +1216,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -1289,9 +1297,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # check a single transport is used
         self.assertBundled(pc1)
@@ -1380,9 +1386,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # check a single transport is used
         self.assertBundled(pc1)
@@ -1559,9 +1563,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # check a single transport is used
         self.assertBundled(pc1)
@@ -1608,9 +1610,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, 'completed')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # check a single transport is used
         self.assertBundled(pc1)
@@ -1743,9 +1743,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # let media flow to trigger RTCP feedback, including REMB
         run(asyncio.sleep(5))
@@ -1853,9 +1851,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # close
         run(pc1.close())
@@ -1971,9 +1967,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc.readyState, 'open')
         self.assertEqual(dc.bufferedAmount, 0)
 
@@ -1984,7 +1978,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got messages
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.1))
         self.assertEqual(pc2_data_messages, [
             'hello',
             '',
@@ -2003,10 +1997,7 @@ a=fmtp:101 apt=100
         ])
 
         # close data channel
-        dc.close()
-        self.assertEqual(dc.readyState, 'closing')
-        run(asyncio.sleep(0.5))
-        self.assertEqual(dc.readyState, 'closed')
+        self.closeDataChannel(dc)
 
         # close
         run(pc1.close())
@@ -2121,9 +2112,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc.readyState, 'open')
 
         # check pc2 got a datachannel
@@ -2133,7 +2122,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got messages
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.1))
         self.assertEqual(pc2_data_messages, [
             'hello',
             '',
@@ -2152,10 +2141,7 @@ a=fmtp:101 apt=100
         ])
 
         # close data channel
-        dc.close()
-        self.assertEqual(dc.readyState, 'closing')
-        run(asyncio.sleep(0.5))
-        self.assertEqual(dc.readyState, 'closed')
+        self.closeDataChannel(dc)
 
         # close
         run(pc1.close())
@@ -2275,9 +2261,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc.readyState, 'open')
 
         # check pc2 got a datachannel
@@ -2287,7 +2271,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got messages
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.1))
         self.assertEqual(pc2_data_messages, [
             'hello',
             '',
@@ -2346,9 +2330,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'completed')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
 
         # check a single transport is used
         self.assertBundled(pc1)
@@ -2357,10 +2339,7 @@ a=fmtp:101 apt=100
         # 3. CLEANUP
 
         # close data channel
-        dc.close()
-        self.assertEqual(dc.readyState, 'closing')
-        run(asyncio.sleep(0.5))
-        self.assertEqual(dc.readyState, 'closed')
+        self.closeDataChannel(dc)
 
         # close
         run(pc1.close())
@@ -2486,9 +2465,7 @@ a=fmtp:101 apt=100
             pc2.addIceCandidate(candidate)
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc.readyState, 'open')
 
         # check pc2 got a datachannel
@@ -2498,7 +2475,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got messages
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.1))
         self.assertEqual(pc2_data_messages, [
             'hello',
             '',
@@ -2517,10 +2494,7 @@ a=fmtp:101 apt=100
         ])
 
         # close data channel
-        dc.close()
-        self.assertEqual(dc.readyState, 'closing')
-        run(asyncio.sleep(0.5))
-        self.assertEqual(dc.readyState, 'closed')
+        self.closeDataChannel(dc)
 
         # close
         run(pc1.close())
@@ -2622,9 +2596,7 @@ a=fmtp:101 apt=100
         self.assertEqual(pc1.iceConnectionState, 'checking')
 
         # check outcome
-        run(asyncio.sleep(1))
-        self.assertEqual(pc1.iceConnectionState, 'completed')
-        self.assertEqual(pc2.iceConnectionState, 'completed')
+        self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc.readyState, 'open')
 
         # check pc2 got a datachannel
@@ -2634,17 +2606,14 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
         # check pc2 got message
-        run(asyncio.sleep(1))
+        run(asyncio.sleep(0.1))
         self.assertEqual(pc2_data_messages, ['hello'])
 
         # check pc1 got replies
         self.assertEqual(pc1_data_messages, ['string-echo: hello'])
 
         # close data channel
-        dc.close()
-        self.assertEqual(dc.readyState, 'closing')
-        run(asyncio.sleep(0.5))
-        self.assertEqual(dc.readyState, 'closed')
+        self.closeDataChannel(dc)
 
         # close
         run(pc1.close())
