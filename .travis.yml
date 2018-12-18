@@ -6,6 +6,11 @@ addons:
     - libvpx-dev
     - libx264-dev
     - yasm
+  homebrew:
+    packages:
+    - ffmpeg
+    - opus
+    - libvpx
 cache:
   directories: $HOME/.local
   pip: true

@@ -4,9 +4,7 @@ set -e
 
 PREFIX=$HOME/.local
 
-if [ "$(uname -s)" = "Darwin" ]; then
-    brew install ffmpeg opus libvpx
-else
+if [ "$(uname -s)" != "Darwin" ]; then
     if [ ! -e "$PREFIX/bin/ffmpeg" ]; then
         curl http://www.ffmpeg.org/releases/ffmpeg-3.2.12.tar.xz | tar xJ
         cd ffmpeg-3.2.12
