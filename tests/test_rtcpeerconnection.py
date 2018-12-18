@@ -467,6 +467,14 @@ a=rtpmap:8 PCMA/8000
         # allow media to flow long enough to collect stats
         run(asyncio.sleep(2))
 
+        # check stats
+        report = run(pc1.getStats())
+        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertEqual(
+            sorted([s.type for s in report.values()]),
+            ['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp', 'remote-outbound-rtp',
+             'transport'])
+
         # close
         run(pc1.close())
         run(pc2.close())
@@ -758,9 +766,6 @@ a=rtpmap:8 PCMA/8000
         # check outcome
         self.assertIceCompleted(pc1, pc2)
 
-        # allow media to flow long enough to collect stats
-        run(asyncio.sleep(2))
-
         # close
         run(pc1.close())
         run(pc2.close())
@@ -853,9 +858,6 @@ a=rtpmap:8 PCMA/8000
         # check outcome
         self.assertIceCompleted(pc1, pc2)
 
-        # allow media to flow long enough to collect stats
-        run(asyncio.sleep(2))
-
         # close
         run(pc1.close())
         run(pc2.close())
@@ -946,9 +948,6 @@ a=rtpmap:8 PCMA/8000
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-
-        # allow media to flow long enough to collect stats
-        run(asyncio.sleep(2))
 
         # close
         run(pc1.close())

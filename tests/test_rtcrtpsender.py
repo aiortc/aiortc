@@ -141,7 +141,7 @@ class RTCRtpSenderTest(TestCase):
         sender._send_keyframe()
 
         # wait for packet to be transmitted, then shutdown
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         run(sender.stop())
 
     def test_retransmit(self):
@@ -168,7 +168,7 @@ class RTCRtpSenderTest(TestCase):
         run(sender._retransmit(packet.sequence_number))
 
         # wait for packet to be retransmitted, then shutdown
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         run(sender.stop())
 
         # check packet was retransmitted
@@ -210,7 +210,7 @@ class RTCRtpSenderTest(TestCase):
         run(sender._retransmit(packet.sequence_number))
 
         # wait for packet to be retransmitted, then shutdown
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         run(sender.stop())
 
         # check packet was retransmitted
@@ -243,5 +243,6 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(track, self.local_transport)
         run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
 
+        # stop track and wait for RTP loop to exit
         track.stop()
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))

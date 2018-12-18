@@ -652,7 +652,7 @@ class RTCSctpTransportTest(TestCase):
             new_streams=16)
         run(client._send_reconfig_param(param))
 
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
 
         self.assertEqual(server._inbound_streams_count, 272)
         self.assertEqual(server._outbound_streams_count, 2048)
@@ -686,7 +686,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._outbound_streams_count, 256)
         self.assertEqual(server._remote_extensions, [130])
 
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
 
         # shutdown
         run(client.stop())
@@ -723,7 +723,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(channel.id, None)
         self.assertEqual(channel.label, 'chat')
 
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(channel.id, 1)
         self.assertEqual(channel.label, 'chat')
         self.assertEqual(len(client_channels), 0)
@@ -762,7 +762,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(channel.id, None)
         self.assertEqual(channel.label, 'chat')
 
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(len(client_channels), 1)
         self.assertEqual(client_channels[0].id, 0)
         self.assertEqual(client_channels[0].label, 'chat')
@@ -804,7 +804,7 @@ class RTCSctpTransportTest(TestCase):
         asyncio.ensure_future(self.client_transport._send_data(b'garbage'))
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
@@ -819,7 +819,7 @@ class RTCSctpTransportTest(TestCase):
         asyncio.ensure_future(self.client_transport._send_data(data))
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
         # shutdown
@@ -843,7 +843,7 @@ class RTCSctpTransportTest(TestCase):
         run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(client._association_state, RTCSctpTransport.State.COOKIE_ECHOED)
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
@@ -871,7 +871,7 @@ class RTCSctpTransportTest(TestCase):
         run(client.start(server.getCapabilities(), server.port))
 
         # check outcome
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 

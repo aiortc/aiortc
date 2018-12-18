@@ -111,7 +111,7 @@ class RTCDtlsTransportTest(TestCase):
 
         # shutdown
         run(session1.stop())
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
 
@@ -161,7 +161,7 @@ class RTCDtlsTransportTest(TestCase):
 
         # shutdown
         run(session1.stop())
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertCounters(session1, session2, 4, 3)
         self.assertEqual(session1.state, 'closed')
         self.assertEqual(session2.state, 'closed')
@@ -211,7 +211,7 @@ class RTCDtlsTransportTest(TestCase):
         # "replay check failed (bad index)"
         run(session1._send_rtp(RTP))
         run(session1._send_rtp(RTP))
-        run(asyncio.sleep(0.5))
+        run(asyncio.sleep(0.1))
         self.assertEqual(len(receiver2.rtcp_packets), 0)
         self.assertEqual(len(receiver2.rtp_packets), 1)
 
