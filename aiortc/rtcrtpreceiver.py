@@ -361,15 +361,19 @@ class RTCRtpReceiver:
                                 payload_type=codec.payloadType,
                                 ssrc=original_ssrc)
 
-        # parse codec-specific information
-        if packet.payload:
-            packet._data = depayload(codec, packet.payload)
-        else:
-            packet._data = b''
-
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
             await self._send_rtcp_nack(packet.ssrc, sorted(self.__nack_generator.missing))
+
+        # parse codec-specific information
+        try:
+            if packet.payload:
+                packet._data = depayload(codec, packet.payload)
+            else:
+                packet._data = b''
+        except ValueError as exc:
+            self.__log_debug('x RTP payload parsing failed: %s', exc)
+            return
 
         # try to re-assemble encoded frame
         encoded_frame = self.__jitter_buffer.add(packet)

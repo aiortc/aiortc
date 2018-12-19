@@ -309,6 +309,20 @@ class RTCRtpReceiverTest(CodecTestCase):
         # shutdown
         run(receiver.stop())
 
+    def test_rtp_invalid_payload(self):
+        receiver = RTCRtpReceiver('video', self.local_transport)
+        self.assertEqual(receiver.transport, self.local_transport)
+
+        receiver._track = RemoteStreamTrack(kind='video')
+        run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
+
+        # receive RTP with unknown payload type
+        packet = RtpPacket(payload_type=100, payload=b'\x80')
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+
+        # shutdown
+        run(receiver.stop())
+
     def test_rtp_unknown_payload_type(self):
         receiver = RTCRtpReceiver('video', self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
