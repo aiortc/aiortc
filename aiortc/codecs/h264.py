@@ -39,39 +39,43 @@ class H264PayloadDescriptor:
     def parse(cls, data):
         output = bytes()
 
+        # NAL unit header
+        if len(data) < 2:
+            raise ValueError('NAL unit is too short')
         nal_type = data[0] & 0x1f
-        if nal_type == NAL_TYPE_FU_A:
-            assert len(data) >= FU_A_HEADER_SIZE, 'FU-A NAL units truncated.'
+        f_nri = data[0] & (0x80 | 0x60)
+        pos = NAL_HEADER_SIZE
 
-            f_nri = data[0] & (0x80 | 0x60)
-            original_nal_type = data[1] & 0x1f
-            first_fragment = bool(data[1] & 0x80)
+        if nal_type in range(1, 24):
+            # single NAL unit
+            output = bytes([0, 0, 0, 1]) + data
+            obj = cls(first_fragment=True)
+        elif nal_type == NAL_TYPE_FU_A:
+            # fragmentation unit
+            original_nal_type = data[pos] & 0x1f
+            first_fragment = bool(data[pos] & 0x80)
+            pos += 1
 
             if first_fragment:
                 original_nal_header = bytes([f_nri | original_nal_type])
                 output += bytes([0, 0, 0, 1])
                 output += original_nal_header
-
-            output += data[2:]
+            output += data[pos:]
 
             obj = cls(first_fragment=first_fragment)
-        else:
+        elif nal_type == NAL_TYPE_STAP_A:
+            # single time aggregation packet
             offsets = []
-            if nal_type == NAL_TYPE_STAP_A:
-                assert len(data) > STAP_A_HEADER_SIZE,  'StapA header truncated.'
+            while pos < len(data):
+                if len(data) < pos + LENGTH_FIELD_SIZE:
+                    raise ValueError('STAP-A length field is truncated')
+                nulu_size = unpack_from('!H', data, pos)[0]
+                pos += LENGTH_FIELD_SIZE
+                offsets.append(pos)
 
-                offset = 1
-                while offset < len(data):
-                    (nulu_size,) = unpack_from('!H', data, offset)
-                    offset += LENGTH_FIELD_SIZE
-                    assert offset < len(data), 'StapA length field truncated.'
-                    offsets.append(offset)
-                    offset += nulu_size
-                    assert offset <= len(data), 'StapA packet with incorrect NALU packet lengths.'
-
-                nal_type = data[STAP_A_HEADER_SIZE] & 0x1f
-            else:
-                offsets.append(0)
+                pos += nulu_size
+                if len(data) < pos:
+                    raise ValueError('STAP-A data is truncated')
 
             offsets.append(len(data) + LENGTH_FIELD_SIZE)
             for start, end in pairwise(offsets):
@@ -80,6 +84,8 @@ class H264PayloadDescriptor:
                 output += data[start:end]
 
             obj = cls(first_fragment=True)
+        else:
+            raise ValueError('NAL unit type %d is not supported' % nal_type)
 
         return obj, output
 

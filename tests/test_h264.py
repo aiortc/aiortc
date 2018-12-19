@@ -15,6 +15,11 @@ H264_CODEC = RTCRtpCodecParameters(name='H264', clockRate=90000)
 
 
 class H264PayloadDescriptorTest(TestCase):
+    def test_parse_empty(self):
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(b'')
+        self.assertEqual(str(cm.exception), 'NAL unit is too short')
+
     def test_parse_stap_a(self):
         payload = load('h264_0000.bin')
         descr, rest = H264PayloadDescriptor.parse(payload)
@@ -22,6 +27,26 @@ class H264PayloadDescriptorTest(TestCase):
         self.assertEqual(repr(descr), 'H264PayloadDescriptor(FF=True)')
         self.assertEqual(rest[:4], b'\00\00\00\01')
         self.assertEqual(len(rest), 26)
+
+    def test_parse_stap_a_truncated(self):
+        payload = load('h264_0000.bin')
+
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(payload[0:1])
+        self.assertEqual(str(cm.exception), 'NAL unit is too short')
+
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(payload[0:2])
+        self.assertEqual(str(cm.exception), 'STAP-A length field is truncated')
+
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(payload[0:3])
+        self.assertEqual(str(cm.exception), 'STAP-A data is truncated')
+
+    def test_parse_stap_b(self):
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(b'\x19\x00')
+        self.assertEqual(str(cm.exception), 'NAL unit type 25 is not supported')
 
     def test_parse_fu_a_1(self):
         payload = load('h264_0001.bin')
@@ -38,6 +63,11 @@ class H264PayloadDescriptorTest(TestCase):
         self.assertEqual(repr(descr), 'H264PayloadDescriptor(FF=False)')
         self.assertNotEqual(rest[:4], b'\00\00\00\01')
         self.assertEqual(len(rest), 912)
+
+    def test_parse_fu_a_truncated(self):
+        with self.assertRaises(ValueError) as cm:
+            H264PayloadDescriptor.parse(b'\x7c')
+        self.assertEqual(str(cm.exception), 'NAL unit is too short')
 
     def test_parse_nalu(self):
         payload = load('h264_0003.bin')

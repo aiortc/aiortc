@@ -12,6 +12,7 @@ Media
 .....
 
   * Fix VP8 descriptor parsing errors detected by fuzzing.
+  * Fix H264 descriptor parsing errors detected by fuzzing.
 
 0.9.14
 ------
