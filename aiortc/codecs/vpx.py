@@ -1,6 +1,6 @@
 import multiprocessing
 import random
-from struct import pack, unpack
+from struct import pack, unpack_from
 
 from av import VideoFrame
 
@@ -76,6 +76,9 @@ class VpxPayloadDescriptor:
 
     @classmethod
     def parse(cls, data):
+        if len(data) < 1:
+            raise ValueError('VPX descriptor is too short')
+
         # first byte
         octet = data[0]
         extended = octet >> 7
@@ -89,6 +92,9 @@ class VpxPayloadDescriptor:
 
         # extended control bits
         if extended:
+            if len(data) < pos + 1:
+                raise ValueError('VPX descriptor has truncated extended bits')
+
             octet = data[pos]
             ext_I = (octet >> 7) & 1
             ext_L = (octet >> 6) & 1
@@ -98,8 +104,14 @@ class VpxPayloadDescriptor:
 
             # picture id
             if ext_I:
+                if len(data) < pos + 1:
+                    raise ValueError('VPX descriptor has truncated PictureID')
+
                 if data[pos] & 0x80:
-                    picture_id = unpack('!H', data[pos:pos+2])[0] & 0x7fff
+                    if len(data) < pos + 2:
+                        raise ValueError('VPX descriptor has truncated long PictureID')
+
+                    picture_id = unpack_from('!H', data, pos)[0] & 0x7fff
                     pos += 2
                 else:
                     picture_id = data[pos]
@@ -107,10 +119,16 @@ class VpxPayloadDescriptor:
 
             # unused
             if ext_L:
-                tl0picidx = unpack('!B', data[pos:pos+1])[0]
+                if len(data) < pos + 1:
+                    raise ValueError('VPX descriptor has truncated TL0PICIDX')
+
+                tl0picidx = data[pos]
                 pos += 1
             if ext_T or ext_K:
-                t_k = unpack('!B', data[pos:pos+1])[0]
+                if len(data) < pos + 1:
+                    raise ValueError('VPX descriptor has truncated T/K')
+
+                t_k = data[pos]
                 if ext_T:
                     tid = (
                         (t_k >> 6) & 3,

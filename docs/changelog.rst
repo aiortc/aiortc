@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.15
+------
+
+*under development*
+
+Media
+.....
+
+  * Fix VP8 descriptor parsing errors detected by fuzzing.
+
 0.9.14
 ------
 

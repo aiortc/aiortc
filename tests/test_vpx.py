@@ -116,6 +116,35 @@ class VpxPayloadDescriptorTest(TestCase):
 
         self.assertEqual(rest, b'')
 
+    def test_truncated(self):
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'')
+        self.assertEqual(str(cm.exception), 'VPX descriptor is too short')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated extended bits')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80\x80')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated PictureID')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80\x80\x80')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated long PictureID')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80\x40')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated TL0PICIDX')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80\x20')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated T/K')
+
+        with self.assertRaises(ValueError) as cm:
+            VpxPayloadDescriptor.parse(b'\x80\x10')
+        self.assertEqual(str(cm.exception), 'VPX descriptor has truncated T/K')
+
 
 class Vp8Test(CodecTestCase):
     def test_assert(self):
