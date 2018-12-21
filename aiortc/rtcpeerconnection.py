@@ -12,7 +12,7 @@ from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
-from .rtcicetransport import RTCIceCandidate, RTCIceGatherer, RTCIceTransport
+from .rtcicetransport import RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import (RTCRtpCodecParameters, RTCRtpDecodingParameters,
                                RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters, RTCRtpReceiveParameters,
@@ -24,14 +24,8 @@ from .rtcsctptransport import RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 from .stats import RTCStatsReport
 
-DUMMY_CANDIDATE = RTCIceCandidate(
-    foundation='',
-    component=1,
-    protocol='udp',
-    priority=1,
-    ip='0.0.0.0',
-    port=0,
-    type='host')
+DISCARD_HOST = '0.0.0.0'
+DISCARD_PORT = 9
 HEADER_EXTENSIONS = {
     'audio': [
         RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
@@ -96,11 +90,11 @@ def add_transport_description(media, dtlsTransport):
     media.ice_candidates_complete = (iceGatherer.state == 'completed')
     media.ice = iceGatherer.getLocalParameters()
     if media.ice_candidates:
-        default_candidate = media.ice_candidates[0]
+        media.host = media.ice_candidates[0].ip
+        media.port = media.ice_candidates[0].port
     else:
-        default_candidate = DUMMY_CANDIDATE
-    media.host = default_candidate.ip
-    media.port = default_candidate.port
+        media.host = DISCARD_HOST
+        media.port = DISCARD_PORT
 
     # dtls
     media.dtls = dtlsTransport.getLocalParameters()
@@ -134,7 +128,7 @@ def create_media_description_for_sctp(sctp, legacy, mid):
     if legacy:
         media = sdp.MediaDescription(
             kind='application',
-            port=DUMMY_CANDIDATE.port,
+            port=DISCARD_PORT,
             profile='DTLS/SCTP',
             fmt=[sctp.port])
         media.sctpmap[sctp.port] = (
@@ -142,7 +136,7 @@ def create_media_description_for_sctp(sctp, legacy, mid):
     else:
         media = sdp.MediaDescription(
             kind='application',
-            port=DUMMY_CANDIDATE.port,
+            port=DISCARD_PORT,
             profile='UDP/DTLS/SCTP',
             fmt=['webrtc-datachannel'])
         media.sctp_port = sctp.port
@@ -154,23 +148,20 @@ def create_media_description_for_sctp(sctp, legacy, mid):
     return media
 
 
-def create_media_description_for_transceiver(transceiver, cname, mid, type):
+def create_media_description_for_transceiver(transceiver, cname, direction, mid):
     media = sdp.MediaDescription(
         kind=transceiver.kind,
-        port=DUMMY_CANDIDATE.port,
+        port=DISCARD_PORT,
         profile='UDP/TLS/RTP/SAVPF',
         fmt=[c.payloadType for c in transceiver._codecs])
-    if type in ['answer', 'pranswer']:
-        media.direction = and_direction(transceiver.direction, transceiver._offerDirection)
-    else:
-        media.direction = transceiver.direction
+    media.direction = direction
 
     media.rtp = RTCRtpParameters(
         codecs=transceiver._codecs,
         headerExtensions=transceiver._headerExtensions,
         muxId=mid)
-    media.rtcp_host = '0.0.0.0'
-    media.rtcp_port = 9
+    media.rtcp_host = DISCARD_HOST
+    media.rtcp_port = DISCARD_PORT
     media.rtcp_mux = True
     media.ssrc = [
         sdp.SsrcDescription(
@@ -245,6 +236,7 @@ class RTCPeerConnection(EventEmitter):
         self.__remoteRtp = {}
         self.__seenMids = set()
         self.__sctp = None
+        self.__sctp_mline_index = None
         self._sctpLegacySdp = True
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
@@ -424,7 +416,10 @@ class RTCPeerConnection(EventEmitter):
             if remote_m.kind in ['audio', 'video']:
                 transceiver = self.__getTransceiverByMid(remote_m.rtp.muxId)
                 description.media.append(create_media_description_for_transceiver(
-                    transceiver, cname=self.__cname, mid=transceiver.mid, type='answer'))
+                    transceiver,
+                    cname=self.__cname,
+                    direction=and_direction(transceiver.direction, transceiver._offerDirection),
+                    mid=transceiver.mid))
             else:
                 description.media.append(create_media_description_for_sctp(
                     self.__sctp, legacy=self._sctpLegacySdp, mid=self.__sctp.mid))
@@ -497,29 +492,46 @@ class RTCPeerConnection(EventEmitter):
             items=['*']))
         description.type = 'offer'
 
+        def get_media(description):
+            return description.media if description else []
+
+        def get_media_section(media, i):
+            return media[i] if i < len(media) else None
+
         # handle existing transceivers / sctp
-        local_media = self.__localDescription().media if self.__localDescription() else []
-        remote_media = self.__remoteDescription().media if self.__remoteDescription() else []
+        local_media = get_media(self.__localDescription())
+        remote_media = get_media(self.__remoteDescription())
         for i in range(max(len(local_media), len(remote_media))):
-            local_m = local_media[i] if i < len(local_media) else None
-            remote_m = remote_media[i] if i < len(remote_media) else None
+            local_m = get_media_section(local_media, i)
+            remote_m = get_media_section(remote_media, i)
             media_kind = local_m.kind if local_m else remote_m.kind
             mid = local_m.rtp.muxId if local_m else remote_m.rtp.muxId
             if media_kind in ['audio', 'video']:
                 transceiver = self.__getTransceiverByMid(mid)
                 transceiver._set_mline_index(i)
                 description.media.append(create_media_description_for_transceiver(
-                    transceiver, cname=self.__cname, mid=mid, type='offer'))
+                    transceiver,
+                    cname=self.__cname,
+                    direction=transceiver.direction,
+                    mid=mid))
             elif media_kind == 'application':
+                self.__sctp_mline_index = i
                 description.media.append(create_media_description_for_sctp(
                     self.__sctp, legacy=self._sctpLegacySdp, mid=mid))
 
         # handle new transceivers / sctp
+        def next_mline_index():
+            return len(description.media)
+
         for transceiver in filter(lambda x: x.mid is None and not x.stopped, self.__transceivers):
-            transceiver._set_mline_index(len(description.media))
+            transceiver._set_mline_index(next_mline_index())
             description.media.append(create_media_description_for_transceiver(
-                transceiver, cname=self.__cname, mid=allocate_mid(mids), type='offer'))
+                transceiver,
+                cname=self.__cname,
+                direction=transceiver.direction,
+                mid=allocate_mid(mids)))
         if self.__sctp and self.__sctp.mid is None:
+            self.__sctp_mline_index = next_mline_index()
             description.media.append(create_media_description_for_sctp(
                 self.__sctp, legacy=self._sctpLegacySdp, mid=allocate_mid(mids)))
 
@@ -704,6 +716,7 @@ class RTCPeerConnection(EventEmitter):
                     self.__createSctpTransport()
                 if self.__sctp.mid is None:
                     self.__sctp.mid = media.rtp.muxId
+                    self.__sctp_mline_index = i
 
                 # configure sctp
                 if media.profile == 'DTLS/SCTP':
