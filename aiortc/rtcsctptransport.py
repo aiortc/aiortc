@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import time
+import warnings
 from struct import pack, unpack
 
 import attr
@@ -14,6 +15,12 @@ from pyee import EventEmitter
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .utils import random32, uint16_add
+
+try:
+    import crcmod._crcfunext
+except ImportError:  # pragma: no cover
+    warnings.warn('crcmod C extension was not found, datachannel performance will be reduced')
+
 
 crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
