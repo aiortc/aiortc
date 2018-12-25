@@ -1,9 +1,12 @@
 import asyncio
+import datetime
 import logging
 import queue
 import random
 import threading
 import time
+
+import attr
 
 from . import clock
 from .codecs import depayload, get_decoder
@@ -174,6 +177,27 @@ class TimestampMapper:
         return timestamp - self._origin
 
 
+@attr.s
+class RTCRtpContributingSource:
+    """
+    The :class:`RTCRtpContributingSource` dictionary contains information about
+    a contributing source (CSRC).
+    """
+    timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
+    "The timestamp associated with this source."
+    source = attr.ib(type=int)  # type: int
+    "The CSRC or SSRC identifier associated with this source."
+
+
+@attr.s
+class RTCRtpSynchronizationSource(RTCRtpContributingSource):
+    """
+    The :class:`RTCRtpSynchronizationSource` dictionary contains information about
+    a synchronization source (SSRC).
+    """
+    pass
+
+
 class RTCRtpReceiver:
     """
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
@@ -186,6 +210,7 @@ class RTCRtpReceiver:
         if transport.state == 'closed':
             raise InvalidStateError
 
+        self.__active_ssrc = {}
         self.__codecs = {}
         self.__decoder_queue = queue.Queue()
         self.__decoder_thread = None
@@ -246,6 +271,18 @@ class RTCRtpReceiver:
         self.__stats.update(self.transport._get_stats())
 
         return self.__stats
+
+    def getSynchronizationSources(self):
+        """
+        Returns a :class:`RTCRtpSynchronizationSource` for each unique SSRC identifier
+        received in the last 10 seconds.
+        """
+        cutoff = clock.current_datetime() - datetime.timedelta(seconds=10)
+        sources = []
+        for source, timestamp in self.__active_ssrc.items():
+            if timestamp >= cutoff:
+                sources.append(RTCRtpSynchronizationSource(source=source, timestamp=timestamp))
+        return sources
 
     async def receive(self, parameters: RTCRtpReceiveParameters):
         """
@@ -332,6 +369,9 @@ class RTCRtpReceiver:
                         fmt=RTCP_PSFB_APP, ssrc=self.__rtcp_ssrc, media_ssrc=0)
                     rtcp_packet.fci = pack_remb_fci(*remb)
                     await self._send_rtcp(rtcp_packet)
+
+        # keep track of sources
+        self.__active_ssrc[packet.ssrc] = clock.current_datetime()
 
         # check the codec is known
         codec = self.__codecs.get(packet.payload_type)

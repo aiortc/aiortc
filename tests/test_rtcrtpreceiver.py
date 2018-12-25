@@ -11,8 +11,8 @@ from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
                                      RTCRtpReceiveParameters,
                                      RTCRtpRtxParameters)
 from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
-                                   RTCRtpReceiver, StreamStatistics,
-                                   TimestampMapper)
+                                   RTCRtpReceiver, RTCRtpSynchronizationSource,
+                                   StreamStatistics, TimestampMapper)
 from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
@@ -244,6 +244,12 @@ class RTCRtpReceiverTest(CodecTestCase):
         self.assertEqual(
             sorted([s.type for s in report.values()]),
             ['inbound-rtp', 'remote-outbound-rtp', 'transport'])
+
+        # check sources
+        sources = receiver.getSynchronizationSources()
+        self.assertEqual(len(sources), 1)
+        self.assertTrue(isinstance(sources[0], RTCRtpSynchronizationSource))
+        self.assertEqual(sources[0].source, 4028317929)
 
         # check remote track
         frame = run(receiver._track.recv())

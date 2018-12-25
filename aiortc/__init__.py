@@ -11,7 +11,9 @@ from .rtcicetransport import (RTCIceCandidate, RTCIceGatherer,  # noqa
 from .rtcpeerconnection import RTCPeerConnection  # noqa
 from .rtcrtpparameters import (RTCRtcpParameters,  # noqa
                                RTCRtpCodecParameters, RTCRtpParameters)
-from .rtcrtpreceiver import RTCRtpReceiver  # noqa
+from .rtcrtpreceiver import (RTCRtpContributingSource,  # noqa
+                             RTCRtpReceiver,
+                             RTCRtpSynchronizationSource)
 from .rtcrtpsender import RTCRtpSender  # noqa
 from .rtcrtptransceiver import RTCRtpTransceiver  # noqa
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport  # noqa

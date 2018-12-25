@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.16
+------
+
+*under development*
+
+Media
+.....
+
+  * Add :meth:`RTCRtpReceiver.getSynchronizationSources`.
+
 0.9.15
 ------
 
