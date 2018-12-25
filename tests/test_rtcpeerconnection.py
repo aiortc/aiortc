@@ -1873,6 +1873,98 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_connect_video_no_ssrc(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(VideoStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=video ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=video ' in pc1.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
+
+        # strip out SSRC
+        mangled = RTCSessionDescription(
+            sdp=re.sub('^a=ssrc:.*\r\n', '', pc1.localDescription.sdp, flags=re.M),
+            type=pc1.localDescription.type)
+
+        # handle offer
+        run(pc2.setRemoteDescription(mangled))
+        self.assertEqual(pc2.remoteDescription, mangled)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=video ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_connect_datachannel_legacy_sdp(self):
         pc1 = RTCPeerConnection()
         pc1._sctpLegacySdp = True

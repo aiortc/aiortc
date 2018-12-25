@@ -680,19 +680,20 @@ class RTCPeerConnection(EventEmitter):
                     headerExtensions=transceiver._headerExtensions,
                     muxId=media.rtp.muxId,
                     rtcp=media.rtp.rtcp)
-                encodings = OrderedDict()
-                for codec in transceiver._codecs:
-                    if codec.name == 'rtx':
-                        if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
-                            encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
-                                ssrc=media.ssrc[1].ssrc)
-                        continue
+                if len(media.ssrc):
+                    encodings = OrderedDict()
+                    for codec in transceiver._codecs:
+                        if codec.name == 'rtx':
+                            if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
+                                encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
+                                    ssrc=media.ssrc[1].ssrc)
+                            continue
 
-                    encodings[codec.payloadType] = RTCRtpDecodingParameters(
-                        ssrc=media.ssrc[0].ssrc,
-                        payloadType=codec.payloadType
-                    )
-                receiveParameters.encodings = list(encodings.values())
+                        encodings[codec.payloadType] = RTCRtpDecodingParameters(
+                            ssrc=media.ssrc[0].ssrc,
+                            payloadType=codec.payloadType
+                        )
+                    receiveParameters.encodings = list(encodings.values())
                 self.__remoteRtp[transceiver] = receiveParameters
 
                 # configure direction
