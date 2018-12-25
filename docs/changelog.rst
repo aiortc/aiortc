@@ -6,11 +6,17 @@ Changelog
 0.9.15
 ------
 
-*under development*
+Data channels
+.............
+
+  * Emit a warning if the crcmod C extension is not present.
 
 Media
 .....
 
+  * Support subsequent offer / answer exchanges.
+  * Route RTCP parameters to RTP receiver and sender independently.
+  * Fix a regression when the remote SSRC are not known.
   * Fix VP8 descriptor parsing errors detected by fuzzing.
   * Fix H264 descriptor parsing errors detected by fuzzing.
 
