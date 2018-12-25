@@ -8,11 +8,11 @@ from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
-                        RtcpPacket, RtcpPsfbPacket, RtcpRtpfbPacket, RtpPacket,
-                        is_rtcp)
+                        RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
+                        RtcpRtpfbPacket, RtpPacket, is_rtcp)
 from aiortc.stats import RTCStatsReport
 
-from .utils import dummy_dtls_transport_pair, load, run
+from .utils import dummy_dtls_transport_pair, run
 
 
 class RTCRtpSenderTest(TestCase):
@@ -53,7 +53,7 @@ class RTCRtpSenderTest(TestCase):
         ])))
 
         # receive RTCP feedback NACK
-        packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=5678)
+        packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=sender._ssrc)
         packet.lost.append(7654)
         run(sender._handle_rtcp_packet(packet))
 
@@ -69,7 +69,7 @@ class RTCRtpSenderTest(TestCase):
         ])))
 
         # receive RTCP feedback NACK
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=5678)
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=sender._ssrc)
         run(sender._handle_rtcp_packet(packet))
 
         # clean shutdown
@@ -84,12 +84,12 @@ class RTCRtpSenderTest(TestCase):
         ])))
 
         # receive RTCP feedback REMB
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=sender._ssrc,
                                 fci=b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
         run(sender._handle_rtcp_packet(packet))
 
         # receive RTCP feedback REMB (malformed)
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=sender._ssrc,
                                 fci=b'JUNK')
         run(sender._handle_rtcp_packet(packet))
 
@@ -105,8 +105,10 @@ class RTCRtpSenderTest(TestCase):
         ])))
 
         # receive RTCP RR
-        for packet in RtcpPacket.parse(load('rtcp_rr.bin')):
-            run(sender._handle_rtcp_packet(packet))
+        packet = RtcpRrPacket(ssrc=1234, reports=[RtcpReceiverInfo(
+           ssrc=sender._ssrc, fraction_lost=0, packets_lost=0, highest_sequence=630,
+           jitter=1906, lsr=0, dlsr=0)])
+        run(sender._handle_rtcp_packet(packet))
 
         # check stats
         report = run(sender.getStats())

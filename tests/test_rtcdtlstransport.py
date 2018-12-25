@@ -9,7 +9,10 @@ from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
 from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
                                      RTCRtpDecodingParameters,
                                      RTCRtpReceiveParameters)
-from aiortc.rtp import RtpPacket
+from aiortc.rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
+                        RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
+                        RtcpRtpfbPacket, RtcpSenderInfo, RtcpSrPacket,
+                        RtpPacket)
 
 from .utils import dummy_ice_transport_pair, load, run
 
@@ -336,13 +339,52 @@ class RTCDtlsTransportTest(TestCase):
 
 
 class RtpRouterTest(TestCase):
+    def test_route_rtcp(self):
+        receiver = object()
+        sender = object()
+
+        router = RtpRouter()
+        router.register_receiver(receiver, ssrcs=[1234, 2345], payload_types=[96, 97])
+        router.register_sender(sender, ssrc=3456)
+
+        # BYE
+        packet = RtcpByePacket(sources=[1234, 2345])
+        self.assertEqual(router.route_rtcp(packet), set([receiver]))
+
+        # RR
+        packet = RtcpRrPacket(ssrc=1234, reports=[RtcpReceiverInfo(
+           ssrc=3456, fraction_lost=0, packets_lost=0, highest_sequence=630,
+           jitter=1906, lsr=0, dlsr=0)])
+        self.assertEqual(router.route_rtcp(packet), set([sender]))
+
+        # SR
+        packet = RtcpSrPacket(
+            ssrc=1234,
+            sender_info=RtcpSenderInfo(
+                ntp_timestamp=0,
+                rtp_timestamp=0,
+                packet_count=0,
+                octet_count=0),
+            reports=[RtcpReceiverInfo(
+                ssrc=3456, fraction_lost=0, packets_lost=0, highest_sequence=630,
+                jitter=1906, lsr=0, dlsr=0)])
+        self.assertEqual(router.route_rtcp(packet), set([receiver, sender]))
+
+        # PSFB
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=3456)
+        self.assertEqual(router.route_rtcp(packet), set([sender]))
+
+        # RTPFB
+        packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=3456)
+        self.assertEqual(router.route_rtcp(packet), set([sender]))
+
     def test_route_rtp(self):
         receiver1 = object()
         receiver2 = object()
 
         router = RtpRouter()
-        router.register(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])
-        router.register(receiver2, ssrcs=[3456, 4567], payload_types=[98, 99])
+        router.register_receiver(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])
+        router.register_receiver(receiver2, ssrcs=[3456, 4567], payload_types=[98, 99])
 
         # known SSRC and payload type
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), receiver1)

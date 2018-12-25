@@ -163,7 +163,7 @@ class RTCRtpSender:
 
     async def _handle_rtcp_packet(self, packet):
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
-            for report in packet.reports:
+            for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
                 if self.__lsr == report.lsr and report.dlsr:
                     rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)

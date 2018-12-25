@@ -21,7 +21,8 @@ from pylibsrtp import Policy, Session
 
 from . import clock, rtp
 from .rtcrtpparameters import RTCRtpReceiveParameters, RTCRtpSendParameters
-from .rtp import RtcpPacket, RtpPacket, is_rtcp
+from .rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket, RtcpRrPacket,
+                  RtcpRtpfbPacket, RtcpSrPacket, RtpPacket, is_rtcp)
 from .stats import RTCStatsReport, RTCTransportStats
 
 binding = Binding()
@@ -200,11 +201,12 @@ class RtpRouter:
     """
     def __init__(self):
         self.receivers = set()
+        self.senders = {}
         self.mid_table = {}
         self.ssrc_table = {}
         self.payload_type_table = {}
 
-    def register(self, receiver, ssrcs, payload_types, mid=None):
+    def register_receiver(self, receiver, ssrcs, payload_types, mid=None):
         self.receivers.add(receiver)
         if mid is not None:
             self.mid_table[mid] = receiver
@@ -213,18 +215,31 @@ class RtpRouter:
         for payload_type in payload_types:
             self.payload_type_table[payload_type] = receiver
 
+    def register_sender(self, sender, ssrc):
+        self.senders[ssrc] = sender
+
     def route_rtcp(self, packet):
-        ssrc = None
-        if hasattr(packet, 'ssrc'):
-            # SR and RR
-            ssrc = packet.ssrc
-        elif getattr(packet, 'chunks', None):
-            # SDES
-            ssrc = packet.chunks[0].ssrc
-        elif getattr(packet, 'sources', None):
-            # BYE
-            ssrc = packet.sources[0]
-        return self.ssrc_table.get(ssrc)
+        recipients = set()
+
+        def add_recipient(recipient):
+            if recipient is not None:
+                recipients.add(recipient)
+
+        # route to RTP receiver
+        if isinstance(packet, RtcpSrPacket):
+            add_recipient(self.ssrc_table.get(packet.ssrc))
+        elif isinstance(packet, RtcpByePacket):
+            for source in packet.sources:
+                add_recipient(self.ssrc_table.get(source))
+
+        # route to RTP sender
+        if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
+            for report in packet.reports:
+                add_recipient(self.senders.get(report.ssrc))
+        elif isinstance(packet, (RtcpPsfbPacket, RtcpRtpfbPacket)):
+            add_recipient(self.senders.get(packet.media_ssrc))
+
+        return recipients
 
     def route_rtp(self, packet):
         ssrc_receiver = self.ssrc_table.get(packet.ssrc)
@@ -242,11 +257,14 @@ class RtpRouter:
         # discard the packet
         return None
 
-    def unregister(self, receiver):
+    def unregister_receiver(self, receiver):
         self.receivers.discard(receiver)
         self.__discard(self.mid_table, receiver)
         self.__discard(self.ssrc_table, receiver)
         self.__discard(self.payload_type_table, receiver)
+
+    def unregister_sender(self, sender):
+        self.__discard(self.senders, sender)
 
     def __discard(self, d, value):
         for k, v in list(d.items()):
@@ -272,7 +290,6 @@ class RTCDtlsTransport(EventEmitter):
         self._role = 'auto'
         self._rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self._rtp_router = RtpRouter()
-        self._rtp_senders = set()
         self._state = State.NEW
         self._stats_id = 'transport_' + str(id(self))
         self._task = None
@@ -459,9 +476,8 @@ class RTCDtlsTransport(EventEmitter):
 
         for packet in packets:
             # route RTCP packet
-            receiver = self._rtp_router.route_rtcp(packet)
-            if receiver is not None:
-                await receiver._handle_rtcp_packet(packet)
+            for recipient in self._rtp_router.route_rtcp(packet):
+                await recipient._handle_rtcp_packet(packet)
 
     async def _handle_rtp_data(self, data, arrival_time_ms):
         try:
@@ -530,14 +546,15 @@ class RTCDtlsTransport(EventEmitter):
             ssrcs.add(encoding.ssrc)
 
         self._rtp_header_extensions_map.configure(parameters)
-        self._rtp_router.register(receiver,
-                                  ssrcs=list(ssrcs),
-                                  payload_types=[codec.payloadType for codec in parameters.codecs],
-                                  mid=parameters.muxId)
+        self._rtp_router.register_receiver(
+            receiver,
+            ssrcs=list(ssrcs),
+            payload_types=[codec.payloadType for codec in parameters.codecs],
+            mid=parameters.muxId)
 
     def _register_rtp_sender(self, sender, parameters: RTCRtpSendParameters):
         self._rtp_header_extensions_map.configure(parameters)
-        self._rtp_senders.add(sender)
+        self._rtp_router.register_sender(sender, ssrc=sender._ssrc)
 
     async def _send_data(self, data):
         if self._state != State.CONNECTED:
@@ -569,10 +586,10 @@ class RTCDtlsTransport(EventEmitter):
             self._data_receiver = None
 
     def _unregister_rtp_receiver(self, receiver):
-        self._rtp_router.unregister(receiver)
+        self._rtp_router.unregister_receiver(receiver)
 
     def _unregister_rtp_sender(self, sender):
-        self._rtp_senders.discard(sender)
+        self._rtp_router.unregister_sender(sender)
 
     async def _write_ssl(self):
         """

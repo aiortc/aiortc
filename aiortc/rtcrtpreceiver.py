@@ -202,7 +202,6 @@ class RTCRtpReceiver:
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_task = None
         self.__rtx_ssrc = {}
-        self.__sender = None
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__timestamp_mapper = TimestampMapper()
@@ -311,10 +310,6 @@ class RTCRtpReceiver:
             self.__lsr_time[packet.ssrc] = time.time()
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
-
-        # FIXME: could this be done at the DTLS level?
-        if self.__sender:
-            await self.__sender._handle_rtcp_packet(packet)
 
     async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int):
         """
@@ -449,9 +444,6 @@ class RTCRtpReceiver:
 
     def _set_rtcp_ssrc(self, ssrc):
         self.__rtcp_ssrc = ssrc
-
-    def _set_sender(self, sender):
-        self.__sender = sender
 
     def __stop_decoder(self):
         """
