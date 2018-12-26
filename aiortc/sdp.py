@@ -1,5 +1,6 @@
 import ipaddress
 import re
+from collections import OrderedDict
 from typing import List  # noqa
 
 import attr
@@ -102,6 +103,30 @@ def ipaddress_from_sdp(sdp):
 def ipaddress_to_sdp(addr):
     version = ipaddress.ip_address(addr).version
     return 'IN IP%d %s' % (version, addr)
+
+
+def parameters_from_sdp(sdp):
+    parameters = OrderedDict()
+    for param in sdp.split(';'):
+        if '=' in param:
+            k, v = param.split('=', 1)
+            if k in FMTP_INT_PARAMETERS:
+                parameters[k] = int(v)
+            else:
+                parameters[k] = v
+        else:
+            parameters[param] = None
+    return parameters
+
+
+def parameters_to_sdp(parameters):
+    params = []
+    for param_k, param_v in parameters.items():
+        if param_v is not None:
+            params.append('%s=%s' % (param_k, param_v))
+        else:
+            params.append(param_k)
+    return ';'.join(params)
 
 
 def parse_attr(line):
@@ -219,14 +244,9 @@ class MediaDescription:
                 lines.append('a=rtcp-fb:%d %s' % (codec.payloadType, value))
 
             # parameters
-            params = []
-            for param_k, param_v in codec.parameters.items():
-                if param_v is not None:
-                    params.append('%s=%s' % (param_k, param_v))
-                else:
-                    params.append(param_k)
+            params = parameters_to_sdp(codec.parameters)
             if params:
-                lines.append('a=fmtp:%d %s' % (codec.payloadType, ';'.join(params)))
+                lines.append('a=fmtp:%d %s' % (codec.payloadType, params))
 
         for k, v in self.sctpmap.items():
             lines.append('a=sctpmap:%d %s' % (k, v))
@@ -379,7 +399,7 @@ class SessionDescription:
                         format_id = int(format_id)
                         bits = format_desc.split('/')
                         codec = RTCRtpCodecParameters(
-                            name=bits[0],
+                            mimeType=current_media.kind + '/' + bits[0],
                             channels=int(bits[2]) if len(bits) > 2 else None,
                             clockRate=int(bits[1]),
                             payloadType=int(format_id))
@@ -414,15 +434,7 @@ class SessionDescription:
                     if attr == 'fmtp':
                         format_id, format_desc = value.split(' ', 1)
                         codec = find_codec(int(format_id))
-                        for param in format_desc.split(';'):
-                            if '=' in param:
-                                k, v = param.split('=', 1)
-                                if k in FMTP_INT_PARAMETERS:
-                                    codec.parameters[k] = int(v)
-                                else:
-                                    codec.parameters[k] = v
-                            else:
-                                codec.parameters[param] = None
+                        codec.parameters = parameters_from_sdp(format_desc)
                     elif attr == 'rtcp-fb':
                         bits = value.split(' ', 2)
                         codec = find_codec(int(bits[0]))

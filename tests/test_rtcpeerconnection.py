@@ -62,40 +62,42 @@ def track_states(pc):
 class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
         local_codecs = [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8)
         ]
         remote_codecs = [
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(common, [
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
         ])
 
     def test_common_dynamic(self):
         local_codecs = [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8)
         ]
         remote_codecs = [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, payloadType=100),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(common, [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=100),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
+                                  payloadType=100),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1,
+                                  payloadType=8),
         ])
 
     def test_common_feedback(self):
         local_codecs = [
             RTCRtpCodecParameters(
-                name='VP8',
+                mimeType='video/VP8',
                 clockRate=90000,
                 rtcpFeedback=[
                     RTCRtcpFeedback(type='nack'),
@@ -105,7 +107,7 @@ class RTCRtpCodecParametersTest(TestCase):
         ]
         remote_codecs = [
             RTCRtpCodecParameters(
-                name='VP8',
+                mimeType='video/VP8',
                 clockRate=90000,
                 payloadType=120,
                 rtcpFeedback=[
@@ -125,20 +127,20 @@ class RTCRtpCodecParametersTest(TestCase):
 
     def test_common_rtx(self):
         local_codecs = [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000),
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000),
         ]
         remote_codecs = [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=97,
                                   parameters={'apt': 96}),
-            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99,
+            RTCRtpCodecParameters(mimeType='video/VP9', clockRate=90000, payloadType=98),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=99,
                                   parameters={'apt': 98}),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(common, [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=97,
                                   parameters={'apt': 96}),
         ])
 

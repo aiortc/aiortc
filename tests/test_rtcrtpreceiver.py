@@ -6,7 +6,7 @@ from unittest.mock import patch
 from aiortc.codecs import PCMU_CODEC, get_encoder
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import MediaStreamError
-from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
+from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecParameters,
                                      RTCRtpEncodingParameters,
                                      RTCRtpReceiveParameters,
                                      RTCRtpRtxParameters)
@@ -20,7 +20,7 @@ from aiortc.utils import uint16_add
 from .codecs import CodecTestCase
 from .utils import dummy_dtls_transport_pair, load, run
 
-VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100)
+VP8_CODEC = RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100)
 
 
 def create_rtp_packets(count, seq=0):
@@ -195,6 +195,16 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(self.local_transport.stop())
         run(self.remote_transport.stop())
 
+    def test_capabilities(self):
+        capabilities = RTCRtpReceiver.getCapabilities('audio')
+        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+
+        capabilities = RTCRtpReceiver.getCapabilities('video')
+        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+
+        capabilities = RTCRtpReceiver.getCapabilities('bogus')
+        self.assertIsNone(capabilities)
+
     def test_connection_error(self):
         """
         Close the underlying transport before the receiver.
@@ -350,8 +360,8 @@ class RTCRtpReceiverTest(CodecTestCase):
         receiver._track = RemoteStreamTrack(kind='video')
         run(receiver.receive(RTCRtpReceiveParameters(
             codecs=[
-                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                VP8_CODEC,
+                RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
                                       parameters={'apt': 100}),
             ],
             encodings=[
@@ -373,8 +383,8 @@ class RTCRtpReceiverTest(CodecTestCase):
         receiver._track = RemoteStreamTrack(kind='video')
         run(receiver.receive(RTCRtpReceiveParameters(
             codecs=[
-                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                VP8_CODEC,
+                RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
                                       parameters={'apt': 100}),
             ])))
 

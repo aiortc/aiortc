@@ -5,13 +5,29 @@ import attr
 
 
 @attr.s
+class RTCRtpCodecCapability:
+    """
+    The :class:`RTCRtpCodecCapability` dictionary provides information on
+    codec capabilities.
+    """
+    mimeType = attr.ib(type=str)  # type: str
+    "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
+    clockRate = attr.ib(type=int)  # type: int
+    "The codec clock rate expressed in Hertz."
+    channels = attr.ib(default=None)  # type: int
+    "The number of channels supported (e.g. two for stereo)."
+    parameters = attr.ib(default=attr.Factory(OrderedDict))  # type: OrderedDict
+    "Codec-specific parameters available for signaling."
+
+
+@attr.s
 class RTCRtpCodecParameters:
     """
     The :class:`RTCRtpCodecParameters` dictionary provides information on
     codec settings.
     """
-    name = attr.ib(type=str)  # type: str
-    "The codec MIME subtype, for instance `'PCMU'`."
+    mimeType = attr.ib(type=str)  # type: str
+    "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
     clockRate = attr.ib(type=int)  # type: int
     "The codec clock rate expressed in Hertz."
     channels = attr.ib(default=None)  # type: int
@@ -22,6 +38,10 @@ class RTCRtpCodecParameters:
     "Transport layer and codec-specific feedback messages for this codec."
     parameters = attr.ib(default=attr.Factory(OrderedDict))  # type: OrderedDict
     "Codec-specific parameters available for signaling."
+
+    @property
+    def name(self):
+        return self.mimeType.split('/')[1]
 
     def __str__(self):
         s = '%s/%d' % (self.name, self.clockRate)
@@ -53,6 +73,16 @@ class RTCRtpEncodingParameters(RTCRtpCodingParameters):
 
 
 @attr.s
+class RTCRtpHeaderExtensionCapability:
+    """
+    The :class:`RTCRtpHeaderExtensionCapability` dictionary provides information
+    on a supported header extension.
+    """
+    uri = attr.ib(type=str)  # type: str
+    "The URI of the RTP header extension."
+
+
+@attr.s
 class RTCRtpHeaderExtensionParameters:
     """
     The :class:`RTCRtpHeaderExtensionParameters` dictionary enables a header
@@ -67,7 +97,15 @@ class RTCRtpHeaderExtensionParameters:
 
 @attr.s
 class RTCRtpCapabilities:
-    codecs = attr.ib(default=attr.Factory(list))
+    """
+    The :class:`RTCRtpCapabilities` dictionary provides information about
+    support codecs and header extensions.
+    """
+    codecs = attr.ib(default=attr.Factory(list))  # type: List[RTCRtpCodecCapability]
+    "A list of :class:`RTCRtpCodecCapability`."
+    headerExtensions = attr.ib(
+        default=attr.Factory(list))  # type: List[RTCRtpHeaderExtensionCapability]
+    "A list of :class:`RTCRtpHeaderExtensionCapability`."
 
 
 @attr.s

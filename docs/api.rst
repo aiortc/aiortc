@@ -60,6 +60,15 @@ Real-time Transport Protocol (RTP)
    .. autoclass:: RTCRtpSynchronizationSource()
       :members:
 
+   .. autoclass:: RTCRtpCapabilities()
+      :members:
+
+   .. autoclass:: RTCRtpCodecCapability()
+      :members:
+
+   .. autoclass:: RTCRtpHeaderExtensionCapability()
+      :members:
+
    .. autoclass:: RTCRtpParameters()
       :members:
 

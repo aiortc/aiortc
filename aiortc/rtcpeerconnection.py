@@ -6,7 +6,7 @@ from collections import OrderedDict
 from pyee import EventEmitter
 
 from . import clock, rtp, sdp
-from .codecs import MEDIA_CODECS
+from .codecs import CODECS, HEADER_EXTENSIONS
 from .events import RTCTrackEvent
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
@@ -14,7 +14,6 @@ from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import (RTCRtpCodecParameters, RTCRtpDecodingParameters,
-                               RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters, RTCRtpReceiveParameters,
                                RTCRtpRtxParameters)
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
@@ -26,16 +25,6 @@ from .stats import RTCStatsReport
 
 DISCARD_HOST = '0.0.0.0'
 DISCARD_PORT = 9
-HEADER_EXTENSIONS = {
-    'audio': [
-        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-    ],
-    'video': [
-        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-        RTCRtpHeaderExtensionParameters(
-            id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
-    ]
-}
 MEDIA_KINDS = ['audio', 'video']
 
 
@@ -460,7 +449,7 @@ class RTCPeerConnection(EventEmitter):
         dynamic_pt = rtp.DYNAMIC_PAYLOAD_TYPES.start
         for transceiver in self.__transceivers:
             codecs = []
-            for codec in MEDIA_CODECS[transceiver.kind]:
+            for codec in CODECS[transceiver.kind]:
                 codec = copy.deepcopy(codec)
                 if codec.payloadType is None:
                     codec.payloadType = dynamic_pt
@@ -470,7 +459,7 @@ class RTCPeerConnection(EventEmitter):
                 # for video, offer the corresponding RTX
                 if transceiver.kind == 'video':
                     codecs.append(RTCRtpCodecParameters(
-                        name='rtx',
+                        mimeType='video/rtx',
                         clockRate=codec.clockRate,
                         payloadType=dynamic_pt,
                         parameters={
@@ -662,7 +651,7 @@ class RTCPeerConnection(EventEmitter):
                     transceiver._set_mline_index(i)
 
                 # negotiate codecs
-                common = find_common_codecs(MEDIA_CODECS[media.kind], media.rtp.codecs)
+                common = find_common_codecs(CODECS[media.kind], media.rtp.codecs)
                 assert len(common)
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(

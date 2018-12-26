@@ -5,7 +5,7 @@ import time
 import uuid
 
 from . import clock, rtp
-from .codecs import get_encoder
+from .codecs import get_capabilities, get_encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError
 from .rtcrtpparameters import RTCRtpSendParameters
@@ -92,6 +92,16 @@ class RTCRtpSender:
         transmitted.
         """
         return self.__transport
+
+    @classmethod
+    def getCapabilities(self, kind):
+        """
+        Returns the most optimistic view of the system's capabilities for
+        sending media of the given `kind`.
+
+        :rtype: :class:`RTCRtpCapabilities`
+        """
+        return get_capabilities(kind)
 
     async def getStats(self):
         """

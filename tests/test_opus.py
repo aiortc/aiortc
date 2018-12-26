@@ -7,7 +7,7 @@ from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
 
-OPUS_CODEC = RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2)
+OPUS_CODEC = RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2)
 
 
 class OpusTest(CodecTestCase):

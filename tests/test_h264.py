@@ -11,7 +11,7 @@ from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 from .codecs import CodecTestCase
 from .utils import load
 
-H264_CODEC = RTCRtpCodecParameters(name='H264', clockRate=90000)
+H264_CODEC = RTCRtpCodecParameters(mimeType='video/H264', clockRate=90000)
 
 
 class H264PayloadDescriptorTest(TestCase):

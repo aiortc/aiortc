@@ -9,7 +9,7 @@ import time
 import attr
 
 from . import clock
-from .codecs import depayload, get_decoder
+from .codecs import depayload, get_capabilities, get_decoder
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamError, MediaStreamTrack
@@ -245,6 +245,16 @@ class RTCRtpReceiver:
         track is received.
         """
         return self.__transport
+
+    @classmethod
+    def getCapabilities(self, kind):
+        """
+        Returns the most optimistic view of the system's capabilities for
+        receiving media of the given `kind`.
+
+        :rtype: :class:`RTCRtpCapabilities`
+        """
+        return get_capabilities(kind)
 
     async def getStats(self):
         """

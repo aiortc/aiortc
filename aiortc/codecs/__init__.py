@@ -1,28 +1,33 @@
 from collections import OrderedDict
 
-from ..rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
+from ..rtcrtpparameters import (RTCRtcpFeedback,
+                                RTCRtpCapabilities,
+                                RTCRtpCodecCapability,
+                                RTCRtpCodecParameters,
+                                RTCRtpHeaderExtensionCapability,
+                                RTCRtpHeaderExtensionParameters)
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
 
-PCMU_CODEC = RTCRtpCodecParameters(name='PCMU', clockRate=8000, channels=1, payloadType=0)
-PCMA_CODEC = RTCRtpCodecParameters(name='PCMA', clockRate=8000, channels=1, payloadType=8)
+PCMU_CODEC = RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0)
+PCMA_CODEC = RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8)
 
-MEDIA_CODECS = {
+CODECS = {
     'audio': [
-        RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2),
+        RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
         PCMU_CODEC,
         PCMA_CODEC,
     ],
     'video': [
-        RTCRtpCodecParameters(name='VP8', clockRate=90000, rtcpFeedback=[
+        RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, rtcpFeedback=[
             RTCRtcpFeedback(type='nack'),
             RTCRtcpFeedback(type='nack', parameter='pli'),
             RTCRtcpFeedback(type='goog-remb'),
         ]),
         RTCRtpCodecParameters(
-            name='H264',
+            mimeType='video/H264',
             clockRate=90000,
             rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
@@ -36,7 +41,7 @@ MEDIA_CODECS = {
             ))
         ),
         RTCRtpCodecParameters(
-            name='H264',
+            mimeType='video/H264',
             clockRate=90000,
             rtcpFeedback=[
                 RTCRtcpFeedback(type='nack'),
@@ -51,6 +56,16 @@ MEDIA_CODECS = {
         ),
     ]
 }
+HEADER_EXTENSIONS = {
+    'audio': [
+        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+    ],
+    'video': [
+        RTCRtpHeaderExtensionParameters(id=1, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+        RTCRtpHeaderExtensionParameters(
+            id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+    ]
+}
 
 
 def depayload(codec, payload):
@@ -60,6 +75,22 @@ def depayload(codec, payload):
         return h264_depayload(payload)
     else:
         return payload
+
+
+def get_capabilities(kind):
+    if kind in CODECS:
+        codecs = []
+        for params in CODECS[kind]:
+            codecs.append(RTCRtpCodecCapability(
+                mimeType=params.mimeType,
+                clockRate=params.clockRate,
+                channels=params.channels,
+                parameters=params.parameters))
+        headerExtensions = []
+        for params in HEADER_EXTENSIONS[kind]:
+            headerExtensions.append(RTCRtpHeaderExtensionCapability(
+                uri=params.uri))
+        return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 
 def get_decoder(codec):

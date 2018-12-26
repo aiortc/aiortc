@@ -133,14 +133,14 @@ class RTCDtlsTransportTest(TestCase):
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
         session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
+            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
             encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
         session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
+            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
             encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
 
         run(asyncio.gather(
@@ -196,14 +196,14 @@ class RTCDtlsTransportTest(TestCase):
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
         session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
+            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
             encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
         session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0)],
+            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
             encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
 
         run(asyncio.gather(

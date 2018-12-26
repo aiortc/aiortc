@@ -70,21 +70,26 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='opus', clockRate=48000, channels=2, payloadType=111,
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
+                                  payloadType=111,
                                   rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')],
                                   parameters={'minptime': 10, 'useinbandfec': 1}),
-            RTCRtpCodecParameters(name='ISAC', clockRate=16000, payloadType=103),
-            RTCRtpCodecParameters(name='ISAC', clockRate=32000, payloadType=104),
-            RTCRtpCodecParameters(name='G722', clockRate=8000, payloadType=9),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='CN', clockRate=32000, payloadType=106),
-            RTCRtpCodecParameters(name='CN', clockRate=16000, payloadType=105),
-            RTCRtpCodecParameters(name='CN', clockRate=8000, payloadType=13),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=48000, payloadType=110),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=32000, payloadType=112),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=16000, payloadType=113),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=126),
+            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=16000, payloadType=103),
+            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=32000, payloadType=104),
+            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, payloadType=9),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=32000, payloadType=106),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=16000, payloadType=105),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=8000, payloadType=13),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=48000,
+                                  payloadType=110),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=32000,
+                                  payloadType=112),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=16000,
+                                  payloadType=113),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+                                  payloadType=126),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(id=1,
@@ -232,14 +237,14 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(
-                name='opus', clockRate=48000, channels=2, payloadType=109,
+                mimeType='audio/opus', clockRate=48000, channels=2, payloadType=109,
                 parameters={
                     'maxplaybackrate': 48000, 'stereo': 1, 'useinbandfec': 1
                 }),
-            RTCRtpCodecParameters(name='G722', clockRate=8000, channels=1, payloadType=9),
-            RTCRtpCodecParameters(name='PCMU', clockRate=8000, payloadType=0),
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101,
+            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, channels=1, payloadType=9),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, payloadType=101,
                                   parameters={'0-15': None}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
@@ -359,8 +364,9 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, None)
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+                                  payloadType=101),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, '')
@@ -460,8 +466,9 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, None)
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(name='telephone-event', clockRate=8000, payloadType=101),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+                                  payloadType=101),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, '')
@@ -772,28 +779,30 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=96, rtcpFeedback=[
-                RTCRtcpFeedback(type='goog-remb'),
-                RTCRtcpFeedback(type='transport-cc'),
-                RTCRtcpFeedback(type='ccm', parameter='fir'),
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-            ]),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=97,
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96,
+                                  rtcpFeedback=[
+                                    RTCRtcpFeedback(type='goog-remb'),
+                                    RTCRtcpFeedback(type='transport-cc'),
+                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
+                                    RTCRtcpFeedback(type='nack'),
+                                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                                  ]),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=97,
                                   parameters={'apt': 96}),
-            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=98, rtcpFeedback=[
-                RTCRtcpFeedback(type='goog-remb'),
-                RTCRtcpFeedback(type='transport-cc'),
-                RTCRtcpFeedback(type='ccm', parameter='fir'),
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-            ]),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=99,
+            RTCRtpCodecParameters(mimeType='video/VP9', clockRate=90000, payloadType=98,
+                                  rtcpFeedback=[
+                                    RTCRtcpFeedback(type='goog-remb'),
+                                    RTCRtcpFeedback(type='transport-cc'),
+                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
+                                    RTCRtcpFeedback(type='nack'),
+                                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                                  ]),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=99,
                                   parameters={'apt': 98}),
-            RTCRtpCodecParameters(name='red', clockRate=90000, payloadType=100),
-            RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+            RTCRtpCodecParameters(mimeType='video/red', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
                                   parameters={'apt': 100}),
-            RTCRtpCodecParameters(name='ulpfec', clockRate=90000, payloadType=102)
+            RTCRtpCodecParameters(mimeType='video/ulpfec', clockRate=90000, payloadType=102)
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(
@@ -979,18 +988,20 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=120, rtcpFeedback=[
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-                RTCRtcpFeedback(type='ccm', parameter='fir'),
-                RTCRtcpFeedback(type='goog-remb'),
-            ], parameters={'max-fs': 12288, 'max-fr': 60}),
-            RTCRtpCodecParameters(name='VP9', clockRate=90000, payloadType=121, rtcpFeedback=[
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-                RTCRtcpFeedback(type='ccm', parameter='fir'),
-                RTCRtcpFeedback(type='goog-remb'),
-            ], parameters={'max-fs': 12288, 'max-fr': 60}),
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=120,
+                                  rtcpFeedback=[
+                                    RTCRtcpFeedback(type='nack'),
+                                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
+                                    RTCRtcpFeedback(type='goog-remb'),
+                                  ], parameters={'max-fs': 12288, 'max-fr': 60}),
+            RTCRtpCodecParameters(mimeType='video/VP9', clockRate=90000, payloadType=121,
+                                  rtcpFeedback=[
+                                    RTCRtcpFeedback(type='nack'),
+                                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
+                                    RTCRtcpFeedback(type='goog-remb'),
+                                  ], parameters={'max-fs': 12288, 'max-fr': 60}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(

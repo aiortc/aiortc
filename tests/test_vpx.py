@@ -8,7 +8,7 @@ from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
 
-VP8_CODEC = RTCRtpCodecParameters(name='VP8', clockRate=90000)
+VP8_CODEC = RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100)
 
 
 class VpxPayloadDescriptorTest(TestCase):

@@ -5,7 +5,8 @@ from unittest import TestCase
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
-from aiortc.rtcrtpparameters import RTCRtpCodecParameters, RTCRtpParameters
+from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecParameters,
+                                     RTCRtpParameters)
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
                         RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
@@ -13,6 +14,8 @@ from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
 from aiortc.stats import RTCStatsReport
 
 from .utils import dummy_dtls_transport_pair, run
+
+VP8_CODEC = RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100)
 
 
 class RTCRtpSenderTest(TestCase):
@@ -22,6 +25,16 @@ class RTCRtpSenderTest(TestCase):
     def tearDown(self):
         run(self.local_transport.stop())
         run(self.remote_transport.stop())
+
+    def test_capabilities(self):
+        capabilities = RTCRtpSender.getCapabilities('audio')
+        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+
+        capabilities = RTCRtpSender.getCapabilities('video')
+        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+
+        capabilities = RTCRtpSender.getCapabilities('bogus')
+        self.assertIsNone(capabilities)
 
     def test_construct(self):
         sender = RTCRtpSender('audio', self.local_transport)
@@ -48,9 +61,7 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # receive RTCP feedback NACK
         packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=sender._ssrc)
@@ -64,9 +75,7 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # receive RTCP feedback NACK
         packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=sender._ssrc)
@@ -79,9 +88,7 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # receive RTCP feedback REMB
         packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=sender._ssrc,
@@ -100,9 +107,7 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # receive RTCP RR
         packet = RtcpRrPacket(ssrc=1234, reports=[RtcpReceiverInfo(
@@ -134,9 +139,7 @@ class RTCRtpSenderTest(TestCase):
         sender = RTCRtpSender(VideoStreamTrack(), self.local_transport)
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # wait for one packet to be transmitted, and ask for keyframe
         run(queue.get())
@@ -161,9 +164,7 @@ class RTCRtpSenderTest(TestCase):
         sender._ssrc = 1234
         self.assertEqual(sender.kind, 'video')
 
-        run(sender.send(RTCRtpParameters(codecs=[
-            RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-        ])))
+        run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # wait for one packet to be transmitted, and ask to retransmit
         packet = run(queue.get())
@@ -202,8 +203,8 @@ class RTCRtpSenderTest(TestCase):
 
         run(sender.send(RTCRtpParameters(
             codecs=[
-                RTCRtpCodecParameters(name='VP8', clockRate=90000, payloadType=100),
-                RTCRtpCodecParameters(name='rtx', clockRate=90000, payloadType=101,
+                VP8_CODEC,
+                RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
                                       parameters={'apt': 100})
             ])))
 

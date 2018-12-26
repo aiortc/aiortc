@@ -11,6 +11,7 @@ Changelog
 Media
 .....
 
+  * Add :meth:`RTCRtpReceiver.getCapabilities` and :meth:`RTCRtpSender.getCapabilities`.
   * Add :meth:`RTCRtpReceiver.getSynchronizationSources`.
 
 0.9.15
