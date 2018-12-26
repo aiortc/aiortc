@@ -398,9 +398,16 @@ class SessionDescription:
                         format_id, format_desc = value.split(' ', 1)
                         format_id = int(format_id)
                         bits = format_desc.split('/')
+                        if current_media.kind == 'audio':
+                            if len(bits) > 2:
+                                channels = int(bits[2])
+                            else:
+                                channels = 1
+                        else:
+                            channels = None
                         codec = RTCRtpCodecParameters(
                             mimeType=current_media.kind + '/' + bits[0],
-                            channels=int(bits[2]) if len(bits) > 2 else None,
+                            channels=channels,
                             clockRate=int(bits[1]),
                             payloadType=int(format_id))
                         current_media.rtp.codecs.append(codec)

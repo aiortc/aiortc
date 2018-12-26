@@ -13,9 +13,8 @@ from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceGatherer, RTCIceTransport
-from .rtcrtpparameters import (RTCRtpCodecParameters, RTCRtpDecodingParameters,
-                               RTCRtpParameters, RTCRtpReceiveParameters,
-                               RTCRtpRtxParameters)
+from .rtcrtpparameters import (RTCRtpDecodingParameters, RTCRtpParameters,
+                               RTCRtpReceiveParameters, RTCRtpRtxParameters)
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
@@ -446,28 +445,8 @@ class RTCPeerConnection(EventEmitter):
             raise InternalError('Cannot create an offer with no media and no data channels')
 
         # offer codecs
-        dynamic_pt = rtp.DYNAMIC_PAYLOAD_TYPES.start
         for transceiver in self.__transceivers:
-            codecs = []
-            for codec in CODECS[transceiver.kind]:
-                codec = copy.deepcopy(codec)
-                if codec.payloadType is None:
-                    codec.payloadType = dynamic_pt
-                    dynamic_pt += 1
-                codecs.append(codec)
-
-                # for video, offer the corresponding RTX
-                if transceiver.kind == 'video':
-                    codecs.append(RTCRtpCodecParameters(
-                        mimeType='video/rtx',
-                        clockRate=codec.clockRate,
-                        payloadType=dynamic_pt,
-                        parameters={
-                            'apt': codec.payloadType
-                        }
-                    ))
-                    dynamic_pt += 1
-            transceiver._codecs = codecs
+            transceiver._codecs = CODECS[transceiver.kind][:]
             transceiver._headerExtensions = HEADER_EXTENSIONS[transceiver.kind][:]
 
         mids = self.__seenMids.copy()

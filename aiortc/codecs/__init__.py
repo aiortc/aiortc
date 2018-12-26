@@ -16,45 +16,11 @@ PCMA_CODEC = RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channe
 
 CODECS = {
     'audio': [
-        RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
+        RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2, payloadType=96),
         PCMU_CODEC,
         PCMA_CODEC,
     ],
-    'video': [
-        RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, rtcpFeedback=[
-            RTCRtcpFeedback(type='nack'),
-            RTCRtcpFeedback(type='nack', parameter='pli'),
-            RTCRtcpFeedback(type='goog-remb'),
-        ]),
-        RTCRtpCodecParameters(
-            mimeType='video/H264',
-            clockRate=90000,
-            rtcpFeedback=[
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-                RTCRtcpFeedback(type='goog-remb'),
-            ],
-            parameters=OrderedDict((
-                ('packetization-mode', '1'),
-                ('level-asymmetry-allowed', '1'),
-                ('profile-level-id', '42001f'),
-            ))
-        ),
-        RTCRtpCodecParameters(
-            mimeType='video/H264',
-            clockRate=90000,
-            rtcpFeedback=[
-                RTCRtcpFeedback(type='nack'),
-                RTCRtcpFeedback(type='nack', parameter='pli'),
-                RTCRtcpFeedback(type='goog-remb'),
-            ],
-            parameters=OrderedDict((
-                ('packetization-mode', '1'),
-                ('level-asymmetry-allowed', '1'),
-                ('profile-level-id', '42e01f'),
-            ))
-        ),
-    ]
+    'video': [],
 }
 HEADER_EXTENSIONS = {
     'audio': [
@@ -66,6 +32,47 @@ HEADER_EXTENSIONS = {
             id=2, uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
     ]
 }
+
+
+def init_codecs():
+    dynamic_pt = 97
+
+    def add_video_codec(mimeType, parameters=None):
+        nonlocal dynamic_pt
+
+        clockRate = 90000
+        CODECS['video'] += [
+            RTCRtpCodecParameters(
+                mimeType=mimeType,
+                clockRate=clockRate,
+                payloadType=dynamic_pt,
+                rtcpFeedback=[
+                    RTCRtcpFeedback(type='nack'),
+                    RTCRtcpFeedback(type='nack', parameter='pli'),
+                    RTCRtcpFeedback(type='goog-remb'),
+                ],
+                parameters=parameters or OrderedDict()),
+            RTCRtpCodecParameters(
+                mimeType='video/rtx',
+                clockRate=clockRate,
+                payloadType=dynamic_pt + 1,
+                parameters={
+                    'apt': dynamic_pt,
+                })
+        ]
+        dynamic_pt += 2
+
+    add_video_codec('video/VP8')
+    add_video_codec('video/H264', OrderedDict((
+        ('packetization-mode', '1'),
+        ('level-asymmetry-allowed', '1'),
+        ('profile-level-id', '42001f'),
+    )))
+    add_video_codec('video/H264', OrderedDict((
+        ('packetization-mode', '1'),
+        ('level-asymmetry-allowed', '1'),
+        ('profile-level-id', '42e01f'),
+    )))
 
 
 def depayload(codec, payload):
@@ -117,3 +124,6 @@ def get_encoder(codec):
         return Vp8Encoder()
     elif codec.name == 'H264':
         return H264Encoder()
+
+
+init_codecs()

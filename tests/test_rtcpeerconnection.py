@@ -62,13 +62,14 @@ def track_states(pc):
 class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
         local_codecs = [
-            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
+                                  payloadType=96),
             RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
             RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8)
         ]
         remote_codecs = [
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(common, [
@@ -78,13 +79,15 @@ class RTCRtpCodecParametersTest(TestCase):
 
     def test_common_dynamic(self):
         local_codecs = [
-            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2),
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
+                                  payloadType=96),
             RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
             RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8)
         ]
         remote_codecs = [
-            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, payloadType=100),
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
+                                  payloadType=100),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
         ]
         common = find_common_codecs(local_codecs, remote_codecs)
         self.assertEqual(common, [
@@ -99,6 +102,7 @@ class RTCRtpCodecParametersTest(TestCase):
             RTCRtpCodecParameters(
                 mimeType='video/VP8',
                 clockRate=90000,
+                payloadType=100,
                 rtcpFeedback=[
                     RTCRtcpFeedback(type='nack'),
                     RTCRtcpFeedback(type='nack', parameter='pli'),
@@ -127,7 +131,9 @@ class RTCRtpCodecParametersTest(TestCase):
 
     def test_common_rtx(self):
         local_codecs = [
-            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000),
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
+                                  parameters={'apt': 100}),
         ]
         remote_codecs = [
             RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96),
@@ -1668,26 +1674,26 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, 'complete')
         self.assertEqual(mids(pc1), ['0'])
         self.assertTrue('m=video ' in pc1.localDescription.sdp)
-        self.assertTrue(lf2crlf("""a=rtpmap:96 VP8/90000
-a=rtcp-fb:96 nack
-a=rtcp-fb:96 nack pli
-a=rtcp-fb:96 goog-remb
-a=rtpmap:97 rtx/90000
-a=fmtp:97 apt=96
-a=rtpmap:98 H264/90000
-a=rtcp-fb:98 nack
-a=rtcp-fb:98 nack pli
-a=rtcp-fb:98 goog-remb
-a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:99 rtx/90000
-a=fmtp:99 apt=98
-a=rtpmap:100 H264/90000
-a=rtcp-fb:100 nack
-a=rtcp-fb:100 nack pli
-a=rtcp-fb:100 goog-remb
-a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:101 rtx/90000
-a=fmtp:101 apt=100
+        self.assertTrue(lf2crlf("""a=rtpmap:97 VP8/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=rtpmap:98 rtx/90000
+a=fmtp:98 apt=97
+a=rtpmap:99 H264/90000
+a=rtcp-fb:99 nack
+a=rtcp-fb:99 nack pli
+a=rtcp-fb:99 goog-remb
+a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:100 rtx/90000
+a=fmtp:100 apt=99
+a=rtpmap:101 H264/90000
+a=rtcp-fb:101 nack
+a=rtcp-fb:101 nack pli
+a=rtcp-fb:101 goog-remb
+a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:102 rtx/90000
+a=fmtp:102 apt=101
 """) in pc1.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
         self.assertHasIceCandidates(pc1.localDescription)
@@ -1713,26 +1719,26 @@ a=fmtp:101 apt=100
         self.assertEqual(pc2.iceConnectionState, 'checking')
         self.assertEqual(pc2.iceGatheringState, 'complete')
         self.assertTrue('m=video ' in pc2.localDescription.sdp)
-        self.assertTrue(lf2crlf("""a=rtpmap:96 VP8/90000
-a=rtcp-fb:96 nack
-a=rtcp-fb:96 nack pli
-a=rtcp-fb:96 goog-remb
-a=rtpmap:97 rtx/90000
-a=fmtp:97 apt=96
-a=rtpmap:98 H264/90000
-a=rtcp-fb:98 nack
-a=rtcp-fb:98 nack pli
-a=rtcp-fb:98 goog-remb
-a=fmtp:98 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:99 rtx/90000
-a=fmtp:99 apt=98
-a=rtpmap:100 H264/90000
-a=rtcp-fb:100 nack
-a=rtcp-fb:100 nack pli
-a=rtcp-fb:100 goog-remb
-a=fmtp:100 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:101 rtx/90000
-a=fmtp:101 apt=100
+        self.assertTrue(lf2crlf("""a=rtpmap:97 VP8/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=rtpmap:98 rtx/90000
+a=fmtp:98 apt=97
+a=rtpmap:99 H264/90000
+a=rtcp-fb:99 nack
+a=rtcp-fb:99 nack pli
+a=rtcp-fb:99 goog-remb
+a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:100 rtx/90000
+a=fmtp:100 apt=99
+a=rtpmap:101 H264/90000
+a=rtcp-fb:101 nack
+a=rtcp-fb:101 nack pli
+a=rtcp-fb:101 goog-remb
+a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:102 rtx/90000
+a=fmtp:102 apt=101
 """) in pc2.localDescription.sdp)
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)

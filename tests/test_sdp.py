@@ -74,21 +74,29 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
                                   payloadType=111,
                                   rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')],
                                   parameters={'minptime': 10, 'useinbandfec': 1}),
-            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=16000, payloadType=103),
-            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=32000, payloadType=104),
-            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, payloadType=9),
-            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=32000, payloadType=106),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=16000, payloadType=105),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=8000, payloadType=13),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=48000,
+            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=16000, channels=1,
+                                  payloadType=103),
+            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=32000, channels=1,
+                                  payloadType=104),
+            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, channels=1,
+                                  payloadType=9),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1,
+                                  payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1,
+                                  payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=32000, channels=1,
+                                  payloadType=106),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=16000, channels=1,
+                                  payloadType=105),
+            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=8000, channels=1,
+                                  payloadType=13),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=48000, channels=1,
                                   payloadType=110),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=32000,
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=32000, channels=1,
                                   payloadType=112),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=16000,
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=16000, channels=1,
                                   payloadType=113),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
                                   payloadType=126),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
@@ -242,10 +250,10 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
                     'maxplaybackrate': 48000, 'stereo': 1, 'useinbandfec': 1
                 }),
             RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, channels=1, payloadType=9),
-            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0),
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, payloadType=101,
-                                  parameters={'0-15': None}),
+            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
+                                  payloadType=101, parameters={'0-15': None}),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [
             RTCRtpHeaderExtensionParameters(id=1,
@@ -364,8 +372,9 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, None)
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1,
+                                  payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
                                   payloadType=101),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
@@ -466,8 +475,8 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, None)
         self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000,
+            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
+            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
                                   payloadType=101),
         ])
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
