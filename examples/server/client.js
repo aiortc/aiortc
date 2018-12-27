@@ -174,7 +174,9 @@ function stop() {
     // close transceivers
     if (pc.getTransceivers) {
         pc.getTransceivers().forEach(function(transceiver) {
-            transceiver.stop();
+            if (transceiver.stop) {
+                transceiver.stop();
+            }
         });
     }
 
