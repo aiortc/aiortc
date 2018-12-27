@@ -13,6 +13,7 @@ Media
 
   * Add :meth:`RTCRtpReceiver.getCapabilities` and :meth:`RTCRtpSender.getCapabilities`.
   * Add :meth:`RTCRtpReceiver.getSynchronizationSources`.
+  * Add :meth:`RTCRtpTransceiver.setCodecPreferences`.
 
 0.9.15
 ------

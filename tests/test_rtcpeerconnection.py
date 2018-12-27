@@ -9,8 +9,11 @@ from aiortc.exceptions import (InternalError, InvalidAccessError,
                                InvalidStateError)
 from aiortc.mediastreams import (AudioStreamTrack, MediaStreamTrack,
                                  VideoStreamTrack)
-from aiortc.rtcpeerconnection import find_common_codecs
-from aiortc.rtcrtpparameters import RTCRtcpFeedback, RTCRtpCodecParameters
+from aiortc.rtcpeerconnection import (filter_preferred_codecs,
+                                      find_common_codecs)
+from aiortc.rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecCapability,
+                                     RTCRtpCodecParameters)
+from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.sdp import SessionDescription
 from aiortc.stats import RTCStatsReport
 
@@ -148,6 +151,56 @@ class RTCRtpCodecParametersTest(TestCase):
             RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96),
             RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=97,
                                   parameters={'apt': 96}),
+        ])
+
+    def test_filter_preferred(self):
+        codecs = [
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
+                                  parameters={'apt': 100}),
+            RTCRtpCodecParameters(mimeType='video/H264', clockRate=90000, payloadType=102),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=103,
+                                  parameters={'apt': 102}),
+        ]
+
+        # no preferences
+        self.assertEqual(filter_preferred_codecs(codecs, []), codecs)
+
+        # with RTX, prefer VP8
+        self.assertEqual(filter_preferred_codecs(codecs, [
+            RTCRtpCodecCapability(mimeType='video/VP8', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/rtx', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000),
+        ]), [
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
+                                  parameters={'apt': 100}),
+            RTCRtpCodecParameters(mimeType='video/H264', clockRate=90000, payloadType=102),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=103,
+                                  parameters={'apt': 102}),
+        ])
+
+        # with RTX, prefer H264
+        self.assertEqual(filter_preferred_codecs(codecs, [
+            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/rtx', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/VP8', clockRate=90000),
+        ]), [
+            RTCRtpCodecParameters(mimeType='video/H264', clockRate=90000, payloadType=102),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=103,
+                                  parameters={'apt': 102}),
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
+                                  parameters={'apt': 100}),
+        ])
+
+        # no RTX, same order
+        self.assertEqual(filter_preferred_codecs(codecs, [
+            RTCRtpCodecCapability(mimeType='video/VP8', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000),
+        ]), [
+            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100),
+            RTCRtpCodecParameters(mimeType='video/H264', clockRate=90000, payloadType=102),
         ])
 
 
@@ -588,6 +641,122 @@ a=rtpmap:8 PCMA/8000
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_audio_codec_preferences_offerer(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # add track and set codec preferences to prefer PCMA / PCMU
+        pc1.addTrack(AudioStreamTrack())
+        capabilities = RTCRtpSender.getCapabilities('audio')
+        preferences = list(filter(lambda x: x.name == 'PCMA', capabilities.codecs))
+        preferences += list(filter(lambda x: x.name == 'PCMU', capabilities.codecs))
+        transceiver = pc1.getTransceivers()[0]
+        transceiver.setCodecPreferences(preferences)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=audio ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=audio ' in pc1.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:8 PCMA/8000
+a=rtpmap:0 PCMU/8000
+""") in pc1.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=audio ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc2), ['0'])
+        self.assertTrue('m=audio ' in pc2.localDescription.sdp)
+        self.assertTrue(lf2crlf("""a=rtpmap:8 PCMA/8000
+a=rtpmap:0 PCMU/8000
+""") in pc2.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
+        self.assertEqual(pc2.getTransceivers()[0].currentDirection, 'sendrecv')
+        self.assertEqual(pc2.getTransceivers()[0].direction, 'sendrecv')
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+        self.assertEqual(pc1.getTransceivers()[0].currentDirection, 'sendrecv')
+        self.assertEqual(pc1.getTransceivers()[0].direction, 'sendrecv')
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # allow media to flow long enough to collect stats
+        run(asyncio.sleep(2))
+
+        # check stats
+        report = run(pc1.getStats())
+        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertEqual(
+            sorted([s.type for s in report.values()]),
+            ['inbound-rtp', 'outbound-rtp', 'remote-inbound-rtp', 'remote-outbound-rtp',
+             'transport'])
 
         # close
         run(pc1.close())
@@ -1943,6 +2112,143 @@ a=fmtp:102 apt=101
         self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, 'active')
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_video_codec_preferences_offerer(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'new')
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, 'new')
+        self.assertEqual(pc2.iceGatheringState, 'new')
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # add track and set codec preferences to prefer H264
+        pc1.addTrack(VideoStreamTrack())
+        capabilities = RTCRtpSender.getCapabilities('video')
+        preferences = list(filter(lambda x: x.name == 'H264', capabilities.codecs))
+        preferences += list(filter(lambda x: x.name == 'VP8', capabilities.codecs))
+        preferences += list(filter(lambda x: x.name == 'rtx', capabilities.codecs))
+        transceiver = pc1.getTransceivers()[0]
+        transceiver.setCodecPreferences(preferences)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=video ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=video ' in pc1.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
+        self.assertTrue(lf2crlf("""a=rtpmap:99 H264/90000
+a=rtcp-fb:99 nack
+a=rtcp-fb:99 nack pli
+a=rtcp-fb:99 goog-remb
+a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:100 rtx/90000
+a=fmtp:100 apt=99
+a=rtpmap:101 H264/90000
+a=rtcp-fb:101 nack
+a=rtcp-fb:101 nack pli
+a=rtcp-fb:101 goog-remb
+a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:102 rtx/90000
+a=fmtp:102 apt=101
+a=rtpmap:97 VP8/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=rtpmap:98 rtx/90000
+a=fmtp:98 apt=97
+""") in pc1.localDescription.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=video ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=video ' in pc2.localDescription.sdp)
+        self.assertTrue('a=sendrecv' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
+        self.assertTrue(lf2crlf("""a=rtpmap:99 H264/90000
+a=rtcp-fb:99 nack
+a=rtcp-fb:99 nack pli
+a=rtcp-fb:99 goog-remb
+a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
+a=rtpmap:100 rtx/90000
+a=fmtp:100 apt=99
+a=rtpmap:101 H264/90000
+a=rtcp-fb:101 nack
+a=rtcp-fb:101 nack pli
+a=rtcp-fb:101 goog-remb
+a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
+a=rtpmap:102 rtx/90000
+a=fmtp:102 apt=101
+a=rtpmap:97 VP8/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=rtpmap:98 rtx/90000
+a=fmtp:98 apt=97
+""") in pc2.localDescription.sdp)
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

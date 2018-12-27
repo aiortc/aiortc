@@ -27,6 +27,31 @@ DISCARD_PORT = 9
 MEDIA_KINDS = ['audio', 'video']
 
 
+def filter_preferred_codecs(codecs, preferred):
+    if not preferred:
+        return codecs
+
+    rtx_codecs = list(filter(lambda x: x.name == 'rtx', codecs))
+    rtx_enabled = next(filter(lambda x: x.name == 'rtx', preferred), None) is not None
+
+    filtered = []
+    for pref in filter(lambda x: x.name != 'rtx', preferred):
+        for codec in codecs:
+            if codec.mimeType == pref.mimeType and codec.parameters == pref.parameters:
+                filtered.append(codec)
+
+                # add corresponding RTX
+                if rtx_enabled:
+                    for rtx in rtx_codecs:
+                        if rtx.parameters['apt'] == codec.payloadType:
+                            filtered.append(rtx)
+                            break
+
+                break
+
+    return filtered
+
+
 def find_common_codecs(local_codecs, remote_codecs):
     common = []
     common_base = {}
@@ -445,7 +470,10 @@ class RTCPeerConnection(EventEmitter):
 
         # offer codecs
         for transceiver in self.__transceivers:
-            transceiver._codecs = CODECS[transceiver.kind][:]
+            transceiver._codecs = filter_preferred_codecs(
+                CODECS[transceiver.kind][:],
+                transceiver._preferred_codecs,
+            )
             transceiver._headerExtensions = HEADER_EXTENSIONS[transceiver.kind][:]
 
         mids = self.__seenMids.copy()
@@ -629,7 +657,9 @@ class RTCPeerConnection(EventEmitter):
                     transceiver._set_mline_index(i)
 
                 # negotiate codecs
-                common = find_common_codecs(CODECS[media.kind], media.rtp.codecs)
+                common = filter_preferred_codecs(
+                    find_common_codecs(CODECS[media.kind], media.rtp.codecs),
+                    transceiver._preferred_codecs)
                 assert len(common)
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(

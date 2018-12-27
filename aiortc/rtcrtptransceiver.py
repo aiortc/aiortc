@@ -1,5 +1,6 @@
 import logging
 
+from aiortc.codecs import get_capabilities
 from aiortc.sdp import DIRECTIONS
 
 logger = logging.getLogger('rtp')
@@ -23,6 +24,7 @@ class RTCRtpTransceiver:
 
         self._currentDirection = None
         self._offerDirection = None
+        self._preferred_codecs = []
 
     @property
     def currentDirection(self):
@@ -75,6 +77,22 @@ class RTCRtpTransceiver:
     @property
     def stopped(self):
         return self.__stopped
+
+    def setCodecPreferences(self, codecs):
+        """
+        Override the default codec preferences.
+        """
+        if not codecs:
+            self._preferred_codecs = []
+
+        capabilities = get_capabilities(self.kind).codecs
+        unique = []
+        for codec in reversed(codecs):
+            if codec not in capabilities:
+                raise ValueError('Codec is not in capabilities')
+            if codec not in unique:
+                unique.insert(0, codec)
+        self._preferred_codecs = unique
 
     async def stop(self):
         """
