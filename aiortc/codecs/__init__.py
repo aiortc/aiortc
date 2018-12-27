@@ -87,12 +87,22 @@ def depayload(codec, payload):
 def get_capabilities(kind):
     if kind in CODECS:
         codecs = []
+        rtx_added = False
         for params in CODECS[kind]:
-            codecs.append(RTCRtpCodecCapability(
-                mimeType=params.mimeType,
-                clockRate=params.clockRate,
-                channels=params.channels,
-                parameters=params.parameters))
+            if params.name != 'rtx':
+                codecs.append(RTCRtpCodecCapability(
+                    mimeType=params.mimeType,
+                    clockRate=params.clockRate,
+                    channels=params.channels,
+                    parameters=params.parameters))
+            elif not rtx_added:
+                # There will only be a single entry in codecs[] for retransmission
+                # via RTX, with sdpFmtpLine not present.
+                codecs.append(RTCRtpCodecCapability(
+                    mimeType=params.mimeType,
+                    clockRate=params.clockRate))
+                rtx_added = True
+
         headerExtensions = []
         for params in HEADER_EXTENSIONS[kind]:
             headerExtensions.append(RTCRtpHeaderExtensionCapability(

@@ -19,6 +19,10 @@ class RTCRtpCodecCapability:
     parameters = attr.ib(default=attr.Factory(OrderedDict))  # type: OrderedDict
     "Codec-specific parameters available for signaling."
 
+    @property
+    def name(self):
+        return self.mimeType.split('/')[1]
+
 
 @attr.s
 class RTCRtpCodecParameters:

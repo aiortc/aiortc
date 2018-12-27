@@ -1,11 +1,14 @@
 import asyncio
+from collections import OrderedDict
 from struct import pack
 from unittest import TestCase
 
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
-from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecParameters,
+from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecCapability,
+                                     RTCRtpCodecParameters,
+                                     RTCRtpHeaderExtensionCapability,
                                      RTCRtpParameters)
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
@@ -27,12 +30,41 @@ class RTCRtpSenderTest(TestCase):
         run(self.remote_transport.stop())
 
     def test_capabilities(self):
+        # audio
         capabilities = RTCRtpSender.getCapabilities('audio')
         self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertEqual(capabilities.codecs, [
+            RTCRtpCodecCapability(mimeType='audio/opus', clockRate=48000, channels=2),
+            RTCRtpCodecCapability(mimeType='audio/PCMU', clockRate=8000, channels=1),
+            RTCRtpCodecCapability(mimeType='audio/PCMA', clockRate=8000, channels=1),
+        ])
+        self.assertEqual(capabilities.headerExtensions, [
+            RTCRtpHeaderExtensionCapability(uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+        ])
 
+        # video
         capabilities = RTCRtpSender.getCapabilities('video')
         self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertEqual(capabilities.codecs, [
+            RTCRtpCodecCapability(mimeType='video/VP8', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/rtx', clockRate=90000),
+            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000, parameters=OrderedDict([
+                ('packetization-mode', '1'),
+                ('level-asymmetry-allowed', '1'),
+                ('profile-level-id', '42001f')
+            ])),
+            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000, parameters=OrderedDict([
+                ('packetization-mode', '1'),
+                ('level-asymmetry-allowed', '1'),
+                ('profile-level-id', '42e01f')
+            ])),
+        ])
+        self.assertEqual(capabilities.headerExtensions, [
+            RTCRtpHeaderExtensionCapability(uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
+            RTCRtpHeaderExtensionCapability(uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),  # noqa
+        ])
 
+        # bogus
         capabilities = RTCRtpSender.getCapabilities('bogus')
         self.assertIsNone(capabilities)
 
