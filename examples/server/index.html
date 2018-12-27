@@ -36,6 +36,12 @@
 <div class="option">
     <input id="use-audio" checked="checked" type="checkbox"/>
     <label for="use-audio">Use audio</label>
+    <select id="audio-codec">
+        <option value="default" selected>Default codecs</option>
+        <option value="opus/48000/2">Opus</option>
+        <option value="PCMU/8000">PCMU</option>
+        <option value="PCMA/8000">PCMA</option>
+    </select>
 </div>
 <div class="option">
     <input id="use-video" type="checkbox"/>
@@ -53,9 +59,9 @@
         <option value="rotate">Rotate</option>
     </select>
     <select id="video-codec">
-        <option value="default" selected>Default codec</option>
-        <option value="VP8/90000">VP8/90000</option>
-        <option value="H264/90000">H264/90000</option>
+        <option value="default" selected>Default codecs</option>
+        <option value="VP8/90000">VP8</option>
+        <option value="H264/90000">H264</option>
     </select>
 </div>
 <div class="option">

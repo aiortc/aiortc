@@ -68,9 +68,16 @@ function negotiate() {
         });
     }).then(function() {
         var offer = pc.localDescription;
-        var codec = document.getElementById('video-codec').value;
+        var codec;
+
+        codec = document.getElementById('audio-codec').value;
         if (codec !== 'default') {
-            offer.sdp = sdpFilterCodec(codec, offer.sdp);
+            offer.sdp = sdpFilterCodec('audio', codec, offer.sdp);
+        }
+
+        codec = document.getElementById('video-codec').value;
+        if (codec !== 'default') {
+            offer.sdp = sdpFilterCodec('video', codec, offer.sdp);
         }
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
@@ -182,51 +189,57 @@ function stop() {
     }, 500);
 }
 
-function sdpFilterCodec(codec, realSpd){
+function sdpFilterCodec(kind, codec, realSdp) {
     var allowed = []
-    var codecRegex = new RegExp('a=rtpmap:([0-9]+) '+escapeRegExp(codec))
-    var videoRegex = new RegExp('(m=video .*?)( ([0-9]+))*\\s*$')
+    var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
+    var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
+    var videoRegex = new RegExp('(m=' + kind + ' .*?)( ([0-9]+))*\\s*$')
     
-    var lines = realSpd.split('\n');
+    var lines = realSdp.split('\n');
 
-    var isVideo = false;
-    for(var i = 0; i < lines.length; i++){
-        if (lines[i].startsWith('m=video ')) {
-            isVideo = true;
+    var isKind = false;
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('m=' + kind + ' ')) {
+            isKind = true;
         } else if (lines[i].startsWith('m=')) {
-            isVideo = false;
+            isKind = false;
         }
 
-        if (isVideo) {
-            var match = lines[i].match(codecRegex)
+        if (isKind) {
+            var match = lines[i].match(codecRegex);
             if (match) {
-                allowed.push(parseInt(match[1]))
+                allowed.push(parseInt(match[1]));
+            }
+
+            match = lines[i].match(rtxRegex);
+            if (match && allowed.includes(parseInt(match[2]))) {
+                allowed.push(parseInt(match[1]));
             }
         }
     }
 
-    var skipRegex = 'a=(fmtp|rtcp-fb|rtpmap):([0-9]+)'
-    var sdp = ""
+    var skipRegex = 'a=(fmtp|rtcp-fb|rtpmap):([0-9]+)';
+    var sdp = '';
 
-    var isVideo = false;
-    for(var i = 0; i < lines.length; i++){
-        if (lines[i].startsWith('m=video ')) {
-            isVideo = true;
+    isKind = false;
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('m=' + kind + ' ')) {
+            isKind = true;
         } else if (lines[i].startsWith('m=')) {
-            isVideo = false;
+            isKind = false;
         }
 
-        if (isVideo) {
+        if (isKind) {
             var skipMatch = lines[i].match(skipRegex);
             if (skipMatch && !allowed.includes(parseInt(skipMatch[2]))) {
                 continue;
             } else if (lines[i].match(videoRegex)) {
-                sdp+=lines[i].replace(videoRegex, '$1 '+allowed.join(' ')) + '\n'
+                sdp += lines[i].replace(videoRegex, '$1 ' + allowed.join(' ')) + '\n';
             } else {
-                sdp += lines[i] + '\n'
+                sdp += lines[i] + '\n';
             }
         } else {
-            sdp += lines[i] + '\n'
+            sdp += lines[i] + '\n';
         }
     }
 
