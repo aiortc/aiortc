@@ -221,7 +221,6 @@ class RTCPeerConnection(EventEmitter):
         self.__initialOfferer = None
         self.__remoteDtls = {}
         self.__remoteIce = {}
-        self.__remoteRtp = {}
         self.__seenMids = set()
         self.__sctp = None
         self.__sctp_mline_index = None
@@ -642,28 +641,6 @@ class RTCPeerConnection(EventEmitter):
                 self.__remoteDtls[transceiver] = media.dtls
                 self.__remoteIce[transceiver] = media.ice
 
-                # configure receiver
-                receiveParameters = RTCRtpReceiveParameters(
-                    codecs=transceiver._codecs,
-                    headerExtensions=transceiver._headerExtensions,
-                    muxId=media.rtp.muxId,
-                    rtcp=media.rtp.rtcp)
-                if len(media.ssrc):
-                    encodings = OrderedDict()
-                    for codec in transceiver._codecs:
-                        if codec.name == 'rtx':
-                            if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
-                                encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
-                                    ssrc=media.ssrc[1].ssrc)
-                            continue
-
-                        encodings[codec.payloadType] = RTCRtpDecodingParameters(
-                            ssrc=media.ssrc[0].ssrc,
-                            payloadType=codec.payloadType
-                        )
-                    receiveParameters.encodings = list(encodings.values())
-                self.__remoteRtp[transceiver] = receiveParameters
-
                 # configure direction
                 direction = reverse_direction(media.direction)
                 if description.type in ['answer', 'pranswer']:
@@ -770,7 +747,7 @@ class RTCPeerConnection(EventEmitter):
                     if transceiver.currentDirection in ['sendonly', 'sendrecv']:
                         await transceiver.sender.send(self.__localRtp(transceiver))
                     if transceiver.currentDirection in ['recvonly', 'sendrecv']:
-                        await transceiver.receiver.receive(self.__remoteRtp[transceiver])
+                        await transceiver.receiver.receive(self.__remoteRtp(transceiver))
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
             iceTransport = dtlsTransport.transport
@@ -851,6 +828,30 @@ class RTCPeerConnection(EventEmitter):
 
     def __remoteDescription(self):
         return self.__pendingRemoteDescription or self.__currentRemoteDescription
+
+    def __remoteRtp(self, transceiver):
+        media = self.__remoteDescription().media[transceiver._get_mline_index()]
+
+        receiveParameters = RTCRtpReceiveParameters(
+            codecs=transceiver._codecs,
+            headerExtensions=transceiver._headerExtensions,
+            muxId=media.rtp.muxId,
+            rtcp=media.rtp.rtcp)
+        if len(media.ssrc):
+            encodings = OrderedDict()
+            for codec in transceiver._codecs:
+                if codec.name == 'rtx':
+                    if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
+                        encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
+                            ssrc=media.ssrc[1].ssrc)
+                    continue
+
+                encodings[codec.payloadType] = RTCRtpDecodingParameters(
+                    ssrc=media.ssrc[0].ssrc,
+                    payloadType=codec.payloadType
+                )
+            receiveParameters.encodings = list(encodings.values())
+        return receiveParameters
 
     def __setSignalingState(self, state):
         self.__signalingState = state
