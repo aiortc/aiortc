@@ -83,6 +83,25 @@ def generate_certificate(key):
     return cert
 
 
+def get_error_queue():
+    errors = []
+
+    def text(charp):
+        return ffi.string(charp).decode('utf-8') if charp else ''
+
+    while True:
+        error = lib.ERR_get_error()
+        if error == 0:
+            break
+
+        errors.append((
+            text(lib.ERR_lib_error_string(error)),
+            text(lib.ERR_func_error_string(error)),
+            text(lib.ERR_reason_error_string(error))))
+
+    return errors
+
+
 def get_srtp_key_salt(src, idx):
     key_start = idx * SRTP_KEY_LEN
     salt_start = 2 * SRTP_KEY_LEN + idx * SRTP_SALT_LEN
@@ -371,6 +390,8 @@ class RTCDtlsTransport(EventEmitter):
                     await self._recv_next()
                 else:
                     self.__log_debug('x DTLS handshake failed (error %d)', error)
+                    for info in get_error_queue():
+                        self.__log_debug('x %s', ':'.join(info))
                     self._set_state(State.FAILED)
                     return
         except ConnectionError:

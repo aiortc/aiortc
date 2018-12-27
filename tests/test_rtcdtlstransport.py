@@ -294,8 +294,10 @@ class RTCDtlsTransportTest(TestCase):
 
     @patch('aiortc.rtcdtlstransport.lib.SSL_do_handshake')
     @patch('aiortc.rtcdtlstransport.lib.SSL_get_error')
-    def test_handshake_error(self, mock_get_error, mock_do_handshake):
-        mock_get_error.return_value = 1
+    @patch('aiortc.rtcdtlstransport.lib.ERR_get_error')
+    def test_handshake_error(self, mock_err_get_error, mock_ssl_get_error, mock_do_handshake):
+        mock_err_get_error.side_effect = [0x2006D080, 0, 0]
+        mock_ssl_get_error.return_value = 1
         mock_do_handshake.return_value = -1
 
         transport1, transport2 = dummy_ice_transport_pair()
