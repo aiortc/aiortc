@@ -186,16 +186,19 @@ class RTCRtpContributingSource:
     timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
     "The timestamp associated with this source."
     source = attr.ib(type=int)  # type: int
-    "The CSRC or SSRC identifier associated with this source."
+    "The CSRC identifier associated with this source."
 
 
 @attr.s
-class RTCRtpSynchronizationSource(RTCRtpContributingSource):
+class RTCRtpSynchronizationSource:
     """
     The :class:`RTCRtpSynchronizationSource` dictionary contains information about
     a synchronization source (SSRC).
     """
-    pass
+    timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
+    "The timestamp associated with this source."
+    source = attr.ib(type=int)  # type: int
+    "The SSRC identifier associated with this source."
 
 
 class RTCRtpReceiver:

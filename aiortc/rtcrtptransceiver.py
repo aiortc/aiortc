@@ -81,6 +81,12 @@ class RTCRtpTransceiver:
     def setCodecPreferences(self, codecs):
         """
         Override the default codec preferences.
+
+        See :meth:`RTCRtpSender.getCapabilities` and :meth:`RTCRtpReceiver.getCapabilities`
+        for the supported codecs.
+
+        :param: codecs: A list of :class:`RTCRtpCodecCapability`, in decreasing order
+                        of preference. If empty, restores the default preferences.
         """
         if not codecs:
             self._preferred_codecs = []
