@@ -6,7 +6,11 @@ Changelog
 0.9.16
 ------
 
-*under development*
+DTLS
+....
+
+  * Log OpenSSL errors if the DTLS handshake fails.
+  * Fix DTLS handshake in server mode with OpenSSL < 1.1.0.
 
 Media
 .....
@@ -14,6 +18,12 @@ Media
   * Add :meth:`RTCRtpReceiver.getCapabilities` and :meth:`RTCRtpSender.getCapabilities`.
   * Add :meth:`RTCRtpReceiver.getSynchronizationSources`.
   * Add :meth:`RTCRtpTransceiver.setCodecPreferences`.
+
+Examples
+........
+
+  * `server` : make it possible to force audio codec.
+  * `server` : shutdown cleanly on Chrome which lacks :meth:`RTCRtpTransceiver.stop`.
 
 0.9.15
 ------
