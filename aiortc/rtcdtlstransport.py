@@ -134,6 +134,15 @@ def create_ssl_context(certificate):
     _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
     _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
     _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
+
+    # specify an EDCH group for ECDHE ciphers, otherwise OpenSSL < 1.1.0
+    # cannot negotiate them in server mode
+    if lib.OpenSSL_version_num() < 0x10100000:  # pragma: no cover
+        ecdh = lib.EC_KEY_new_by_curve_name(lib.NID_X9_62_prime256v1)
+        lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
+        lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
+        lib.EC_KEY_free(ecdh)
+
     return ctx
 
 
