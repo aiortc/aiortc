@@ -35,6 +35,8 @@ class FlagVideoStreamTrack(VideoStreamTrack):
 
 
 async def run(pc, signaling, recorder, role):
+    await signaling.connect()
+
     @pc.on('track')
     def on_track(track):
         print('Receiving video')

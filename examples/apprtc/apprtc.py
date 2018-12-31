@@ -20,10 +20,16 @@ PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
 
 
 class ApprtcSignaling:
-    async def connect(self, room):
+    def __init__(self, room):
+        self._origin = 'https://appr.tc'
+        self._room = room
+
+    async def connect(self):
+        join_url = self._origin + '/join/' + self._room
+
         # fetch room parameters
         async with aiohttp.ClientSession() as session:
-            async with session.post('https://appr.tc/join/' + room) as response:
+            async with session.post(join_url) as response:
                 # we cannot use response.json() due to:
                 # https://github.com/webrtc/apprtc/issues/562
                 data = json.loads(await response.text())
@@ -32,7 +38,7 @@ class ApprtcSignaling:
 
         # join room
         self.websocket = await websockets.connect(params['wss_url'], extra_headers={
-            'Origin': 'https://appr.tc'
+            'Origin': self._origin
         })
         await self.websocket.send(json.dumps({
             'clientid': params['client_id'],
@@ -89,7 +95,7 @@ class VideoImageTrack(VideoStreamTrack):
         return frame
 
 
-async def run(pc, player, recorder, room, signaling):
+async def run(pc, player, recorder, signaling):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
@@ -105,7 +111,7 @@ async def run(pc, player, recorder, room, signaling):
         recorder.addTrack(track)
 
     # connect to websocket and join
-    params = await signaling.connect(room)
+    params = await signaling.connect()
 
     if params['is_initiator'] == 'true':
         # send offer
@@ -149,7 +155,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
 
     # create signaling and peer connection
-    signaling = ApprtcSignaling()
+    signaling = ApprtcSignaling(args.room)
     pc = RTCPeerConnection()
 
     # create media source
@@ -171,7 +177,6 @@ if __name__ == '__main__':
             pc=pc,
             player=player,
             recorder=recorder,
-            room=args.room,
             signaling=signaling))
     except KeyboardInterrupt:
         pass

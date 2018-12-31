@@ -54,9 +54,11 @@ class SignalingTest(TestCase):
             queue = asyncio.Queue()
             return MockReader(queue), MockWritePipe(queue, encoding=encoding)
 
+        # connect
+        run(sig_server.connect())
+        run(sig_client.connect())
+
         # mock out reader / write pipe
-        run(sig_server._connect())
-        run(sig_client._connect())
         sig_server._reader, sig_client._write_pipe = dummy_stdio(sig_server._read_pipe.encoding)
         sig_client._reader, sig_server._write_pipe = dummy_stdio(sig_client._read_pipe.encoding)
 
@@ -79,6 +81,10 @@ class SignalingTest(TestCase):
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
 
+        # connect
+        run(sig_server.connect())
+        run(sig_client.connect())
+
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
 
@@ -94,6 +100,10 @@ class SignalingTest(TestCase):
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
+
+        # connect
+        run(sig_server.connect())
+        run(sig_client.connect())
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
@@ -118,6 +128,10 @@ class SignalingTest(TestCase):
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
 
+        # connect
+        run(sig_server.connect())
+        run(sig_client.connect())
+
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
 
@@ -133,6 +147,10 @@ class SignalingTest(TestCase):
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
+
+        # connect
+        run(sig_server.connect())
+        run(sig_client.connect())
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)

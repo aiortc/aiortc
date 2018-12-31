@@ -5,12 +5,28 @@ import time
 
 import uvloop
 
-from aiortc import RTCPeerConnection
+from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 
+async def consume_signaling(pc, signaling):
+    while True:
+        obj = await signaling.receive()
+
+        if isinstance(obj, RTCSessionDescription):
+            await pc.setRemoteDescription(obj)
+
+            if obj.type == 'offer':
+                # send answer
+                await pc.setLocalDescription(await pc.createAnswer())
+                await signaling.send(pc.localDescription)
+        else:
+            print('Exiting')
+            break
+
+
 async def run_answer(pc, signaling, filename):
-    done = asyncio.Event()
+    await signaling.connect()
 
     @pc.on('datachannel')
     def on_datachannel(channel):
@@ -18,7 +34,7 @@ async def run_answer(pc, signaling, filename):
         octets = 0
 
         @channel.on('message')
-        def on_message(message):
+        async def on_message(message):
             nonlocal octets
 
             if message:
@@ -28,21 +44,16 @@ async def run_answer(pc, signaling, filename):
                 elapsed = time.time() - start
                 print('received %d bytes in %.1f s (%.3f Mbps)' % (
                     octets, elapsed, octets * 8 / elapsed / 1000000))
-                channel.send('done')
-                done.set()
 
-    # receive offer
-    offer = await signaling.receive()
-    await pc.setRemoteDescription(offer)
+                # say goodbye
+                await signaling.send(None)
 
-    # send answer
-    await pc.setLocalDescription(await pc.createAnswer())
-    await signaling.send(pc.localDescription)
-    await done.wait()
+    await consume_signaling(pc, signaling)
 
 
 async def run_offer(pc, signaling, fp):
-    done = asyncio.Event()
+    await signaling.connect()
+
     done_reading = False
     channel = pc.createDataChannel('filexfer')
 
@@ -58,21 +69,11 @@ async def run_offer(pc, signaling, fp):
     channel.on('bufferedamountlow', send_data)
     channel.on('open', send_data)
 
-    @channel.on('message')
-    def on_message(message):
-        # quit
-        if message == 'done':
-            done.set()
-
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
     await signaling.send(pc.localDescription)
 
-    # receive answer
-    answer = await signaling.receive()
-    await pc.setRemoteDescription(answer)
-
-    await done.wait()
+    await consume_signaling(pc, signaling)
 
 
 if __name__ == '__main__':

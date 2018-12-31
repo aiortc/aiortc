@@ -43,10 +43,7 @@ class CopyAndPasteSignaling:
         self._reader = None
         self._write_pipe = sys.stdout
 
-    async def _connect(self):
-        if self._reader is not None:
-            return
-
+    async def connect(self):
         loop = asyncio.get_event_loop()
         self._reader = asyncio.StreamReader(loop=loop)
         self._read_transport, _ = await loop.connect_read_pipe(
@@ -55,11 +52,11 @@ class CopyAndPasteSignaling:
 
     async def close(self):
         if self._reader is not None:
+            await self.send(None)
             self._read_transport.close()
             self._reader = None
 
     async def receive(self):
-        await self._connect()
         print('-- Please enter a message from remote party --')
         data = await self._reader.readline()
         print()
@@ -78,6 +75,9 @@ class TcpSocketSignaling:
         self._server = None
         self._reader = None
         self._writer = None
+
+    async def connect(self):
+        pass
 
     async def _connect(self, server):
         if self._writer is not None:
@@ -131,6 +131,9 @@ class UnixSocketSignaling:
         self._server = None
         self._reader = None
         self._writer = None
+
+    async def connect(self):
+        pass
 
     async def _connect(self, server):
         if self._writer is not None:
