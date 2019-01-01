@@ -252,6 +252,7 @@ class RTCPeerConnection(EventEmitter):
         self._sctpLegacySdp = True
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
+        self.__stream_id = str(uuid.uuid4())
         self.__transceivers = []
 
         self.__iceConnectionState = 'new'
@@ -832,6 +833,7 @@ class RTCPeerConnection(EventEmitter):
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport))
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
+        transceiver.sender._stream_id = self.__stream_id
         transceiver._bundled = False
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)

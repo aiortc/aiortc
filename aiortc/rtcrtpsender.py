@@ -39,16 +39,15 @@ class RTCRtpSender:
 
         if hasattr(trackOrKind, 'kind'):
             self.__kind = trackOrKind.kind
-            self.__track = trackOrKind
+            self.replaceTrack(trackOrKind)
         else:
             self.__kind = trackOrKind
-            self.__track = None
+            self.replaceTrack(None)
         self.__cname = None
         self._ssrc = random32()
         self._rtx_ssrc = random32()
-        # FIXME: this should come from the track
+        # FIXME: how should this be initialised?
         self._stream_id = str(uuid.uuid4())
-        self._track_id = str(uuid.uuid4())
         self.__encoder = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
@@ -130,6 +129,10 @@ class RTCRtpSender:
 
     def replaceTrack(self, track):
         self.__track = track
+        if track is not None:
+            self._track_id = track.id
+        else:
+            self._track_id = str(uuid.uuid4())
 
     def setTransport(self, transport):
         self.__transport = transport

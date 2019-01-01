@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.17
+------
+
+*under development*
+
+Media
+.....
+
+  * Put all tracks in the same stream for now, fixes breakage introduced in 0.9.14.
+
 0.9.16
 ------
 
