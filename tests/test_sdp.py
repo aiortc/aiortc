@@ -69,6 +69,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
         self.assertEqual(d.media[0].port, 45076)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].msid, None)
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
                                   payloadType=111,
@@ -243,6 +244,8 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].port, 45274)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].msid, '{dee771c7-671a-451e-b847-f86f8e87c7d8} '
+                                          '{12692dea-686c-47ca-b3e9-48f38fc92b78}')
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(
                 mimeType='audio/opus', clockRate=48000, channels=2, payloadType=109,
@@ -304,6 +307,7 @@ a=sendrecv
 a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
 a=extmap:2 urn:ietf:params:rtp-hdrext:sdes:mid
 a=mid:sdparta_0
+a=msid:{dee771c7-671a-451e-b847-f86f8e87c7d8} {12692dea-686c-47ca-b3e9-48f38fc92b78}
 a=rtcp:38612 IN IP4 192.168.99.58
 a=rtcp-mux
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
@@ -787,6 +791,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(d.media[0].port, 34955)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].msid, None)
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96,
                                   rtcpFeedback=[
@@ -996,6 +1001,8 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         self.assertEqual(d.media[0].port, 42738)
         self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
         self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].msid, '{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} '
+                                          '{d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}')
         self.assertEqual(d.media[0].rtp.codecs, [
             RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=120,
                                   rtcpFeedback=[
@@ -1061,6 +1068,7 @@ a=extmap:3 urn:ietf:params:rtp-hdrext:sdes:mid
 a=extmap:4 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
 a=extmap:5 urn:ietf:params:rtp-hdrext:toffset
 a=mid:sdparta_0
+a=msid:{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} {d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}
 a=rtcp:52914 IN IP4 192.168.99.7
 a=rtcp-mux
 a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}

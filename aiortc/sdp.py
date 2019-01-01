@@ -173,6 +173,7 @@ class MediaDescription:
         self.host = None
         self.profile = profile
         self.direction = None
+        self.msid = None
 
         # rtcp
         self.rtcp_port = None
@@ -219,6 +220,9 @@ class MediaDescription:
 
         if self.rtp.muxId:
             lines.append('a=mid:' + self.rtp.muxId)
+
+        if self.msid:
+            lines.append('a=msid:' + self.msid)
 
         if self.rtcp_port is not None and self.rtcp_host is not None:
             lines.append('a=rtcp:%d %s' % (self.rtcp_port, ipaddress_to_sdp(self.rtcp_host)))
@@ -384,6 +388,8 @@ class SessionDescription:
                             maxMessageSize=int(value))
                     elif attr == 'mid':
                         current_media.rtp.muxId = value
+                    elif attr == 'msid':
+                        current_media.msid = value
                     elif attr == 'rtcp':
                         port, rest = value.split(' ', 1)
                         current_media.rtcp_port = int(port)

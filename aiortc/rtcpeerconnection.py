@@ -168,6 +168,7 @@ def create_media_description_for_transceiver(transceiver, cname, direction, mid)
         profile='UDP/TLS/RTP/SAVPF',
         fmt=[c.payloadType for c in transceiver._codecs])
     media.direction = direction
+    media.msid = '%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id)
 
     media.rtp = RTCRtpParameters(
         codecs=transceiver._codecs,
@@ -179,20 +180,14 @@ def create_media_description_for_transceiver(transceiver, cname, direction, mid)
     media.ssrc = [
         sdp.SsrcDescription(
             ssrc=transceiver.sender._ssrc,
-            cname=cname,
-            msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
-            mslabel=transceiver.sender._stream_id,
-            label=transceiver.sender._track_id),
+            cname=cname),
     ]
 
     # if RTX is enabled, add corresponding SSRC
     if next((x for x in media.rtp.codecs if x.name == 'rtx'), None):
         media.ssrc.append(sdp.SsrcDescription(
             ssrc=transceiver.sender._rtx_ssrc,
-            cname=cname,
-            msid='%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id),
-            mslabel=transceiver.sender._stream_id,
-            label=transceiver.sender._track_id))
+            cname=cname))
         media.ssrc_group = [
             sdp.GroupDescription(
                 semantic='FID',
