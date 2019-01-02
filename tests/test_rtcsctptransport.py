@@ -4,14 +4,14 @@ from unittest import TestCase
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
-                                     USERDATA_MAX_LENGTH, AbortChunk,
-                                     CookieEchoChunk, DataChunk, ErrorChunk,
-                                     HeartbeatAckChunk, HeartbeatChunk,
-                                     InboundStream, InitChunk, Packet,
-                                     ReconfigChunk, RTCSctpCapabilities,
-                                     RTCSctpTransport, SackChunk,
-                                     ShutdownAckChunk, ShutdownChunk,
-                                     ShutdownCompleteChunk,
+                                     SCTP_DATA_UNORDERED, USERDATA_MAX_LENGTH,
+                                     AbortChunk, CookieEchoChunk, DataChunk,
+                                     ErrorChunk, HeartbeatAckChunk,
+                                     HeartbeatChunk, InboundStream, InitChunk,
+                                     Packet, ReconfigChunk,
+                                     RTCSctpCapabilities, RTCSctpTransport,
+                                     SackChunk, ShutdownAckChunk,
+                                     ShutdownChunk, ShutdownCompleteChunk,
                                      StreamAddOutgoingParam,
                                      StreamResetOutgoingParam,
                                      StreamResetResponseParam, tsn_gt, tsn_gte,
@@ -275,79 +275,71 @@ class SctpPacketTest(TestCase):
         self.assertEqual(bytes(packet), data)
 
 
+class ChunkFactory:
+    def __init__(self):
+        self.tsn = 1
+        self.stream_seq = 0
+
+    def create(self, frags, ordered=True):
+        chunks = []
+
+        for i, frag in enumerate(frags):
+            flags = 0
+            if not ordered:
+                flags |= SCTP_DATA_UNORDERED
+            if i == 0:
+                flags |= SCTP_DATA_FIRST_FRAG
+            if i == len(frags) - 1:
+                flags |= SCTP_DATA_LAST_FRAG
+
+            chunk = DataChunk(flags=flags)
+            chunk.protocol = 123
+            chunk.stream_id = 456
+            if ordered:
+                chunk.stream_seq = self.stream_seq
+            chunk.tsn = self.tsn
+            chunk.user_data = frag
+            chunks.append(chunk)
+
+            self.tsn += 1
+
+        if ordered:
+            self.stream_seq += 1
+
+        return chunks
+
+
 class SctpStreamTest(TestCase):
     def setUp(self):
-        self.fragmented = []
-        self.whole = []
-
-        # fragmented
-        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
-        chunk.tsn = 1
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.user_data = b'foo'
-        self.fragmented.append(chunk)
-
-        chunk = DataChunk()
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.tsn = 2
-        chunk.user_data = b'bar'
-        self.fragmented.append(chunk)
-
-        chunk = DataChunk(flags=SCTP_DATA_LAST_FRAG)
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.tsn = 3
-        chunk.user_data = b'baz'
-        self.fragmented.append(chunk)
-
-        # whole
-        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG)
-        chunk.tsn = 1
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.stream_seq = 0
-        chunk.user_data = b'foo'
-        self.whole.append(chunk)
-
-        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG)
-        chunk.tsn = 2
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.stream_seq = 1
-        chunk.user_data = b'bar'
-        self.whole.append(chunk)
-
-        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
-        chunk.tsn = 3
-        chunk.protocol = 123
-        chunk.stream_id = 456
-        chunk.stream_seq = 2
-        chunk.user_data = b'baz'
-        self.whole.append(chunk)
+        self.factory = ChunkFactory()
 
     def test_duplicate(self):
         stream = InboundStream()
+        chunks = self.factory.create([b'foo', b'bar', b'baz'])
 
         # feed first chunk
-        stream.add_chunk(self.fragmented[0])
-        self.assertEqual(stream.reassembly, [self.fragmented[0]])
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[0]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed first chunk again
         with self.assertRaises(AssertionError) as cm:
-            stream.add_chunk(self.fragmented[0])
-        self.assertEqual(str(cm.exception), '')
+            stream.add_chunk(chunks[0])
+        self.assertEqual(str(cm.exception), 'duplicate chunk in reassembly')
 
     def test_whole_in_order(self):
         stream = InboundStream()
+        chunks = (
+            self.factory.create([b'foo']) +
+            self.factory.create([b'bar']))
 
         # feed first unfragmented
-        stream.add_chunk(self.whole[0])
-        self.assertEqual(stream.reassembly, [self.whole[0]])
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [
@@ -357,8 +349,8 @@ class SctpStreamTest(TestCase):
         self.assertEqual(stream.sequence_number, 1)
 
         # feed second unfragmented
-        stream.add_chunk(self.whole[1])
-        self.assertEqual(stream.reassembly, [self.whole[1]])
+        stream.add_chunk(chunks[1])
+        self.assertEqual(stream.reassembly, [chunks[1]])
         self.assertEqual(stream.sequence_number, 1)
 
         self.assertEqual(list(stream.pop_messages()), [
@@ -369,54 +361,67 @@ class SctpStreamTest(TestCase):
 
     def test_whole_out_of_order(self):
         stream = InboundStream()
+        chunks = (
+            self.factory.create([b'foo']) +
+            self.factory.create([b'bar']) +
+            self.factory.create([b'baz', b'qux']))
 
         # feed second unfragmented
-        stream.add_chunk(self.whole[1])
-        self.assertEqual(stream.reassembly, [self.whole[1]])
+        stream.add_chunk(chunks[1])
+        self.assertEqual(stream.reassembly, [chunks[1]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed third partial
-        stream.add_chunk(self.whole[2])
-        self.assertEqual(stream.reassembly, [self.whole[1], self.whole[2]])
+        stream.add_chunk(chunks[2])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed first unfragmented
-        stream.add_chunk(self.whole[0])
-        self.assertEqual(stream.reassembly, [self.whole[0], self.whole[1], self.whole[2]])
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[1], chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [
             (456, 123, b'foo'),
             (456, 123, b'bar'),
         ])
-        self.assertEqual(stream.reassembly, [self.whole[2]])
+        self.assertEqual(stream.reassembly, [chunks[2]])
         self.assertEqual(stream.sequence_number, 2)
 
     def test_fragments_in_order(self):
         stream = InboundStream()
+        chunks = self.factory.create([b'foo', b'bar', b'baz'])
 
         # feed first chunk
-        stream.add_chunk(self.fragmented[0])
-        self.assertEqual(stream.reassembly, [self.fragmented[0]])
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[0]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed second chunk
-        stream.add_chunk(self.fragmented[1])
-        self.assertEqual(stream.reassembly, [self.fragmented[0], self.fragmented[1]])
+        stream.add_chunk(chunks[1])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[1]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed third chunk
-        stream.add_chunk(self.fragmented[2])
+        stream.add_chunk(chunks[2])
         self.assertEqual(stream.reassembly, [
-            self.fragmented[0], self.fragmented[1], self.fragmented[2]])
+            chunks[0], chunks[1], chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [
@@ -427,25 +432,30 @@ class SctpStreamTest(TestCase):
 
     def test_fragments_out_of_order(self):
         stream = InboundStream()
+        chunks = self.factory.create([b'foo', b'bar', b'baz'])
 
         # feed third chunk
-        stream.add_chunk(self.fragmented[2])
-        self.assertEqual(stream.reassembly, [self.fragmented[2]])
+        stream.add_chunk(chunks[2])
+        self.assertEqual(stream.reassembly, [chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed first chunk
-        stream.add_chunk(self.fragmented[0])
-        self.assertEqual(stream.reassembly, [self.fragmented[0], self.fragmented[2]])
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
 
         # feed second chunk
-        stream.add_chunk(self.fragmented[1])
+        stream.add_chunk(chunks[1])
         self.assertEqual(stream.reassembly, [
-            self.fragmented[0], self.fragmented[1], self.fragmented[2]])
+            chunks[0], chunks[1], chunks[2]])
         self.assertEqual(stream.sequence_number, 0)
 
         self.assertEqual(list(stream.pop_messages()), [
@@ -453,6 +463,101 @@ class SctpStreamTest(TestCase):
         ])
         self.assertEqual(stream.reassembly, [])
         self.assertEqual(stream.sequence_number, 1)
+
+    def test_unordered_no_fragments(self):
+        stream = InboundStream()
+        chunks = (
+            self.factory.create([b'foo'], ordered=False) +
+            self.factory.create([b'bar'], ordered=False) +
+            self.factory.create([b'baz'], ordered=False))
+
+        # feed second unfragmented
+        stream.add_chunk(chunks[1])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'bar')])
+        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed third unfragmented
+        stream.add_chunk(chunks[2])
+        self.assertEqual(stream.reassembly, [chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'baz')])
+        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed first unfragmented
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'foo')])
+        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.sequence_number, 0)
+
+    def test_unordered_with_fragments(self):
+        stream = InboundStream()
+        chunks = (
+            self.factory.create([b'foo', b'bar'], ordered=False) +
+            self.factory.create([b'baz'], ordered=False) +
+            self.factory.create([b'qux', b'quux', b'corge'], ordered=False))
+
+        # feed second fragment of first message
+        stream.add_chunk(chunks[1])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed second message
+        stream.add_chunk(chunks[2])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'baz')])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed first fragment of third message
+        stream.add_chunk(chunks[3])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[3]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[3]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed third fragment of third message
+        stream.add_chunk(chunks[5])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[3], chunks[5]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[3], chunks[5]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed second fragment of third message
+        stream.add_chunk(chunks[4])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[3], chunks[4], chunks[5]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'quxquuxcorge')])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # feed first fragment of first message
+        stream.add_chunk(chunks[0])
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        self.assertEqual(list(stream.pop_messages()), [(456, 123, b'foobar')])
+        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.sequence_number, 0)
 
 
 class SctpUtilTest(TestCase):

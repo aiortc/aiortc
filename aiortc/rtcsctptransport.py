@@ -467,7 +467,7 @@ class InboundStream:
         for i, rchunk in enumerate(self.reassembly):
             # should never happen, the chunk should have been eliminated
             # as a duplicate when _mark_received() is called
-            assert rchunk.tsn != chunk.tsn
+            assert rchunk.tsn != chunk.tsn, 'duplicate chunk in reassembly'
 
             if tsn_gt(rchunk.tsn, chunk.tsn):
                 self.reassembly.insert(i, chunk)
@@ -475,24 +475,35 @@ class InboundStream:
 
     def pop_messages(self):
         pos = 0
+        start_pos = None
         while pos < len(self.reassembly):
             chunk = self.reassembly[pos]
-            if not pos:
-                if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
-                    break
+            if start_pos is None:
                 ordered = not (chunk.flags & SCTP_DATA_UNORDERED)
+                if not (chunk.flags & SCTP_DATA_FIRST_FRAG):
+                    if ordered:
+                        break
+                    else:
+                        pos += 1
+                        continue
                 if ordered and chunk.stream_seq != self.sequence_number:
                     break
                 expected_tsn = chunk.tsn
+                start_pos = pos
             elif chunk.tsn != expected_tsn:
-                break
+                if ordered:
+                    break
+                else:
+                    start_pos = None
+                    pos += 1
+                    continue
 
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
-                user_data = b''.join([c.user_data for c in self.reassembly[0:pos + 1]])
-                self.reassembly = self.reassembly[pos + 1:]
+                user_data = b''.join([c.user_data for c in self.reassembly[start_pos:pos + 1]])
+                self.reassembly = self.reassembly[:start_pos] + self.reassembly[pos + 1:]
                 if ordered:
                     self.sequence_number = uint16_add(self.sequence_number, 1)
-                pos = 0
+                pos = start_pos
                 yield (chunk.stream_id, chunk.protocol, user_data)
             else:
                 pos += 1
