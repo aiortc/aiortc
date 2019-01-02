@@ -439,7 +439,8 @@ class RTCPeerConnection(EventEmitter):
 
         return wrap_session_description(description)
 
-    def createDataChannel(self, label, ordered=True, protocol=''):
+    def createDataChannel(self, label, maxPacketLifetime=None, maxRetransmits=None,
+                          ordered=True, protocol=''):
         """
         Create a data channel with the given label.
 
@@ -448,7 +449,12 @@ class RTCPeerConnection(EventEmitter):
         if not self.__sctp:
             self.__createSctpTransport()
 
-        parameters = RTCDataChannelParameters(label=label, ordered=ordered, protocol=protocol)
+        parameters = RTCDataChannelParameters(
+            label=label,
+            maxPacketLifetime=maxPacketLifetime,
+            maxRetransmits=maxRetransmits,
+            ordered=ordered,
+            protocol=protocol)
         return RTCDataChannel(self.__sctp, parameters)
 
     async def createOffer(self):

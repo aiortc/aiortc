@@ -2306,6 +2306,8 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
         self.assertEqual(dc.readyState, 'connecting')
@@ -2379,6 +2381,8 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
@@ -2452,6 +2456,8 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
         self.assertEqual(dc.readyState, 'connecting')
@@ -2523,6 +2529,8 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
@@ -2601,6 +2609,8 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
         self.assertEqual(dc.readyState, 'connecting')
@@ -2672,6 +2682,8 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
@@ -2793,6 +2805,8 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
         self.assertEqual(dc.readyState, 'connecting')
@@ -2877,6 +2891,8 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 
@@ -2898,6 +2914,188 @@ a=fmtp:98 apt=97
             b'binary-echo: ',
             b'binary-echo: ' + LONG_DATA,
         ])
+
+        # close data channel
+        self.closeDataChannel(dc)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_datachannel_max_packet_lifetime(self):
+        pc1 = RTCPeerConnection()
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        @pc2.on('datachannel')
+        def on_datachannel(channel):
+            self.assertEqual(channel.readyState, 'open')
+            pc2_data_channels.append(channel)
+
+            @channel.on('message')
+            def on_message(message):
+                pc2_data_messages.append(message)
+                channel.send('string-echo: ' + message)
+
+        # create data channel
+        dc = pc1.createDataChannel('chat', maxPacketLifetime=0, protocol='bob')
+        self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, 0)
+        self.assertEqual(dc.maxRetransmits, None)
+        self.assertEqual(dc.ordered, True)
+        self.assertEqual(dc.protocol, 'bob')
+        self.assertEqual(dc.readyState, 'connecting')
+
+        # send message
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+
+        @dc.on('message')
+        def on_message(message):
+            pc1_data_messages.append(message)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        run(pc2.setLocalDescription(answer))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertEqual(dc.readyState, 'open')
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, 0)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
+        self.assertEqual(pc2_data_channels[0].ordered, True)
+        self.assertEqual(pc2_data_channels[0].protocol, 'bob')
+
+        # check pc2 got message
+        run(asyncio.sleep(0.1))
+        self.assertEqual(pc2_data_messages, ['hello'])
+
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, ['string-echo: hello'])
+
+        # close data channel
+        self.closeDataChannel(dc)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
+    def test_connect_datachannel_max_retransmits(self):
+        pc1 = RTCPeerConnection()
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        @pc2.on('datachannel')
+        def on_datachannel(channel):
+            self.assertEqual(channel.readyState, 'open')
+            pc2_data_channels.append(channel)
+
+            @channel.on('message')
+            def on_message(message):
+                pc2_data_messages.append(message)
+                channel.send('string-echo: ' + message)
+
+        # create data channel
+        dc = pc1.createDataChannel('chat', maxRetransmits=0, protocol='bob')
+        self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, 0)
+        self.assertEqual(dc.ordered, True)
+        self.assertEqual(dc.protocol, 'bob')
+        self.assertEqual(dc.readyState, 'connecting')
+
+        # send message
+        @dc.on('open')
+        def on_open():
+            dc.send('hello')
+
+        @dc.on('message')
+        def on_message(message):
+            pc1_data_messages.append(message)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        run(pc2.setLocalDescription(answer))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertEqual(dc.readyState, 'open')
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, 0)
+        self.assertEqual(pc2_data_channels[0].ordered, True)
+        self.assertEqual(pc2_data_channels[0].protocol, 'bob')
+
+        # check pc2 got message
+        run(asyncio.sleep(0.1))
+        self.assertEqual(pc2_data_messages, ['hello'])
+
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, ['string-echo: hello'])
 
         # close data channel
         self.closeDataChannel(dc)
@@ -2946,6 +3144,8 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', ordered=False, protocol='bob')
         self.assertEqual(dc.label, 'chat')
+        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, False)
         self.assertEqual(dc.protocol, 'bob')
         self.assertEqual(dc.readyState, 'connecting')
@@ -3008,6 +3208,8 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
+        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, False)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
 

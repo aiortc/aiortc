@@ -67,6 +67,20 @@ class RTCDataChannel(EventEmitter):
         return self.__parameters.ordered
 
     @property
+    def maxPacketLifetime(self):
+        """
+        The maximum time in milliseconds during which retransmissions are attempted.
+        """
+        return self.__parameters.maxPacketLifetime
+
+    @property
+    def maxRetransmits(self):
+        """
+        "The maximum number of retransmissions that are attempted.
+        """
+        return self.__parameters.maxRetransmits
+
+    @property
     def protocol(self):
         """
         The name of the subprotocol in use.
@@ -143,6 +157,12 @@ class RTCDataChannelParameters:
     """
     label = attr.ib(default='')
     "A name describing the data channel."
+
+    maxPacketLifetime = attr.ib(default=None)
+    "The maximum time in milliseconds during which retransmissions are attempted."
+
+    maxRetransmits = attr.ib(default=None)
+    "The maximum number of retransmissions that are attempted."
 
     ordered = attr.ib(default=True)
     "Whether the data channel guarantees in-order delivery of messages."

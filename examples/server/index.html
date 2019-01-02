@@ -32,6 +32,10 @@
 <div class="option">
     <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
+    <select id="datachannel-parameters">
+        <option value='{"ordered": true}'>Ordered, reliable</option>
+        <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
+    </select>
 </div>
 <div class="option">
     <input id="use-audio" checked="checked" type="checkbox"/>

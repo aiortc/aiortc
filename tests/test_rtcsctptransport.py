@@ -6,12 +6,13 @@ from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      SCTP_DATA_UNORDERED, USERDATA_MAX_LENGTH,
                                      AbortChunk, CookieEchoChunk, DataChunk,
-                                     ErrorChunk, HeartbeatAckChunk,
-                                     HeartbeatChunk, InboundStream, InitChunk,
-                                     Packet, ReconfigChunk,
-                                     RTCSctpCapabilities, RTCSctpTransport,
-                                     SackChunk, ShutdownAckChunk,
-                                     ShutdownChunk, ShutdownCompleteChunk,
+                                     ErrorChunk, ForwardTsnChunk,
+                                     HeartbeatAckChunk, HeartbeatChunk,
+                                     InboundStream, InitChunk, Packet,
+                                     ReconfigChunk, RTCSctpCapabilities,
+                                     RTCSctpTransport, SackChunk,
+                                     ShutdownAckChunk, ShutdownChunk,
+                                     ShutdownCompleteChunk,
                                      StreamAddOutgoingParam,
                                      StreamResetOutgoingParam,
                                      StreamResetResponseParam, tsn_gt, tsn_gte,
@@ -25,13 +26,13 @@ def queued_tsns(client):
 
 
 def track_channels(transport):
-        channels = []
+    channels = []
 
-        @transport.on('datachannel')
-        def on_datachannel(channel):
-            channels.append(channel)
+    @transport.on('datachannel')
+    def on_datachannel(channel):
+        channels.append(channel)
 
-        return channels
+    return channels
 
 
 async def wait_for_outcome(client, server):
@@ -142,6 +143,26 @@ class SctpPacketTest(TestCase):
         self.assertEqual(packet.chunks[0].params, [
             (1, b'\x30\x39\x00\x00'),
         ])
+
+        self.assertEqual(bytes(packet), data)
+
+    def test_parse_forward_tsn(self):
+        data = load('sctp_forward_tsn.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 264304801)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], ForwardTsnChunk))
+        self.assertEqual(packet.chunks[0].type, 192)
+        self.assertEqual(packet.chunks[0].flags, 0)
+        self.assertEqual(packet.chunks[0].cumulative_tsn, 1234)
+        self.assertEqual(packet.chunks[0].streams, [
+            (12, 34),
+        ])
+        self.assertEqual(repr(packet.chunks[0]),
+                         'ForwardTsnChunk(cumulative_tsn=1234, streams=[(12, 34)])')
 
         self.assertEqual(bytes(packet), data)
 
@@ -276,8 +297,8 @@ class SctpPacketTest(TestCase):
 
 
 class ChunkFactory:
-    def __init__(self):
-        self.tsn = 1
+    def __init__(self, tsn=1):
+        self.tsn = tsn
         self.stream_seq = 0
 
     def create(self, frags, ordered=True):
@@ -559,6 +580,28 @@ class SctpStreamTest(TestCase):
         self.assertEqual(stream.reassembly, [])
         self.assertEqual(stream.sequence_number, 0)
 
+    def test_prune_chunks(self):
+        stream = InboundStream()
+        factory = ChunkFactory(tsn=100)
+        chunks = (
+            factory.create([b'foo', b'bar']) +
+            factory.create([b'baz', b'qux']))
+
+        for i in [1, 2]:
+            stream.add_chunk(chunks[i])
+            self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[2]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        stream.sequence_number = 2
+        self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1], chunks[2]])
+        self.assertEqual(stream.sequence_number, 2)
+
+        self.assertEqual(stream.prune_chunks(101), 3)
+        self.assertEqual(stream.reassembly, [chunks[2]])
+        self.assertEqual(stream.sequence_number, 2)
+
 
 class SctpUtilTest(TestCase):
     def test_tsn_gt(self):
@@ -745,11 +788,11 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 2048)
         self.assertEqual(client._outbound_streams_count, 256)
-        self.assertEqual(client._remote_extensions, [130])
+        self.assertEqual(client._remote_extensions, [192, 130])
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 256)
         self.assertEqual(server._outbound_streams_count, 2048)
-        self.assertEqual(server._remote_extensions, [130])
+        self.assertEqual(server._remote_extensions, [192, 130])
 
         # client requests additional outbound streams
         param = StreamAddOutgoingParam(
@@ -785,11 +828,11 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 256)
         self.assertEqual(client._outbound_streams_count, 2048)
-        self.assertEqual(client._remote_extensions, [130])
+        self.assertEqual(client._remote_extensions, [192, 130])
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 2048)
         self.assertEqual(server._outbound_streams_count, 256)
-        self.assertEqual(server._remote_extensions, [130])
+        self.assertEqual(server._remote_extensions, [192, 130])
 
         run(asyncio.sleep(0.1))
 
@@ -817,11 +860,11 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 65535)
         self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [130])
+        self.assertEqual(client._remote_extensions, [192, 130])
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 65535)
         self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [130])
+        self.assertEqual(server._remote_extensions, [192, 130])
 
         # create data channel
         channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
@@ -858,9 +901,9 @@ class RTCSctpTransportTest(TestCase):
         # check outcome
         run(wait_for_outcome(client, server))
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._remote_extensions, [130])
+        self.assertEqual(client._remote_extensions, [192, 130])
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._remote_extensions, [130])
+        self.assertEqual(server._remote_extensions, [192, 130])
 
         # create data channel
         channel = RTCDataChannel(server, RTCDataChannelParameters(label='chat'))
@@ -872,6 +915,33 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client_channels[0].id, 0)
         self.assertEqual(client_channels[0].label, 'chat')
         self.assertEqual(len(server_channels), 0)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_with_partial_reliability(self):
+        client = RTCSctpTransport(self.client_transport)
+        client._local_partial_reliability = True
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        server._local_partial_reliability = False
+        self.assertTrue(server.is_server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._remote_extensions, [130])
+        self.assertEqual(client._remote_partial_reliability, False)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._remote_extensions, [192, 130])
+        self.assertEqual(server._remote_partial_reliability, True)
 
         # shutdown
         run(client.stop())
@@ -998,6 +1068,7 @@ class RTCSctpTransportTest(TestCase):
 
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set())
         self.assertEqual(client._last_received_tsn, 1)
         client._sack_needed = False
 
@@ -1005,6 +1076,7 @@ class RTCSctpTransportTest(TestCase):
         run(client._receive_chunk(chunk))
         self.assertEqual(client._sack_needed, True)
         self.assertEqual(client._sack_duplicates, [1])
+        self.assertEqual(client._sack_misordered, set())
         self.assertEqual(client._last_received_tsn, 1)
 
     def test_receive_data_out_of_order(self):
@@ -1059,6 +1131,70 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._sack_duplicates, [3])
         self.assertEqual(client._sack_misordered, set([]))
         self.assertEqual(client._last_received_tsn, 3)
+        client._sack_needed = False
+
+    def test_receive_forward_tsn(self):
+        received = []
+
+        async def fake_receive(*args):
+            received.append(args)
+
+        client = RTCSctpTransport(self.client_transport)
+        client._last_received_tsn = 101
+        client._receive = fake_receive
+
+        factory = ChunkFactory(tsn=102)
+        chunks = (
+            factory.create([b'foo']) +
+            factory.create([b'baz']) +
+            factory.create([b'qux']) +
+            factory.create([b'quux']) +
+            factory.create([b'corge']) +
+            factory.create([b'grault']))
+
+        # receive chunks with gaps
+        for i in [0, 2, 3, 5]:
+            run(client._receive_chunk(chunks[i]))
+
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set([104, 105, 107]))
+        self.assertEqual(client._last_received_tsn, 102)
+        self.assertEqual(received, [(456, 123, b'foo')])
+        received.clear()
+        client._sack_needed = False
+
+        # receive forward tsn
+        chunk = ForwardTsnChunk()
+        chunk.cumulative_tsn = 103
+        chunk.streams = [(456, 1)]
+        run(client._receive_chunk(chunk))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set([107]))
+        self.assertEqual(client._last_received_tsn, 105)
+        self.assertEqual(received, [(456, 123, b'qux'), (456, 123, b'quux')])
+        received.clear()
+        client._sack_needed = False
+
+        # receive forward tsn again
+        run(client._receive_chunk(chunk))
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set([107]))
+        self.assertEqual(client._last_received_tsn, 105)
+        self.assertEqual(received, [])
+        client._sack_needed = False
+
+        # receive chunk
+        run(client._receive_chunk(chunks[4]))
+
+        self.assertEqual(client._sack_needed, True)
+        self.assertEqual(client._sack_duplicates, [])
+        self.assertEqual(client._sack_misordered, set())
+        self.assertEqual(client._last_received_tsn, 107)
+        self.assertEqual(received, [(456, 123, b'corge'), (456, 123, b'grault')])
+        received.clear()
         client._sack_needed = False
 
     def test_receive_heartbeat(self):

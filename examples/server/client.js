@@ -119,7 +119,9 @@ function start() {
     }
 
     if (document.getElementById('use-datachannel').checked) {
-        dc = pc.createDataChannel('chat');
+        var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
+
+        dc = pc.createDataChannel('chat', parameters);
         dc.onclose = function() {
             clearInterval(dcInterval);
             dataChannelLog.textContent += '- close\n';

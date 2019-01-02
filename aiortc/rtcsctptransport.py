@@ -6,7 +6,7 @@ import math
 import os
 import time
 import warnings
-from struct import pack, unpack
+from struct import pack, unpack, unpack_from
 
 import attr
 import crcmod.predefined
@@ -14,7 +14,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .utils import random32, uint16_add
+from .utils import random32, uint16_add, uint16_gt
 
 try:
     import crcmod._crcfunext
@@ -52,6 +52,7 @@ SCTP_TSN_MODULO = 2 ** 32
 
 RECONFIG_CHUNK = 130
 RECONFIG_MAX_STREAMS = 135
+FORWARD_TSN_CHUNK = 192
 
 # parameters
 SCTP_STATE_COOKIE = 0x0007
@@ -59,13 +60,18 @@ SCTP_STR_RESET_OUT_REQUEST = 0x000d
 SCTP_STR_RESET_RESPONSE = 0x0010
 SCTP_STR_RESET_ADD_OUT_STREAMS = 0x0011
 SCTP_SUPPORTED_CHUNK_EXT = 0x8008
+SCTP_PRSCTP_SUPPORTED = 0xc000
 
 # data channel constants
 DATA_CHANNEL_ACK = 2
 DATA_CHANNEL_OPEN = 3
 
 DATA_CHANNEL_RELIABLE = 0x00
+DATA_CHANNEL_PARTIAL_RELIABLE_REXMIT = 0x01
+DATA_CHANNEL_PARTIAL_RELIABLE_TIMED = 0x02
 DATA_CHANNEL_RELIABLE_UNORDERED = 0x80
+DATA_CHANNEL_PARTIAL_RELIABLE_REXMIT_UNORDERED = 0x81
+DATA_CHANNEL_PARTIAL_RELIABLE_TIMED_UNORDERED = 0x82
 
 WEBRTC_DCEP = 50
 WEBRTC_STRING = 51
@@ -205,6 +211,31 @@ class ErrorChunk(BaseParamsChunk):
     pass
 
 
+class ForwardTsnChunk(Chunk):
+    def __init__(self, flags=0, body=b''):
+        self.flags = flags
+        self.streams = []
+        if body:
+            self.cumulative_tsn = unpack_from('!L', body, 0)[0]
+            pos = 4
+            while pos < len(body):
+                self.streams.append(unpack_from('!HH', body, pos))
+                pos += 4
+        else:
+            self.cumulative_tsn = 0
+
+    @property
+    def body(self):
+        body = pack('!L', self.cumulative_tsn)
+        for stream_id, stream_seq in self.streams:
+            body += pack('!HH', stream_id, stream_seq)
+        return body
+
+    def __repr__(self):
+        return 'ForwardTsnChunk(cumulative_tsn=%d, streams=%s)' % (
+            self.cumulative_tsn, self.streams)
+
+
 class HeartbeatChunk(BaseParamsChunk):
     pass
 
@@ -323,6 +354,7 @@ CHUNK_TYPES = {
     11: CookieAckChunk,
     14: ShutdownCompleteChunk,
     130: ReconfigChunk,
+    192: ForwardTsnChunk,
 }
 
 
@@ -486,7 +518,7 @@ class InboundStream:
                     else:
                         pos += 1
                         continue
-                if ordered and chunk.stream_seq != self.sequence_number:
+                if ordered and uint16_gt(chunk.stream_seq, self.sequence_number):
                     break
                 expected_tsn = chunk.tsn
                 start_pos = pos
@@ -501,7 +533,7 @@ class InboundStream:
             if (chunk.flags & SCTP_DATA_LAST_FRAG):
                 user_data = b''.join([c.user_data for c in self.reassembly[start_pos:pos + 1]])
                 self.reassembly = self.reassembly[:start_pos] + self.reassembly[pos + 1:]
-                if ordered:
+                if ordered and chunk.stream_seq == self.sequence_number:
                     self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = start_pos
                 yield (chunk.stream_id, chunk.protocol, user_data)
@@ -509,6 +541,22 @@ class InboundStream:
                 pos += 1
 
             expected_tsn = tsn_plus_one(expected_tsn)
+
+    def prune_chunks(self, tsn):
+        """
+        Prune chunks up to the given TSN.
+        """
+        pos = -1
+        size = 0
+        for i, chunk in enumerate(self.reassembly):
+            if tsn_gte(tsn, chunk.tsn):
+                pos = i
+                size += len(chunk.user_data)
+            else:
+                break
+
+        self.reassembly = self.reassembly[pos + 1:]
+        return size
 
 
 @attr.s
@@ -544,11 +592,12 @@ class RTCSctpTransport(EventEmitter):
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
 
-        self._local_extensions = [RECONFIG_CHUNK]
+        self._local_partial_reliability = True
         self._local_port = port
         self._local_verification_tag = random32()
 
         self._remote_extensions = []
+        self._remote_partial_reliability = False
         self._remote_port = None
         self._remote_verification_tag = 0
 
@@ -699,14 +748,30 @@ class RTCSctpTransport(EventEmitter):
         Gets what extensions are supported by the remote party.
         """
         for k, v in params:
-            if k == SCTP_SUPPORTED_CHUNK_EXT:
+            if k == SCTP_PRSCTP_SUPPORTED:
+                self._remote_partial_reliability = True
+            elif k == SCTP_SUPPORTED_CHUNK_EXT:
                 self._remote_extensions = list(v)
 
     def _set_extensions(self, params):
         """
         Sets what extensions are supported by the local party.
         """
-        params.append((SCTP_SUPPORTED_CHUNK_EXT, bytes(self._local_extensions)))
+        extensions = []
+        if self._local_partial_reliability:
+            params.append((SCTP_PRSCTP_SUPPORTED, b''))
+            extensions.append(FORWARD_TSN_CHUNK)
+
+        extensions.append(RECONFIG_CHUNK)
+        params.append((SCTP_SUPPORTED_CHUNK_EXT, bytes(extensions)))
+
+    def _get_inbound_stream(self, stream_id):
+        """
+        Get or create the inbound stream with the specified ID.
+        """
+        if stream_id not in self._inbound_streams:
+            self._inbound_streams[stream_id] = InboundStream()
+        return self._inbound_streams[stream_id]
 
     def _get_timestamp(self):
         return int(time.time())
@@ -891,6 +956,8 @@ class RTCSctpTransport(EventEmitter):
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls:
                     await self._receive_reconfig_param(cls.parse(param[1]))
+        elif isinstance(chunk, ForwardTsnChunk):
+            await self._receive_forward_tsn_chunk(chunk)
 
     async def _receive_data_chunk(self, chunk):
         """
@@ -903,9 +970,7 @@ class RTCSctpTransport(EventEmitter):
             return
 
         # find stream
-        if chunk.stream_id not in self._inbound_streams:
-            self._inbound_streams[chunk.stream_id] = InboundStream()
-        inbound_stream = self._inbound_streams[chunk.stream_id]
+        inbound_stream = self._get_inbound_stream(chunk.stream_id)
 
         # defragment data
         inbound_stream.add_chunk(chunk)
@@ -913,6 +978,46 @@ class RTCSctpTransport(EventEmitter):
         for message in inbound_stream.pop_messages():
             self._advertised_rwnd += len(message[2])
             await self._receive(*message)
+
+    async def _receive_forward_tsn_chunk(self, chunk):
+        """
+        Handle a FORWARD TSN chunk.
+        """
+        self._sack_needed = True
+
+        # it's a duplicate
+        if tsn_gte(self._last_received_tsn, chunk.cumulative_tsn):
+            return
+
+        def is_obsolete(x):
+            return tsn_gt(x, self._last_received_tsn)
+
+        # advance cumulative TSN
+        self._last_received_tsn = chunk.cumulative_tsn
+        self._sack_misordered = set(filter(is_obsolete, self._sack_misordered))
+        for tsn in sorted(self._sack_misordered):
+            if tsn == tsn_plus_one(self._last_received_tsn):
+                self._last_received_tsn = tsn
+            else:
+                break
+
+        # filter out obsolete entries
+        self._sack_duplicates = list(filter(is_obsolete, self._sack_duplicates))
+        self._sack_misordered = set(filter(is_obsolete, self._sack_misordered))
+
+        # update reassembly
+        for stream_id, stream_seq in chunk.streams:
+            inbound_stream = self._get_inbound_stream(stream_id)
+
+            # advance sequence number and perform delivery
+            inbound_stream.sequence_number = uint16_add(stream_seq, 1)
+            for message in inbound_stream.pop_messages():
+                self._advertised_rwnd += len(message[2])
+                await self._receive(*message)
+
+        # prune obsolete chunks
+        for stream_id, inbound_stream in self._inbound_streams.items():
+            self._advertised_rwnd += inbound_stream.prune_chunks(self._last_received_tsn)
 
     async def _receive_sack_chunk(self, chunk):
         """
@@ -1350,12 +1455,21 @@ class RTCSctpTransport(EventEmitter):
                 channel._addBufferedAmount(-len(user_data))
 
     def _data_channel_open(self, channel):
-        if channel.ordered:
-            channel_type = DATA_CHANNEL_RELIABLE
-        else:
-            channel_type = DATA_CHANNEL_RELIABLE_UNORDERED
+        channel_type = DATA_CHANNEL_RELIABLE
+        priority = 0
+        reliability = 0
+
+        if not channel.ordered:
+            channel_type |= 0x80
+        if channel.maxRetransmits is not None:
+            channel_type |= 1
+            reliability = channel.maxRetransmits
+        elif channel.maxPacketLifetime is not None:
+            channel_type |= 2
+            reliability = channel.maxPacketLifetime
+
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, channel_type,
-                    0, 0, len(channel.label), len(channel.protocol))
+                    priority, reliability, len(channel.label), len(channel.protocol))
         data += channel.label.encode('utf8')
         data += channel.protocol.encode('utf8')
         self._data_channel_queue.append((channel, WEBRTC_DCEP, data))
@@ -1378,13 +1492,20 @@ class RTCSctpTransport(EventEmitter):
                 pos += label_length
                 protocol = data[pos:pos + protocol_length].decode('utf8')
 
-                # check channel type is supported
-                assert channel_type in [DATA_CHANNEL_RELIABLE, DATA_CHANNEL_RELIABLE_UNORDERED]
+                # check channel type
+                maxPacketLifetime = None
+                maxRetransmits = None
+                if (channel_type & 0x03) == 1:
+                    maxRetransmits = reliability
+                elif (channel_type & 0x03) == 2:
+                    maxPacketLifetime = reliability
 
                 # register channel
                 parameters = RTCDataChannelParameters(
                     label=label,
                     ordered=(channel_type & 0x80) == 0,
+                    maxPacketLifetime=maxPacketLifetime,
+                    maxRetransmits=maxRetransmits,
                     protocol=protocol)
                 channel = RTCDataChannel(self, parameters, id=stream_id)
                 channel._setReadyState('open')
