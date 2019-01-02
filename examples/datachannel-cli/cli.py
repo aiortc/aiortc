@@ -32,6 +32,19 @@ async def consume_signaling(pc, signaling):
             break
 
 
+time_start = None
+
+
+def current_stamp():
+    global time_start
+
+    if time_start is None:
+        time_start = time.time()
+        return 0
+    else:
+        return int((time.time() - time_start) * 1000000)
+
+
 async def run_answer(pc, signaling):
     await signaling.connect()
 
@@ -43,9 +56,9 @@ async def run_answer(pc, signaling):
         def on_message(message):
             channel_log(channel, '<', message)
 
-            if message == 'ping':
+            if isinstance(message, str) and message.startswith('ping'):
                 # reply
-                channel_send(channel, 'pong')
+                channel_send(channel, 'pong' + message[4:])
 
     await consume_signaling(pc, signaling)
 
@@ -55,14 +68,10 @@ async def run_offer(pc, signaling):
 
     channel = pc.createDataChannel('chat')
     channel_log(channel, '-', 'created by local party')
-    start = None
 
     async def send_pings():
-        nonlocal start
-
         while True:
-            start = time.time()
-            channel_send(channel, 'ping')
+            channel_send(channel, 'ping %d' % current_stamp())
             await asyncio.sleep(1)
 
     @channel.on('open')
@@ -73,8 +82,8 @@ async def run_offer(pc, signaling):
     def on_message(message):
         channel_log(channel, '<', message)
 
-        if message == 'pong':
-            elapsed_ms = (time.time() - start) * 1000
+        if isinstance(message, str) and message.startswith('pong'):
+            elapsed_ms = (current_stamp() - int(message[5:])) / 1000
             print(' RTT %.2f ms' % elapsed_ms)
 
     # send offer

@@ -107,6 +107,17 @@ function start() {
 
     pc = createPeerConnection();
 
+    var time_start = null;
+
+    function current_stamp() {
+        if (time_start === null) {
+            time_start = new Date().getTime();
+            return 0;
+        } else {
+            return new Date().getTime() - time_start;
+        }
+    }
+
     if (document.getElementById('use-datachannel').checked) {
         dc = pc.createDataChannel('chat');
         dc.onclose = function() {
@@ -116,13 +127,18 @@ function start() {
         dc.onopen = function() {
             dataChannelLog.textContent += '- open\n';
             dcInterval = setInterval(function() {
-                var message = 'ping';
+                var message = 'ping ' + current_stamp();
                 dataChannelLog.textContent += '> ' + message + '\n';
                 dc.send(message);
             }, 1000);
         };
         dc.onmessage = function(evt) {
             dataChannelLog.textContent += '< ' + evt.data + '\n';
+
+            if (evt.data.substring(0, 4) === 'pong') {
+                var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
+                dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
+            }
         };
     }
 

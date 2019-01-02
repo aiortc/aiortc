@@ -82,7 +82,8 @@ async def offer(request):
     def on_datachannel(channel):
         @channel.on('message')
         def on_message(message):
-            channel.send('pong')
+            if isinstance(message, str) and message.startswith('ping'):
+                channel.send('pong' + message[4:])
 
     @pc.on('iceconnectionstatechange')
     async def on_iceconnectionstatechange():
