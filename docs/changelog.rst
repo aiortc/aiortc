@@ -8,10 +8,22 @@ Changelog
 
 *under development*
 
+Data channels
+.............
+
+  * Implement unordered delivery, so that the `ordered` option is honoured.
+  * Implement partial reliability, so that the `maxRetransmits` option is honoured.
+
 Media
 .....
 
   * Put all tracks in the same stream for now, fixes breakage introduced in 0.9.14.
+
+Examples
+........
+
+  * `server` : make it possible to select unreliable mode for data channels.
+  * `server` : print the round-trip time for data channel messages.
 
 0.9.16
 ------

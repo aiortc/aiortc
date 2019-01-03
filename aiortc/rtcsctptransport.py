@@ -615,9 +615,11 @@ class RTCSctpTransport(EventEmitter):
         self._cwnd = 3 * USERDATA_MAX_LENGTH
         self._fast_recovery_exit = None
         self._fast_recovery_transmit = False
+        self._forward_tsn_chunk = None
         self._flight_size = 0
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
+        self._advanced_peer_ack_tsn = tsn_minus_one(self._local_tsn)
         self._outbound_queue = []
         self._outbound_queue_pos = 0
         self._outbound_stream_seq = {}
@@ -807,9 +809,36 @@ class RTCSctpTransport(EventEmitter):
         if self._sack_needed:
             await self._send_sack()
 
+    def _maybe_abandon(self, chunk):
+        """
+        Determine if a chunk needs to be marked as abandoned.
+
+        If it does, it marks the chunk and any other chunk belong to the same
+        message as abandoned.
+        """
+        if chunk._abandoned:
+            return True
+
+        if chunk._max_retransmits is None or chunk._sent_count <= chunk._max_retransmits:
+            return False
+
+        chunk_pos = self._outbound_queue.index(chunk)
+        for pos in range(chunk_pos, -1, -1):
+            ochunk = self._outbound_queue[pos]
+            ochunk._abandoned = True
+            if (ochunk.flags & SCTP_DATA_FIRST_FRAG):
+                break
+        for pos in range(chunk_pos, len(self._outbound_queue)):
+            ochunk = self._outbound_queue[pos]
+            ochunk._abandoned = True
+            if (ochunk.flags & SCTP_DATA_LAST_FRAG):
+                break
+
+        return True
+
     def _mark_received(self, tsn):
         """
-        Mark a data TSN as received.
+        Mark an incoming data TSN as received.
         """
         # it's a duplicate
         if tsn_gte(self._last_received_tsn, tsn) or tsn in self._sack_misordered:
@@ -1063,7 +1092,8 @@ class RTCSctpTransport(EventEmitter):
                     schunk._misses += 1
                     if schunk._misses == 3:
                         schunk._misses = 0
-                        schunk._retransmit = True
+                        if not self._maybe_abandon(schunk):
+                            schunk._retransmit = True
 
                         schunk._acked = False
                         self._flight_size_decrease(schunk)
@@ -1112,6 +1142,7 @@ class RTCSctpTransport(EventEmitter):
             self._t3_handle = None
             self._t3_start()
 
+        self._update_advanced_peer_ack_point()
         await self._data_channel_flush()
         await self._transmit()
 
@@ -1160,7 +1191,7 @@ class RTCSctpTransport(EventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
-    async def _send(self, stream_id, pp_id, user_data, ordered=True):
+    async def _send(self, stream_id, pp_id, user_data, max_retransmits=None, ordered=True):
         """
         Send data ULP -> stream.
         """
@@ -1187,8 +1218,10 @@ class RTCSctpTransport(EventEmitter):
             chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
 
             # initialize counters
+            chunk._abandoned = False
             chunk._acked = False
             chunk._book_size = len(chunk.user_data)
+            chunk._max_retransmits = max_retransmits
             chunk._misses = 0
             chunk._retransmit = False
             chunk._sent_count = 0
@@ -1332,6 +1365,12 @@ class RTCSctpTransport(EventEmitter):
         self._t3_handle = None
         self.__log_debug('x T3 expired')
 
+        # mark abandoned chunks
+        for pos in range(self._outbound_queue_pos):
+            chunk = self._outbound_queue[pos]
+            self._maybe_abandon(chunk)
+        self._update_advanced_peer_ack_point()
+
         # retransmit
         self._flight_size = 0
         self._outbound_queue_pos = 0
@@ -1357,6 +1396,15 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit outbound data.
         """
+        # send FORWARD TSN
+        if self._forward_tsn_chunk is not None:
+            await self._send_chunk(self._forward_tsn_chunk)
+            self._forward_tsn_chunk = None
+
+            # ensure T3 is running
+            if not self._t3_handle:
+                self._t3_start()
+
         # retransmit
         for pos in range(self._outbound_queue_pos):
             chunk = self._outbound_queue[pos]
@@ -1400,6 +1448,35 @@ class RTCSctpTransport(EventEmitter):
             self._reconfig_request_seq = tsn_plus_one(self._reconfig_request_seq)
 
             await self._send_reconfig_param(param)
+
+    def _update_advanced_peer_ack_point(self):
+        """
+        Try to advance "Advanced.Peer.Ack.Point" according to RFC 3758.
+        """
+        if tsn_gt(self._last_sacked_tsn, self._advanced_peer_ack_tsn):
+            self._advanced_peer_ack_tsn = self._last_sacked_tsn
+
+        done = 0
+        streams = {}
+        for pos in range(self._outbound_queue_pos):
+            chunk = self._outbound_queue[pos]
+            if chunk._abandoned:
+                self._advanced_peer_ack_tsn = chunk.tsn
+                done += 1
+                if not (chunk.flags & SCTP_DATA_UNORDERED):
+                    streams[chunk.stream_id] = chunk.stream_seq
+            else:
+                break
+
+        if done:
+            # build FORWARD TSN
+            self._forward_tsn_chunk = ForwardTsnChunk()
+            self._forward_tsn_chunk.cumulative_tsn = self._advanced_peer_ack_tsn
+            self._forward_tsn_chunk.streams = list(streams.items())
+
+            # drop data
+            self._outbound_queue = self._outbound_queue[done:]
+            self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
 
     def _update_rto(self, R):
         """
@@ -1450,7 +1527,8 @@ class RTCSctpTransport(EventEmitter):
                 channel._setId(stream_id)
 
             # send data
-            await self._send(stream_id, protocol, user_data, ordered=channel.ordered)
+            await self._send(stream_id, protocol, user_data,
+                             max_retransmits=channel.maxRetransmits, ordered=channel.ordered)
             if protocol in [WEBRTC_STRING_EMPTY, WEBRTC_STRING, WEBRTC_BINARY_EMPTY, WEBRTC_BINARY]:
                 channel._addBufferedAmount(-len(user_data))
 

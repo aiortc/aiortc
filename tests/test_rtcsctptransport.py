@@ -1028,6 +1028,71 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
+    def test_maybe_abandon(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client = RTCSctpTransport(self.client_transport)
+        client._send_chunk = mock_send_chunk
+
+        # send 3 chunks
+        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 3))
+        self.assertEqual(len(client._outbound_queue), 3)
+        self.assertEqual(client._outbound_queue_pos, 3)
+        for chunk in client._outbound_queue:
+            self.assertEqual(chunk._abandoned, False)
+
+        # try abandon middle chunk
+        client._maybe_abandon(client._outbound_queue[1])
+        for chunk in client._outbound_queue:
+            self.assertEqual(chunk._abandoned, False)
+
+    def test_maybe_abandon_max_retransmits(self):
+        async def mock_send_chunk(chunk):
+            pass
+
+        client = RTCSctpTransport(self.client_transport)
+        client._local_tsn = 1
+        client._last_sacked_tsn = 0
+        client._advanced_peer_ack_tsn = 0
+        client._send_chunk = mock_send_chunk
+
+        # send 3 chunks
+        run(client._send(123, 456, b'M' * USERDATA_MAX_LENGTH * 3, max_retransmits=0))
+        self.assertEqual(len(client._outbound_queue), 3)
+        self.assertEqual(client._outbound_queue_pos, 3)
+        self.assertEqual(client._local_tsn, 4)
+        self.assertEqual(client._advanced_peer_ack_tsn, 0)
+        for chunk in client._outbound_queue:
+            self.assertEqual(chunk._abandoned, False)
+
+        # try abandon middle chunk
+        client._maybe_abandon(client._outbound_queue[1])
+        for chunk in client._outbound_queue:
+            self.assertEqual(chunk._abandoned, True)
+
+        # try abandon middle chunk (again)
+        client._maybe_abandon(client._outbound_queue[1])
+        for chunk in client._outbound_queue:
+            self.assertEqual(chunk._abandoned, True)
+
+        # update advanced peer ack point
+        client._update_advanced_peer_ack_point()
+        self.assertEqual(len(client._outbound_queue), 0)
+        self.assertEqual(client._outbound_queue_pos, 0)
+        self.assertEqual(client._advanced_peer_ack_tsn, 3)
+
+        # check forward TSN
+        self.assertIsNotNone(client._forward_tsn_chunk)
+        self.assertEqual(client._forward_tsn_chunk.cumulative_tsn, 3)
+        self.assertEqual(client._forward_tsn_chunk.streams, [(123, 0)])
+
+        # transmit
+        client._t3_cancel()
+        run(client._transmit())
+        self.assertIsNone(client._forward_tsn_chunk)
+        self.assertIsNotNone(client._t3_handle)
+
     def test_stale_cookie(self):
         def mock_timestamp():
             mock_timestamp.calls += 1
