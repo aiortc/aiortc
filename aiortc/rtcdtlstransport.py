@@ -329,6 +329,10 @@ class RTCDtlsTransport(EventEmitter):
         self.__tx_bytes = 0
         self.__tx_packets = 0
 
+        # SRTP
+        self._rx_srtp = None
+        self._tx_srtp = None
+
         # SSL init
         self.__ctx = create_ssl_context(certificate)
 
@@ -554,7 +558,7 @@ class RTCDtlsTransport(EventEmitter):
             elif result > 0:
                 data = ffi.buffer(self.read_cdata)[0:result]
                 await self._handle_data(data)
-        elif first_byte > 127 and first_byte < 192:
+        elif first_byte > 127 and first_byte < 192 and self._rx_srtp:
             # SRTP / SRTCP
             try:
                 if is_rtcp(data):
