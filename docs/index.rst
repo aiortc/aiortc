@@ -59,5 +59,6 @@ the ``aiortc`` code to ensure best-in-class code quality.
    examples
    api
    helpers
+   contributing
    changelog
    license
