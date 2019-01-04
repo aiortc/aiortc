@@ -446,6 +446,9 @@ class RTCPeerConnection(EventEmitter):
 
         :rtype: :class:`RTCDataChannel`
         """
+        if maxPacketLifeTime is not None and maxRetransmits is not None:
+            raise ValueError('Cannot specify both maxPacketLifeTime and maxRetransmits')
+
         if not self.__sctp:
             self.__createSctpTransport()
 

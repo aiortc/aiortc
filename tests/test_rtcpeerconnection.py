@@ -2577,6 +2577,13 @@ a=fmtp:98 apt=97
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self):
+        pc = RTCPeerConnection()
+        with self.assertRaises(ValueError) as cm:
+            pc.createDataChannel('chat', maxPacketLifeTime=500, maxRetransmits=0)
+        self.assertEqual(str(cm.exception),
+                         'Cannot specify both maxPacketLifeTime and maxRetransmits')
+
     def test_datachannel_send_invalid_state(self):
         pc = RTCPeerConnection()
         dc = pc.createDataChannel('chat')
@@ -2960,9 +2967,9 @@ a=fmtp:98 apt=97
                 channel.send('string-echo: ' + message)
 
         # create data channel
-        dc = pc1.createDataChannel('chat', maxPacketLifeTime=0, protocol='bob')
+        dc = pc1.createDataChannel('chat', maxPacketLifeTime=500, protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifeTime, 0)
+        self.assertEqual(dc.maxPacketLifeTime, 500)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2994,7 +3001,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, 0)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, 500)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
