@@ -1527,9 +1527,12 @@ class RTCSctpTransport(EventEmitter):
                 channel._setId(stream_id)
 
             # send data
-            await self._send(stream_id, protocol, user_data,
-                             max_retransmits=channel.maxRetransmits, ordered=channel.ordered)
-            if protocol in [WEBRTC_STRING_EMPTY, WEBRTC_STRING, WEBRTC_BINARY_EMPTY, WEBRTC_BINARY]:
+            if protocol == WEBRTC_DCEP:
+                await self._send(stream_id, protocol, user_data)
+            else:
+                await self._send(stream_id, protocol, user_data,
+                                 max_retransmits=channel.maxRetransmits,
+                                 ordered=channel.ordered)
                 channel._addBufferedAmount(-len(user_data))
 
     def _data_channel_open(self, channel):
