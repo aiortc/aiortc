@@ -1365,9 +1365,10 @@ class RTCSctpTransport(EventEmitter):
         self._t3_handle = None
         self.__log_debug('x T3 expired')
 
-        # mark abandoned chunks
+        # clear retransmit flag, mark abandoned chunks
         for pos in range(self._outbound_queue_pos):
             chunk = self._outbound_queue[pos]
+            chunk._retransmit = False
             self._maybe_abandon(chunk)
         self._update_advanced_peer_ack_point()
 
