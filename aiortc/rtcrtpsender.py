@@ -5,7 +5,7 @@ import time
 import uuid
 
 from . import clock, rtp
-from .codecs import get_capabilities, get_encoder
+from .codecs import get_capabilities, get_encoder, is_rtx
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError
 from .rtcrtpparameters import RTCRtpSendParameters
@@ -153,8 +153,7 @@ class RTCRtpSender:
 
             # make note of RTX payload type
             for codec in parameters.codecs:
-                if (codec.name == 'rtx' and
-                   codec.parameters['apt'] == parameters.codecs[0].payloadType):
+                if is_rtx(codec) and codec.parameters['apt'] == parameters.codecs[0].payloadType:
                     self.__rtx_payload_type = codec.payloadType
                     break
 

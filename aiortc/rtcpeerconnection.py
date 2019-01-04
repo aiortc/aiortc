@@ -6,7 +6,7 @@ from collections import OrderedDict
 from pyee import EventEmitter
 
 from . import clock, rtp, sdp
-from .codecs import CODECS, HEADER_EXTENSIONS
+from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
 from .events import RTCTrackEvent
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
@@ -31,13 +31,14 @@ def filter_preferred_codecs(codecs, preferred):
     if not preferred:
         return codecs
 
-    rtx_codecs = list(filter(lambda x: x.name == 'rtx', codecs))
-    rtx_enabled = next(filter(lambda x: x.name == 'rtx', preferred), None) is not None
+    rtx_codecs = list(filter(is_rtx, codecs))
+    rtx_enabled = next(filter(is_rtx, preferred), None) is not None
 
     filtered = []
-    for pref in filter(lambda x: x.name != 'rtx', preferred):
+    for pref in filter(lambda x: not is_rtx(x), preferred):
         for codec in codecs:
-            if codec.mimeType == pref.mimeType and codec.parameters == pref.parameters:
+            if (codec.mimeType.lower() == pref.mimeType.lower() and
+               codec.parameters == pref.parameters):
                 filtered.append(codec)
 
                 # add corresponding RTX
@@ -57,7 +58,7 @@ def find_common_codecs(local_codecs, remote_codecs):
     common_base = {}
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
-        if c.name == 'rtx':
+        if is_rtx(c):
             if c.parameters.get('apt') in common_base:
                 base = common_base[c.parameters['apt']]
                 if c.clockRate == base.clockRate:
@@ -66,9 +67,9 @@ def find_common_codecs(local_codecs, remote_codecs):
 
         # handle other codecs
         for codec in local_codecs:
-            if codec.name == c.name and codec.clockRate == c.clockRate:
-                if codec.name == 'H264':
-                    # FIXME: check according to RFC 3184
+            if codec.mimeType.lower() == c.mimeType.lower() and codec.clockRate == c.clockRate:
+                if codec.mimeType.lower() == 'video/h264':
+                    # FIXME: check according to RFC 6184
                     parameters_compatible = True
                     for param in ['packetization-mode', 'profile-level-id']:
                         if c.parameters.get(param) != codec.parameters.get(param):
@@ -184,7 +185,7 @@ def create_media_description_for_transceiver(transceiver, cname, direction, mid)
     ]
 
     # if RTX is enabled, add corresponding SSRC
-    if next((x for x in media.rtp.codecs if x.name == 'rtx'), None):
+    if next(filter(is_rtx, media.rtp.codecs), None):
         media.ssrc.append(sdp.SsrcDescription(
             ssrc=transceiver.sender._rtx_ssrc,
             cname=cname))
@@ -876,7 +877,7 @@ class RTCPeerConnection(EventEmitter):
         if len(media.ssrc):
             encodings = OrderedDict()
             for codec in transceiver._codecs:
-                if codec.name == 'rtx':
+                if is_rtx(codec):
                     if codec.parameters['apt'] in encodings and len(media.ssrc) == 2:
                         encodings[codec.parameters['apt']].rtx = RTCRtpRtxParameters(
                             ssrc=media.ssrc[1].ssrc)

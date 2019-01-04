@@ -9,7 +9,7 @@ import time
 import attr
 
 from . import clock
-from .codecs import depayload, get_capabilities, get_decoder
+from .codecs import depayload, get_capabilities, get_decoder, is_rtx
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamError, MediaStreamTrack
@@ -398,7 +398,7 @@ class RTCRtpReceiver:
         self.__remote_streams[packet.ssrc].add(packet)
 
         # unwrap retransmission packet
-        if codec.name == 'rtx':
+        if is_rtx(codec):
             original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
             if original_ssrc is None:
                 self.__log_debug('x RTX packet from unknown SSRC %d', packet.ssrc)

@@ -89,7 +89,7 @@ def get_capabilities(kind):
         codecs = []
         rtx_added = False
         for params in CODECS[kind]:
-            if params.name != 'rtx':
+            if not is_rtx(params):
                 codecs.append(RTCRtpCodecCapability(
                     mimeType=params.mimeType,
                     clockRate=params.clockRate,
@@ -111,29 +111,37 @@ def get_capabilities(kind):
 
 
 def get_decoder(codec):
-    if codec.name == 'opus':
+    mimeType = codec.mimeType.lower()
+
+    if mimeType == 'audio/opus':
         return OpusDecoder()
-    elif codec.name == 'PCMU':
-        return PcmuDecoder()
-    elif codec.name == 'PCMA':
+    elif mimeType == 'audio/pcma':
         return PcmaDecoder()
-    elif codec.name == 'VP8':
-        return Vp8Decoder()
-    elif codec.name == 'H264':
+    elif mimeType == 'audio/pcmu':
+        return PcmuDecoder()
+    elif mimeType == 'video/h264':
         return H264Decoder()
+    elif mimeType == 'video/vp8':
+        return Vp8Decoder()
 
 
 def get_encoder(codec):
-    if codec.name == 'opus':
+    mimeType = codec.mimeType.lower()
+
+    if mimeType == 'audio/opus':
         return OpusEncoder()
-    elif codec.name == 'PCMU':
-        return PcmuEncoder()
-    elif codec.name == 'PCMA':
+    elif mimeType == 'audio/pcma':
         return PcmaEncoder()
-    elif codec.name == 'VP8':
-        return Vp8Encoder()
-    elif codec.name == 'H264':
+    elif mimeType == 'audio/pcmu':
+        return PcmuEncoder()
+    elif mimeType == 'video/h264':
         return H264Encoder()
+    elif mimeType == 'video/vp8':
+        return Vp8Encoder()
+
+
+def is_rtx(codec):
+    return codec.name.lower() == 'rtx'
 
 
 init_codecs()
