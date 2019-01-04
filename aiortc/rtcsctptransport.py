@@ -819,18 +819,24 @@ class RTCSctpTransport(EventEmitter):
         if chunk._abandoned:
             return True
 
-        if chunk._max_retransmits is None or chunk._sent_count <= chunk._max_retransmits:
+        abandon = (
+            (chunk._max_retransmits is not None and chunk._sent_count > chunk._max_retransmits) or
+            (chunk._expiry is not None and chunk._expiry < time.time())
+        )
+        if not abandon:
             return False
 
         chunk_pos = self._outbound_queue.index(chunk)
         for pos in range(chunk_pos, -1, -1):
             ochunk = self._outbound_queue[pos]
             ochunk._abandoned = True
+            ochunk._retransmit = False
             if (ochunk.flags & SCTP_DATA_FIRST_FRAG):
                 break
         for pos in range(chunk_pos, len(self._outbound_queue)):
             ochunk = self._outbound_queue[pos]
             ochunk._abandoned = True
+            ochunk._retransmit = False
             if (ochunk.flags & SCTP_DATA_LAST_FRAG):
                 break
 
@@ -1191,7 +1197,8 @@ class RTCSctpTransport(EventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
-    async def _send(self, stream_id, pp_id, user_data, max_retransmits=None, ordered=True):
+    async def _send(self, stream_id, pp_id, user_data,
+                    expiry=None, max_retransmits=None, ordered=True):
         """
         Send data ULP -> stream.
         """
@@ -1221,6 +1228,7 @@ class RTCSctpTransport(EventEmitter):
             chunk._abandoned = False
             chunk._acked = False
             chunk._book_size = len(chunk.user_data)
+            chunk._expiry = expiry
             chunk._max_retransmits = max_retransmits
             chunk._misses = 0
             chunk._retransmit = False
@@ -1531,7 +1539,12 @@ class RTCSctpTransport(EventEmitter):
             if protocol == WEBRTC_DCEP:
                 await self._send(stream_id, protocol, user_data)
             else:
+                if channel.maxPacketLifeTime:
+                    expiry = time.time() + (channel.maxPacketLifeTime / 1000)
+                else:
+                    expiry = None
                 await self._send(stream_id, protocol, user_data,
+                                 expiry=expiry,
                                  max_retransmits=channel.maxRetransmits,
                                  ordered=channel.ordered)
                 channel._addBufferedAmount(-len(user_data))

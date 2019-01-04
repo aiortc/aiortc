@@ -12,7 +12,7 @@ Data channels
 .............
 
   * Implement unordered delivery, so that the `ordered` option is honoured.
-  * Implement partial reliability, so that the `maxRetransmits` option is honoured.
+  * Implement partial reliability, so that the `maxRetransmits` and `maxPacketLifeTime` options are honoured.
 
 Media
 .....
