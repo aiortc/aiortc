@@ -2306,7 +2306,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2381,7 +2381,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -2456,7 +2456,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2529,7 +2529,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -2609,7 +2609,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2682,7 +2682,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -2805,7 +2805,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2891,7 +2891,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -2960,9 +2960,9 @@ a=fmtp:98 apt=97
                 channel.send('string-echo: ' + message)
 
         # create data channel
-        dc = pc1.createDataChannel('chat', maxPacketLifetime=0, protocol='bob')
+        dc = pc1.createDataChannel('chat', maxPacketLifeTime=0, protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, 0)
+        self.assertEqual(dc.maxPacketLifeTime, 0)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -2994,7 +2994,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, 0)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, 0)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -3053,7 +3053,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', maxRetransmits=0, protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, 0)
         self.assertEqual(dc.ordered, True)
         self.assertEqual(dc.protocol, 'bob')
@@ -3085,7 +3085,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, 0)
         self.assertEqual(pc2_data_channels[0].ordered, True)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')
@@ -3144,7 +3144,7 @@ a=fmtp:98 apt=97
         # create data channel
         dc = pc1.createDataChannel('chat', ordered=False, protocol='bob')
         self.assertEqual(dc.label, 'chat')
-        self.assertEqual(dc.maxPacketLifetime, None)
+        self.assertEqual(dc.maxPacketLifeTime, None)
         self.assertEqual(dc.maxRetransmits, None)
         self.assertEqual(dc.ordered, False)
         self.assertEqual(dc.protocol, 'bob')
@@ -3208,7 +3208,7 @@ a=fmtp:98 apt=97
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
         self.assertEqual(pc2_data_channels[0].label, 'chat')
-        self.assertEqual(pc2_data_channels[0].maxPacketLifetime, None)
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
         self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
         self.assertEqual(pc2_data_channels[0].ordered, False)
         self.assertEqual(pc2_data_channels[0].protocol, 'bob')

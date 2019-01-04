@@ -67,11 +67,11 @@ class RTCDataChannel(EventEmitter):
         return self.__parameters.ordered
 
     @property
-    def maxPacketLifetime(self):
+    def maxPacketLifeTime(self):
         """
-        The maximum time in milliseconds during which retransmissions are attempted.
+        The maximum time in milliseconds during which transmissions are attempted.
         """
-        return self.__parameters.maxPacketLifetime
+        return self.__parameters.maxPacketLifeTime
 
     @property
     def maxRetransmits(self):
@@ -158,8 +158,8 @@ class RTCDataChannelParameters:
     label = attr.ib(default='')
     "A name describing the data channel."
 
-    maxPacketLifetime = attr.ib(default=None)
-    "The maximum time in milliseconds during which retransmissions are attempted."
+    maxPacketLifeTime = attr.ib(default=None)
+    "The maximum time in milliseconds during which transmissions are attempted."
 
     maxRetransmits = attr.ib(default=None)
     "The maximum number of retransmissions that are attempted."

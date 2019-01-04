@@ -1542,9 +1542,9 @@ class RTCSctpTransport(EventEmitter):
         if channel.maxRetransmits is not None:
             channel_type |= 1
             reliability = channel.maxRetransmits
-        elif channel.maxPacketLifetime is not None:
+        elif channel.maxPacketLifeTime is not None:
             channel_type |= 2
-            reliability = channel.maxPacketLifetime
+            reliability = channel.maxPacketLifeTime
 
         data = pack('!BBHLHH', DATA_CHANNEL_OPEN, channel_type,
                     priority, reliability, len(channel.label), len(channel.protocol))
@@ -1571,18 +1571,18 @@ class RTCSctpTransport(EventEmitter):
                 protocol = data[pos:pos + protocol_length].decode('utf8')
 
                 # check channel type
-                maxPacketLifetime = None
+                maxPacketLifeTime = None
                 maxRetransmits = None
                 if (channel_type & 0x03) == 1:
                     maxRetransmits = reliability
                 elif (channel_type & 0x03) == 2:
-                    maxPacketLifetime = reliability
+                    maxPacketLifeTime = reliability
 
                 # register channel
                 parameters = RTCDataChannelParameters(
                     label=label,
                     ordered=(channel_type & 0x80) == 0,
-                    maxPacketLifetime=maxPacketLifetime,
+                    maxPacketLifeTime=maxPacketLifeTime,
                     maxRetransmits=maxRetransmits,
                     protocol=protocol)
                 channel = RTCDataChannel(self, parameters, id=stream_id)
