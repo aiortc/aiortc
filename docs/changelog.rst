@@ -6,7 +6,10 @@ Changelog
 0.9.17
 ------
 
-*under development*
+DTLS
+....
+
+  * Do not bomb if SRTP is received before DTLS handshake completes.
 
 Data channels
 .............
@@ -18,6 +21,8 @@ Media
 .....
 
   * Put all tracks in the same stream for now, fixes breakage introduced in 0.9.14.
+  * Use case-insensitive comparison for codec names.
+  * Use a=msid attribute in SDP instead of SSRC-level attributes.
 
 Examples
 ........
