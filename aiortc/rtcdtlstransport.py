@@ -542,7 +542,6 @@ class RTCDtlsTransport(EventEmitter):
             await self._write_ssl()
             return
 
-        arrival_time_ms = clock.current_ms()
         self.__rx_bytes += len(data)
         self.__rx_packets += 1
 
@@ -560,6 +559,7 @@ class RTCDtlsTransport(EventEmitter):
                 await self._handle_data(data)
         elif first_byte > 127 and first_byte < 192 and self._rx_srtp:
             # SRTP / SRTCP
+            arrival_time_ms = clock.current_ms()
             try:
                 if is_rtcp(data):
                     data = self._rx_srtp.unprotect_rtcp(data)
