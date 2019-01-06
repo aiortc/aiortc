@@ -6,7 +6,7 @@ import math
 import os
 import time
 import warnings
-from struct import pack, unpack, unpack_from
+from struct import pack, unpack_from
 
 import attr
 import crcmod.predefined
@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
     warnings.warn('crcmod C extension was not found, datachannel performance will be reduced')
 
 
-crc32c = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
+crc32 = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
 # local constants
@@ -88,7 +88,7 @@ def decode_params(body):
     params = []
     pos = 0
     while pos <= len(body) - 4:
-        param_type, param_length = unpack('!HH', body[pos:pos + 4])
+        param_type, param_length = unpack_from('!HH', body, pos)
         params.append((param_type, body[pos + 4:pos + param_length]))
         pos += param_length + padl(param_length)
     return params
@@ -107,10 +107,6 @@ def encode_params(params):
 
 def padl(l):
     return 4 * ((l + 3) // 4) - l
-
-
-def swapl(i):
-    return unpack("<I", pack(">I", i))[0]
 
 
 def tsn_minus_one(a):
@@ -171,7 +167,7 @@ class DataChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
-            (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack('!LHHL', body[0:12])
+            (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack_from('!LHHL', body)
             self.user_data = body[12:]
         else:
             self.tsn = 0
@@ -233,7 +229,7 @@ class BaseInitChunk(Chunk):
         self.flags = flags
         if body:
             (self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
-             self.inbound_streams, self.initial_tsn) = unpack('!LLHHL', body[0:16])
+             self.inbound_streams, self.initial_tsn) = unpack_from('!LLHHL', body)
             self.params = decode_params(body[16:])
         else:
             self.initiate_tag = 0
@@ -270,14 +266,14 @@ class SackChunk(Chunk):
         self.gaps = []
         self.duplicates = []
         if body:
-            self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack(
-                '!LLHH', body[0:12])
+            self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack_from(
+                '!LLHH', body)
             pos = 12
             for i in range(nb_gaps):
-                self.gaps.append(unpack('!HH', body[pos:pos + 4]))
+                self.gaps.append(unpack_from('!HH', body, pos))
                 pos += 4
             for i in range(nb_duplicates):
-                self.duplicates.append(unpack('!L', body[pos:pos + 4])[0])
+                self.duplicates.append(unpack_from('!L', body, pos)[0])
                 pos += 4
         else:
             self.cumulative_tsn = 0
@@ -302,7 +298,7 @@ class ShutdownChunk(Chunk):
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
-            self.cumulative_tsn = unpack('!L', body[0:4])[0]
+            self.cumulative_tsn = unpack_from('!L', body)[0]
         else:
             self.cumulative_tsn = 0
 
@@ -361,20 +357,20 @@ class Packet:
             data += bytes(chunk)
 
         # calculate checksum
-        checksum = swapl(crc32c(data))
-        return data[0:8] + pack('!L', checksum) + data[12:]
+        checksum = crc32(data)
+        return data[0:8] + pack('<L', checksum) + data[12:]
 
     @classmethod
     def parse(cls, data):
         if len(data) < 12:
             raise ValueError('SCTP packet length is less than 12 bytes')
 
-        source_port, destination_port, verification_tag, checksum = unpack(
-            '!HHLL', data[0:12])
+        source_port, destination_port, verification_tag = unpack_from('!HHL', data)
+        checksum = unpack_from('<L', data, 8)[0]
 
         # verify checksum
         check_data = data[0:8] + b'\x00\x00\x00\x00' + data[12:]
-        if checksum != swapl(crc32c(check_data)):
+        if checksum != crc32(check_data):
             raise ValueError('SCTP packet has invalid checksum')
 
         packet = cls(
@@ -385,7 +381,7 @@ class Packet:
 
         pos = 12
         while pos <= len(data) - 4:
-            chunk_type, chunk_flags, chunk_length = unpack('!BBH', data[pos:pos + 4])
+            chunk_type, chunk_flags, chunk_length = unpack_from('!BBH', data, pos)
             chunk_body = data[pos + 4:pos + chunk_length]
             chunk_cls = CHUNK_TYPES.get(chunk_type)
             if chunk_cls:
@@ -417,10 +413,10 @@ class StreamResetOutgoingParam:
 
     @classmethod
     def parse(cls, data):
-        request_sequence, response_sequence, last_tsn = unpack('!LLL', data[0:12])
+        request_sequence, response_sequence, last_tsn = unpack_from('!LLL', data)
         streams = []
         for pos in range(12, len(data), 2):
-            streams.append(unpack('!H', data[pos:pos + 2])[0])
+            streams.append(unpack_from('!H', data, pos)[0])
         return cls(
             request_sequence=request_sequence,
             response_sequence=response_sequence,
@@ -443,7 +439,7 @@ class StreamAddOutgoingParam:
 
     @classmethod
     def parse(cls, data):
-        request_sequence, new_streams, reserved = unpack('!LHH', data[0:8])
+        request_sequence, new_streams, reserved = unpack_from('!LHH', data)
         return cls(
             request_sequence=request_sequence,
             new_streams=new_streams)
@@ -459,7 +455,7 @@ class StreamResetResponseParam:
 
     @classmethod
     def parse(cls, data):
-        response_sequence, result = unpack('!LL', data[0:8])
+        response_sequence, result = unpack_from('!LL', data)
         return cls(response_sequence=response_sequence, result=result)
 
 
@@ -897,7 +893,7 @@ class RTCSctpTransport(EventEmitter):
 
             # check state cookie lifetime
             now = self._get_timestamp()
-            stamp = unpack('!L', cookie[0:4])[0]
+            stamp = unpack_from('!L', cookie)[0]
             if stamp < now - COOKIE_LIFETIME or stamp > now:
                 self.__log_debug('x State cookie has expired')
                 error = ErrorChunk()
@@ -1556,7 +1552,7 @@ class RTCSctpTransport(EventEmitter):
 
     async def _data_channel_receive(self, stream_id, pp_id, data):
         if pp_id == WEBRTC_DCEP and len(data):
-            msg_type = unpack('!B', data[0:1])[0]
+            msg_type = data[0]
             if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
                 # we should not receive an open for an existing channel
                 assert stream_id not in self._data_channels
@@ -1565,7 +1561,7 @@ class RTCSctpTransport(EventEmitter):
                 assert (stream_id % 2) != (self._data_channel_id % 2)
 
                 (msg_type, channel_type, priority, reliability,
-                 label_length, protocol_length) = unpack('!BBHLHH', data[0:12])
+                 label_length, protocol_length) = unpack_from('!BBHLHH', data)
                 pos = 12
                 label = data[pos:pos + label_length].decode('utf8')
                 pos += label_length
