@@ -14,7 +14,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .utils import random32, uint16_add, uint16_gt
+from .utils import random32, uint16_add, uint16_gt, uint32_gt, uint32_gte
 
 try:
     import crcmod._crcfunext
@@ -111,22 +111,6 @@ def padl(l):
 
 def swapl(i):
     return unpack("<I", pack(">I", i))[0]
-
-
-def tsn_gt(a, b):
-    """
-    Return True if tsn a is greater than b.
-    """
-    half_mod = (1 << 31)
-    return (((a < b) and ((b - a) > half_mod)) or
-            ((a > b) and ((a - b) < half_mod)))
-
-
-def tsn_gte(a, b):
-    """
-    Return True if tsn a is greater than or equal to b.
-    """
-    return (a == b) or tsn_gt(a, b)
 
 
 def tsn_minus_one(a):
@@ -492,7 +476,7 @@ class InboundStream:
         self.sequence_number = 0
 
     def add_chunk(self, chunk):
-        if not self.reassembly or tsn_gt(chunk.tsn, self.reassembly[-1].tsn):
+        if not self.reassembly or uint32_gt(chunk.tsn, self.reassembly[-1].tsn):
             self.reassembly.append(chunk)
             return
 
@@ -501,7 +485,7 @@ class InboundStream:
             # as a duplicate when _mark_received() is called
             assert rchunk.tsn != chunk.tsn, 'duplicate chunk in reassembly'
 
-            if tsn_gt(rchunk.tsn, chunk.tsn):
+            if uint32_gt(rchunk.tsn, chunk.tsn):
                 self.reassembly.insert(i, chunk)
                 break
 
@@ -549,7 +533,7 @@ class InboundStream:
         pos = -1
         size = 0
         for i, chunk in enumerate(self.reassembly):
-            if tsn_gte(tsn, chunk.tsn):
+            if uint32_gte(tsn, chunk.tsn):
                 pos = i
                 size += len(chunk.user_data)
             else:
@@ -847,7 +831,7 @@ class RTCSctpTransport(EventEmitter):
         Mark an incoming data TSN as received.
         """
         # it's a duplicate
-        if tsn_gte(self._last_received_tsn, tsn) or tsn in self._sack_misordered:
+        if uint32_gte(self._last_received_tsn, tsn) or tsn in self._sack_misordered:
             self._sack_duplicates.append(tsn)
             return True
 
@@ -861,7 +845,7 @@ class RTCSctpTransport(EventEmitter):
 
         # filter out obsolete entries
         def is_obsolete(x):
-            return tsn_gt(x, self._last_received_tsn)
+            return uint32_gt(x, self._last_received_tsn)
         self._sack_duplicates = list(filter(is_obsolete, self._sack_duplicates))
         self._sack_misordered = set(filter(is_obsolete, self._sack_misordered))
 
@@ -1021,11 +1005,11 @@ class RTCSctpTransport(EventEmitter):
         self._sack_needed = True
 
         # it's a duplicate
-        if tsn_gte(self._last_received_tsn, chunk.cumulative_tsn):
+        if uint32_gte(self._last_received_tsn, chunk.cumulative_tsn):
             return
 
         def is_obsolete(x):
-            return tsn_gt(x, self._last_received_tsn)
+            return uint32_gt(x, self._last_received_tsn)
 
         # advance cumulative TSN
         self._last_received_tsn = chunk.cumulative_tsn
@@ -1058,7 +1042,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Handle a SACK chunk.
         """
-        if tsn_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
+        if uint32_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
             return
 
         received_time = time.time()
@@ -1070,7 +1054,7 @@ class RTCSctpTransport(EventEmitter):
         # handle acknowledged data
         for i in range(len(self._outbound_queue)):
             schunk = self._outbound_queue[i]
-            if tsn_gt(schunk.tsn, self._last_sacked_tsn):
+            if uint32_gt(schunk.tsn, self._last_sacked_tsn):
                 break
             done += 1
             if not schunk._acked:
@@ -1092,7 +1076,7 @@ class RTCSctpTransport(EventEmitter):
                     seen.add(tsn)
             for i in range(done, len(self._outbound_queue)):
                 schunk = self._outbound_queue[i]
-                if tsn_gt(schunk.tsn, highest_seen_tsn):
+                if uint32_gt(schunk.tsn, highest_seen_tsn):
                     break
                 if schunk.tsn not in seen:
                     schunk._misses += 1
@@ -1136,7 +1120,7 @@ class RTCSctpTransport(EventEmitter):
                 self._partial_bytes_acked = 0
                 self._fast_recovery_exit = highest_seen_tsn
                 self._fast_recovery_transmit = True
-        elif tsn_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
+        elif uint32_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
             self._fast_recovery_exit = None
 
         if not len(self._outbound_queue):
@@ -1462,7 +1446,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Try to advance "Advanced.Peer.Ack.Point" according to RFC 3758.
         """
-        if tsn_gt(self._last_sacked_tsn, self._advanced_peer_ack_tsn):
+        if uint32_gt(self._last_sacked_tsn, self._advanced_peer_ack_tsn):
             self._advanced_peer_ack_tsn = self._last_sacked_tsn
 
         done = 0
