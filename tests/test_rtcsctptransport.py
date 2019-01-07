@@ -130,6 +130,27 @@ class SctpPacketTest(TestCase):
 
         self.assertEqual(bytes(packet), data)
 
+    def test_parse_data_padding(self):
+        data = load('sctp_data_padding.bin')
+        packet = Packet.parse(data)
+        self.assertEqual(packet.source_port, 5000)
+        self.assertEqual(packet.destination_port, 5000)
+        self.assertEqual(packet.verification_tag, 264304801)
+
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertTrue(isinstance(packet.chunks[0], DataChunk))
+        self.assertEqual(packet.chunks[0].type, 0)
+        self.assertEqual(packet.chunks[0].flags, 3)
+        self.assertEqual(packet.chunks[0].tsn, 2584679421)
+        self.assertEqual(packet.chunks[0].stream_id, 1)
+        self.assertEqual(packet.chunks[0].stream_seq, 1)
+        self.assertEqual(packet.chunks[0].protocol, 51)
+        self.assertEqual(packet.chunks[0].user_data, b'M')
+        self.assertEqual(repr(packet.chunks[0]),
+                         'DataChunk(flags=3, tsn=2584679421, stream_id=1, stream_seq=1)')
+
+        self.assertEqual(bytes(packet), data)
+
     def test_parse_error(self):
         data = load('sctp_error.bin')
         packet = Packet.parse(data)

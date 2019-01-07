@@ -102,7 +102,8 @@ def encode_params(params):
 
 
 def padl(l):
-    return 4 * ((l + 3) // 4) - l
+    m = l % 4
+    return 4 - m if m else 0
 
 
 def tsn_minus_one(a):
@@ -168,11 +169,15 @@ class DataChunk(Chunk):
             self.protocol = 0
             self.user_data = b''
 
-    @property
-    def body(self):
-        body = pack('!LHHL', self.tsn, self.stream_id, self.stream_seq, self.protocol)
-        body += self.user_data
-        return body
+    def __bytes__(self):
+        length = 16 + len(self.user_data)
+        data = pack(
+            '!BBHLHHL',
+            self.type, self.flags, length,
+            self.tsn, self.stream_id, self.stream_seq, self.protocol) + self.user_data
+        if length % 4:
+            data += b'\x00' * padl(length)
+        return data
 
     def __repr__(self):
         return 'DataChunk(flags=%d, tsn=%d, stream_id=%d, stream_seq=%d)' % (
@@ -275,15 +280,17 @@ class SackChunk(Chunk):
             self.cumulative_tsn = 0
             self.advertised_rwnd = 0
 
-    @property
-    def body(self):
-        body = pack('!LLHH', self.cumulative_tsn, self.advertised_rwnd,
-                    len(self.gaps), len(self.duplicates))
+    def __bytes__(self):
+        length = 16 + 4 * (len(self.gaps) + len(self.duplicates))
+        data = pack(
+            '!BBHLLHH',
+            self.type, self.flags, length,
+            self.cumulative_tsn, self.advertised_rwnd, len(self.gaps), len(self.duplicates))
         for gap in self.gaps:
-            body += pack('!HH', *gap)
+            data += pack('!HH', *gap)
         for tsn in self.duplicates:
-            body += pack('!L', tsn)
-        return body
+            data += pack('!L', tsn)
+        return data
 
     def __repr__(self):
         return 'SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d, gaps=%s)' % (
