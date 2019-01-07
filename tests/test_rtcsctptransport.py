@@ -1,5 +1,6 @@
 import asyncio
 from unittest import TestCase
+from unittest.mock import patch
 
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -899,6 +900,30 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client_channels[0].id, 0)
         self.assertEqual(client_channels[0].label, 'chat')
         self.assertEqual(len(server_channels), 0)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    @patch('aiortc.rtcsctptransport.logger.isEnabledFor')
+    def test_connect_with_logging(self, mock_is_enabled_for):
+        mock_is_enabled_for.return_value = True
+
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
 
         # shutdown
         run(client.stop())

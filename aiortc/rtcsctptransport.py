@@ -565,9 +565,10 @@ class RTCSctpTransport(EventEmitter):
 
         super().__init__()
         self._association_state = self.State.CLOSED
-        self.__transport = transport
-        self._started = False
+        self.__log_debug = lambda *args: None
+        self.__started = False
         self.__state = 'new'
+        self.__transport = transport
 
         self._loop = asyncio.get_event_loop()
         self._hmac_key = os.urandom(16)
@@ -668,10 +669,15 @@ class RTCSctpTransport(EventEmitter):
         """
         Start the transport.
         """
-        if not self._started:
-            self._started = True
+        if not self.__started:
+            self.__started = True
             self.__state = 'connecting'
             self._remote_port = remotePort
+
+            # configure logging
+            if logger.isEnabledFor(logging.DEBUG):
+                prefix = self.is_server and 'server ' or 'client '
+                self.__log_debug = lambda msg, *args: logger.debug(prefix + msg, *args)
 
             # initialise local channel ID counter
             if self.is_server:
@@ -1623,10 +1629,6 @@ class RTCSctpTransport(EventEmitter):
         channel._addBufferedAmount(len(user_data))
         self._data_channel_queue.append((channel, pp_id, user_data))
         asyncio.ensure_future(self._data_channel_flush())
-
-    def __log_debug(self, msg, *args):
-        role = self.is_server and 'server' or 'client'
-        logger.debug(role + ' ' + msg, *args)
 
     class State(enum.Enum):
         CLOSED = 1
