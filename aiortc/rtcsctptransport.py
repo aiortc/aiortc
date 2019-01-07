@@ -50,9 +50,7 @@ SCTP_RTO_MIN = 1
 SCTP_RTO_MAX = 60
 SCTP_TSN_MODULO = 2 ** 32
 
-RECONFIG_CHUNK = 130
 RECONFIG_MAX_STREAMS = 135
-FORWARD_TSN_CHUNK = 192
 
 # parameters
 SCTP_STATE_COOKIE = 0x0007
@@ -131,12 +129,6 @@ class Chunk:
     def __repr__(self):
         return '%s(flags=%d)' % (chunk_type(self), self.flags)
 
-    @property
-    def type(self):
-        for k, cls in CHUNK_TYPES.items():
-            if isinstance(self, cls):
-                return k
-
 
 class BaseParamsChunk(Chunk):
     def __init__(self, flags=0, body=b''):
@@ -152,18 +144,20 @@ class BaseParamsChunk(Chunk):
 
 
 class AbortChunk(BaseParamsChunk):
-    pass
+    type = 6
 
 
 class CookieAckChunk(Chunk):
-    pass
+    type = 11
 
 
 class CookieEchoChunk(Chunk):
-    pass
+    type = 10
 
 
 class DataChunk(Chunk):
+    type = 0
+
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
@@ -188,10 +182,12 @@ class DataChunk(Chunk):
 
 
 class ErrorChunk(BaseParamsChunk):
-    pass
+    type = 9
 
 
 class ForwardTsnChunk(Chunk):
+    type = 192
+
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         self.streams = []
@@ -217,11 +213,11 @@ class ForwardTsnChunk(Chunk):
 
 
 class HeartbeatChunk(BaseParamsChunk):
-    pass
+    type = 4
 
 
 class HeartbeatAckChunk(BaseParamsChunk):
-    pass
+    type = 5
 
 
 class BaseInitChunk(Chunk):
@@ -249,18 +245,20 @@ class BaseInitChunk(Chunk):
 
 
 class InitChunk(BaseInitChunk):
-    pass
+    type = 1
 
 
 class InitAckChunk(BaseInitChunk):
-    pass
+    type = 2
 
 
 class ReconfigChunk(BaseParamsChunk):
-    pass
+    type = 130
 
 
 class SackChunk(Chunk):
+    type = 3
+
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         self.gaps = []
@@ -295,6 +293,8 @@ class SackChunk(Chunk):
 
 
 class ShutdownChunk(Chunk):
+    type = 7
+
     def __init__(self, flags=0, body=b''):
         self.flags = flags
         if body:
@@ -312,30 +312,31 @@ class ShutdownChunk(Chunk):
 
 
 class ShutdownAckChunk(Chunk):
-    pass
+    type = 8
 
 
 class ShutdownCompleteChunk(Chunk):
-    pass
+    type = 14
 
 
-CHUNK_TYPES = {
-    0: DataChunk,
-    1: InitChunk,
-    2: InitAckChunk,
-    3: SackChunk,
-    4: HeartbeatChunk,
-    5: HeartbeatAckChunk,
-    6: AbortChunk,
-    7: ShutdownChunk,
-    8: ShutdownAckChunk,
-    9: ErrorChunk,
-    10: CookieEchoChunk,
-    11: CookieAckChunk,
-    14: ShutdownCompleteChunk,
-    130: ReconfigChunk,
-    192: ForwardTsnChunk,
-}
+CHUNK_CLASSES = [
+    DataChunk,
+    InitChunk,
+    InitAckChunk,
+    SackChunk,
+    HeartbeatChunk,
+    HeartbeatAckChunk,
+    AbortChunk,
+    ShutdownChunk,
+    ShutdownAckChunk,
+    ErrorChunk,
+    CookieEchoChunk,
+    CookieAckChunk,
+    ShutdownCompleteChunk,
+    ReconfigChunk,
+    ForwardTsnChunk,
+]
+CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 
 class Packet:
@@ -748,9 +749,9 @@ class RTCSctpTransport(EventEmitter):
         extensions = []
         if self._local_partial_reliability:
             params.append((SCTP_PRSCTP_SUPPORTED, b''))
-            extensions.append(FORWARD_TSN_CHUNK)
+            extensions.append(ForwardTsnChunk.type)
 
-        extensions.append(RECONFIG_CHUNK)
+        extensions.append(ReconfigChunk.type)
         params.append((SCTP_SUPPORTED_CHUNK_EXT, bytes(extensions)))
 
     def _get_inbound_stream(self, stream_id):
@@ -863,8 +864,40 @@ class RTCSctpTransport(EventEmitter):
         """
         self.__log_debug('< %s', chunk)
 
+        # common
+        if isinstance(chunk, DataChunk):
+            await self._receive_data_chunk(chunk)
+        elif isinstance(chunk, SackChunk):
+            await self._receive_sack_chunk(chunk)
+        elif isinstance(chunk, ForwardTsnChunk):
+            await self._receive_forward_tsn_chunk(chunk)
+        elif isinstance(chunk, HeartbeatChunk):
+            ack = HeartbeatAckChunk()
+            ack.params = chunk.params
+            await self._send_chunk(ack)
+        elif isinstance(chunk, AbortChunk):
+            self.__log_debug('x Association was aborted by remote party')
+            self._set_state(self.State.CLOSED)
+        elif isinstance(chunk, ShutdownChunk):
+            self._t2_cancel()
+            self._set_state(self.State.SHUTDOWN_RECEIVED)
+            ack = ShutdownAckChunk()
+            await self._send_chunk(ack)
+            self._t2_start(ack)
+            self._set_state(self.State.SHUTDOWN_ACK_SENT)
+        elif (isinstance(chunk, ShutdownCompleteChunk) and
+              self._association_state == self.State.SHUTDOWN_ACK_SENT):
+            self._t2_cancel()
+            self._set_state(self.State.CLOSED)
+        elif (isinstance(chunk, ReconfigChunk) and
+              self._association_state == self.State.ESTABLISHED):
+            for param in chunk.params:
+                cls = RECONFIG_PARAM_TYPES.get(param[0])
+                if cls:
+                    await self._receive_reconfig_param(cls.parse(param[1]))
+
         # server
-        if isinstance(chunk, InitChunk) and self.is_server:
+        elif isinstance(chunk, InitChunk) and self.is_server:
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._reconfig_response_seq = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
@@ -947,38 +980,6 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.CLOSED)
             self.__log_debug('x Could not establish association')
             return
-
-        # common
-        elif isinstance(chunk, DataChunk):
-            await self._receive_data_chunk(chunk)
-        elif isinstance(chunk, SackChunk):
-            await self._receive_sack_chunk(chunk)
-        elif isinstance(chunk, HeartbeatChunk):
-            ack = HeartbeatAckChunk()
-            ack.params = chunk.params
-            await self._send_chunk(ack)
-        elif isinstance(chunk, AbortChunk):
-            self.__log_debug('x Association was aborted by remote party')
-            self._set_state(self.State.CLOSED)
-        elif isinstance(chunk, ShutdownChunk):
-            self._t2_cancel()
-            self._set_state(self.State.SHUTDOWN_RECEIVED)
-            ack = ShutdownAckChunk()
-            await self._send_chunk(ack)
-            self._t2_start(ack)
-            self._set_state(self.State.SHUTDOWN_ACK_SENT)
-        elif (isinstance(chunk, ShutdownCompleteChunk) and
-              self._association_state == self.State.SHUTDOWN_ACK_SENT):
-            self._t2_cancel()
-            self._set_state(self.State.CLOSED)
-        elif (isinstance(chunk, ReconfigChunk) and
-              self._association_state == self.State.ESTABLISHED):
-            for param in chunk.params:
-                cls = RECONFIG_PARAM_TYPES.get(param[0])
-                if cls:
-                    await self._receive_reconfig_param(cls.parse(param[1]))
-        elif isinstance(chunk, ForwardTsnChunk):
-            await self._receive_forward_tsn_chunk(chunk)
 
     async def _receive_data_chunk(self, chunk):
         """
