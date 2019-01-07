@@ -5,11 +5,9 @@ import logging
 import math
 import os
 import time
-import warnings
 from struct import pack, unpack_from
 
 import attr
-import crcmod.predefined
 from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
@@ -17,12 +15,12 @@ from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .utils import random32, uint16_add, uint16_gt, uint32_gt, uint32_gte
 
 try:
-    import crcmod._crcfunext
+    from crc32c import crc32
 except ImportError:  # pragma: no cover
-    warnings.warn('crcmod C extension was not found, datachannel performance will be reduced')
+    os.environ['CRC32C_SW_MODE'] = '1'
+    from crc32c import crc32
 
 
-crc32 = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
 logger = logging.getLogger('sctp')
 
 # local constants

@@ -16,7 +16,7 @@ install_requires = [
     'attrs',
     'av>=6.1.0,<7.0.0',
     'cffi>=1.0.0',
-    'crcmod',
+    'crc32c',
     'cryptography>=2.2',
     'pyee',
     'pylibsrtp>=0.5.6',
