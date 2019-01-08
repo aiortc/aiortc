@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.18
+------
+
+*under development*
+
+Data channels
+.............
+
+  * Add setter for :attr:`RTCDataChannel.bufferedAmountLowThreshold`.
+
 0.9.17
 ------
 

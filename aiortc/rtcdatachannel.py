@@ -43,6 +43,12 @@ class RTCDataChannel(EventEmitter):
         """
         return self.__bufferedAmountLowThreshold
 
+    @bufferedAmountLowThreshold.setter
+    def bufferedAmountLowThreshold(self, value):
+        if value < 0 or value > 4294967295:
+            raise ValueError('bufferedAmountLowThreshold must be in range 0 - 4294967295')
+        self.__bufferedAmountLowThreshold = value
+
     @property
     def id(self):
         """

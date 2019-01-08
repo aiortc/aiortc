@@ -2584,6 +2584,28 @@ a=fmtp:98 apt=97
         self.assertEqual(str(cm.exception),
                          'Cannot specify both maxPacketLifeTime and maxRetransmits')
 
+    def test_datachannel_bufferedamountlowthreshold(self):
+        pc = RTCPeerConnection()
+        dc = pc.createDataChannel('chat')
+        self.assertEqual(dc.bufferedAmountLowThreshold, 0)
+
+        dc.bufferedAmountLowThreshold = 4294967295
+        self.assertEqual(dc.bufferedAmountLowThreshold, 4294967295)
+
+        dc.bufferedAmountLowThreshold = 16384
+        self.assertEqual(dc.bufferedAmountLowThreshold, 16384)
+
+        dc.bufferedAmountLowThreshold = 0
+        self.assertEqual(dc.bufferedAmountLowThreshold, 0)
+
+        with self.assertRaises(ValueError):
+            dc.bufferedAmountLowThreshold = -1
+            self.assertEqual(dc.bufferedAmountLowThreshold, 0)
+
+        with self.assertRaises(ValueError):
+            dc.bufferedAmountLowThreshold = 4294967296
+            self.assertEqual(dc.bufferedAmountLowThreshold, 0)
+
     def test_datachannel_send_invalid_state(self):
         pc = RTCPeerConnection()
         dc = pc.createDataChannel('chat')
