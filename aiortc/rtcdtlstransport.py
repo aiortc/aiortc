@@ -497,10 +497,6 @@ class RTCDtlsTransport(EventEmitter):
         ))
         return report
 
-    async def _handle_data(self, data):
-        if self._data_receiver:
-            await self._data_receiver._handle_data(data)
-
     async def _handle_rtcp_data(self, data):
         try:
             packets = RtcpPacket.parse(data)
@@ -558,9 +554,9 @@ class RTCDtlsTransport(EventEmitter):
             if result == 0:
                 self.__log_debug('- DTLS shutdown by remote party')
                 raise ConnectionError
-            elif result > 0:
+            elif result > 0 and self._data_receiver:
                 data = ffi.buffer(self.read_cdata)[0:result]
-                await self._handle_data(data)
+                await self._data_receiver._handle_data(data)
         elif first_byte > 127 and first_byte < 192 and self._rx_srtp:
             # SRTP / SRTCP
             arrival_time_ms = clock.current_ms()
