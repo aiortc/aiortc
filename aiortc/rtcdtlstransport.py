@@ -527,20 +527,24 @@ class RTCDtlsTransport(EventEmitter):
 
     async def _recv_next(self):
         # get timeout
-        ptv_sec = ffi.new('time_t *')
-        ptv_usec = ffi.new('long *')
-        if lib.Cryptography_DTLSv1_get_timeout(self.ssl, ptv_sec, ptv_usec):
-            timeout = ptv_sec[0] + (ptv_usec[0] / 1000000)
-        else:
-            timeout = None
+        timeout = None
+        if not self.encrypted:
+            ptv_sec = ffi.new('time_t *')
+            ptv_usec = ffi.new('long *')
+            if lib.Cryptography_DTLSv1_get_timeout(self.ssl, ptv_sec, ptv_usec):
+                timeout = ptv_sec[0] + (ptv_usec[0] / 1000000)
 
-        try:
-            data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
-        except asyncio.TimeoutError:
-            self.__log_debug('x DTLS handling timeout')
-            lib.DTLSv1_handle_timeout(self.ssl)
-            await self._write_ssl()
-            return
+        # receive next datagram
+        if timeout is not None:
+            try:
+                data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
+            except asyncio.TimeoutError:
+                self.__log_debug('x DTLS handling timeout')
+                lib.DTLSv1_handle_timeout(self.ssl)
+                await self._write_ssl()
+                return
+        else:
+            data = await self.transport._recv()
 
         self.__rx_bytes += len(data)
         self.__rx_packets += 1
