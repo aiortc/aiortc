@@ -9,14 +9,14 @@ from aiortc.rtcsctptransport import (SCTP_DATA_FIRST_FRAG, SCTP_DATA_LAST_FRAG,
                                      AbortChunk, CookieEchoChunk, DataChunk,
                                      ErrorChunk, ForwardTsnChunk,
                                      HeartbeatAckChunk, HeartbeatChunk,
-                                     InboundStream, InitChunk, Packet,
-                                     ReconfigChunk, RTCSctpCapabilities,
-                                     RTCSctpTransport, SackChunk,
-                                     ShutdownAckChunk, ShutdownChunk,
-                                     ShutdownCompleteChunk,
+                                     InboundStream, InitChunk, ReconfigChunk,
+                                     RTCSctpCapabilities, RTCSctpTransport,
+                                     SackChunk, ShutdownAckChunk,
+                                     ShutdownChunk, ShutdownCompleteChunk,
                                      StreamAddOutgoingParam,
                                      StreamResetOutgoingParam,
-                                     StreamResetResponseParam, tsn_minus_one,
+                                     StreamResetResponseParam, parse_packet,
+                                     serialize_packet, tsn_minus_one,
                                      tsn_plus_one)
 
 from .utils import dummy_dtls_transport_pair, load, run
@@ -48,181 +48,138 @@ async def wait_for_outcome(client, server):
 
 
 class SctpPacketTest(TestCase):
+    def roundtrip_packet(self, data):
+        source_port, destination_port, verification_tag, chunks = parse_packet(data)
+        self.assertEqual(source_port, 5000)
+        self.assertEqual(destination_port, 5000)
+        self.assertEqual(len(chunks), 1)
+        output = serialize_packet(source_port, destination_port, verification_tag, chunks[0])
+        self.assertEqual(output, data)
+        return chunks[0]
+
     def test_parse_init(self):
         data = load('sctp_init.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 0)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], InitChunk))
-        self.assertEqual(packet.chunks[0].type, 1)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(len(packet.chunks[0].body), 82)
-        self.assertEqual(repr(packet.chunks[0]), 'InitChunk(flags=0)')
-
-        self.assertEqual(bytes(packet), data)
+        self.assertTrue(isinstance(chunk, InitChunk))
+        self.assertEqual(chunk.type, 1)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(len(chunk.body), 82)
+        self.assertEqual(repr(chunk), 'InitChunk(flags=0)')
 
     def test_parse_init_invalid_checksum(self):
         data = load('sctp_init.bin')
         data = data[0:8] + b'\x01\x02\x03\x04' + data[12:]
         with self.assertRaises(ValueError) as cm:
-            Packet.parse(data)
+            self.roundtrip_packet(data)
         self.assertEqual(str(cm.exception), 'SCTP packet has invalid checksum')
 
     def test_parse_init_truncated_packet_header(self):
         data = load('sctp_init.bin')[0:10]
         with self.assertRaises(ValueError) as cm:
-            Packet.parse(data)
+            self.roundtrip_packet(data)
         self.assertEqual(str(cm.exception), 'SCTP packet length is less than 12 bytes')
 
     def test_parse_cookie_echo(self):
         data = load('sctp_cookie_echo.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 1039286925)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], CookieEchoChunk))
-        self.assertEqual(packet.chunks[0].type, 10)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(len(packet.chunks[0].body), 8)
-
-        self.assertEqual(bytes(packet), data)
+        self.assertTrue(isinstance(chunk, CookieEchoChunk))
+        self.assertEqual(chunk.type, 10)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(len(chunk.body), 8)
 
     def test_parse_abort(self):
         data = load('sctp_abort.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 3763951554)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], AbortChunk))
-        self.assertEqual(packet.chunks[0].type, 6)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, AbortChunk))
+        self.assertEqual(chunk.type, 6)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (13, b'Expected B-bit for TSN=4ce1f17f, SID=0001, SSN=0000'),
         ])
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_data(self):
         data = load('sctp_data.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 264304801)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], DataChunk))
-        self.assertEqual(packet.chunks[0].type, 0)
-        self.assertEqual(packet.chunks[0].flags, 3)
-        self.assertEqual(packet.chunks[0].tsn, 2584679421)
-        self.assertEqual(packet.chunks[0].stream_id, 1)
-        self.assertEqual(packet.chunks[0].stream_seq, 1)
-        self.assertEqual(packet.chunks[0].protocol, 51)
-        self.assertEqual(packet.chunks[0].user_data, b'ping')
-        self.assertEqual(repr(packet.chunks[0]),
+        self.assertTrue(isinstance(chunk, DataChunk))
+        self.assertEqual(chunk.type, 0)
+        self.assertEqual(chunk.flags, 3)
+        self.assertEqual(chunk.tsn, 2584679421)
+        self.assertEqual(chunk.stream_id, 1)
+        self.assertEqual(chunk.stream_seq, 1)
+        self.assertEqual(chunk.protocol, 51)
+        self.assertEqual(chunk.user_data, b'ping')
+        self.assertEqual(repr(chunk),
                          'DataChunk(flags=3, tsn=2584679421, stream_id=1, stream_seq=1)')
-
-        self.assertEqual(bytes(packet), data)
 
     def test_parse_data_padding(self):
         data = load('sctp_data_padding.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 264304801)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], DataChunk))
-        self.assertEqual(packet.chunks[0].type, 0)
-        self.assertEqual(packet.chunks[0].flags, 3)
-        self.assertEqual(packet.chunks[0].tsn, 2584679421)
-        self.assertEqual(packet.chunks[0].stream_id, 1)
-        self.assertEqual(packet.chunks[0].stream_seq, 1)
-        self.assertEqual(packet.chunks[0].protocol, 51)
-        self.assertEqual(packet.chunks[0].user_data, b'M')
-        self.assertEqual(repr(packet.chunks[0]),
+        self.assertTrue(isinstance(chunk, DataChunk))
+        self.assertEqual(chunk.type, 0)
+        self.assertEqual(chunk.flags, 3)
+        self.assertEqual(chunk.tsn, 2584679421)
+        self.assertEqual(chunk.stream_id, 1)
+        self.assertEqual(chunk.stream_seq, 1)
+        self.assertEqual(chunk.protocol, 51)
+        self.assertEqual(chunk.user_data, b'M')
+        self.assertEqual(repr(chunk),
                          'DataChunk(flags=3, tsn=2584679421, stream_id=1, stream_seq=1)')
-
-        self.assertEqual(bytes(packet), data)
 
     def test_parse_error(self):
         data = load('sctp_error.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 3763951554)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ErrorChunk))
-        self.assertEqual(packet.chunks[0].type, 9)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, ErrorChunk))
+        self.assertEqual(chunk.type, 9)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (1, b'\x30\x39\x00\x00'),
         ])
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_forward_tsn(self):
         data = load('sctp_forward_tsn.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 264304801)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ForwardTsnChunk))
-        self.assertEqual(packet.chunks[0].type, 192)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].cumulative_tsn, 1234)
-        self.assertEqual(packet.chunks[0].streams, [
+        self.assertTrue(isinstance(chunk, ForwardTsnChunk))
+        self.assertEqual(chunk.type, 192)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.cumulative_tsn, 1234)
+        self.assertEqual(chunk.streams, [
             (12, 34),
         ])
-        self.assertEqual(repr(packet.chunks[0]),
+        self.assertEqual(repr(chunk),
                          'ForwardTsnChunk(cumulative_tsn=1234, streams=[(12, 34)])')
-
-        self.assertEqual(bytes(packet), data)
 
     def test_parse_heartbeat(self):
         data = load('sctp_heartbeat.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 3100082021)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], HeartbeatChunk))
-        self.assertEqual(packet.chunks[0].type, 4)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, HeartbeatChunk))
+        self.assertEqual(chunk.type, 4)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (1, b'\xb5o\xaaZvZ\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00{\x10\x00\x00'
                 b'\x004\xeb\x07F\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
         ])
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_reconfig_reset_out(self):
         data = load('sctp_reconfig_reset_out.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 3370675819)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
-        self.assertEqual(packet.chunks[0].type, 130)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertEqual(chunk.type, 130)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (13, b'\x8b\xd8\n[\xe4\x8b\xecs\x8b\xd8\n^\x00\x01')
         ])
 
         # Outgoing SSN Reset Request Parameter
-        param_data = packet.chunks[0].params[0][1]
+        param_data = chunk.params[0][1]
         param = StreamResetOutgoingParam.parse(param_data)
         self.assertEqual(param.request_sequence, 2346191451)
         self.assertEqual(param.response_sequence, 3834375283)
@@ -230,92 +187,66 @@ class SctpPacketTest(TestCase):
         self.assertEqual(param.streams, [1])
         self.assertEqual(bytes(param), param_data)
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_reconfig_add_out(self):
         data = load('sctp_reconfig_add_out.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 3909981950)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
-        self.assertEqual(packet.chunks[0].type, 130)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertEqual(chunk.type, 130)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (17, b'\xca\x02\xf60\x00\x10\x00\x00')
         ])
 
         # Add Outgoing Streams Request Parameter
-        param_data = packet.chunks[0].params[0][1]
+        param_data = chunk.params[0][1]
         param = StreamAddOutgoingParam.parse(param_data)
         self.assertEqual(param.request_sequence, 3389191728)
         self.assertEqual(param.new_streams, 16)
         self.assertEqual(bytes(param), param_data)
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_reconfig_response(self):
         data = load('sctp_reconfig_response.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 2982117117)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ReconfigChunk))
-        self.assertEqual(packet.chunks[0].type, 130)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].params, [
+        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertEqual(chunk.type, 130)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.params, [
             (16, b'\x91S\x1fT\x00\x00\x00\x01')
         ])
 
         # Re-configuration Response Parameter
-        param_data = packet.chunks[0].params[0][1]
+        param_data = chunk.params[0][1]
         param = StreamResetResponseParam.parse(param_data)
         self.assertEqual(param.response_sequence, 2438143828)
         self.assertEqual(param.result, 1)
         self.assertEqual(bytes(param), param_data)
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_sack(self):
         data = load('sctp_sack.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 4146048843)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], SackChunk))
-        self.assertEqual(packet.chunks[0].type, 3)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].cumulative_tsn, 2222939037)
-        self.assertEqual(packet.chunks[0].gaps, [(2, 2), (4, 4)])
-        self.assertEqual(packet.chunks[0].duplicates, [2222939041])
-        self.assertEqual(repr(packet.chunks[0]),
+        self.assertTrue(isinstance(chunk, SackChunk))
+        self.assertEqual(chunk.type, 3)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.cumulative_tsn, 2222939037)
+        self.assertEqual(chunk.gaps, [(2, 2), (4, 4)])
+        self.assertEqual(chunk.duplicates, [2222939041])
+        self.assertEqual(repr(chunk),
                          'SackChunk(flags=0, advertised_rwnd=128160, cumulative_tsn=2222939037, '
                          'gaps=[(2, 2), (4, 4)])')
 
-        self.assertEqual(bytes(packet), data)
-
     def test_parse_shutdown(self):
         data = load('sctp_shutdown.bin')
-        packet = Packet.parse(data)
-        self.assertEqual(packet.source_port, 5000)
-        self.assertEqual(packet.destination_port, 5000)
-        self.assertEqual(packet.verification_tag, 4019984498)
+        chunk = self.roundtrip_packet(data)
 
-        self.assertEqual(len(packet.chunks), 1)
-        self.assertTrue(isinstance(packet.chunks[0], ShutdownChunk))
-        self.assertEqual(repr(packet.chunks[0]),
+        self.assertTrue(isinstance(chunk, ShutdownChunk))
+        self.assertEqual(repr(chunk),
                          'ShutdownChunk(flags=0, cumulative_tsn=2696426712)')
-        self.assertEqual(packet.chunks[0].type, 7)
-        self.assertEqual(packet.chunks[0].flags, 0)
-        self.assertEqual(packet.chunks[0].cumulative_tsn, 2696426712)
-
-        self.assertEqual(bytes(packet), data)
+        self.assertEqual(chunk.type, 7)
+        self.assertEqual(chunk.flags, 0)
+        self.assertEqual(chunk.cumulative_tsn, 2696426712)
 
 
 class ChunkFactory:

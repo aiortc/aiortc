@@ -130,7 +130,7 @@ class Chunk:
 
 
 class BaseParamsChunk(Chunk):
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
             self.params = decode_params(body)
@@ -154,10 +154,10 @@ class CookieEchoChunk(Chunk):
     type = 10
 
 
-class DataChunk(Chunk):
+class DataChunk:
     type = 0
 
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
             (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack_from('!LHHL', body)
@@ -191,7 +191,7 @@ class ErrorChunk(BaseParamsChunk):
 class ForwardTsnChunk(Chunk):
     type = 192
 
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         self.streams = []
         if body:
@@ -224,7 +224,7 @@ class HeartbeatAckChunk(BaseParamsChunk):
 
 
 class BaseInitChunk(Chunk):
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
             (self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
@@ -259,10 +259,10 @@ class ReconfigChunk(BaseParamsChunk):
     type = 130
 
 
-class SackChunk(Chunk):
+class SackChunk:
     type = 3
 
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         self.gaps = []
         self.duplicates = []
@@ -300,7 +300,7 @@ class SackChunk(Chunk):
 class ShutdownChunk(Chunk):
     type = 7
 
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
             self.cumulative_tsn = unpack_from('!L', body)[0]
@@ -344,58 +344,41 @@ CHUNK_CLASSES = [
 CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 
-class Packet:
-    def __init__(self, source_port, destination_port, verification_tag, chunks):
-        self.source_port = source_port
-        self.destination_port = destination_port
-        self.verification_tag = verification_tag
-        self.chunks = chunks
+def parse_packet(data):
+    length = len(data)
+    if length < 12:
+        raise ValueError('SCTP packet length is less than 12 bytes')
 
-    def __bytes__(self):
-        checksum = 0
-        data = pack(
-            '!HHLL',
-            self.source_port,
-            self.destination_port,
-            self.verification_tag,
-            checksum)
-        for chunk in self.chunks:
-            data += bytes(chunk)
+    source_port, destination_port, verification_tag = unpack_from('!HHL', data)
 
-        # calculate checksum
-        checksum = crc32(data)
-        return data[0:8] + pack('<L', checksum) + data[12:]
+    # verify checksum
+    checksum = unpack_from('<L', data, 8)[0]
+    if checksum != crc32(data[0:8] + b'\x00\x00\x00\x00' + data[12:]):
+        raise ValueError('SCTP packet has invalid checksum')
 
-    @classmethod
-    def parse(cls, data):
-        if len(data) < 12:
-            raise ValueError('SCTP packet length is less than 12 bytes')
+    chunks = []
+    pos = 12
+    while pos <= length - 4:
+        chunk_type, chunk_flags, chunk_length = unpack_from('!BBH', data, pos)
+        chunk_body = data[pos + 4:pos + chunk_length]
+        chunk_cls = CHUNK_TYPES.get(chunk_type)
+        if chunk_cls:
+            chunks.append(chunk_cls(
+                flags=chunk_flags,
+                body=chunk_body))
+        pos += chunk_length + padl(chunk_length)
+    return source_port, destination_port, verification_tag, chunks
 
-        source_port, destination_port, verification_tag = unpack_from('!HHL', data)
-        checksum = unpack_from('<L', data, 8)[0]
 
-        # verify checksum
-        check_data = data[0:8] + b'\x00\x00\x00\x00' + data[12:]
-        if checksum != crc32(check_data):
-            raise ValueError('SCTP packet has invalid checksum')
-
-        packet = cls(
-            source_port=source_port,
-            destination_port=destination_port,
-            verification_tag=verification_tag,
-            chunks=[])
-
-        pos = 12
-        while pos <= len(data) - 4:
-            chunk_type, chunk_flags, chunk_length = unpack_from('!BBH', data, pos)
-            chunk_body = data[pos + 4:pos + chunk_length]
-            chunk_cls = CHUNK_TYPES.get(chunk_type)
-            if chunk_cls:
-                packet.chunks.append(chunk_cls(
-                    flags=chunk_flags,
-                    body=chunk_body))
-            pos += chunk_length + padl(chunk_length)
-        return packet
+def serialize_packet(source_port, destination_port, verification_tag, chunk):
+    header = pack(
+        '!HHL',
+        source_port,
+        destination_port,
+        verification_tag)
+    data = bytes(chunk)
+    checksum = crc32(header + b'\x00\x00\x00\x00' + data)
+    return header + pack('<L', checksum) + data
 
 
 # RFC 6525
@@ -775,26 +758,26 @@ class RTCSctpTransport(EventEmitter):
         Handle data received from the network.
         """
         try:
-            packet = Packet.parse(data)
+            _, _, verification_tag, chunks = parse_packet(data)
         except ValueError:
             return
 
         # is this an init?
-        init_chunk = len([x for x in packet.chunks if isinstance(x, InitChunk)])
+        init_chunk = len([x for x in chunks if isinstance(x, InitChunk)])
         if init_chunk:
-            assert len(packet.chunks) == 1
+            assert len(chunks) == 1
             expected_tag = 0
         else:
             expected_tag = self._local_verification_tag
 
         # verify tag
-        if packet.verification_tag != expected_tag:
+        if verification_tag != expected_tag:
             self.__log_debug('Bad verification tag %d vs %d',
-                             packet.verification_tag, expected_tag)
+                             verification_tag, expected_tag)
             return
 
         # handle chunks
-        for chunk in packet.chunks:
+        for chunk in chunks:
             await self._receive_chunk(chunk)
 
         # send SACK if needed
@@ -1243,12 +1226,11 @@ class RTCSctpTransport(EventEmitter):
         Transmit a chunk (no bundling for now).
         """
         self.__log_debug('> %s', chunk)
-        packet = Packet(
-            source_port=self._local_port,
-            destination_port=self._remote_port,
-            verification_tag=self._remote_verification_tag,
-            chunks=[chunk])
-        await self.transport._send_data(bytes(packet))
+        await self.__transport._send_data(serialize_packet(
+            self._local_port,
+            self._remote_port,
+            self._remote_verification_tag,
+            chunk))
 
     async def _send_reconfig_param(self, param):
         chunk = ReconfigChunk()
