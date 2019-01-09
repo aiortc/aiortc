@@ -219,6 +219,7 @@ class RTCIceTransport(EventEmitter):
         self.__start = None
         self.__iceGatherer = gatherer
         self.__state = 'new'
+        self._connection = gatherer._connection
 
     @property
     def iceGatherer(self):
@@ -297,10 +298,6 @@ class RTCIceTransport(EventEmitter):
         if self.state != 'closed':
             self.__setState('closed')
             await self._connection.close()
-
-    @property
-    def _connection(self):
-        return self.iceGatherer._connection
 
     async def _recv(self):
         try:
