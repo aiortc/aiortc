@@ -6,12 +6,18 @@ Changelog
 0.9.18
 ------
 
-*under development*
+DTLS
+....
+
+  * Do not use DTLSv1_get_timeout after DTLS handshake completes.
 
 Data channels
 .............
 
   * Add setter for :attr:`RTCDataChannel.bufferedAmountLowThreshold`.
+  * Use `crc32c` package instead of `crcmod`, it provides better performance.
+  * Improve parsing and serialization code performance.
+  * Disable logging code if it is not used to improve performance.
 
 0.9.17
 ------
