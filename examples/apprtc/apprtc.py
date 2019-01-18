@@ -28,15 +28,19 @@ class ApprtcSignaling:
         join_url = self._origin + '/join/' + self._room
 
         # fetch room parameters
-        async with aiohttp.ClientSession() as session:
-            async with session.post(join_url) as response:
-                # we cannot use response.json() due to:
-                # https://github.com/webrtc/apprtc/issues/562
-                data = json.loads(await response.text())
+        self.client = aiohttp.ClientSession()
+        async with self.client.post(join_url) as response:
+            # we cannot use response.json() due to:
+            # https://github.com/webrtc/apprtc/issues/562
+            data = json.loads(await response.text())
         assert data['result'] == 'SUCCESS'
         params = data['params']
 
-        # join room
+        self.__is_initiator = params['is_initiator'] == 'true'
+        self.__messages = params['messages']
+        self.__post_url = self._origin + '/message/' + self._room + '/' + params['client_id']
+
+        # connect to websocket
         self.websocket = await websockets.connect(params['wss_url'], extra_headers={
             'Origin': self._origin
         })
@@ -45,13 +49,13 @@ class ApprtcSignaling:
             'cmd': 'register',
             'roomid': params['room_id'],
         }))
-        self.__messages = params['messages']
 
         return params
 
     async def close(self):
         await self.send(None)
         self.websocket.close()
+        await self.client.close()
 
     async def receive(self):
         if self.__messages:
@@ -65,10 +69,13 @@ class ApprtcSignaling:
     async def send(self, obj):
         message = object_to_string(obj)
         print('>', message)
-        await self.websocket.send(json.dumps({
-            'cmd': 'send',
-            'msg': message,
-        }))
+        if self.__is_initiator:
+            await self.client.post(self.__post_url, data=message)
+        else:
+            await self.websocket.send(json.dumps({
+                'cmd': 'send',
+                'msg': message,
+            }))
 
 
 class VideoImageTrack(VideoStreamTrack):
