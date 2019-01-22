@@ -366,6 +366,8 @@ class RTCRtpReceiver:
         Handle an incoming RTP packet.
         """
         self.__log_debug('< %s', packet)
+        if len(packet.payload) <1:
+            return
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
