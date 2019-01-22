@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.19
+------
+
+*under development*
+
+Media
+.....
+
+  * Skip RTX packets with an empty payload.
+
 0.9.18
 ------
 

@@ -404,6 +404,9 @@ class RTCRtpReceiver:
                 self.__log_debug('x RTX packet from unknown SSRC %d', packet.ssrc)
                 return
 
+            if len(packet.payload) < 2:
+                return
+
             codec = self.__codecs[codec.parameters['apt']]
             packet = unwrap_rtx(packet,
                                 payload_type=codec.payloadType,

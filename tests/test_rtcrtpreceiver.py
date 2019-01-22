@@ -401,8 +401,12 @@ class RTCRtpReceiverTest(CodecTestCase):
                                          rtx=RTCRtpRtxParameters(ssrc=2345))
             ])))
 
-        # receive RTX with unknown SSRC
+        # receive RTX with payload
         packet = RtpPacket(payload_type=101, ssrc=2345, payload=b'\x00\x00')
+        run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
+
+        # receive RTX without payload
+        packet = RtpPacket(payload_type=101, ssrc=2345)
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # shutdown
