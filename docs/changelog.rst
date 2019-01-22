@@ -13,6 +13,11 @@ Media
 
   * Skip RTX packets with an empty payload.
 
+Examples
+........
+
+  * `apprtc` : make the initiator send messages using an HTTP POST instead of WebSocket.
+
 0.9.18
 ------
 
