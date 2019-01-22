@@ -21,15 +21,17 @@ PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
 
 class ApprtcSignaling:
     def __init__(self, room):
+        self._http = None
         self._origin = 'https://appr.tc'
         self._room = room
+        self._websocket = None
 
     async def connect(self):
         join_url = self._origin + '/join/' + self._room
 
         # fetch room parameters
-        self.client = aiohttp.ClientSession()
-        async with self.client.post(join_url) as response:
+        self._http = aiohttp.ClientSession()
+        async with self._http.post(join_url) as response:
             # we cannot use response.json() due to:
             # https://github.com/webrtc/apprtc/issues/562
             data = json.loads(await response.text())
@@ -41,10 +43,10 @@ class ApprtcSignaling:
         self.__post_url = self._origin + '/message/' + self._room + '/' + params['client_id']
 
         # connect to websocket
-        self.websocket = await websockets.connect(params['wss_url'], extra_headers={
+        self._websocket = await websockets.connect(params['wss_url'], extra_headers={
             'Origin': self._origin
         })
-        await self.websocket.send(json.dumps({
+        await self._websocket.send(json.dumps({
             'clientid': params['client_id'],
             'cmd': 'register',
             'roomid': params['room_id'],
@@ -53,15 +55,17 @@ class ApprtcSignaling:
         return params
 
     async def close(self):
-        await self.send(None)
-        self.websocket.close()
-        await self.client.close()
+        if self._websocket:
+            await self.send(None)
+            self._websocket.close()
+        if self._http:
+            await self._http.close()
 
     async def receive(self):
         if self.__messages:
             message = self.__messages.pop(0)
         else:
-            message = await self.websocket.recv()
+            message = await self._websocket.recv()
             message = json.loads(message)['msg']
         print('<', message)
         return object_from_string(message)
@@ -70,9 +74,9 @@ class ApprtcSignaling:
         message = object_to_string(obj)
         print('>', message)
         if self.__is_initiator:
-            await self.client.post(self.__post_url, data=message)
+            await self._http.post(self.__post_url, data=message)
         else:
-            await self.websocket.send(json.dumps({
+            await self._websocket.send(json.dumps({
                 'cmd': 'send',
                 'msg': message,
             }))
