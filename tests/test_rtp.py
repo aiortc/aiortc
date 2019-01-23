@@ -262,6 +262,32 @@ class RtpPacketTest(TestCase):
         self.assertEqual(serialized[0:12], data[0:12])
         self.assertEqual(serialized[-1], data[-1])
 
+    def test_padding_only_with_header_extensions(self):
+        extensions_map = rtp.HeaderExtensionsMap()
+        extensions_map.configure(RTCRtpParameters(
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=2,
+                    uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
+            ]))
+
+        data = load('rtp_only_padding_with_header_extensions.bin')
+        packet = RtpPacket.parse(data, extensions_map)
+        self.assertEqual(packet.version, 2)
+        self.assertEqual(packet.marker, 0)
+        self.assertEqual(packet.payload_type, 98)
+        self.assertEqual(packet.sequence_number, 22138)
+        self.assertEqual(packet.timestamp, 3171065731)
+        self.assertEqual(packet.csrc, [])
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions(abs_send_time=15846540))
+        self.assertEqual(len(packet.payload), 0)
+        self.assertEqual(packet.padding_size, 224)
+
+        serialized = packet.serialize(extensions_map)
+        self.assertEqual(len(serialized), len(data))
+        self.assertEqual(serialized[0:20], data[0:20])
+        self.assertEqual(serialized[-1], data[-1])
+
     def test_padding_too_long(self):
         data = load('rtp_only_padding.bin')[0:12] + b'\x02'
         with self.assertRaises(ValueError) as cm:
