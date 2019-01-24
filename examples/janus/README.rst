@@ -21,6 +21,12 @@ When you run the example, it will connect to Janus and join the '1234' room:
 Additional options
 ------------------
 
+If you want to join a different room, run:
+
+.. code-block:: console
+
+   $ python janus.py --room 5678 http://localhost:8088/janus
+
 If you want to play a media file instead of sending green video frames, run:
 
 .. code-block:: console

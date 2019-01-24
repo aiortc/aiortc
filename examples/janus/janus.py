@@ -107,7 +107,7 @@ class JanusSession:
                         print(data)
 
 
-async def run(pc, player, session):
+async def run(pc, player, room, session):
     await session.create()
 
     # configure media
@@ -128,7 +128,7 @@ async def run(pc, player, session):
             'display': 'aiortc',
             'ptype': 'publisher',
             'request': 'join',
-            'room': 1234,
+            'room': room,
         }
     })
 
@@ -159,6 +159,8 @@ async def run(pc, player, session):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Janus')
     parser.add_argument('url', help='Janus root URL, e.g. http://localhost:8088/janus')
+    parser.add_argument('--room', type=int, default=1234,
+                        help='The video room ID to join (default: 1234).'),
     parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
     parser.add_argument('--verbose', '-v', action='count')
     args = parser.parse_args()
@@ -178,7 +180,11 @@ if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(pc=pc, player=player, session=session))
+        loop.run_until_complete(run(
+            pc=pc,
+            player=player,
+            room=args.room,
+            session=session))
     except KeyboardInterrupt:
         pass
     finally:
