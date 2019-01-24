@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import ssl
+import uuid
 
 import cv2
 from aiohttp import web
@@ -13,6 +14,9 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
 ROOT = os.path.dirname(__file__)
+
+logger = logging.getLogger('pc')
+pcs = set()
 
 
 class VideoTransformTrack(VideoStreamTrack):
@@ -94,7 +98,13 @@ async def offer(request):
         type=params['type'])
 
     pc = RTCPeerConnection()
+    pc_id = 'PeerConnection(%s)' % uuid.uuid4()
     pcs.add(pc)
+
+    def log_info(msg, *args):
+        logger.info(pc_id + ' ' + msg, *args)
+
+    log_info('Created for %s', request.remote)
 
     # prepare local media
     player = MediaPlayer(os.path.join(ROOT, 'demo-instruct.wav'))
@@ -112,14 +122,14 @@ async def offer(request):
 
     @pc.on('iceconnectionstatechange')
     async def on_iceconnectionstatechange():
-        print('ICE connection state is %s' % pc.iceConnectionState)
+        log_info('ICE connection state is %s', pc.iceConnectionState)
         if pc.iceConnectionState == 'failed':
             await pc.close()
             pcs.discard(pc)
 
     @pc.on('track')
     def on_track(track):
-        print('Track %s received' % track.kind)
+        log_info('Track %s received', track.kind)
 
         if track.kind == 'audio':
             pc.addTrack(player.audio)
@@ -130,7 +140,7 @@ async def offer(request):
 
         @track.on('ended')
         async def on_ended():
-            print('Track %s ended' % track.kind)
+            log_info('Track %s ended', track.kind)
             await recorder.stop()
 
     # handle offer
@@ -147,9 +157,6 @@ async def offer(request):
             'sdp': pc.localDescription.sdp,
             'type': pc.localDescription.type
         }))
-
-
-pcs = set()
 
 
 async def on_shutdown(app):
@@ -171,6 +178,8 @@ if __name__ == '__main__':
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     if args.cert_file:
         ssl_context = ssl.SSLContext()
@@ -183,4 +192,4 @@ if __name__ == '__main__':
     app.router.add_get('/', index)
     app.router.add_get('/client.js', javascript)
     app.router.add_post('/offer', offer)
-    web.run_app(app, port=args.port, ssl_context=ssl_context)
+    web.run_app(app, access_log=None, port=args.port, ssl_context=ssl_context)
