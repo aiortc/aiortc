@@ -38,13 +38,17 @@ def decoder_worker(loop, input_q, output_q):
             break
         codec, encoded_frame = task
 
-        if codec.name != codec_name:
-            decoder = get_decoder(codec)
-            codec_name = codec.name
+        if not RTCRtpReceiver.disableDecoding:
+            if codec.name != codec_name:
+                decoder = get_decoder(codec)
+                codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
-            # pass the decoded frame to the track
-            asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+            for frame in decoder.decode(encoded_frame):
+                # pass the decoded frame to the track
+                asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+        else:
+            # pass the raw jitter frame to the track
+            asyncio.run_coroutine_threadsafe(output_q.put(encoded_frame), loop)
 
     if decoder is not None:
         del decoder
@@ -209,6 +213,10 @@ class RTCRtpReceiver:
     :param: kind: The kind of media (`'audio'` or `'video'`).
     :param: transport: An :class:`RTCDtlsTransport`.
     """
+
+    # Global option to disable decoding
+    disableDecoding = False
+
     def __init__(self, kind, transport):
         if transport.state == 'closed':
             raise InvalidStateError

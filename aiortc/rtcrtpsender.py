@@ -33,6 +33,10 @@ class RTCRtpSender:
                          media kind (`'audio'` or `'video'`).
     :param: transport: An :class:`RTCDtlsTransport`.
     """
+
+    # Global option to disable encoding
+    disableEncoding = False
+
     def __init__(self, trackOrKind, transport):
         if transport.state == 'closed':
             raise InvalidStateError
@@ -218,6 +222,10 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec):
         # get frame
         frame = await self.__track.recv()
+
+        if RTCRtpSender.disableEncoding:
+            # don't encode frame
+            return [bytearray(frame.planes[0])], frame.pts
 
         # encode frame
         if self.__encoder is None:
