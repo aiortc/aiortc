@@ -79,12 +79,14 @@ class MediaBlackhole:
 
 def player_worker(loop, container, audio_track, video_track, quit_event, throttle_playback):
     audio_fifo = av.AudioFifo()
-    audio_format = av.AudioFormat('s16')
+    audio_format_name = 's16'
+    audio_layout_name = 'stereo'
     audio_sample_rate = 48000
     audio_samples = 0
     audio_samples_per_frame = int(audio_sample_rate * AUDIO_PTIME)
     audio_resampler = av.AudioResampler(
-        format=audio_format,
+        format=audio_format_name,
+        layout=audio_layout_name,
         rate=audio_sample_rate)
 
     video_first_pts = None
@@ -109,7 +111,9 @@ def player_worker(loop, container, audio_track, video_track, quit_event, throttl
                 time.sleep(0.1)
 
         if isinstance(frame, AudioFrame) and audio_track:
-            if frame.format != audio_format or frame.sample_rate != audio_sample_rate:
+            if (frame.format.name != audio_format_name or
+               frame.layout.name != audio_layout_name or
+               frame.sample_rate != audio_sample_rate):
                 frame.pts = None
                 frame = audio_resampler.resample(frame)
 

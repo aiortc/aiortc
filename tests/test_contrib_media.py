@@ -118,7 +118,7 @@ class MediaPlayerTest(MediaTestCase):
         for i in range(49):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
-            self.assertEqual(frame.layout.name, 'mono')
+            self.assertEqual(frame.layout.name, 'stereo')
             self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
         with self.assertRaises(MediaStreamError):
@@ -142,7 +142,7 @@ class MediaPlayerTest(MediaTestCase):
         for i in range(50):
             frame = run(player.audio.recv())
             self.assertEqual(frame.format.name, 's16')
-            self.assertEqual(frame.layout.name, 'mono')
+            self.assertEqual(frame.layout.name, 'stereo')
             self.assertEqual(frame.samples, 960)
             self.assertEqual(frame.sample_rate, 48000)
         with self.assertRaises(MediaStreamError):
