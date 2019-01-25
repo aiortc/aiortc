@@ -5,8 +5,10 @@ import queue
 import random
 import threading
 import time
+import fractions
 
 import attr
+import av
 
 from . import clock
 from .codecs import depayload, get_capabilities, get_decoder, is_rtx
@@ -26,6 +28,17 @@ from .utils import uint16_add, uint16_gt
 logger = logging.getLogger('rtp')
 
 
+def create_pcm_audio_frame(jitter_frame):
+    sample_rate = 8000
+    frame = av.AudioFrame(format='u8', layout='mono', samples=len(jitter_frame.data))
+    for p in frame.planes:
+        p.update(jitter_frame.data)
+    frame.pts = jitter_frame.timestamp
+    frame.sample_rate = sample_rate
+    frame.time_base = fractions.Fraction(1, sample_rate)
+    return frame
+
+
 def decoder_worker(loop, input_q, output_q):
     codec_name = None
     decoder = None
@@ -37,8 +50,12 @@ def decoder_worker(loop, input_q, output_q):
             asyncio.run_coroutine_threadsafe(output_q.put(None), loop)
             break
         codec, encoded_frame = task
+        mime_type = codec.mimeType.lower()
 
-        if not RTCRtpReceiver.disableDecoding:
+        if RTCRtpReceiver.disableDecoding and (mime_type == 'audio/pcma' or mime_type == 'audio/pcmu'):
+            frame = create_pcm_audio_frame(encoded_frame)
+            asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+        else:
             if codec.name != codec_name:
                 decoder = get_decoder(codec)
                 codec_name = codec.name
@@ -46,9 +63,6 @@ def decoder_worker(loop, input_q, output_q):
             for frame in decoder.decode(encoded_frame):
                 # pass the decoded frame to the track
                 asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
-        else:
-            # pass the raw jitter frame to the track
-            asyncio.run_coroutine_threadsafe(output_q.put(encoded_frame), loop)
 
     if decoder is not None:
         del decoder

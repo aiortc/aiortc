@@ -222,8 +222,9 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec):
         # get frame
         frame = await self.__track.recv()
+        mime_type = codec.mimeType.lower()
 
-        if RTCRtpSender.disableEncoding:
+        if RTCRtpSender.disableEncoding and (mime_type == 'audio/pcma' or mime_type == 'audio/pcmu'):
             # don't encode frame
             return [bytearray(frame.planes[0])], frame.pts
 
