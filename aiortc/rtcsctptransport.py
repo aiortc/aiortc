@@ -1038,6 +1038,7 @@ class RTCSctpTransport(EventEmitter):
 
         received_time = time.time()
         self._last_sacked_tsn = chunk.cumulative_tsn
+        cwnd_fully_utilized = (self._flight_size >= self._cwnd)
         done = 0
         done_bytes = 0
         restart_t3 = False
@@ -1095,7 +1096,7 @@ class RTCSctpTransport(EventEmitter):
 
         # adjust congestion window
         if self._fast_recovery_exit is None:
-            if done:
+            if done and cwnd_fully_utilized:
                 if self._cwnd <= self._ssthresh:
                     # slow start
                     self._cwnd += min(done_bytes, USERDATA_MAX_LENGTH)
@@ -1394,7 +1395,7 @@ class RTCSctpTransport(EventEmitter):
             if chunk._retransmit:
                 if self._fast_recovery_transmit:
                     self._fast_recovery_transmit = False
-                elif self._flight_size + chunk._book_size > self._cwnd:
+                elif self._flight_size >= self._cwnd:
                     return
                 self._flight_size_increase(chunk)
 
@@ -1403,9 +1404,9 @@ class RTCSctpTransport(EventEmitter):
                 await self._send_chunk(chunk)
 
         while self._outbound_queue_pos < len(self._outbound_queue):
-            chunk = self._outbound_queue[self._outbound_queue_pos]
-            if self._flight_size + chunk._book_size > self._cwnd:
+            if self._flight_size >= self._cwnd:
                 break
+            chunk = self._outbound_queue[self._outbound_queue_pos]
             self._flight_size_increase(chunk)
 
             # update counters
