@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 21.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1"
+	 id="svg2169" inkscape:output_extension="org.inkscape.output.svg.inkscape" inkscape:version="0.45.1" sodipodi:docbase="/home/bene/Desktop" sodipodi:docname="dessin-1.svg" sodipodi:version="0.32" xmlns:cc="http://web.resource.org/cc/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:svg="http://www.w3.org/2000/svg"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 110.4 109.8"
+	 style="enable-background:new 0 0 110.4 109.8;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:url(#path8615_1_);}
+	.st1{fill:url(#path8620_1_);}
+	.st2{fill:url(#SVGID_1_);}
+	.st3{fill:url(#SVGID_2_);}
+</style>
+<sodipodi:namedview  bordercolor="#666666" borderopacity="1.0" height="184.25197px" id="base" inkscape:current-layer="layer1" inkscape:cx="-260.46312" inkscape:cy="316.02744" inkscape:document-units="px" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:window-height="624" inkscape:window-width="872" inkscape:window-x="5" inkscape:window-y="48" inkscape:zoom="0.24748737" pagecolor="#ffffff" width="131.10236px">
+	</sodipodi:namedview>
+<g id="layer1" transform="translate(-473.36088,-251.72485)" inkscape:groupmode="layer" inkscape:label="Calque 1">
+	<g id="g1894" transform="translate(428.42338,184.2561)">
+		
+			<linearGradient id="path8615_1_" gradientUnits="userSpaceOnUse" x1="100.2275" y1="100.1401" x2="154.8275" y2="45.3575" gradientTransform="matrix(1 0 0 -1 -44.9375 177.4688)">
+			<stop  offset="0" style="stop-color:#387EB8"/>
+			<stop  offset="1" style="stop-color:#366994"/>
+		</linearGradient>
+		<path id="path8615" class="st0" d="M99.8,67.5c-28,0-26.3,12.2-26.3,12.2l0,12.6h26.8V96H62.9c0,0-17.9-2-17.9,26.3
+			c0,28.3,15.7,27.3,15.7,27.3h9.3v-13.1c0,0-0.5-15.7,15.4-15.7s26.5,0,26.5,0s14.9,0.2,14.9-14.4s0-24.2,0-24.2
+			S129,67.5,99.8,67.5z M85,75.9c2.7,0,4.8,2.2,4.8,4.8s-2.2,4.8-4.8,4.8s-4.8-2.2-4.8-4.8S82.3,75.9,85,75.9z"/>
+		
+			<linearGradient id="path8620_1_" gradientUnits="userSpaceOnUse" x1="133.8035" y1="65.2656" x2="192.4441" y2="9.0849" gradientTransform="matrix(1 0 0 -1 -44.9375 177.4688)">
+			<stop  offset="0" style="stop-color:#FFE052"/>
+			<stop  offset="1" style="stop-color:#FFC331"/>
+		</linearGradient>
+		<path id="path8620" class="st1" d="M100.5,177.3c28,0,26.3-12.2,26.3-12.2l0-12.6H100v-3.8h37.4c0,0,17.9,2,17.9-26.3
+			c0-28.3-15.7-27.3-15.7-27.3h-9.3v13.1c0,0,0.5,15.7-15.4,15.7s-26.5,0-26.5,0s-14.9-0.2-14.9,14.4c0,14.6,0,24.2,0,24.2
+			S71.3,177.3,100.5,177.3z M115.3,168.8c-2.7,0-4.8-2.2-4.8-4.8s2.2-4.8,4.8-4.8s4.8,2.2,4.8,4.8
+			C120.1,166.7,118,168.8,115.3,168.8z"/>
+	</g>
+</g>
+<linearGradient id="SVGID_1_" gradientUnits="userSpaceOnUse" x1="76.3715" y1="70.2564" x2="105.8843" y2="70.2564">
+	<stop  offset="0" style="stop-color:#387EB8"/>
+	<stop  offset="1" style="stop-color:#366994"/>
+</linearGradient>
+<polygon class="st2" points="76.4,75.2 76.4,85 86.2,75.2 105.9,75.2 105.9,55.5 76.4,55.5 "/>
+<linearGradient id="SVGID_2_" gradientUnits="userSpaceOnUse" x1="28.9421" y1="39.0417" x2="57.3333" y2="39.0417">
+	<stop  offset="0" style="stop-color:#FFE052"/>
+	<stop  offset="1" style="stop-color:#FFC331"/>
+</linearGradient>
+<polygon class="st3" points="28.9,34.3 28.9,24.8 38.4,34.3 57.3,34.3 57.3,53.2 28.9,53.2 "/>
+</svg>
