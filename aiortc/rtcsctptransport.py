@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import time
+from collections import deque
 from struct import pack, unpack_from
 
 import attr
@@ -590,11 +591,11 @@ class RTCSctpTransport(EventEmitter):
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
         self._advanced_peer_ack_tsn = tsn_minus_one(self._local_tsn)
-        self._outbound_queue = []
-        self._outbound_queue_pos = 0
+        self._outbound_queue = deque()
         self._outbound_stream_seq = {}
         self._outbound_streams_count = MAX_STREAMS
         self._partial_bytes_acked = 0
+        self._sent_queue = deque()
 
         # reconfiguration
         self._reconfig_queue = []
@@ -614,7 +615,7 @@ class RTCSctpTransport(EventEmitter):
 
         # data channels
         self._data_channel_id = None
-        self._data_channel_queue = []
+        self._data_channel_queue = deque()
         self._data_channels = {}
 
     @property
@@ -801,15 +802,15 @@ class RTCSctpTransport(EventEmitter):
         if not abandon:
             return False
 
-        chunk_pos = self._outbound_queue.index(chunk)
+        chunk_pos = self._sent_queue.index(chunk)
         for pos in range(chunk_pos, -1, -1):
-            ochunk = self._outbound_queue[pos]
+            ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
             if (ochunk.flags & SCTP_DATA_FIRST_FRAG):
                 break
-        for pos in range(chunk_pos, len(self._outbound_queue)):
-            ochunk = self._outbound_queue[pos]
+        for pos in range(chunk_pos, len(self._sent_queue)):
+            ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
             if (ochunk.flags & SCTP_DATA_LAST_FRAG):
@@ -1043,9 +1044,8 @@ class RTCSctpTransport(EventEmitter):
         done_bytes = 0
 
         # handle acknowledged data
-        for schunk in self._outbound_queue:
-            if uint32_gt(schunk.tsn, self._last_sacked_tsn):
-                break
+        while self._sent_queue and uint32_gte(self._last_sacked_tsn, self._sent_queue[0].tsn):
+            schunk = self._sent_queue.popleft()
             done += 1
             if not schunk._acked:
                 done_bytes += schunk._book_size
@@ -1054,11 +1054,6 @@ class RTCSctpTransport(EventEmitter):
             # update RTO estimate
             if done == 1 and schunk._sent_count == 1:
                 self._update_rto(received_time - schunk._sent_time)
-
-        # discard acknowledged data
-        if done:
-            self._outbound_queue = self._outbound_queue[done:]
-            self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
 
         # handle gap blocks
         loss = False
@@ -1071,7 +1066,7 @@ class RTCSctpTransport(EventEmitter):
 
             # determined Highest TSN Newly Acked (HTNA)
             highest_newly_acked = chunk.cumulative_tsn
-            for schunk in self._outbound_queue:
+            for schunk in self._sent_queue:
                 if uint32_gt(schunk.tsn, highest_seen_tsn):
                     break
                 if schunk.tsn in seen and not schunk._acked:
@@ -1081,7 +1076,7 @@ class RTCSctpTransport(EventEmitter):
                     highest_newly_acked = schunk.tsn
 
             # strike missing chunks prior to HTNA
-            for schunk in self._outbound_queue:
+            for schunk in self._sent_queue:
                 if uint32_gt(schunk.tsn, highest_newly_acked):
                     break
                 if schunk.tsn not in seen:
@@ -1112,12 +1107,12 @@ class RTCSctpTransport(EventEmitter):
                 self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
                 self._cwnd = self._ssthresh
                 self._partial_bytes_acked = 0
-                self._fast_recovery_exit = self._outbound_queue[self._outbound_queue_pos - 1].tsn
+                self._fast_recovery_exit = self._sent_queue[-1].tsn
                 self._fast_recovery_transmit = True
         elif uint32_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
             self._fast_recovery_exit = None
 
-        if not self._outbound_queue:
+        if not self._sent_queue:
             # there is no outstanding data, stop T3
             self._t3_cancel()
         elif done:
@@ -1349,8 +1344,7 @@ class RTCSctpTransport(EventEmitter):
         self.__log_debug('x T3 expired')
 
         # mark retransmit or abandoned chunks
-        for pos in range(self._outbound_queue_pos):
-            chunk = self._outbound_queue[pos]
+        for chunk in self._sent_queue:
             if not self._maybe_abandon(chunk):
                 chunk._retransmit = True
         self._update_advanced_peer_ack_point()
@@ -1397,8 +1391,8 @@ class RTCSctpTransport(EventEmitter):
                 self._t3_start()
 
         # retransmit
-        for pos in range(self._outbound_queue_pos):
-            chunk = self._outbound_queue[pos]
+        retransmit_earliest = True
+        for chunk in self._sent_queue:
             if chunk._retransmit:
                 if self._fast_recovery_transmit:
                     self._fast_recovery_transmit = False
@@ -1409,15 +1403,15 @@ class RTCSctpTransport(EventEmitter):
                 chunk._retransmit = False
                 chunk._sent_count += 1
                 await self._send_chunk(chunk)
-                if pos == 0:
+                if retransmit_earliest:
                     # restart the T3 timer as the earliest outstanding TSN
                     # is being retransmitted
                     self._t3_restart()
+            retransmit_earliest = False
 
-        while self._outbound_queue_pos < len(self._outbound_queue):
-            if self._flight_size >= self._cwnd:
-                break
-            chunk = self._outbound_queue[self._outbound_queue_pos]
+        while self._outbound_queue and self._flight_size < self._cwnd:
+            chunk = self._outbound_queue.popleft()
+            self._sent_queue.append(chunk)
             self._flight_size_increase(chunk)
 
             # update counters
@@ -1427,7 +1421,6 @@ class RTCSctpTransport(EventEmitter):
             await self._send_chunk(chunk)
             if not self._t3_handle:
                 self._t3_start()
-            self._outbound_queue_pos += 1
 
     async def _transmit_reconfig(self):
         if self._reconfig_queue and not self._reconfig_request:
@@ -1453,25 +1446,18 @@ class RTCSctpTransport(EventEmitter):
 
         done = 0
         streams = {}
-        for pos in range(self._outbound_queue_pos):
-            chunk = self._outbound_queue[pos]
-            if chunk._abandoned:
-                self._advanced_peer_ack_tsn = chunk.tsn
-                done += 1
-                if not (chunk.flags & SCTP_DATA_UNORDERED):
-                    streams[chunk.stream_id] = chunk.stream_seq
-            else:
-                break
+        while self._sent_queue and self._sent_queue[0]._abandoned:
+            chunk = self._sent_queue.popleft()
+            self._advanced_peer_ack_tsn = chunk.tsn
+            done += 1
+            if not (chunk.flags & SCTP_DATA_UNORDERED):
+                streams[chunk.stream_id] = chunk.stream_seq
 
         if done:
             # build FORWARD TSN
             self._forward_tsn_chunk = ForwardTsnChunk()
             self._forward_tsn_chunk.cumulative_tsn = self._advanced_peer_ack_tsn
             self._forward_tsn_chunk.streams = list(streams.items())
-
-            # drop data
-            self._outbound_queue = self._outbound_queue[done:]
-            self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
 
     def _update_rto(self, R):
         """
@@ -1510,8 +1496,9 @@ class RTCSctpTransport(EventEmitter):
         if self._association_state != self.State.ESTABLISHED:
             return
 
-        while len(self._outbound_queue) < MAX_OUTBOUND_QUEUE and self._data_channel_queue:
-            channel, protocol, user_data = self._data_channel_queue.pop(0)
+        while (self._data_channel_queue and
+               len(self._outbound_queue) + len(self._sent_queue) < MAX_OUTBOUND_QUEUE):
+            channel, protocol, user_data = self._data_channel_queue.popleft()
 
             # register channel if necessary
             stream_id = channel.id

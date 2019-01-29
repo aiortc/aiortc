@@ -23,13 +23,11 @@ from .utils import dummy_dtls_transport_pair, load, run
 
 
 def outstanding_tsns(client):
-    return [client._outbound_queue[i].tsn for i in range(client._outbound_queue_pos)]
+    return [chunk.tsn for chunk in client._sent_queue]
 
 
 def queued_tsns(client):
-    return [
-        client._outbound_queue[i].tsn for i in range(client._outbound_queue_pos,
-                                                     len(client._outbound_queue))]
+    return [chunk.tsn for chunk in client._outbound_queue]
 
 
 def track_channels(transport):
@@ -1011,7 +1009,7 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(chunk._abandoned, False)
 
         # try abandon middle chunk
-        client._maybe_abandon(client._outbound_queue[1])
+        client._maybe_abandon(client._sent_queue[1])
         for chunk in client._outbound_queue:
             self.assertEqual(chunk._abandoned, False)
 
@@ -1035,12 +1033,12 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(chunk._abandoned, False)
 
         # try abandon middle chunk
-        client._maybe_abandon(client._outbound_queue[1])
+        client._maybe_abandon(client._sent_queue[1])
         for chunk in client._outbound_queue:
             self.assertEqual(chunk._abandoned, True)
 
         # try abandon middle chunk (again)
-        client._maybe_abandon(client._outbound_queue[1])
+        client._maybe_abandon(client._sent_queue[1])
         for chunk in client._outbound_queue:
             self.assertEqual(chunk._abandoned, True)
 
