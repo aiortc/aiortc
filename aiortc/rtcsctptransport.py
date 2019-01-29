@@ -27,7 +27,6 @@ logger = logging.getLogger('sctp')
 # local constants
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
-MAX_OUTBOUND_QUEUE = 100
 MAX_STREAMS = 65535
 USERDATA_MAX_LENGTH = 1200
 
@@ -1390,16 +1389,24 @@ class RTCSctpTransport(EventEmitter):
             if not self._t3_handle:
                 self._t3_start()
 
+        # limit burst size
+        if self._fast_recovery_exit is not None:
+            burst_size = 2 * USERDATA_MAX_LENGTH
+        else:
+            burst_size = 4 * USERDATA_MAX_LENGTH
+        cwnd = min(self._flight_size + burst_size, self._cwnd)
+
         # retransmit
         retransmit_earliest = True
         for chunk in self._sent_queue:
             if chunk._retransmit:
                 if self._fast_recovery_transmit:
                     self._fast_recovery_transmit = False
-                elif self._flight_size >= self._cwnd:
+                elif self._flight_size >= cwnd:
                     return
                 self._flight_size_increase(chunk)
 
+                chunk._misses = 0
                 chunk._retransmit = False
                 chunk._sent_count += 1
                 await self._send_chunk(chunk)
@@ -1409,7 +1416,7 @@ class RTCSctpTransport(EventEmitter):
                     self._t3_restart()
             retransmit_earliest = False
 
-        while self._outbound_queue and self._flight_size < self._cwnd:
+        while self._outbound_queue and self._flight_size < cwnd:
             chunk = self._outbound_queue.popleft()
             self._sent_queue.append(chunk)
             self._flight_size_increase(chunk)
@@ -1496,8 +1503,7 @@ class RTCSctpTransport(EventEmitter):
         if self._association_state != self.State.ESTABLISHED:
             return
 
-        while (self._data_channel_queue and
-               len(self._outbound_queue) + len(self._sent_queue) < MAX_OUTBOUND_QUEUE):
+        while self._data_channel_queue and not self._outbound_queue:
             channel, protocol, user_data = self._data_channel_queue.popleft()
 
             # register channel if necessary
