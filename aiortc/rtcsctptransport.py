@@ -1349,16 +1349,16 @@ class RTCSctpTransport(EventEmitter):
         self._t3_handle = None
         self.__log_debug('x T3 expired')
 
-        # clear retransmit flag, mark abandoned chunks
+        # mark retransmit or abandoned chunks
         for pos in range(self._outbound_queue_pos):
             chunk = self._outbound_queue[pos]
-            chunk._retransmit = False
-            self._maybe_abandon(chunk)
+            if not self._maybe_abandon(chunk):
+                chunk._retransmit = True
         self._update_advanced_peer_ack_point()
 
-        # retransmit
+        # adjust congestion window
+        self._fast_recovery_exit = None
         self._flight_size = 0
-        self._outbound_queue_pos = 0
         self._partial_bytes_acked = 0
 
         self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
