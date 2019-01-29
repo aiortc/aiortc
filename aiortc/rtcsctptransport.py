@@ -1041,7 +1041,6 @@ class RTCSctpTransport(EventEmitter):
         cwnd_fully_utilized = (self._flight_size >= self._cwnd)
         done = 0
         done_bytes = 0
-        restart_t3 = False
 
         # handle acknowledged data
         for schunk in self._outbound_queue:
@@ -1060,20 +1059,30 @@ class RTCSctpTransport(EventEmitter):
         if done:
             self._outbound_queue = self._outbound_queue[done:]
             self._outbound_queue_pos = max(0, self._outbound_queue_pos - done)
-            restart_t3 = True
 
         # handle gap blocks
         loss = False
         if chunk.gaps:
-            highest_seen_tsn = (chunk.cumulative_tsn + chunk.gaps[-1][1]) % SCTP_TSN_MODULO
             seen = set()
             for gap in chunk.gaps:
                 for pos in range(gap[0], gap[1] + 1):
-                    tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
-                    seen.add(tsn)
-            for i in range(len(self._outbound_queue)):
-                schunk = self._outbound_queue[i]
+                    highest_seen_tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
+                    seen.add(highest_seen_tsn)
+
+            # determined Highest TSN Newly Acked (HTNA)
+            highest_newly_acked = chunk.cumulative_tsn
+            for schunk in self._outbound_queue:
                 if uint32_gt(schunk.tsn, highest_seen_tsn):
+                    break
+                if schunk.tsn in seen and not schunk._acked:
+                    done_bytes += schunk._book_size
+                    schunk._acked = True
+                    self._flight_size_decrease(schunk)
+                    highest_newly_acked = schunk.tsn
+
+            # strike missing chunks prior to HTNA
+            for schunk in self._outbound_queue:
+                if uint32_gt(schunk.tsn, highest_newly_acked):
                     break
                 if schunk.tsn not in seen:
                     schunk._misses += 1
@@ -1086,14 +1095,6 @@ class RTCSctpTransport(EventEmitter):
                         self._flight_size_decrease(schunk)
 
                         loss = True
-                        if i == 0:
-                            # restart the T3 timer as the earliest outstanding TSN
-                            # is being retransmitted
-                            restart_t3 = True
-                elif not schunk._acked:
-                    done_bytes += schunk._book_size
-                    schunk._acked = True
-                    self._flight_size_decrease(schunk)
 
         # adjust congestion window
         if self._fast_recovery_exit is None:
@@ -1116,14 +1117,12 @@ class RTCSctpTransport(EventEmitter):
         elif uint32_gte(chunk.cumulative_tsn, self._fast_recovery_exit):
             self._fast_recovery_exit = None
 
-        if not len(self._outbound_queue):
+        if not self._outbound_queue:
             # there is no outstanding data, stop T3
             self._t3_cancel()
-        elif restart_t3:
+        elif done:
             # the earliest outstanding chunk was acknowledged, restart T3
-            self._t3_handle.cancel()
-            self._t3_handle = None
-            self._t3_start()
+            self._t3_restart()
 
         self._update_advanced_peer_ack_point()
         await self._data_channel_flush()
@@ -1366,6 +1365,13 @@ class RTCSctpTransport(EventEmitter):
 
         asyncio.ensure_future(self._transmit())
 
+    def _t3_restart(self):
+        self.__log_debug('- T3 restart')
+        if self._t3_handle is not None:
+            self._t3_handle.cancel()
+            self._t3_handle = None
+        self._t3_handle = self._loop.call_later(self._rto, self._t3_expired)
+
     def _t3_start(self):
         assert self._t3_handle is None
         self.__log_debug('- T3 start')
@@ -1403,6 +1409,10 @@ class RTCSctpTransport(EventEmitter):
                 chunk._retransmit = False
                 chunk._sent_count += 1
                 await self._send_chunk(chunk)
+                if pos == 0:
+                    # restart the T3 timer as the earliest outstanding TSN
+                    # is being retransmitted
+                    self._t3_restart()
 
         while self._outbound_queue_pos < len(self._outbound_queue):
             if self._flight_size >= self._cwnd:
