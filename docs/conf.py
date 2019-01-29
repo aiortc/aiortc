@@ -142,6 +142,7 @@ html_theme_options = {
     'github_button': True,
     'github_user': 'jlaine',
     'github_repo': 'aiortc',
+    'logo': 'aiortc.svg',
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
