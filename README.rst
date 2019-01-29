@@ -15,11 +15,11 @@ aiortc
 .. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
     :target: https://pypi.python.org/pypi/aiortc
 
-.. |travis| image:: https://img.shields.io/travis/jlaine/aiortc.svg
-    :target: https://travis-ci.org/jlaine/aiortc
+.. |travis| image:: https://img.shields.io/travis/com/aiortc/aiortc.svg
+    :target: https://travis-ci.com/aiortc/aiortc
 
-.. |codecov| image:: https://img.shields.io/codecov/c/github/jlaine/aiortc.svg
-    :target: https://codecov.io/gh/jlaine/aiortc
+.. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aiortc.svg
+    :target: https://codecov.io/gh/aiortc/aiortc
 
 .. |gitter| image:: https://img.shields.io/gitter/room/aiortc/Lobby.svg
     :target: https://gitter.im/aiortc/Lobby

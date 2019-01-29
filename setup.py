@@ -32,7 +32,7 @@ setuptools.setup(
     version='0.9.18',
     description='An implementation of WebRTC and ORTC',
     long_description=long_description,
-    url='https://github.com/jlaine/aiortc',
+    url='https://github.com/aiortc/aiortc',
     author='Jeremy Lainé',
     author_email='jeremy.laine@m4x.org',
     license='BSD',
