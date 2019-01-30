@@ -6,7 +6,12 @@ Changelog
 0.9.19
 ------
 
-*under development*
+Data channels
+.............
+
+  * Do not raise congestion window when it is not fully utilized.
+  * Fix Highest TSN Newly Acknowledged logic for striking lost chunks.
+  * Do not limit congestion window to 120kB, limit burst size instead.
 
 Media
 .....
