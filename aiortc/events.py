@@ -1,5 +1,9 @@
 import attr
 
+from .mediastreams import MediaStreamTrack
+from .rtcrtpreceiver import RTCRtpReceiver
+from .rtcrtptransceiver import RTCRtpTransceiver
+
 
 @attr.s
 class RTCTrackEvent:
