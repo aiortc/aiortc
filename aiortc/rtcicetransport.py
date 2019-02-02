@@ -205,6 +205,8 @@ class RTCIceParameters:
     password = attr.ib(default=None)
     "ICE password."
 
+    iceLite = attr.ib(default=False)
+
 
 class RTCIceTransport(EventEmitter):
     """
