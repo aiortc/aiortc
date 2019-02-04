@@ -77,7 +77,8 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
-def player_worker(loop, container, audio_track, video_track, quit_event, throttle_playback):
+def player_worker(loop, container, streams, audio_track, video_track, quit_event,
+                  throttle_playback):
     audio_fifo = av.AudioFifo()
     audio_format_name = 's16'
     audio_layout_name = 'stereo'
@@ -96,7 +97,7 @@ def player_worker(loop, container, audio_track, video_track, quit_event, throttl
 
     while not quit_event.is_set():
         try:
-            frame = next(container.decode())
+            frame = next(container.decode(*streams))
         except (av.AVError, StopIteration):
             if audio_track:
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
@@ -214,13 +215,16 @@ class MediaPlayer:
 
         # examine streams
         self.__started = set()
+        self.__streams = []
         self.__audio = None
         self.__video = None
         for stream in self.__container.streams:
             if stream.type == 'audio' and not self.__audio:
                 self.__audio = PlayerStreamTrack(self, kind='audio')
+                self.__streams.append(stream)
             elif stream.type == 'video' and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind='video')
+                self.__streams.append(stream)
 
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(','))
@@ -249,7 +253,8 @@ class MediaPlayer:
                 name='media-player',
                 target=player_worker,
                 args=(
-                    asyncio.get_event_loop(), self.__container,
+                    asyncio.get_event_loop(),
+                    self.__container, self.__streams,
                     self.__audio, self.__video,
                     self.__thread_quit,
                     self._throttle_playback))
