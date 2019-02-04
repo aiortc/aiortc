@@ -132,11 +132,14 @@ def player_worker(loop, container, streams, audio_track, video_track, quit_event
                 else:
                     break
         elif isinstance(frame, VideoFrame) and video_track:
+            if frame.pts is None:  # pragma: no cover
+                logger.warning('Skipping video frame with no pts')
+                continue
+
             # video from a webcam doesn't start at pts 0, cancel out offset
-            if frame.pts is not None:
-                if video_first_pts is None:
-                    video_first_pts = frame.pts
-                frame.pts -= video_first_pts
+            if video_first_pts is None:
+                video_first_pts = frame.pts
+            frame.pts -= video_first_pts
 
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)

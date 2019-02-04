@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.20
+------
+
+*under development*
+
+Examples
+........
+
+  * :class:`aiortc.contrib.media.MediaPlayer` : skip frames with no presentation timestamp (pts).
+
 0.9.19
 ------
 
