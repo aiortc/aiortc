@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+if [ "$BUILD" = "sdist" ]; then
+    python3 setup.py sdist bdist_wheel
+    if [ -n "$TRAVIS_TAG" ]; then
+        pip3 install pyopenssl twine
+        python3 -m twine upload --skip-existing dist/*
+    fi
+else
+    flake8 aioquic tests
+    coverage run setup.py test
+    curl -s https://codecov.io/bash | bash
+fi
