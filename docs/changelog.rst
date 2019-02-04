@@ -8,6 +8,11 @@ Changelog
 
 *under development*
 
+Documentation
+.............
+
+  * Fix documentation build by installing `crc32c` instead of `crcmod`.
+
 Examples
 ........
 

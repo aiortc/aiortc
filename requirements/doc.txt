@@ -1,7 +1,7 @@
 aioice
 attrs
 cffi
-crcmod
+crc32c
 cryptography
 pyee
 pylibsrtp
