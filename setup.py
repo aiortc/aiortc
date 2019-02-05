@@ -29,4 +29,5 @@ setuptools.setup(
         'Programming Language :: Python :: 3.7',
     ],
     packages=['aioquic'],
+    install_requires=['cryptography'],
 )
