@@ -24,6 +24,10 @@ def decode_cid_length(length):
     return length + 3 if length else 0
 
 
+def is_long_header(first_byte):
+    return bool(first_byte & PACKET_LONG_HEADER)
+
+
 def unpack_variable_length(data, pos=0):
     kind = data[pos] // 64
     length, fmt, mask = VARIABLE_LENGTH_FORMATS[kind]
@@ -44,7 +48,7 @@ class QuicHeader:
             raise ValueError('Packet is too short (%d bytes)' % datagram_length)
 
         first_byte = data[0]
-        if first_byte & PACKET_LONG_HEADER:
+        if is_long_header(first_byte):
             if datagram_length < 6:
                 raise ValueError('Long header is too short (%d bytes)' % datagram_length)
 
