@@ -13,6 +13,7 @@ algorithm = hashes.SHA256()
 backend = default_backend()
 
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
+MAX_PN_SIZE = 4
 
 
 def hkdf_label(label, length):
@@ -47,6 +48,41 @@ def derive_keying_material(cid, is_client):
     return key, iv, hp
 
 
+def decrypt_packet(key, iv, hp, packet, encrypted_offset):
+    packet = bytearray(packet)
+
+    # header protection
+    sample_offset = encrypted_offset + MAX_PN_SIZE
+    sample = packet[sample_offset:sample_offset + 16]
+    cipher = Cipher(algorithms.AES(hp), modes.ECB(), backend=backend)
+    encryptor = cipher.encryptor()
+    buf = bytearray(31)
+    encryptor.update_into(sample, buf)
+    mask = buf[:5]
+
+    if is_long_header(packet[0]):
+        # long header
+        packet[0] ^= (mask[0] & 0x0f)
+    else:
+        # short header
+        packet[0] ^= (mask[0] & 0x1f)
+
+    pn_length = (packet[0] & 0x03) + 1
+    for i in range(pn_length):
+        packet[encrypted_offset + i] ^= mask[1 + i]
+    pn = packet[encrypted_offset:encrypted_offset + pn_length]
+    plain_header = bytes(packet[:encrypted_offset + pn_length])
+
+    # payload protection
+    nonce = bytearray(len(iv) - pn_length) + bytearray(pn)
+    for i in range(len(iv)):
+        nonce[i] ^= iv[i]
+    aesgcm = aead.AESGCM(key)
+    payload = aesgcm.decrypt(nonce, bytes(packet[encrypted_offset + pn_length:]), plain_header)
+
+    return plain_header, payload
+
+
 def encrypt_packet(key, iv, hp, plain_header, plain_payload):
     pn_length = (plain_header[0] & 0x03) + 1
     pn_offset = len(plain_header) - pn_length
@@ -60,7 +96,7 @@ def encrypt_packet(key, iv, hp, plain_header, plain_payload):
     protected_payload = aesgcm.encrypt(nonce, plain_payload, plain_header)
 
     # header protection
-    sample_offset = 4 - pn_length
+    sample_offset = MAX_PN_SIZE - pn_length
     sample = protected_payload[sample_offset:sample_offset + 16]
     cipher = Cipher(algorithms.AES(hp), modes.ECB(), backend=backend)
     encryptor = cipher.encryptor()
