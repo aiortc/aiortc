@@ -37,6 +37,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.destination_cid, binascii.unhexlify('90ed1e1c7b04b5d3'))
         self.assertEqual(header.source_cid, b'')
         self.assertEqual(header.token, b'')
+        self.assertEqual(header.encrypted_offset, 17)
 
     def test_parse_initial_server(self):
         data = load('initial_server.bin')
@@ -45,20 +46,21 @@ class PacketTest(TestCase):
         self.assertEqual(header.destination_cid, b'')
         self.assertEqual(header.source_cid, binascii.unhexlify('0fcee9852fde8780'))
         self.assertEqual(header.token, b'')
+        self.assertEqual(header.encrypted_offset, 17)
 
-    def test_parse_long_header_bad_packet_type(self):
+    def test_parse_long_header_no_fixed_bit(self):
         with self.assertRaises(ValueError) as cm:
             QuicHeader.parse(b'\x80\x00\x00\x00\x00\x00')
-        self.assertEqual(str(cm.exception), 'Long header packet type 0x80 is not supported')
+        self.assertEqual(str(cm.exception), 'Packet fixed bit is zero')
 
     def test_parse_long_header_too_short(self):
         with self.assertRaises(ValueError) as cm:
-            QuicHeader.parse(b'\x80\x00')
+            QuicHeader.parse(b'\xc0\x00')
         self.assertEqual(str(cm.exception), 'Long header is too short (2 bytes)')
 
     def test_parse_short_header(self):
         with self.assertRaises(ValueError) as cm:
-            QuicHeader.parse(b'\x00\x00')
+            QuicHeader.parse(b'\x40\x00')
         self.assertEqual(str(cm.exception), 'Short header is not supported yet')
 
     def test_parse_too_short_header(self):

@@ -39,6 +39,7 @@ class QuicHeader:
     version: int
     destination_cid: bytes
     source_cid: bytes
+    encrypted_offset: int
     token: bytes = b''
 
     @classmethod
@@ -48,6 +49,10 @@ class QuicHeader:
             raise ValueError('Packet is too short (%d bytes)' % datagram_length)
 
         first_byte = data[0]
+        if not (first_byte & PACKET_FIXED_BIT):
+            raise ValueError('Packet fixed bit is zero')
+
+        token = b''
         if is_long_header(first_byte):
             if datagram_length < 6:
                 raise ValueError('Long header is too short (%d bytes)' % datagram_length)
@@ -70,13 +75,12 @@ class QuicHeader:
                 pos += token_length
 
                 length, pos = unpack_variable_length(data, pos)
-            else:
-                raise ValueError('Long header packet type 0x%x is not supported' % packet_type)
 
             return QuicHeader(
                 version=version,
                 destination_cid=destination_cid,
                 source_cid=source_cid,
+                encrypted_offset=pos,
                 token=token)
         else:
             # short header packet
