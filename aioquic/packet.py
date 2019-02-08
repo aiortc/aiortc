@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from struct import unpack_from
+
+from .tls import pull_bytes, pull_uint8, pull_uint32, pull_uint_var
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40
@@ -12,13 +13,6 @@ PACKET_TYPE_MASK = 0xf0
 
 PROTOCOL_VERSION = 0xFF000011  # draft 17
 
-VARIABLE_LENGTH_FORMATS = [
-    (1, '!B', 0x3f),
-    (2, '!H', 0x3fff),
-    (4, '!L', 0x3fffffff),
-    (8, '!Q', 0x3fffffffffffffff),
-]
-
 
 def decode_cid_length(length):
     return length + 3 if length else 0
@@ -26,12 +20,6 @@ def decode_cid_length(length):
 
 def is_long_header(first_byte):
     return bool(first_byte & PACKET_LONG_HEADER)
-
-
-def unpack_variable_length(data, pos=0):
-    kind = data[pos] // 64
-    length, fmt, mask = VARIABLE_LENGTH_FORMATS[kind]
-    return unpack_from(fmt, data, pos)[0] & mask, pos + length
 
 
 @dataclass
@@ -42,46 +30,35 @@ class QuicHeader:
     encrypted_offset: int
     token: bytes = b''
 
-    @classmethod
-    def parse(cls, data):
-        datagram_length = len(data)
-        if datagram_length < 2:
-            raise ValueError('Packet is too short (%d bytes)' % datagram_length)
 
-        first_byte = data[0]
-        if not (first_byte & PACKET_FIXED_BIT):
-            raise ValueError('Packet fixed bit is zero')
+def pull_quic_header(buf):
+    first_byte = pull_uint8(buf)
+    if not (first_byte & PACKET_FIXED_BIT):
+        raise ValueError('Packet fixed bit is zero')
 
-        token = b''
-        if is_long_header(first_byte):
-            if datagram_length < 6:
-                raise ValueError('Long header is too short (%d bytes)' % datagram_length)
+    token = b''
+    if is_long_header(first_byte):
+        version = pull_uint32(buf)
+        cid_lengths = pull_uint8(buf)
 
-            version, cid_lengths = unpack_from('!LB', data, 1)
-            pos = 6
+        destination_cid_length = decode_cid_length(cid_lengths // 16)
+        destination_cid = pull_bytes(buf, destination_cid_length)
 
-            destination_cid_length = decode_cid_length(cid_lengths // 16)
-            destination_cid = data[pos:pos + destination_cid_length]
-            pos += destination_cid_length
+        source_cid_length = decode_cid_length(cid_lengths % 16)
+        source_cid = pull_bytes(buf, source_cid_length)
 
-            source_cid_length = decode_cid_length(cid_lengths % 16)
-            source_cid = data[pos:pos + source_cid_length]
-            pos += source_cid_length
+        packet_type = first_byte & PACKET_TYPE_MASK
+        if packet_type == PACKET_TYPE_INITIAL:
+            token_length = pull_uint_var(buf)
+            token = pull_bytes(buf, token_length)
+            pull_uint_var(buf)
 
-            packet_type = first_byte & PACKET_TYPE_MASK
-            if packet_type == PACKET_TYPE_INITIAL:
-                token_length, pos = unpack_variable_length(data, pos)
-                token = data[pos:pos + token_length]
-                pos += token_length
-
-                length, pos = unpack_variable_length(data, pos)
-
-            return QuicHeader(
-                version=version,
-                destination_cid=destination_cid,
-                source_cid=source_cid,
-                encrypted_offset=pos,
-                token=token)
-        else:
-            # short header packet
-            raise ValueError('Short header is not supported yet')
+        return QuicHeader(
+            version=version,
+            destination_cid=destination_cid,
+            source_cid=source_cid,
+            encrypted_offset=buf._pos,
+            token=token)
+    else:
+        # short header packet
+        raise ValueError('Short header is not supported yet')
