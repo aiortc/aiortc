@@ -27,7 +27,6 @@ class QuicHeader:
     version: int
     destination_cid: bytes
     source_cid: bytes
-    encrypted_offset: int
     token: bytes = b''
 
 
@@ -57,7 +56,6 @@ def pull_quic_header(buf):
             version=version,
             destination_cid=destination_cid,
             source_cid=source_cid,
-            encrypted_offset=buf._pos,
             token=token)
     else:
         # short header packet

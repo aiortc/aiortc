@@ -20,7 +20,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.destination_cid, binascii.unhexlify('90ed1e1c7b04b5d3'))
         self.assertEqual(header.source_cid, b'')
         self.assertEqual(header.token, b'')
-        self.assertEqual(header.encrypted_offset, 17)
+        self.assertEqual(buf.tell(), 17)
 
     def test_parse_initial_server(self):
         buf = Buffer(data=load('initial_server.bin'))
@@ -29,7 +29,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.destination_cid, b'')
         self.assertEqual(header.source_cid, binascii.unhexlify('0fcee9852fde8780'))
         self.assertEqual(header.token, b'')
-        self.assertEqual(header.encrypted_offset, 17)
+        self.assertEqual(buf.tell(), 17)
 
     def test_parse_long_header_no_fixed_bit(self):
         buf = Buffer(data=b'\x80\x00\x00\x00\x00\x00')

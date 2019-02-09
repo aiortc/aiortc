@@ -54,6 +54,13 @@ class Buffer:
     def data(self):
         return bytes(self._data[:self._pos])
 
+    def seek(self, pos):
+        assert pos < self._length
+        self._pos = pos
+
+    def tell(self):
+        return self._pos
+
 
 @dataclass
 class ClientHello:

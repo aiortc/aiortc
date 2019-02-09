@@ -15,7 +15,7 @@ class BufferTest(TestCase):
     def roundtrip(self, data, value):
         buf = Buffer(data=data)
         self.assertEqual(pull_uint_var(buf), value)
-        self.assertEqual(buf._pos, len(data))
+        self.assertEqual(buf.tell(), len(data))
 
         buf = Buffer(capacity=8)
         push_uint_var(buf, value)
