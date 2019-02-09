@@ -1,8 +1,7 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.crypto import (decrypt_packet, derive_keying_material,
-                            encrypt_packet)
+from aioquic.crypto import CryptoContext, derive_keying_material
 
 CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
 CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
@@ -73,7 +72,6 @@ class CryptoTest(TestCase):
 
     https://tools.ietf.org/html/draft-ietf-quic-tls-18#appendix-A
     """
-
     def test_client_initial(self):
         cid = binascii.unhexlify('8394c8f03e515708')
         key, iv, hp = derive_keying_material(cid, is_client=True)
@@ -89,31 +87,27 @@ class CryptoTest(TestCase):
         self.assertEqual(hp, binascii.unhexlify('94b9452d2b3c7c7f6da7fdd8593537fd'))
 
     def test_decrypt_packet_client(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        key, iv, hp = derive_keying_material(cid, is_client=True)
+        context = CryptoContext(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
 
-        plain_header, plain_payload = decrypt_packet(key, iv, hp, CLIENT_ENCRYPTED_PACKET, 17)
+        plain_header, plain_payload = context.decrypt_packet(CLIENT_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, CLIENT_PLAIN_PAYLOAD)
 
     def test_decrypt_packet_server(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        key, iv, hp = derive_keying_material(cid, is_client=False)
+        context = CryptoContext(cid=binascii.unhexlify('8394c8f03e515708'), is_client=False)
 
-        plain_header, plain_payload = decrypt_packet(key, iv, hp, SERVER_ENCRYPTED_PACKET, 17)
+        plain_header, plain_payload = context.decrypt_packet(SERVER_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SERVER_PLAIN_PAYLOAD)
 
     def test_encrypt_packet_client(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        key, iv, hp = derive_keying_material(cid, is_client=True)
+        context = CryptoContext(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
 
-        packet = encrypt_packet(key, iv, hp, CLIENT_PLAIN_HEADER, CLIENT_PLAIN_PAYLOAD)
+        packet = context.encrypt_packet(CLIENT_PLAIN_HEADER, CLIENT_PLAIN_PAYLOAD)
         self.assertEqual(packet, CLIENT_ENCRYPTED_PACKET)
 
     def test_encrypt_packet_server(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        key, iv, hp = derive_keying_material(cid, is_client=False)
+        context = CryptoContext(cid=binascii.unhexlify('8394c8f03e515708'), is_client=False)
 
-        packet = encrypt_packet(key, iv, hp, SERVER_PLAIN_HEADER, SERVER_PLAIN_PAYLOAD)
+        packet = context.encrypt_packet(SERVER_PLAIN_HEADER, SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet, SERVER_ENCRYPTED_PACKET)
