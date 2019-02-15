@@ -1,8 +1,14 @@
+import os
 import struct
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import IntEnum
 from struct import pack_into, unpack_from
 from typing import List, Tuple
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
@@ -10,30 +16,42 @@ TLS_VERSION_1_3_DRAFT_28 = 0x7f1c
 TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
 TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
-TLS_CIPHER_SUITE_AES_256_GCM_SHA384 = 0x1302
-TLS_CIPHER_SUITE_AES_128_GCM_SHA256 = 0x1301
-TLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 = 0x1303
-
-TLS_COMPRESSION_METHOD_NULL = 0
-
-TLS_EXTENSION_TYPE_SUPPORTED_GROUPS = 10
-TLS_EXTENSION_TYPE_SIGNATURE_ALGORITHMS = 13
-TLS_EXTENSION_TYPE_SUPPORTED_VERSIONS = 43
-TLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES = 45
-TLS_EXTENSION_TYPE_KEY_SHARE = 51
-TLS_EXTENSION_TYPE_QUIC_TRANSPORT_PARAMETERS = 65445
-
-TLS_GROUP_SECP256R1 = 23
-
 TLS_HANDSHAKE_CLIENT_HELLO = 1
 TLS_HANDSHAKE_SERVER_HELLO = 2
 
-TLS_KEY_EXCHANGE_MODE_PSK_DHE_KE = 1
 
-TLS_SIGNATURE_ALGORITHM_RSA_PSS_RSAE_SHA256 = 0x0804
-TLS_SIGNATURE_ALGORITHM_ECDSA_SECP256R1_SHA256 = 0x0403
-TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 = 0x0401
-TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA1 = 0x0201
+class CipherSuite(IntEnum):
+    AES_256_GCM_SHA384 = 0x1302
+    AES_128_GCM_SHA256 = 0x1301
+    CHACHA20_POLY1305_SHA256 = 0x1303
+
+
+class CompressionMethod(IntEnum):
+    NULL = 0
+
+
+class ExtensionType(IntEnum):
+    SUPPORTED_GROUPS = 10
+    SIGNATURE_ALGORITHMS = 13
+    SUPPORTED_VERSIONS = 43
+    PSK_KEY_EXCHANGE_MODES = 45
+    KEY_SHARE = 51
+    QUIC_TRANSPORT_PARAMETERS = 65445
+
+
+class Group(IntEnum):
+    SECP256R1 = 23
+
+
+class KeyExchangeMode(IntEnum):
+    PSK_DHE_KE = 1
+
+
+class SignatureAlgorithm(IntEnum):
+    RSA_PSS_RSAE_SHA256 = 0x0804
+    ECDSA_SECP256R1_SHA256 = 0x0403
+    RSA_PKCS1_SHA256 = 0x0401
+    RSA_PKCS1_SHA1 = 0x0201
 
 
 class BufferReadError(ValueError):
@@ -54,8 +72,11 @@ class Buffer:
     def data(self):
         return bytes(self._data[:self._pos])
 
+    def eof(self):
+        return self._pos == self._length
+
     def seek(self, pos):
-        assert pos < self._length
+        assert pos <= self._length
         self._pos = pos
 
     def tell(self):
@@ -343,15 +364,15 @@ def pull_client_hello(buf):
         def pull_extension(buf):
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
-            if extension_type == TLS_EXTENSION_TYPE_KEY_SHARE:
+            if extension_type == ExtensionType.KEY_SHARE:
                 hello.key_share = pull_list(buf, 2, pull_key_share)
-            elif extension_type == TLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
+            elif extension_type == ExtensionType.SUPPORTED_VERSIONS:
                 hello.supported_versions = pull_list(buf, 1, pull_uint16)
-            elif extension_type == TLS_EXTENSION_TYPE_SIGNATURE_ALGORITHMS:
+            elif extension_type == ExtensionType.SIGNATURE_ALGORITHMS:
                 hello.signature_algorithms = pull_list(buf, 2, pull_uint16)
-            elif extension_type == TLS_EXTENSION_TYPE_SUPPORTED_GROUPS:
+            elif extension_type == ExtensionType.SUPPORTED_GROUPS:
                 hello.supported_groups = pull_list(buf, 2, pull_uint16)
-            elif extension_type == TLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES:
+            elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
                 hello.key_exchange_modes = pull_list(buf, 1, pull_uint8)
             else:
                 pull_bytes(buf, extension_length)
@@ -373,19 +394,19 @@ def push_client_hello(buf, hello):
 
         # extensions
         with push_block(buf, 2):
-            with push_extension(buf, TLS_EXTENSION_TYPE_KEY_SHARE):
+            with push_extension(buf, ExtensionType.KEY_SHARE):
                 push_list(buf, 2, push_key_share, hello.key_share)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_SUPPORTED_VERSIONS):
+            with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
                 push_list(buf, 1, push_uint16, hello.supported_versions)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_SIGNATURE_ALGORITHMS):
+            with push_extension(buf, ExtensionType.SIGNATURE_ALGORITHMS):
                 push_list(buf, 2, push_uint16, hello.signature_algorithms)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_SUPPORTED_GROUPS):
+            with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
                 push_list(buf, 2, push_uint16, hello.supported_groups)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_QUIC_TRANSPORT_PARAMETERS):
+            with push_extension(buf, ExtensionType.QUIC_TRANSPORT_PARAMETERS):
                 push_uint32(buf, 0xff000011)  # QUIC draft 17
                 with push_block(buf, 2):
                     push_tlv32(buf, 0x0005, 0x80100000)
@@ -396,7 +417,7 @@ def push_client_hello(buf, hello):
                     push_tlv16(buf, 0x0008, 0x4064)
                     push_tlv8(buf, 0x000a, 0x0a)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES):
+            with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
 
 
@@ -419,9 +440,9 @@ def pull_server_hello(buf):
         def pull_extension(buf):
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
-            if extension_type == TLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
+            if extension_type == ExtensionType.SUPPORTED_VERSIONS:
                 hello.supported_version = pull_uint16(buf)
-            elif extension_type == TLS_EXTENSION_TYPE_KEY_SHARE:
+            elif extension_type == ExtensionType.KEY_SHARE:
                 hello.key_share = pull_key_share(buf)
             else:
                 pull_bytes(buf, extension_length)
@@ -445,8 +466,58 @@ def push_server_hello(buf, hello):
 
         # extensions
         with push_block(buf, 2):
-            with push_extension(buf, TLS_EXTENSION_TYPE_SUPPORTED_VERSIONS):
+            with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
                 push_uint16(buf, hello.supported_version)
 
-            with push_extension(buf, TLS_EXTENSION_TYPE_KEY_SHARE):
+            with push_extension(buf, ExtensionType.KEY_SHARE):
                 push_key_share(buf, hello.key_share)
+
+
+class Context:
+    def __init__(self, is_client):
+        if is_client:
+            self.client_random = os.urandom(32)
+            self.session_id = os.urandom(32)
+            self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+
+        self.is_client = is_client
+
+    def client_hello(self):
+        return ClientHello(
+            random=self.client_random,
+            session_id=self.session_id,
+            cipher_suites=[
+                CipherSuite.AES_256_GCM_SHA384,
+                CipherSuite.AES_128_GCM_SHA256,
+                CipherSuite.CHACHA20_POLY1305_SHA256,
+            ],
+            compression_methods=[
+                CompressionMethod.NULL,
+            ],
+
+            key_exchange_modes=[
+                KeyExchangeMode.PSK_DHE_KE,
+            ],
+            key_share=[
+                (
+                    Group.SECP256R1,
+                    self.private_key.public_key().public_bytes(
+                        Encoding.X962, PublicFormat.UncompressedPoint),
+                )
+            ],
+            signature_algorithms=[
+                SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+                SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
+                SignatureAlgorithm.RSA_PKCS1_SHA256,
+                SignatureAlgorithm.RSA_PKCS1_SHA1,
+            ],
+            supported_groups=[
+                Group.SECP256R1,
+            ],
+            supported_versions=[
+                TLS_VERSION_1_3,
+                TLS_VERSION_1_3_DRAFT_28,
+                TLS_VERSION_1_3_DRAFT_27,
+                TLS_VERSION_1_3_DRAFT_26,
+            ]
+        )

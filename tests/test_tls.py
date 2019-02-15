@@ -2,10 +2,10 @@ import binascii
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.tls import (Buffer, BufferReadError, ClientHello, ServerHello,
-                         pull_block, pull_bytes, pull_client_hello,
-                         pull_server_hello, pull_uint8, pull_uint16,
-                         pull_uint32, pull_uint64, pull_uint_var,
+from aioquic.tls import (Buffer, BufferReadError, ClientHello, Context,
+                         ServerHello, pull_block, pull_bytes,
+                         pull_client_hello, pull_server_hello, pull_uint8,
+                         pull_uint16, pull_uint32, pull_uint64, pull_uint_var,
                          push_client_hello, push_server_hello, push_uint_var)
 
 from .utils import load
@@ -82,6 +82,28 @@ class BufferTest(TestCase):
             push_uint_var(buf, 4611686018427387904)
         self.assertEqual(str(cm.exception), 'Integer is too big for a variable-length integer')
 
+    def test_seek(self):
+        buf = Buffer(data=b'01234567')
+        self.assertFalse(buf.eof())
+        self.assertEqual(buf.tell(), 0)
+
+        buf.seek(4)
+        self.assertFalse(buf.eof())
+        self.assertEqual(buf.tell(), 4)
+
+        buf.seek(8)
+        self.assertTrue(buf.eof())
+        self.assertEqual(buf.tell(), 8)
+
+
+class ContextTest(TestCase):
+    def test_client_hello(self):
+        context = Context(is_client=True)
+        hello = context.client_hello()
+
+        self.assertEqual(len(hello.random), 32)
+        self.assertEqual(len(hello.session_id), 32)
+
 
 class TlsTest(TestCase):
     def test_pull_client_hello(self):
@@ -96,21 +118,21 @@ class TlsTest(TestCase):
             binascii.unhexlify(
                 '9aee82a2d186c1cb32a329d9dcfe004a1a438ad0485a53c6bfcf55c132a23235'))
         self.assertEqual(hello.cipher_suites, [
-            tls.TLS_CIPHER_SUITE_AES_256_GCM_SHA384,
-            tls.TLS_CIPHER_SUITE_AES_128_GCM_SHA256,
-            tls.TLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+            tls.CipherSuite.AES_256_GCM_SHA384,
+            tls.CipherSuite.AES_128_GCM_SHA256,
+            tls.CipherSuite.CHACHA20_POLY1305_SHA256,
         ])
         self.assertEqual(hello.compression_methods, [
-            tls.TLS_COMPRESSION_METHOD_NULL,
+            tls.CompressionMethod.NULL,
         ])
 
         # extensions
         self.assertEqual(hello.key_exchange_modes, [
-            tls.TLS_KEY_EXCHANGE_MODE_PSK_DHE_KE,
+            tls.KeyExchangeMode.PSK_DHE_KE,
         ])
         self.assertEqual(hello.key_share, [
             (
-                tls.TLS_GROUP_SECP256R1,
+                tls.Group.SECP256R1,
                 binascii.unhexlify(
                     '047bfea344467535054263b75def60cffa82405a211b68d1eb8d1d944e67aef8'
                     '93c7665a5473d032cfaf22a73da28eb4aacae0017ed12557b5791f98a1e84f15'
@@ -118,13 +140,13 @@ class TlsTest(TestCase):
             )
         ])
         self.assertEqual(hello.signature_algorithms, [
-            tls.TLS_SIGNATURE_ALGORITHM_RSA_PSS_RSAE_SHA256,
-            tls.TLS_SIGNATURE_ALGORITHM_ECDSA_SECP256R1_SHA256,
-            tls.TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
-            tls.TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA1,
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA256,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA1,
         ])
         self.assertEqual(hello.supported_groups, [
-            tls.TLS_GROUP_SECP256R1,
+            tls.Group.SECP256R1,
         ])
         self.assertEqual(hello.supported_versions, [
             tls.TLS_VERSION_1_3,
@@ -140,20 +162,20 @@ class TlsTest(TestCase):
             session_id=binascii.unhexlify(
                 '9aee82a2d186c1cb32a329d9dcfe004a1a438ad0485a53c6bfcf55c132a23235'),
             cipher_suites=[
-                tls.TLS_CIPHER_SUITE_AES_256_GCM_SHA384,
-                tls.TLS_CIPHER_SUITE_AES_128_GCM_SHA256,
-                tls.TLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                tls.CipherSuite.AES_256_GCM_SHA384,
+                tls.CipherSuite.AES_128_GCM_SHA256,
+                tls.CipherSuite.CHACHA20_POLY1305_SHA256,
             ],
             compression_methods=[
-                tls.TLS_COMPRESSION_METHOD_NULL,
+                tls.CompressionMethod.NULL,
             ],
 
             key_exchange_modes=[
-                tls.TLS_KEY_EXCHANGE_MODE_PSK_DHE_KE,
+                tls.KeyExchangeMode.PSK_DHE_KE,
             ],
             key_share=[
                 (
-                    tls.TLS_GROUP_SECP256R1,
+                    tls.Group.SECP256R1,
                     binascii.unhexlify(
                         '047bfea344467535054263b75def60cffa82405a211b68d1eb8d1d944e67aef8'
                         '93c7665a5473d032cfaf22a73da28eb4aacae0017ed12557b5791f98a1e84f15'
@@ -161,13 +183,13 @@ class TlsTest(TestCase):
                 )
             ],
             signature_algorithms=[
-                tls.TLS_SIGNATURE_ALGORITHM_RSA_PSS_RSAE_SHA256,
-                tls.TLS_SIGNATURE_ALGORITHM_ECDSA_SECP256R1_SHA256,
-                tls.TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
-                tls.TLS_SIGNATURE_ALGORITHM_RSA_PKCS1_SHA1,
+                tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+                tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
+                tls.SignatureAlgorithm.RSA_PKCS1_SHA256,
+                tls.SignatureAlgorithm.RSA_PKCS1_SHA1,
             ],
             supported_groups=[
-                tls.TLS_GROUP_SECP256R1,
+                tls.Group.SECP256R1,
             ],
             supported_versions=[
                 tls.TLS_VERSION_1_3,
@@ -192,10 +214,10 @@ class TlsTest(TestCase):
             hello.session_id,
             binascii.unhexlify(
                 '9aee82a2d186c1cb32a329d9dcfe004a1a438ad0485a53c6bfcf55c132a23235'))
-        self.assertEqual(hello.cipher_suite, tls.TLS_CIPHER_SUITE_AES_256_GCM_SHA384)
-        self.assertEqual(hello.compression_method, tls.TLS_COMPRESSION_METHOD_NULL)
+        self.assertEqual(hello.cipher_suite, tls.CipherSuite.AES_256_GCM_SHA384)
+        self.assertEqual(hello.compression_method, tls.CompressionMethod.NULL)
         self.assertEqual(hello.key_share, (
-            tls.TLS_GROUP_SECP256R1,
+            tls.Group.SECP256R1,
             binascii.unhexlify(
                 '048b27d0282242d84b7fcc02a9c4f13eca0329e3c7029aa34a33794e6e7ba189'
                 '5cca1c503bf0378ac6937c354912116ff3251026bca1958d7f387316c83ae6cf'
@@ -209,11 +231,11 @@ class TlsTest(TestCase):
                 'ada85271d19680c615ea7336519e3fdf6f1e26f3b1075ee1de96ffa8884e8280'),
             session_id=binascii.unhexlify(
                 '9aee82a2d186c1cb32a329d9dcfe004a1a438ad0485a53c6bfcf55c132a23235'),
-            cipher_suite=tls.TLS_CIPHER_SUITE_AES_256_GCM_SHA384,
-            compression_method=tls.TLS_COMPRESSION_METHOD_NULL,
+            cipher_suite=tls.CipherSuite.AES_256_GCM_SHA384,
+            compression_method=tls.CompressionMethod.NULL,
 
             key_share=(
-                tls.TLS_GROUP_SECP256R1,
+                tls.Group.SECP256R1,
                 binascii.unhexlify(
                     '048b27d0282242d84b7fcc02a9c4f13eca0329e3c7029aa34a33794e6e7ba189'
                     '5cca1c503bf0378ac6937c354912116ff3251026bca1958d7f387316c83ae6cf'
