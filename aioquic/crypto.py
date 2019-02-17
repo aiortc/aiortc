@@ -14,7 +14,6 @@ backend = default_backend()
 
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
 MAX_PN_SIZE = 4
-AEAD_TAG_SIZE = 16
 
 
 def hkdf_label(label, length):
@@ -54,6 +53,7 @@ class CryptoContext:
     def __init__(self, cid, is_client):
         key, self.iv, hp = derive_keying_material(cid, is_client)
         self.aead = aead.AESGCM(key)
+        self.aead_tag_size = 16
         self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=backend)
 
     def decrypt_packet(self, packet, encrypted_offset):
