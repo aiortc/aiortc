@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from aioquic import tls
 from aioquic.tls import (Buffer, BufferReadError, ClientHello, Context,
-                         ServerHello, pull_block, pull_bytes,
+                         ServerHello, State, pull_block, pull_bytes,
                          pull_client_hello, pull_server_hello, pull_uint8,
                          pull_uint16, pull_uint32, pull_uint64,
                          push_client_hello, push_server_hello)
@@ -58,12 +58,37 @@ class BufferTest(TestCase):
 
 
 class ContextTest(TestCase):
-    def test_client_hello(self):
-        context = Context(is_client=True)
-        hello = context.client_hello()
+    def test_handshake(self):
+        client = Context(is_client=True)
+        self.assertEqual(client.state, State.CLIENT_HANDSHAKE_START)
 
-        self.assertEqual(len(hello.random), 32)
-        self.assertEqual(len(hello.session_id), 32)
+        server = Context(is_client=False)
+        self.assertEqual(server.state, State.SERVER_EXPECT_CLIENT_HELLO)
+
+        # send client hello
+        client_buf = Buffer(capacity=512)
+        client.handle_message(b'', client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        self.assertEqual(client_buf.tell(), 254)
+        server_input = client_buf.data
+        client_buf.seek(0)
+
+        # handle client hello, send server hello
+        server_buf = Buffer(capacity=512)
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        self.assertEqual(server_buf.tell(), 155)
+        client_input = server_buf.data
+        server_buf.seek(0)
+
+        # handle server hello
+        client.handle_message(client_input, client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
+        self.assertEqual(server_buf.tell(), 0)
+
+        # check keys match
+        self.assertEqual(client.dec_key, server.enc_key)
+        self.assertEqual(client.enc_key, server.dec_key)
 
 
 class TlsTest(TestCase):

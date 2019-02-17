@@ -4,43 +4,38 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import (Cipher, aead, algorithms,
                                                     modes)
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .packet import is_long_header
-from .tls import hkdf_expand_label, hkdf_label
-
-algorithm = hashes.SHA256()
-backend = default_backend()
+from .tls import hkdf_expand_label, hkdf_extract
 
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
 MAX_PN_SIZE = 4
 
 
-def derive_keying_material(cid, is_client):
+def derive_initial_secret(cid, is_client):
     if is_client:
         label = b'client in'
     else:
         label = b'server in'
-    secret = HKDF(
-        algorithm=algorithm,
-        length=32,
-        salt=INITIAL_SALT,
-        info=hkdf_label(label, 32),
-        backend=backend
-    ).derive(cid)
+
+    algorithm = hashes.SHA256()
+    initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
+    secret = hkdf_expand_label(algorithm, initial_secret, label, b'', algorithm.digest_size)
+    return algorithm, secret
+
+
+def derive_key_iv_hp(algorithm, secret):
     return (
-        hkdf_expand_label(algorithm, secret, b'quic key', 16),
-        hkdf_expand_label(algorithm, secret, b'quic iv', 12),
-        hkdf_expand_label(algorithm, secret, b'quic hp', 16)
+        hkdf_expand_label(algorithm, secret, b'quic key', b'', 16),
+        hkdf_expand_label(algorithm, secret, b'quic iv', b'', 12),
+        hkdf_expand_label(algorithm, secret, b'quic hp', b'', 16)
     )
 
 
 class CryptoContext:
     def __init__(self, cid, is_client):
-        key, self.iv, hp = derive_keying_material(cid, is_client)
-        self.aead = aead.AESGCM(key)
-        self.aead_tag_size = 16
-        self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=backend)
+        algorithm, secret = derive_initial_secret(cid, is_client)
+        self.setup(algorithm, secret)
 
     def decrypt_packet(self, packet, encrypted_offset):
         packet = bytearray(packet)
@@ -106,3 +101,9 @@ class CryptoContext:
             packet[pn_offset + i] ^= mask[1 + i]
 
         return packet
+
+    def setup(self, algorithm, secret):
+        key, self.iv, hp = derive_key_iv_hp(algorithm, secret)
+        self.aead = aead.AESGCM(key)
+        self.aead_tag_size = 16
+        self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=default_backend())

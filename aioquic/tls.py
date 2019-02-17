@@ -2,12 +2,13 @@ import os
 import struct
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 from struct import pack_into, unpack_from
 from typing import List, Tuple
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -21,18 +22,35 @@ TLS_HANDSHAKE_CLIENT_HELLO = 1
 TLS_HANDSHAKE_SERVER_HELLO = 2
 
 
-def hkdf_label(label, length):
+class Direction(Enum):
+    DECRYPT = 0
+    ENCRYPT = 1
+
+
+class Epoch(Enum):
+    HANDSHAKE = 2
+
+
+def hkdf_label(label, hash_value, length):
     full_label = b'tls13 ' + label
-    return struct.pack('!HB', length, len(full_label)) + full_label + b'\x00'
+    return (
+        struct.pack('!HB', length, len(full_label)) + full_label +
+        struct.pack('!B', len(hash_value)) + hash_value)
 
 
-def hkdf_expand_label(algorithm, secret, label, length):
+def hkdf_expand_label(algorithm, secret, label, hash_value, length):
     return HKDFExpand(
         algorithm=algorithm,
         length=length,
-        info=hkdf_label(label, length),
+        info=hkdf_label(label, hash_value, length),
         backend=default_backend()
     ).derive(secret)
+
+
+def hkdf_extract(algorithm, salt, key_material):
+    h = hmac.HMAC(salt, algorithm, backend=default_backend())
+    h.update(key_material)
+    return h.finalize()
 
 
 class CipherSuite(IntEnum):
@@ -86,6 +104,9 @@ class Buffer:
     @property
     def data(self):
         return bytes(self._data[:self._pos])
+
+    def data_slice(self, start, end):
+        return bytes(self._data[start:end])
 
     def eof(self):
         return self._pos == self._length
@@ -459,23 +480,87 @@ def push_server_hello(buf, hello):
                 push_key_share(buf, hello.key_share)
 
 
+class State(Enum):
+    CLIENT_HANDSHAKE_START = 0
+    CLIENT_EXPECT_SERVER_HELLO = 1
+    CLIENT_EXPECT_ENCRYPTED_EXTENSIONS = 2
+    SERVER_EXPECT_CLIENT_HELLO = 3
+    SERVER_EXPECT_FINISHED = 4
+
+
+class KeySchedule:
+    def __init__(self):
+        self.algorithm = hashes.SHA256()
+        self.generation = 0
+        self.hash = hashes.Hash(self.algorithm, default_backend())
+        self.hash_empty_value = self.hash.copy().finalize()
+        self.secret = bytes(self.algorithm.digest_size)
+
+    def derive_secret(self, label):
+        return hkdf_expand_label(
+            algorithm=self.algorithm,
+            secret=self.secret,
+            label=label,
+            hash_value=self.hash.copy().finalize(),
+            length=self.algorithm.digest_size)
+
+    def extract(self, key_material=None):
+        if key_material is None:
+            key_material = bytes(self.algorithm.digest_size)
+
+        if self.generation:
+            self.secret = hkdf_expand_label(
+                algorithm=self.algorithm,
+                secret=self.secret,
+                label=b'derived',
+                hash_value=self.hash_empty_value,
+                length=self.algorithm.digest_size)
+
+        self.generation += 1
+        self.secret = hkdf_extract(
+            algorithm=self.algorithm,
+            salt=self.secret,
+            key_material=key_material)
+
+    def update_hash(self, data):
+        self.hash.update(data)
+
+
 class Context:
     def __init__(self, is_client):
+        self.enc_key = None
+        self.dec_key = None
+        self.update_traffic_key_cb = lambda d, e, s: None
+
         if is_client:
             self.client_random = os.urandom(32)
             self.session_id = os.urandom(32)
             self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+            self.state = State.CLIENT_HANDSHAKE_START
+        else:
+            self.client_random = None
+            self.session_id = None
+            self.private_key = None
+            self.state = State.SERVER_EXPECT_CLIENT_HELLO
 
         self.is_client = is_client
 
-    def client_hello(self):
-        return ClientHello(
+    def handle_message(self, input_data, output_buf):
+        if self.state == State.CLIENT_HANDSHAKE_START:
+            self._client_send_hello(output_buf)
+        elif self.state == State.CLIENT_EXPECT_SERVER_HELLO:
+            self._client_handle_hello(input_data, output_buf)
+        elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
+            self._server_handle_hello(input_data, output_buf)
+        else:
+            raise Exception('unhandled state')
+
+    def _client_send_hello(self, output_buf):
+        hello = ClientHello(
             random=self.client_random,
             session_id=self.session_id,
             cipher_suites=[
-                CipherSuite.AES_256_GCM_SHA384,
                 CipherSuite.AES_128_GCM_SHA256,
-                CipherSuite.CHACHA20_POLY1305_SHA256,
             ],
             compression_methods=[
                 CompressionMethod.NULL,
@@ -507,3 +592,82 @@ class Context:
                 TLS_VERSION_1_3_DRAFT_26,
             ]
         )
+
+        self.key_schedule = KeySchedule()
+        self.key_schedule.extract(None)
+
+        hash_start = output_buf.tell()
+        push_client_hello(output_buf, hello)
+        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+
+        self.state = State.CLIENT_EXPECT_SERVER_HELLO
+
+    def _client_handle_hello(self, data, output_buf):
+        buf = Buffer(data=data)
+        peer_hello = pull_server_hello(buf)
+        assert buf.eof()
+
+        peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP256R1(), peer_hello.key_share[1])
+        shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
+
+        self.key_schedule.update_hash(data)
+        self.key_schedule.extract(shared_key)
+
+        self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b's hs traffic')
+        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+
+        self.state = State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
+
+    def _server_handle_hello(self, data, output_buf):
+        buf = Buffer(data=data)
+        peer_hello = pull_client_hello(buf)
+        assert buf.eof()
+
+        self.client_random = peer_hello.random
+        self.server_random = os.urandom(32)
+        self.session_id = peer_hello.session_id
+        self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+
+        self.key_schedule = KeySchedule()
+        self.key_schedule.extract(None)
+        self.key_schedule.update_hash(data)
+
+        peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP256R1(), peer_hello.key_share[0][1])
+        shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
+
+        # send reply
+        hello = ServerHello(
+            random=self.server_random,
+            session_id=self.session_id,
+            cipher_suite=CipherSuite.AES_128_GCM_SHA256,
+            compression_method=CompressionMethod.NULL,
+
+            key_share=(
+                Group.SECP256R1,
+                self.private_key.public_key().public_bytes(
+                    Encoding.X962, PublicFormat.UncompressedPoint),
+            ),
+            supported_version=TLS_VERSION_1_3,
+        )
+
+        hash_start = output_buf.tell()
+        push_server_hello(output_buf, hello)
+        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        self.key_schedule.extract(shared_key)
+
+        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b's hs traffic')
+        self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+
+        self.state = State.SERVER_EXPECT_FINISHED
+
+    def _setup_traffic_protection(self, direction, epoch, label):
+        key = self.key_schedule.derive_secret(label)
+
+        if direction == Direction.ENCRYPT:
+            self.enc_key = key
+        else:
+            self.dec_key = key
+
+        self.update_traffic_key_cb(direction, epoch, key)
