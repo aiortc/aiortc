@@ -8,6 +8,7 @@ from typing import List, Tuple
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 TLS_VERSION_1_2 = 0x0303
@@ -18,6 +19,20 @@ TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
 TLS_HANDSHAKE_CLIENT_HELLO = 1
 TLS_HANDSHAKE_SERVER_HELLO = 2
+
+
+def hkdf_label(label, length):
+    full_label = b'tls13 ' + label
+    return struct.pack('!HB', length, len(full_label)) + full_label + b'\x00'
+
+
+def hkdf_expand_label(algorithm, secret, label, length):
+    return HKDFExpand(
+        algorithm=algorithm,
+        length=length,
+        info=hkdf_label(label, length),
+        backend=default_backend()
+    ).derive(secret)
 
 
 class CipherSuite(IntEnum):

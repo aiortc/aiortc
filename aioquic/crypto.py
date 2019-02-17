@@ -1,33 +1,19 @@
 import binascii
-import struct
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import (Cipher, aead, algorithms,
                                                     modes)
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .packet import is_long_header
+from .tls import hkdf_expand_label, hkdf_label
 
 algorithm = hashes.SHA256()
 backend = default_backend()
 
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
 MAX_PN_SIZE = 4
-
-
-def hkdf_label(label, length):
-    full_label = b'tls13 ' + label
-    return struct.pack('!HB', length, len(full_label)) + full_label + b'\x00'
-
-
-def hkdf_expand_label(secret, label, length):
-    return HKDFExpand(
-        algorithm=algorithm,
-        length=length,
-        info=hkdf_label(label, length),
-        backend=backend
-    ).derive(secret)
 
 
 def derive_keying_material(cid, is_client):
@@ -43,9 +29,9 @@ def derive_keying_material(cid, is_client):
         backend=backend
     ).derive(cid)
     return (
-        hkdf_expand_label(secret, b'quic key', 16),
-        hkdf_expand_label(secret, b'quic iv', 12),
-        hkdf_expand_label(secret, b'quic hp', 16)
+        hkdf_expand_label(algorithm, secret, b'quic key', 16),
+        hkdf_expand_label(algorithm, secret, b'quic iv', 12),
+        hkdf_expand_label(algorithm, secret, b'quic hp', 16)
     )
 
 
