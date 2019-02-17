@@ -216,42 +216,6 @@ def push_uint64(buf, v):
     buf._pos += 8
 
 
-# QUIC VARIABLE LENGTH
-
-
-UINT_VAR_FORMATS = [
-    (pull_uint8, push_uint8, 0x3f),
-    (pull_uint16, push_uint16, 0x3fff),
-    (pull_uint32, push_uint32, 0x3fffffff),
-    (pull_uint64, push_uint64, 0x3fffffffffffffff),
-]
-
-
-def pull_uint_var(buf):
-    """
-    Pull a QUIC variable-length unsigned integer.
-    """
-    try:
-        kind = buf._data[buf._pos] // 64
-    except IndexError:
-        raise BufferReadError
-    pull, push, mask = UINT_VAR_FORMATS[kind]
-    return pull(buf) & mask
-
-
-def push_uint_var(buf, value):
-    """
-    Push a QUIC variable-length unsigned integer.
-    """
-    for i, (pull, push, mask) in enumerate(UINT_VAR_FORMATS):
-        if value <= mask:
-            start = buf._pos
-            push(buf, value)
-            buf._data[start] |= i * 64
-            return
-    raise ValueError('Integer is too big for a variable-length integer')
-
-
 # BLOCKS
 
 
@@ -319,11 +283,7 @@ def push_key_share(buf, value):
         push_bytes(buf, value[1])
 
 
-@contextmanager
-def push_extension(buf, extension_type):
-    push_uint16(buf, extension_type)
-    with push_block(buf, 2):
-        yield
+# QuicTransportParameters
 
 
 def push_tlv8(buf, param, value):
@@ -342,6 +302,25 @@ def push_tlv32(buf, param, value):
     push_uint16(buf, param)
     push_uint16(buf, 4)
     push_uint32(buf, value)
+
+
+def push_quic_transport_parameters(buf, value):
+    push_uint32(buf, 0xff000011)  # QUIC draft 17
+    with push_block(buf, 2):
+        push_tlv32(buf, 0x0005, 0x80100000)
+        push_tlv32(buf, 0x0006, 0x80100000)
+        push_tlv32(buf, 0x0007, 0x80100000)
+        push_tlv32(buf, 0x0004, 0x81000000)
+        push_tlv16(buf, 0x0001, 0x4258)
+        push_tlv16(buf, 0x0008, 0x4064)
+        push_tlv8(buf, 0x000a, 0x0a)
+
+
+@contextmanager
+def push_extension(buf, extension_type):
+    push_uint16(buf, extension_type)
+    with push_block(buf, 2):
+        yield
 
 
 # CLIENT HELLO
@@ -407,15 +386,7 @@ def push_client_hello(buf, hello):
                 push_list(buf, 2, push_uint16, hello.supported_groups)
 
             with push_extension(buf, ExtensionType.QUIC_TRANSPORT_PARAMETERS):
-                push_uint32(buf, 0xff000011)  # QUIC draft 17
-                with push_block(buf, 2):
-                    push_tlv32(buf, 0x0005, 0x80100000)
-                    push_tlv32(buf, 0x0006, 0x80100000)
-                    push_tlv32(buf, 0x0007, 0x80100000)
-                    push_tlv32(buf, 0x0004, 0x81000000)
-                    push_tlv16(buf, 0x0001, 0x4258)
-                    push_tlv16(buf, 0x0008, 0x4064)
-                    push_tlv8(buf, 0x000a, 0x0a)
+                push_quic_transport_parameters(buf, None)
 
             with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
