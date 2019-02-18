@@ -2,14 +2,22 @@ import binascii
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.tls import (Buffer, BufferReadError, ClientHello, Context,
-                         ServerHello, State, pull_block, pull_bytes,
-                         pull_client_hello, pull_encrypted_extensions,
+from aioquic.tls import (Buffer, BufferReadError, Certificate,
+                         CertificateVerify, ClientHello, Context,
+                         EncryptedExtensions, Finished, ServerHello, State,
+                         pull_block, pull_bytes, pull_certificate,
+                         pull_certificate_verify, pull_client_hello,
+                         pull_encrypted_extensions, pull_finished,
                          pull_server_hello, pull_uint8, pull_uint16,
-                         pull_uint32, pull_uint64, push_client_hello,
+                         pull_uint32, pull_uint64, push_certificate,
+                         push_certificate_verify, push_client_hello,
+                         push_encrypted_extensions, push_finished,
                          push_server_hello)
 
 from .utils import load
+
+CERTIFICATE_DATA = load('tls_certificate.bin')[11:-2]
+CERTIFICATE_VERIFY_SIGNATURE = load('tls_certificate_verify.bin')[-384:]
 
 
 class BufferTest(TestCase):
@@ -89,7 +97,6 @@ class ContextTest(TestCase):
 
         # check keys match
         self.assertEqual(client.dec_key, server.enc_key)
-        self.assertEqual(client.enc_key, server.dec_key)
 
 
 class TlsTest(TestCase):
@@ -243,3 +250,75 @@ class TlsTest(TestCase):
         extensions = pull_encrypted_extensions(buf)
         self.assertIsNotNone(extensions)
         self.assertTrue(buf.eof())
+
+        self.assertEqual(extensions.other_extensions, [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, binascii.unhexlify(
+                b'ff00001104ff000011004500050004801000000006000480100000000700048'
+                b'010000000040004810000000001000242580002001000000000000000000000'
+                b'000000000000000800024064000a00010a'))
+        ])
+
+    def test_push_encrypted_extensions(self):
+        extensions = EncryptedExtensions(other_extensions=[
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, binascii.unhexlify(
+                b'ff00001104ff000011004500050004801000000006000480100000000700048'
+                b'010000000040004810000000001000242580002001000000000000000000000'
+                b'000000000000000800024064000a00010a'))
+        ])
+
+        buf = Buffer(100)
+        push_encrypted_extensions(buf, extensions)
+        self.assertEqual(buf.data, load('tls_encrypted_extensions.bin'))
+
+    def test_pull_certificate(self):
+        buf = Buffer(data=load('tls_certificate.bin'))
+        certificate = pull_certificate(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(certificate.request_context, b'')
+        self.assertEqual(certificate.certificates, [(CERTIFICATE_DATA, b'')])
+
+    def test_push_certificate(self):
+        certificate = Certificate(
+            request_context=b'',
+            certificates=[(CERTIFICATE_DATA, b'')])
+
+        buf = Buffer(1600)
+        push_certificate(buf, certificate)
+        self.assertEqual(buf.data, load('tls_certificate.bin'))
+
+    def test_pull_certificate_verify(self):
+        buf = Buffer(data=load('tls_certificate_verify.bin'))
+        verify = pull_certificate_verify(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(verify.algorithm, tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256)
+        self.assertEqual(verify.signature, CERTIFICATE_VERIFY_SIGNATURE)
+
+    def test_push_certificate_verify(self):
+        verify = CertificateVerify(
+            algorithm=tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            signature=CERTIFICATE_VERIFY_SIGNATURE)
+
+        buf = Buffer(400)
+        push_certificate_verify(buf, verify)
+        self.assertEqual(buf.data, load('tls_certificate_verify.bin'))
+
+    def test_pull_finished(self):
+        buf = Buffer(data=load('tls_finished.bin'))
+        finished = pull_finished(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            finished.verify_data,
+            binascii.unhexlify('f157923234ff9a4921aadb2e0ec7b1a3'
+                               '0fce73fb9ec0c4276f9af268f408ec68'))
+
+    def test_push_finished(self):
+        finished = Finished(
+            verify_data=binascii.unhexlify('f157923234ff9a4921aadb2e0ec7b1a3'
+                                           '0fce73fb9ec0c4276f9af268f408ec68'))
+
+        buf = Buffer(128)
+        push_finished(buf, finished)
+        self.assertEqual(buf.data, load('tls_finished.bin'))

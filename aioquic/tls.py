@@ -1,14 +1,14 @@
 import os
 import struct
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from struct import pack_into, unpack_from
 from typing import List, Tuple
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -18,11 +18,6 @@ TLS_VERSION_1_3_DRAFT_28 = 0x7f1c
 TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
 TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
-TLS_HANDSHAKE_CLIENT_HELLO = 1
-TLS_HANDSHAKE_SERVER_HELLO = 2
-TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS = 8
-TLS_HANDSHAKE_CERTIFICATE = 11
-
 
 class Direction(Enum):
     DECRYPT = 0
@@ -30,7 +25,24 @@ class Direction(Enum):
 
 
 class Epoch(Enum):
+    INITIAL = 0
+    ZERO_RTT = 1
     HANDSHAKE = 2
+    ONE_RTT = 3
+
+
+class State(Enum):
+    CLIENT_HANDSHAKE_START = 0
+    CLIENT_EXPECT_SERVER_HELLO = 1
+    CLIENT_EXPECT_ENCRYPTED_EXTENSIONS = 2
+    CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE = 3
+    CLIENT_EXPECT_CERTIFICATE_CERTIFICATE = 4
+    CLIENT_EXPECT_CERTIFICATE_VERIFY = 5
+    CLIENT_EXPECT_FINISHED = 6
+    CLIENT_POST_HANDSHAKE = 7
+
+    SERVER_EXPECT_CLIENT_HELLO = 8
+    SERVER_EXPECT_FINISHED = 9
 
 
 def hkdf_label(label, hash_value, length):
@@ -67,16 +79,38 @@ class CompressionMethod(IntEnum):
 
 class ExtensionType(IntEnum):
     SERVER_NAME = 0
+    STATUS_REQUEST = 5
     SUPPORTED_GROUPS = 10
     SIGNATURE_ALGORITHMS = 13
+    ALPN = 16
+    COMPRESS_CERTIFICATE = 27
+    PRE_SHARED_KEY = 41
+    EARLY_DATA = 42
     SUPPORTED_VERSIONS = 43
+    COOKIE = 44
     PSK_KEY_EXCHANGE_MODES = 45
     KEY_SHARE = 51
     QUIC_TRANSPORT_PARAMETERS = 65445
+    ENCRYPTED_SERVER_NAME = 65486
 
 
 class Group(IntEnum):
     SECP256R1 = 23
+
+
+class HandshakeType(IntEnum):
+    CLIENT_HELLO = 1
+    SERVER_HELLO = 2
+    NEW_SESSION_TICKET = 4
+    END_OF_EARLY_DATA = 5
+    ENCRYPTED_EXTENSIONS = 8
+    CERTIFICATE = 11
+    CERTIFICATE_REQUEST = 13
+    CERTIFICATE_VERIFY = 15
+    FINISHED = 20
+    KEY_UPDATE = 24
+    COMPRESSED_CERTIFICATE = 25
+    MESSAGE_HASH = 254
 
 
 class KeyExchangeMode(IntEnum):
@@ -124,38 +158,6 @@ class Buffer:
 
     def tell(self):
         return self._pos
-
-
-@dataclass
-class ClientHello:
-    random: bytes = None
-    session_id: bytes = None
-    cipher_suites: List[int] = None
-    compression_methods: List[int] = None
-
-    # extensions
-    key_exchange_modes: List[int] = None
-    key_share: List[Tuple[int, bytes]] = None
-    signature_algorithms: List[int] = None
-    supported_groups: List[int] = None
-    supported_versions: List[int] = None
-
-
-@dataclass
-class EncryptedExtensions:
-    pass
-
-
-@dataclass
-class ServerHello:
-    random: bytes = None
-    session_id: bytes = None
-    cipher_suite: int = None
-    compression_method: int = None
-
-    # extensions
-    key_share: Tuple[int, bytes] = None
-    supported_version: int = None
 
 
 # BYTES
@@ -273,7 +275,7 @@ def pull_block(buf, capacity):
     for b in pull_bytes(buf, capacity):
         length = (length << 8) | b
     end = buf._pos + length
-    yield end
+    yield length
     assert buf._pos == end
 
 
@@ -300,7 +302,8 @@ def pull_list(buf, capacity, func):
     Pull a list of items.
     """
     items = []
-    with pull_block(buf, capacity) as end:
+    with pull_block(buf, capacity) as length:
+        end = buf._pos + length
         while buf._pos < end:
             items.append(func(buf))
     return items
@@ -352,6 +355,12 @@ def push_tlv32(buf, param, value):
     push_uint32(buf, value)
 
 
+def pull_quic_transport_parameters(buf):
+    pull_uint32(buf)
+    with pull_block(buf, 2) as length:
+        pull_bytes(buf, length)
+
+
 def push_quic_transport_parameters(buf, value):
     push_uint32(buf, 0xff000011)  # QUIC draft 17
     with push_block(buf, 2):
@@ -371,12 +380,27 @@ def push_extension(buf, extension_type):
         yield
 
 
-# ClientHello
+# MESSAGES
+
+@dataclass
+class ClientHello:
+    random: bytes = None
+    session_id: bytes = None
+    cipher_suites: List[int] = None
+    compression_methods: List[int] = None
+
+    # extensions
+    key_exchange_modes: List[int] = None
+    key_share: List[Tuple[int, bytes]] = None
+    signature_algorithms: List[int] = None
+    supported_groups: List[int] = None
+    supported_versions: List[int] = None
+
 
 def pull_client_hello(buf):
     hello = ClientHello()
 
-    assert pull_uint8(buf) == TLS_HANDSHAKE_CLIENT_HELLO
+    assert pull_uint8(buf) == HandshakeType.CLIENT_HELLO
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
         hello.random = pull_bytes(buf, 32)
@@ -410,7 +434,7 @@ def pull_client_hello(buf):
 
 
 def push_client_hello(buf, hello):
-    push_uint8(buf, TLS_HANDSHAKE_CLIENT_HELLO)
+    push_uint8(buf, HandshakeType.CLIENT_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
         push_bytes(buf, hello.random)
@@ -440,13 +464,22 @@ def push_client_hello(buf, hello):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
 
 
-# ServerHello
+@dataclass
+class ServerHello:
+    random: bytes = None
+    session_id: bytes = None
+    cipher_suite: int = None
+    compression_method: int = None
+
+    # extensions
+    key_share: Tuple[int, bytes] = None
+    supported_version: int = None
 
 
 def pull_server_hello(buf):
     hello = ServerHello()
 
-    assert pull_uint8(buf) == TLS_HANDSHAKE_SERVER_HELLO
+    assert pull_uint8(buf) == HandshakeType.SERVER_HELLO
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
         hello.random = pull_bytes(buf, 32)
@@ -472,7 +505,7 @@ def pull_server_hello(buf):
 
 
 def push_server_hello(buf, hello):
-    push_uint8(buf, TLS_HANDSHAKE_SERVER_HELLO)
+    push_uint8(buf, HandshakeType.SERVER_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
         push_bytes(buf, hello.random)
@@ -492,32 +525,126 @@ def push_server_hello(buf, hello):
                 push_key_share(buf, hello.key_share)
 
 
-# EncryptedExtensions
+@dataclass
+class EncryptedExtensions:
+    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
 def pull_encrypted_extensions(buf):
     extensions = EncryptedExtensions()
 
-    assert pull_uint8(buf) == TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS
-
+    assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
         def pull_extension(buf):
-            pull_uint16(buf)
+            extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
-            pull_bytes(buf, extension_length)
+            extensions.other_extensions.append(
+                (extension_type, pull_bytes(buf, extension_length)),
+            )
 
         pull_list(buf, 2, pull_extension)
 
     return extensions
 
 
-class State(Enum):
-    CLIENT_HANDSHAKE_START = 0
-    CLIENT_EXPECT_SERVER_HELLO = 1
-    CLIENT_EXPECT_ENCRYPTED_EXTENSIONS = 2
-    CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE = 3
-    SERVER_EXPECT_CLIENT_HELLO = 4
-    SERVER_EXPECT_FINISHED = 5
+def push_encrypted_extensions(buf, extensions):
+    push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
+    with push_block(buf, 3):
+        with push_block(buf, 2):
+            for extension_type, extension_value in extensions.other_extensions:
+                with push_extension(buf, extension_type):
+                    push_bytes(buf, extension_value)
+
+
+@dataclass
+class Certificate:
+    request_context: bytes = None
+    certificates: List = field(default_factory=list)
+
+
+def pull_certificate(buf):
+    certificate = Certificate()
+
+    assert pull_uint8(buf) == HandshakeType.CERTIFICATE
+    with pull_block(buf, 3):
+        with pull_block(buf, 1) as length:
+            certificate.request_context = pull_bytes(buf, length)
+
+        def pull_certificate_entry(buf):
+            with pull_block(buf, 3) as length:
+                data = pull_bytes(buf, length)
+            with pull_block(buf, 2) as length:
+                extensions = pull_bytes(buf, length)
+            return (data, extensions)
+
+        certificate.certificates = pull_list(buf, 3, pull_certificate_entry)
+
+    return certificate
+
+
+def push_certificate(buf, certificate):
+    push_uint8(buf, HandshakeType.CERTIFICATE)
+    with push_block(buf, 3):
+        with push_block(buf, 1):
+            push_bytes(buf, certificate.request_context)
+
+        def push_certificate_entry(buf, entry):
+            with push_block(buf, 3):
+                push_bytes(buf, entry[0])
+            with push_block(buf, 2):
+                push_bytes(buf, entry[1])
+
+        push_list(buf, 3, push_certificate_entry, certificate.certificates)
+
+
+@dataclass
+class CertificateVerify:
+    algorithm: int = None
+    signature: bytes = None
+
+
+def pull_certificate_verify(buf):
+    verify = CertificateVerify()
+
+    assert pull_uint8(buf) == HandshakeType.CERTIFICATE_VERIFY
+    with pull_block(buf, 3):
+        verify.algorithm = pull_uint16(buf)
+        with pull_block(buf, 2) as length:
+            verify.signature = pull_bytes(buf, length)
+
+    return verify
+
+
+def push_certificate_verify(buf, verify):
+    push_uint8(buf, HandshakeType.CERTIFICATE_VERIFY)
+    with push_block(buf, 3):
+        push_uint16(buf, verify.algorithm)
+        with push_block(buf, 2):
+            push_bytes(buf, verify.signature)
+
+
+@dataclass
+class Finished:
+    verify_data: bytes = None
+
+
+def pull_finished(buf):
+    finished = Finished()
+
+    assert pull_uint8(buf) == HandshakeType.FINISHED
+    with pull_block(buf, 3) as length:
+        finished.verify_data = pull_bytes(buf, length)
+
+    return finished
+
+
+def push_finished(buf, finished):
+    push_uint8(buf, HandshakeType.FINISHED)
+    with push_block(buf, 3):
+        push_bytes(buf, finished.verify_data)
+
+
+# CONTEXT
 
 
 class KeySchedule:
@@ -560,6 +687,7 @@ class KeySchedule:
 
 class Context:
     def __init__(self, is_client):
+        self.receive_buffer = b''
         self.enc_key = None
         self.dec_key = None
         self.update_traffic_key_cb = lambda d, e, s: None
@@ -578,20 +706,41 @@ class Context:
         self.is_client = is_client
 
     def handle_message(self, input_data, output_buf):
-        input_buf = Buffer(data=input_data)
-        if self.state == State.CLIENT_HANDSHAKE_START:
+        if not input_data:
             self._client_send_hello(output_buf)
-        elif self.state == State.CLIENT_EXPECT_SERVER_HELLO:
-            self._client_handle_hello(input_buf, output_buf)
-        elif self.state == State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS:
-            self._client_handle_encrypted_extensions(input_buf, output_buf)
-        elif self.state == State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE:
-            # TODO
-            pass
-        elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
-            self._server_handle_hello(input_buf, output_buf)
-        else:
-            raise Exception('unhandled state')
+            return
+
+        self.receive_buffer += input_data
+        while len(self.receive_buffer) >= 4:
+            # determine record length
+            record_length = 0
+            for b in self.receive_buffer[1:4]:
+                record_length = (record_length << 8) | b
+            record_length += 4
+
+            # check record is complete
+            if len(self.receive_buffer) < record_length:
+                break
+            record = self.receive_buffer[:record_length]
+            self.receive_buffer = self.receive_buffer[record_length:]
+
+            input_buf = Buffer(data=record)
+            if self.state == State.CLIENT_EXPECT_SERVER_HELLO:
+                self._client_handle_hello(input_buf, output_buf)
+            elif self.state == State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS:
+                self._client_handle_encrypted_extensions(input_buf, output_buf)
+            elif self.state == State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE:
+                self._client_handle_certificate(input_buf, output_buf)
+            elif self.state == State.CLIENT_EXPECT_CERTIFICATE_VERIFY:
+                self._client_handle_certificate_verify(input_buf, output_buf)
+            elif self.state == State.CLIENT_EXPECT_FINISHED:
+                self._client_handle_finished(input_buf, output_buf)
+            elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
+                self._server_handle_hello(input_buf, output_buf)
+            else:
+                raise Exception('unhandled state')
+
+            assert input_buf.eof()
 
     def _client_send_hello(self, output_buf):
         hello = ClientHello(
@@ -642,7 +791,6 @@ class Context:
 
     def _client_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_server_hello(input_buf)
-        assert input_buf.eof()
 
         peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
             ec.SECP256R1(), peer_hello.key_share[1])
@@ -652,18 +800,42 @@ class Context:
         self.key_schedule.extract(shared_key)
 
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b's hs traffic')
-        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
 
         self.state = State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
 
     def _client_handle_encrypted_extensions(self, input_buf, output_buf):
         pull_encrypted_extensions(input_buf)
 
+        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+        self.key_schedule.update_hash(input_buf.data)
+
         self.state = State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
+
+    def _client_handle_certificate(self, input_buf, output_buf):
+        pull_certificate(input_buf)
+
+        self.key_schedule.update_hash(input_buf.data)
+
+        self.state = State.CLIENT_EXPECT_CERTIFICATE_VERIFY
+
+    def _client_handle_certificate_verify(self, input_buf, output_buf):
+        pull_certificate_verify(input_buf)
+
+        self.key_schedule.update_hash(input_buf.data)
+
+        self.state = State.CLIENT_EXPECT_FINISHED
+
+    def _client_handle_finished(self, input_buf, output_buf):
+        pull_finished(input_buf)
+
+        self.key_schedule.update_hash(input_buf.data)
+        self.key_schedule.extract(None)
+        self._setup_traffic_protection(Direction.DECRYPT, Epoch.ONE_RTT, b's ap traffic')
+
+        self.state = State.CLIENT_POST_HANDSHAKE
 
     def _server_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_client_hello(input_buf)
-        assert input_buf.eof()
 
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
