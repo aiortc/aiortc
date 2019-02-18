@@ -55,11 +55,11 @@ class PacketTest(TestCase):
     def test_pull_empty(self):
         buf = Buffer(data=b'')
         with self.assertRaises(BufferReadError):
-            pull_quic_header(buf)
+            pull_quic_header(buf, host_cid_length=8)
 
     def test_pull_initial_client(self):
         buf = Buffer(data=load('initial_client.bin'))
-        header = pull_quic_header(buf)
+        header = pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(header.version, PROTOCOL_VERSION_DRAFT_17)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, binascii.unhexlify('90ed1e1c7b04b5d3'))
@@ -70,7 +70,7 @@ class PacketTest(TestCase):
 
     def test_pull_initial_server(self):
         buf = Buffer(data=load('initial_server.bin'))
-        header = pull_quic_header(buf)
+        header = pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(header.version, PROTOCOL_VERSION_DRAFT_17)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, b'')
@@ -82,19 +82,24 @@ class PacketTest(TestCase):
     def test_pull_long_header_no_fixed_bit(self):
         buf = Buffer(data=b'\x80\x00\x00\x00\x00\x00')
         with self.assertRaises(ValueError) as cm:
-            pull_quic_header(buf)
+            pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(str(cm.exception), 'Packet fixed bit is zero')
 
     def test_pull_long_header_too_short(self):
         buf = Buffer(data=b'\xc0\x00')
         with self.assertRaises(BufferReadError):
-            pull_quic_header(buf)
+            pull_quic_header(buf, host_cid_length=8)
 
     def test_pull_short_header(self):
-        buf = Buffer(data=b'\x40\x00')
-        with self.assertRaises(ValueError) as cm:
-            pull_quic_header(buf)
-        self.assertEqual(str(cm.exception), 'Short header is not supported yet')
+        buf = Buffer(data=load('short_header.bin'))
+        header = pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(header.version, 0)
+        self.assertEqual(header.packet_type, 0x50)
+        self.assertEqual(header.destination_cid, binascii.unhexlify('f45aa7b59c0e1ad6'))
+        self.assertEqual(header.source_cid, b'')
+        self.assertEqual(header.token, b'')
+        self.assertEqual(header.rest_length, 12)
+        self.assertEqual(buf.tell(), 9)
 
     def test_push_initial(self):
         buf = Buffer(capacity=32)

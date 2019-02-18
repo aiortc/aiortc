@@ -105,6 +105,10 @@ class Buffer:
         self._pos = 0
 
     @property
+    def capacity(self):
+        return self._length
+
+    @property
     def data(self):
         return bytes(self._data[:self._pos])
 

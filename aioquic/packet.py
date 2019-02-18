@@ -35,6 +35,12 @@ class QuicHeader:
 
 
 @dataclass
+class QuicShortHeader:
+    packet_type: int
+    destination_cid: bytes
+
+
+@dataclass
 class QuickAckFrame:
     largest_acknowledged: int
     ack_delay: int
@@ -79,7 +85,7 @@ def push_uint_var(buf, value):
     raise ValueError('Integer is too big for a variable-length integer')
 
 
-def pull_quic_header(buf):
+def pull_quic_header(buf, host_cid_length=None):
     first_byte = pull_uint8(buf)
     if not (first_byte & PACKET_FIXED_BIT):
         raise ValueError('Packet fixed bit is zero')
@@ -110,7 +116,15 @@ def pull_quic_header(buf):
             rest_length=rest_length)
     else:
         # short header packet
-        raise ValueError('Short header is not supported yet')
+        packet_type = first_byte & PACKET_TYPE_MASK
+        destination_cid = pull_bytes(buf, host_cid_length)
+        return QuicHeader(
+            version=0,
+            packet_type=packet_type,
+            destination_cid=destination_cid,
+            source_cid=b'',
+            token=b'',
+            rest_length=buf.capacity - buf.tell())
 
 
 def push_quic_header(buf, header):
