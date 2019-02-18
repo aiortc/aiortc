@@ -19,6 +19,15 @@ from .utils import load
 CERTIFICATE_DATA = load('tls_certificate.bin')[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load('tls_certificate_verify.bin')[-384:]
 
+CLIENT_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
+    b'ff0000110031000500048010000000060004801000000007000480100000000'
+    b'4000481000000000100024258000800024064000a00010a')
+
+SERVER_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
+    b'ff00001104ff000011004500050004801000000006000480100000000700048'
+    b'010000000040004810000000001000242580002001000000000000000000000'
+    b'000000000000000800024064000a00010a')
+
 
 class BufferTest(TestCase):
     def test_pull_block_truncated(self):
@@ -69,9 +78,16 @@ class BufferTest(TestCase):
 class ContextTest(TestCase):
     def test_handshake(self):
         client = Context(is_client=True)
+        client.handshake_extensions = [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
+        ]
         self.assertEqual(client.state, State.CLIENT_HANDSHAKE_START)
 
         server = Context(is_client=False)
+        server.certificate = CERTIFICATE_DATA
+        server.handshake_extensions = [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
+        ]
         self.assertEqual(server.state, State.SERVER_EXPECT_CLIENT_HELLO)
 
         # send client hello
@@ -82,21 +98,23 @@ class ContextTest(TestCase):
         server_input = client_buf.data
         client_buf.seek(0)
 
-        # handle client hello, send server hello
-        server_buf = Buffer(capacity=512)
+        # handle client hello
+        # send server hello, encrypted extensions, certificate
+        server_buf = Buffer(capacity=2048)
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        self.assertEqual(server_buf.tell(), 155)
+        self.assertEqual(server_buf.tell(), 155 + 90 + 1538)
         client_input = server_buf.data
         server_buf.seek(0)
 
-        # handle server hello
+        # handle server hello, encrypted extensions, certificate
         client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
-        self.assertEqual(server_buf.tell(), 0)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
+        self.assertEqual(client_buf.tell(), 0)
 
         # check keys match
         self.assertEqual(client.dec_key, server.enc_key)
+        self.assertEqual(client.enc_key, server.dec_key)
 
 
 class TlsTest(TestCase):
@@ -151,6 +169,10 @@ class TlsTest(TestCase):
             tls.TLS_VERSION_1_3_DRAFT_26,
         ])
 
+        self.assertEqual(hello.other_extensions, [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
+        ])
+
     def test_push_client_hello(self):
         hello = ClientHello(
             random=binascii.unhexlify(
@@ -192,6 +214,10 @@ class TlsTest(TestCase):
                 tls.TLS_VERSION_1_3_DRAFT_28,
                 tls.TLS_VERSION_1_3_DRAFT_27,
                 tls.TLS_VERSION_1_3_DRAFT_26,
+            ],
+
+            other_extensions=[
+                (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
             ])
 
         buf = Buffer(1000)
@@ -252,18 +278,12 @@ class TlsTest(TestCase):
         self.assertTrue(buf.eof())
 
         self.assertEqual(extensions.other_extensions, [
-            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, binascii.unhexlify(
-                b'ff00001104ff000011004500050004801000000006000480100000000700048'
-                b'010000000040004810000000001000242580002001000000000000000000000'
-                b'000000000000000800024064000a00010a'))
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
         ])
 
     def test_push_encrypted_extensions(self):
         extensions = EncryptedExtensions(other_extensions=[
-            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, binascii.unhexlify(
-                b'ff00001104ff000011004500050004801000000006000480100000000700048'
-                b'010000000040004810000000001000242580002001000000000000000000000'
-                b'000000000000000800024064000a00010a'))
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
         ])
 
         buf = Buffer(100)

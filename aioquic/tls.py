@@ -334,45 +334,6 @@ def push_key_share(buf, value):
         push_bytes(buf, value[1])
 
 
-# QuicTransportParameters
-
-
-def push_tlv8(buf, param, value):
-    push_uint16(buf, param)
-    push_uint16(buf, 1)
-    push_uint8(buf, value)
-
-
-def push_tlv16(buf, param, value):
-    push_uint16(buf, param)
-    push_uint16(buf, 2)
-    push_uint16(buf, value)
-
-
-def push_tlv32(buf, param, value):
-    push_uint16(buf, param)
-    push_uint16(buf, 4)
-    push_uint32(buf, value)
-
-
-def pull_quic_transport_parameters(buf):
-    pull_uint32(buf)
-    with pull_block(buf, 2) as length:
-        pull_bytes(buf, length)
-
-
-def push_quic_transport_parameters(buf, value):
-    push_uint32(buf, 0xff000011)  # QUIC draft 17
-    with push_block(buf, 2):
-        push_tlv32(buf, 0x0005, 0x80100000)
-        push_tlv32(buf, 0x0006, 0x80100000)
-        push_tlv32(buf, 0x0007, 0x80100000)
-        push_tlv32(buf, 0x0004, 0x81000000)
-        push_tlv16(buf, 0x0001, 0x4258)
-        push_tlv16(buf, 0x0008, 0x4064)
-        push_tlv8(buf, 0x000a, 0x0a)
-
-
 @contextmanager
 def push_extension(buf, extension_type):
     push_uint16(buf, extension_type)
@@ -395,6 +356,8 @@ class ClientHello:
     signature_algorithms: List[int] = None
     supported_groups: List[int] = None
     supported_versions: List[int] = None
+
+    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
 def pull_client_hello(buf):
@@ -426,7 +389,9 @@ def pull_client_hello(buf):
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
                 hello.key_exchange_modes = pull_list(buf, 1, pull_uint8)
             else:
-                pull_bytes(buf, extension_length)
+                hello.other_extensions.append(
+                    (extension_type, pull_bytes(buf, extension_length)),
+                )
 
         pull_list(buf, 2, pull_extension)
 
@@ -457,8 +422,9 @@ def push_client_hello(buf, hello):
             with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
                 push_list(buf, 2, push_uint16, hello.supported_groups)
 
-            with push_extension(buf, ExtensionType.QUIC_TRANSPORT_PARAMETERS):
-                push_quic_transport_parameters(buf, None)
+            for extension_type, extension_value in hello.other_extensions:
+                with push_extension(buf, extension_type):
+                    push_bytes(buf, extension_value)
 
             with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
@@ -687,10 +653,13 @@ class KeySchedule:
 
 class Context:
     def __init__(self, is_client):
+        self.certificates = None
+        self.handshake_extensions = []
+        self.update_traffic_key_cb = lambda d, e, s: None
+
         self.receive_buffer = b''
         self.enc_key = None
         self.dec_key = None
-        self.update_traffic_key_cb = lambda d, e, s: None
 
         if is_client:
             self.client_random = os.urandom(32)
@@ -777,7 +746,9 @@ class Context:
                 TLS_VERSION_1_3_DRAFT_28,
                 TLS_VERSION_1_3_DRAFT_27,
                 TLS_VERSION_1_3_DRAFT_26,
-            ]
+            ],
+
+            other_extensions=self.handshake_extensions
         )
 
         self.key_schedule = KeySchedule()
@@ -850,7 +821,7 @@ class Context:
             ec.SECP256R1(), peer_hello.key_share[0][1])
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
-        # send reply
+        # send hello
         hello = ServerHello(
             random=self.server_random,
             session_id=self.session_id,
@@ -872,6 +843,13 @@ class Context:
 
         self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b's hs traffic')
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+
+        # send encrypted extensions, certificate
+        push_encrypted_extensions(output_buf, EncryptedExtensions(
+            other_extensions=self.handshake_extensions))
+        push_certificate(output_buf, Certificate(
+            request_context=b'',
+            certificates=[(self.certificate, b'')]))
 
         self.state = State.SERVER_EXPECT_FINISHED
 
