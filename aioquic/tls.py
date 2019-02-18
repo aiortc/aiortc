@@ -163,7 +163,7 @@ class Buffer:
 # BYTES
 
 
-def pull_bytes(buf, length):
+def pull_bytes(buf: Buffer, length: int) -> bytes:
     """
     Pull bytes.
     """
@@ -174,7 +174,7 @@ def pull_bytes(buf, length):
     return v
 
 
-def push_bytes(buf, v):
+def push_bytes(buf: Buffer, v: bytes):
     """
     Push bytes.
     """
@@ -186,7 +186,7 @@ def push_bytes(buf, v):
 # INTEGERS
 
 
-def pull_uint8(buf):
+def pull_uint8(buf: Buffer) -> int:
     """
     Pull an 8-bit unsigned integer.
     """
@@ -198,7 +198,7 @@ def pull_uint8(buf):
         raise BufferReadError
 
 
-def push_uint8(buf, v):
+def push_uint8(buf: Buffer, v: int):
     """
     Push an 8-bit unsigned integer.
     """
@@ -206,7 +206,7 @@ def push_uint8(buf, v):
     buf._pos += 1
 
 
-def pull_uint16(buf):
+def pull_uint16(buf: Buffer) -> int:
     """
     Pull a 16-bit unsigned integer.
     """
@@ -218,7 +218,7 @@ def pull_uint16(buf):
         raise BufferReadError
 
 
-def push_uint16(buf, v):
+def push_uint16(buf: Buffer, v: int):
     """
     Push a 16-bit unsigned integer.
     """
@@ -226,7 +226,7 @@ def push_uint16(buf, v):
     buf._pos += 2
 
 
-def pull_uint32(buf):
+def pull_uint32(buf: Buffer) -> int:
     """
     Pull a 32-bit unsigned integer.
     """
@@ -238,7 +238,7 @@ def pull_uint32(buf):
         raise BufferReadError
 
 
-def push_uint32(buf, v):
+def push_uint32(buf: Buffer, v: int):
     """
     Push a 32-bit unsigned integer.
     """
@@ -246,7 +246,7 @@ def push_uint32(buf, v):
     buf._pos += 4
 
 
-def pull_uint64(buf):
+def pull_uint64(buf: Buffer) -> int:
     """
     Pull a 64-bit unsigned integer.
     """
@@ -258,7 +258,7 @@ def pull_uint64(buf):
         raise BufferReadError
 
 
-def push_uint64(buf, v):
+def push_uint64(buf: Buffer, v: int):
     """
     Push a 64-bit unsigned integer.
     """
@@ -270,7 +270,7 @@ def push_uint64(buf, v):
 
 
 @contextmanager
-def pull_block(buf, capacity):
+def pull_block(buf: Buffer, capacity: int):
     length = 0
     for b in pull_bytes(buf, capacity):
         length = (length << 8) | b
@@ -280,7 +280,7 @@ def pull_block(buf, capacity):
 
 
 @contextmanager
-def push_block(buf, capacity):
+def push_block(buf: Buffer, capacity: int):
     """
     Context manager to push a variable-length block, with `capacity` bytes
     to write the length.
@@ -297,7 +297,7 @@ def push_block(buf, capacity):
 # LISTS
 
 
-def pull_list(buf, capacity, func):
+def pull_list(buf: Buffer, capacity: int, func):
     """
     Pull a list of items.
     """
@@ -309,7 +309,7 @@ def pull_list(buf, capacity, func):
     return items
 
 
-def push_list(buf, capacity, func, values):
+def push_list(buf: Buffer, capacity: int, func, values):
     """
     Push a list of items.
     """
@@ -321,21 +321,21 @@ def push_list(buf, capacity, func, values):
 # KeyShareEntry
 
 
-def pull_key_share(buf):
+def pull_key_share(buf: Buffer) -> Tuple[int, bytes]:
     group = pull_uint16(buf)
     data_length = pull_uint16(buf)
     data = pull_bytes(buf, data_length)
     return (group, data)
 
 
-def push_key_share(buf, value):
+def push_key_share(buf: Buffer, value: Tuple[int, bytes]):
     push_uint16(buf, value[0])
     with push_block(buf, 2):
         push_bytes(buf, value[1])
 
 
 @contextmanager
-def push_extension(buf, extension_type):
+def push_extension(buf: Buffer, extension_type: int):
     push_uint16(buf, extension_type)
     with push_block(buf, 2):
         yield
@@ -360,7 +360,7 @@ class ClientHello:
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
-def pull_client_hello(buf):
+def pull_client_hello(buf: Buffer):
     hello = ClientHello()
 
     assert pull_uint8(buf) == HandshakeType.CLIENT_HELLO
@@ -398,7 +398,7 @@ def pull_client_hello(buf):
     return hello
 
 
-def push_client_hello(buf, hello):
+def push_client_hello(buf: Buffer, hello: ClientHello):
     push_uint8(buf, HandshakeType.CLIENT_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
@@ -442,7 +442,7 @@ class ServerHello:
     supported_version: int = None
 
 
-def pull_server_hello(buf):
+def pull_server_hello(buf: Buffer) -> ServerHello:
     hello = ServerHello()
 
     assert pull_uint8(buf) == HandshakeType.SERVER_HELLO
@@ -470,7 +470,7 @@ def pull_server_hello(buf):
     return hello
 
 
-def push_server_hello(buf, hello):
+def push_server_hello(buf: Buffer, hello: ServerHello):
     push_uint8(buf, HandshakeType.SERVER_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
@@ -496,7 +496,7 @@ class EncryptedExtensions:
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
-def pull_encrypted_extensions(buf):
+def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
     extensions = EncryptedExtensions()
 
     assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
@@ -513,7 +513,7 @@ def pull_encrypted_extensions(buf):
     return extensions
 
 
-def push_encrypted_extensions(buf, extensions):
+def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions):
     push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
     with push_block(buf, 3):
         with push_block(buf, 2):
@@ -524,11 +524,11 @@ def push_encrypted_extensions(buf, extensions):
 
 @dataclass
 class Certificate:
-    request_context: bytes = None
+    request_context: bytes = b''
     certificates: List = field(default_factory=list)
 
 
-def pull_certificate(buf):
+def pull_certificate(buf: Buffer) -> Certificate:
     certificate = Certificate()
 
     assert pull_uint8(buf) == HandshakeType.CERTIFICATE
@@ -548,7 +548,7 @@ def pull_certificate(buf):
     return certificate
 
 
-def push_certificate(buf, certificate):
+def push_certificate(buf: Buffer, certificate: Certificate):
     push_uint8(buf, HandshakeType.CERTIFICATE)
     with push_block(buf, 3):
         with push_block(buf, 1):
@@ -569,7 +569,7 @@ class CertificateVerify:
     signature: bytes = None
 
 
-def pull_certificate_verify(buf):
+def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
     verify = CertificateVerify()
 
     assert pull_uint8(buf) == HandshakeType.CERTIFICATE_VERIFY
@@ -581,7 +581,7 @@ def pull_certificate_verify(buf):
     return verify
 
 
-def push_certificate_verify(buf, verify):
+def push_certificate_verify(buf: Buffer, verify: CertificateVerify):
     push_uint8(buf, HandshakeType.CERTIFICATE_VERIFY)
     with push_block(buf, 3):
         push_uint16(buf, verify.algorithm)
@@ -591,10 +591,10 @@ def push_certificate_verify(buf, verify):
 
 @dataclass
 class Finished:
-    verify_data: bytes = None
+    verify_data: bytes = b''
 
 
-def pull_finished(buf):
+def pull_finished(buf: Buffer) -> Finished:
     finished = Finished()
 
     assert pull_uint8(buf) == HandshakeType.FINISHED
@@ -604,7 +604,7 @@ def pull_finished(buf):
     return finished
 
 
-def push_finished(buf, finished):
+def push_finished(buf: Buffer, finished: Finished):
     push_uint8(buf, HandshakeType.FINISHED)
     with push_block(buf, 3):
         push_bytes(buf, finished.verify_data)
