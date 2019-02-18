@@ -1,6 +1,10 @@
 import binascii
 from unittest import TestCase
 
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+
 from aioquic import tls
 from aioquic.tls import (Buffer, BufferReadError, Certificate,
                          CertificateVerify, ClientHello, Context,
@@ -15,6 +19,11 @@ from aioquic.tls import (Buffer, BufferReadError, Certificate,
                          push_server_hello)
 
 from .utils import load
+
+SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
+    load('ssl_cert.pem'), backend=default_backend())
+SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
+    load('ssl_key.pem'), password=None, backend=default_backend())
 
 CERTIFICATE_DATA = load('tls_certificate.bin')[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load('tls_certificate_verify.bin')[-384:]
@@ -84,7 +93,9 @@ class ContextTest(TestCase):
         self.assertEqual(client.state, State.CLIENT_HANDSHAKE_START)
 
         server = Context(is_client=False)
-        server.certificate = CERTIFICATE_DATA
+        server.certificate = SERVER_CERTIFICATE
+        server.certificate_private_key = SERVER_PRIVATE_KEY
+
         server.handshake_extensions = [
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
         ]
@@ -99,18 +110,26 @@ class ContextTest(TestCase):
         client_buf.seek(0)
 
         # handle client hello
-        # send server hello, encrypted extensions, certificate
-        server_buf = Buffer(capacity=2048)
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = Buffer(capacity=4096)
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        self.assertEqual(server_buf.tell(), 155 + 90 + 1538)
+        self.assertEqual(server_buf.tell(), 155 + 90 + 1538 + 392 + 36)
         client_input = server_buf.data
         server_buf.seek(0)
 
-        # handle server hello, encrypted extensions, certificate
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # send finished
         client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
-        self.assertEqual(client_buf.tell(), 0)
+        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+        self.assertEqual(client_buf.tell(), 36)
+        server_input = client_buf.data
+        client_buf.seek(0)
+
+        # handle finished
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
+        self.assertEqual(server_buf.tell(), 0)
 
         # check keys match
         self.assertEqual(client.dec_key, server.enc_key)

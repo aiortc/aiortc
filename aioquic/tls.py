@@ -6,9 +6,10 @@ from enum import Enum, IntEnum
 from struct import pack_into, unpack_from
 from typing import List, Tuple
 
+from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -43,6 +44,7 @@ class State(Enum):
 
     SERVER_EXPECT_CLIENT_HELLO = 8
     SERVER_EXPECT_FINISHED = 9
+    SERVER_POST_HANDSHAKE = 10
 
 
 def hkdf_label(label, hash_value, length):
@@ -621,6 +623,21 @@ class KeySchedule:
         self.hash_empty_value = self.hash.copy().finalize()
         self.secret = bytes(self.algorithm.digest_size)
 
+    def certificate_verify_data(self, context_string):
+        return b' ' * 64 + context_string + b'\x00' + self.hash.copy().finalize()
+
+    def finished_verify_data(self, secret):
+        hmac_key = hkdf_expand_label(
+            algorithm=self.algorithm,
+            secret=secret,
+            label=b'finished',
+            hash_value=b'',
+            length=self.algorithm.digest_size)
+
+        h = hmac.HMAC(hmac_key, algorithm=self.algorithm, backend=default_backend())
+        h.update(self.hash.copy().finalize())
+        return h.finalize()
+
     def derive_secret(self, label):
         return hkdf_expand_label(
             algorithm=self.algorithm,
@@ -653,11 +670,13 @@ class KeySchedule:
 
 class Context:
     def __init__(self, is_client):
-        self.certificates = None
+        self.certificate = None
+        self.certificate_private_key = None
         self.handshake_extensions = []
         self.update_traffic_key_cb = lambda d, e, s: None
 
-        self.receive_buffer = b''
+        self._peer_certificate = None
+        self._receive_buffer = b''
         self.enc_key = None
         self.dec_key = None
 
@@ -679,21 +698,21 @@ class Context:
             self._client_send_hello(output_buf)
             return
 
-        self.receive_buffer += input_data
-        while len(self.receive_buffer) >= 4:
-            # determine record length
-            record_length = 0
-            for b in self.receive_buffer[1:4]:
-                record_length = (record_length << 8) | b
-            record_length += 4
+        self._receive_buffer += input_data
+        while len(self._receive_buffer) >= 4:
+            # determine message length
+            message_length = 0
+            for b in self._receive_buffer[1:4]:
+                message_length = (message_length << 8) | b
+            message_length += 4
 
-            # check record is complete
-            if len(self.receive_buffer) < record_length:
+            # check message is complete
+            if len(self._receive_buffer) < message_length:
                 break
-            record = self.receive_buffer[:record_length]
-            self.receive_buffer = self.receive_buffer[record_length:]
+            message = self._receive_buffer[:message_length]
+            self._receive_buffer = self._receive_buffer[message_length:]
 
-            input_buf = Buffer(data=record)
+            input_buf = Buffer(data=message)
             if self.state == State.CLIENT_EXPECT_SERVER_HELLO:
                 self._client_handle_hello(input_buf, output_buf)
             elif self.state == State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS:
@@ -706,6 +725,8 @@ class Context:
                 self._client_handle_finished(input_buf, output_buf)
             elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
                 self._server_handle_hello(input_buf, output_buf)
+            elif self.state == State.SERVER_EXPECT_FINISHED:
+                self._server_handle_finished(input_buf, output_buf)
             else:
                 raise Exception('unhandled state')
 
@@ -783,25 +804,54 @@ class Context:
         self.state = State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
 
     def _client_handle_certificate(self, input_buf, output_buf):
-        pull_certificate(input_buf)
+        certificate = pull_certificate(input_buf)
 
+        self._peer_certificate = x509.load_der_x509_certificate(
+            certificate.certificates[0][0], backend=default_backend())
         self.key_schedule.update_hash(input_buf.data)
 
         self.state = State.CLIENT_EXPECT_CERTIFICATE_VERIFY
 
     def _client_handle_certificate_verify(self, input_buf, output_buf):
-        pull_certificate_verify(input_buf)
+        verify = pull_certificate_verify(input_buf)
+
+        # check signature
+        assert verify.algorithm == SignatureAlgorithm.RSA_PSS_RSAE_SHA256
+        algorithm = hashes.SHA256()
+        self._peer_certificate.public_key().verify(
+            verify.signature,
+            self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
+            padding.PSS(
+                mgf=padding.MGF1(algorithm),
+                salt_length=algorithm.digest_size
+            ),
+            algorithm)
 
         self.key_schedule.update_hash(input_buf.data)
 
         self.state = State.CLIENT_EXPECT_FINISHED
 
     def _client_handle_finished(self, input_buf, output_buf):
-        pull_finished(input_buf)
+        finished = pull_finished(input_buf)
 
+        # check verify data
+        expected_verify_data = self.key_schedule.finished_verify_data(self.dec_key)
+        assert finished.verify_data == expected_verify_data
         self.key_schedule.update_hash(input_buf.data)
+
+        # prepare traffic keys
+        assert self.key_schedule.generation == 2
         self.key_schedule.extract(None)
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.ONE_RTT, b's ap traffic')
+        next_enc_key = self.key_schedule.derive_secret(b'c ap traffic')
+
+        # send finished
+        push_finished(output_buf, Finished(
+            verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
+
+        # commit traffic key
+        self.enc_key = next_enc_key
+        self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self.enc_key)
 
         self.state = State.CLIENT_POST_HANDSHAKE
 
@@ -845,13 +895,60 @@ class Context:
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b'c hs traffic')
 
         # send encrypted extensions, certificate
+        hash_start = output_buf.tell()
         push_encrypted_extensions(output_buf, EncryptedExtensions(
             other_extensions=self.handshake_extensions))
         push_certificate(output_buf, Certificate(
             request_context=b'',
-            certificates=[(self.certificate, b'')]))
+            certificates=[
+                (self.certificate.public_bytes(Encoding.DER), b'')
+            ]))
+        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+
+        # send certificate verify
+        algorithm = hashes.SHA256()
+        signature = self.certificate_private_key.sign(
+            self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
+            padding.PSS(
+                mgf=padding.MGF1(algorithm),
+                salt_length=algorithm.digest_size
+            ),
+            algorithm)
+        hash_start = output_buf.tell()
+        push_certificate_verify(output_buf, CertificateVerify(
+            algorithm=SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            signature=signature))
+        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+
+        # send finished
+        hash_start = output_buf.tell()
+        push_finished(output_buf, Finished(
+            verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
+        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+
+        # prepare traffic keys
+        assert self.key_schedule.generation == 2
+        self.key_schedule.extract(None)
+        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.ONE_RTT, b's ap traffic')
+        self._next_dec_key = self.key_schedule.derive_secret(b'c ap traffic')
 
         self.state = State.SERVER_EXPECT_FINISHED
+
+    def _server_handle_finished(self, input_buf, output_buf):
+        finished = pull_finished(input_buf)
+
+        # check verify data
+        expected_verify_data = self.key_schedule.finished_verify_data(self.dec_key)
+        assert finished.verify_data == expected_verify_data
+
+        # commit traffic key
+        self.dec_key = self._next_dec_key
+        self._next_dec_key = None
+        self.update_traffic_key_cb(Direction.DECRYPT, Epoch.ONE_RTT, self.dec_key)
+
+        self.key_schedule.update_hash(input_buf.data)
+
+        self.state = State.SERVER_POST_HANDSHAKE
 
     def _setup_traffic_protection(self, direction, epoch, label):
         key = self.key_schedule.derive_secret(label)
