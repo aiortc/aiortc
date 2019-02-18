@@ -20,6 +20,8 @@ TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
 TLS_HANDSHAKE_CLIENT_HELLO = 1
 TLS_HANDSHAKE_SERVER_HELLO = 2
+TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS = 8
+TLS_HANDSHAKE_CERTIFICATE = 11
 
 
 class Direction(Enum):
@@ -64,6 +66,7 @@ class CompressionMethod(IntEnum):
 
 
 class ExtensionType(IntEnum):
+    SERVER_NAME = 0
     SUPPORTED_GROUPS = 10
     SIGNATURE_ALGORITHMS = 13
     SUPPORTED_VERSIONS = 43
@@ -132,6 +135,11 @@ class ClientHello:
     signature_algorithms: List[int] = None
     supported_groups: List[int] = None
     supported_versions: List[int] = None
+
+
+@dataclass
+class EncryptedExtensions:
+    pass
 
 
 @dataclass
@@ -359,7 +367,7 @@ def push_extension(buf, extension_type):
         yield
 
 
-# CLIENT HELLO
+# ClientHello
 
 def pull_client_hello(buf):
     hello = ClientHello()
@@ -428,7 +436,7 @@ def push_client_hello(buf, hello):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
 
 
-# SERVER HELLO
+# ServerHello
 
 
 def pull_server_hello(buf):
@@ -480,12 +488,32 @@ def push_server_hello(buf, hello):
                 push_key_share(buf, hello.key_share)
 
 
+# EncryptedExtensions
+
+
+def pull_encrypted_extensions(buf):
+    extensions = EncryptedExtensions()
+
+    assert pull_uint8(buf) == TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS
+
+    with pull_block(buf, 3):
+        def pull_extension(buf):
+            pull_uint16(buf)
+            extension_length = pull_uint16(buf)
+            pull_bytes(buf, extension_length)
+
+        pull_list(buf, 2, pull_extension)
+
+    return extensions
+
+
 class State(Enum):
     CLIENT_HANDSHAKE_START = 0
     CLIENT_EXPECT_SERVER_HELLO = 1
     CLIENT_EXPECT_ENCRYPTED_EXTENSIONS = 2
-    SERVER_EXPECT_CLIENT_HELLO = 3
-    SERVER_EXPECT_FINISHED = 4
+    CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE = 3
+    SERVER_EXPECT_CLIENT_HELLO = 4
+    SERVER_EXPECT_FINISHED = 5
 
 
 class KeySchedule:
@@ -546,12 +574,18 @@ class Context:
         self.is_client = is_client
 
     def handle_message(self, input_data, output_buf):
+        input_buf = Buffer(data=input_data)
         if self.state == State.CLIENT_HANDSHAKE_START:
             self._client_send_hello(output_buf)
         elif self.state == State.CLIENT_EXPECT_SERVER_HELLO:
-            self._client_handle_hello(input_data, output_buf)
+            self._client_handle_hello(input_buf, output_buf)
+        elif self.state == State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS:
+            self._client_handle_encrypted_extensions(input_buf, output_buf)
+        elif self.state == State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE:
+            # TODO
+            pass
         elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
-            self._server_handle_hello(input_data, output_buf)
+            self._server_handle_hello(input_buf, output_buf)
         else:
             raise Exception('unhandled state')
 
@@ -602,16 +636,15 @@ class Context:
 
         self.state = State.CLIENT_EXPECT_SERVER_HELLO
 
-    def _client_handle_hello(self, data, output_buf):
-        buf = Buffer(data=data)
-        peer_hello = pull_server_hello(buf)
-        assert buf.eof()
+    def _client_handle_hello(self, input_buf, output_buf):
+        peer_hello = pull_server_hello(input_buf)
+        assert input_buf.eof()
 
         peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
             ec.SECP256R1(), peer_hello.key_share[1])
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
-        self.key_schedule.update_hash(data)
+        self.key_schedule.update_hash(input_buf.data)
         self.key_schedule.extract(shared_key)
 
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b's hs traffic')
@@ -619,10 +652,14 @@ class Context:
 
         self.state = State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
 
-    def _server_handle_hello(self, data, output_buf):
-        buf = Buffer(data=data)
-        peer_hello = pull_client_hello(buf)
-        assert buf.eof()
+    def _client_handle_encrypted_extensions(self, input_buf, output_buf):
+        pull_encrypted_extensions(input_buf)
+
+        self.state = State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
+
+    def _server_handle_hello(self, input_buf, output_buf):
+        peer_hello = pull_client_hello(input_buf)
+        assert input_buf.eof()
 
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
@@ -631,7 +668,7 @@ class Context:
 
         self.key_schedule = KeySchedule()
         self.key_schedule.extract(None)
-        self.key_schedule.update_hash(data)
+        self.key_schedule.update_hash(input_buf.data)
 
         peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
             ec.SECP256R1(), peer_hello.key_share[0][1])

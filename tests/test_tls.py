@@ -4,9 +4,10 @@ from unittest import TestCase
 from aioquic import tls
 from aioquic.tls import (Buffer, BufferReadError, ClientHello, Context,
                          ServerHello, State, pull_block, pull_bytes,
-                         pull_client_hello, pull_server_hello, pull_uint8,
-                         pull_uint16, pull_uint32, pull_uint64,
-                         push_client_hello, push_server_hello)
+                         pull_client_hello, pull_encrypted_extensions,
+                         pull_server_hello, pull_uint8, pull_uint16,
+                         pull_uint32, pull_uint64, push_client_hello,
+                         push_server_hello)
 
 from .utils import load
 
@@ -93,8 +94,10 @@ class ContextTest(TestCase):
 
 class TlsTest(TestCase):
     def test_pull_client_hello(self):
-        buf = Buffer(data=load('client_hello.bin'))
+        buf = Buffer(data=load('tls_client_hello.bin'))
         hello = pull_client_hello(buf)
+        self.assertTrue(buf.eof())
+
         self.assertEqual(
             hello.random,
             binascii.unhexlify(
@@ -186,11 +189,12 @@ class TlsTest(TestCase):
 
         buf = Buffer(1000)
         push_client_hello(buf, hello)
-        self.assertEqual(buf.data, load('client_hello.bin'))
+        self.assertEqual(buf.data, load('tls_client_hello.bin'))
 
     def test_pull_server_hello(self):
-        buf = Buffer(data=load('server_hello.bin'))
+        buf = Buffer(data=load('tls_server_hello.bin'))
         hello = pull_server_hello(buf)
+        self.assertTrue(buf.eof())
 
         self.assertEqual(
             hello.random,
@@ -232,4 +236,10 @@ class TlsTest(TestCase):
 
         buf = Buffer(1000)
         push_server_hello(buf, hello)
-        self.assertEqual(buf.data, load('server_hello.bin'))
+        self.assertEqual(buf.data, load('tls_server_hello.bin'))
+
+    def test_pull_encrypted_extensions(self):
+        buf = Buffer(data=load('tls_encrypted_extensions.bin'))
+        extensions = pull_encrypted_extensions(buf)
+        self.assertIsNotNone(extensions)
+        self.assertTrue(buf.eof())
