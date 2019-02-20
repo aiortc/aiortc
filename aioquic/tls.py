@@ -1,3 +1,4 @@
+import logging
 import os
 import struct
 from contextlib import contextmanager
@@ -12,6 +13,8 @@ from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+logger = logging.getLogger('tls')
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
@@ -775,11 +778,10 @@ class Context:
         self.key_schedule = KeySchedule()
         self.key_schedule.extract(None)
 
-        hash_start = output_buf.tell()
-        push_client_hello(output_buf, hello)
-        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        with self._push_message(output_buf):
+            push_client_hello(output_buf, hello)
 
-        self.state = State.CLIENT_EXPECT_SERVER_HELLO
+        self._set_state(State.CLIENT_EXPECT_SERVER_HELLO)
 
     def _client_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_server_hello(input_buf)
@@ -793,7 +795,7 @@ class Context:
 
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b's hs traffic')
 
-        self.state = State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
+        self._set_state(State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
 
     def _client_handle_encrypted_extensions(self, input_buf, output_buf):
         pull_encrypted_extensions(input_buf)
@@ -801,7 +803,7 @@ class Context:
         self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
         self.key_schedule.update_hash(input_buf.data)
 
-        self.state = State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
+        self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
 
     def _client_handle_certificate(self, input_buf, output_buf):
         certificate = pull_certificate(input_buf)
@@ -810,7 +812,7 @@ class Context:
             certificate.certificates[0][0], backend=default_backend())
         self.key_schedule.update_hash(input_buf.data)
 
-        self.state = State.CLIENT_EXPECT_CERTIFICATE_VERIFY
+        self._set_state(State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
 
     def _client_handle_certificate_verify(self, input_buf, output_buf):
         verify = pull_certificate_verify(input_buf)
@@ -829,7 +831,7 @@ class Context:
 
         self.key_schedule.update_hash(input_buf.data)
 
-        self.state = State.CLIENT_EXPECT_FINISHED
+        self._set_state(State.CLIENT_EXPECT_FINISHED)
 
     def _client_handle_finished(self, input_buf, output_buf):
         finished = pull_finished(input_buf)
@@ -853,7 +855,7 @@ class Context:
         self.enc_key = next_enc_key
         self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self.enc_key)
 
-        self.state = State.CLIENT_POST_HANDSHAKE
+        self._set_state(State.CLIENT_POST_HANDSHAKE)
 
     def _server_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_client_hello(input_buf)
@@ -885,25 +887,25 @@ class Context:
             ),
             supported_version=TLS_VERSION_1_3,
         )
-
-        hash_start = output_buf.tell()
-        push_server_hello(output_buf, hello)
-        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        with self._push_message(output_buf):
+            push_server_hello(output_buf, hello)
         self.key_schedule.extract(shared_key)
 
         self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b's hs traffic')
         self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b'c hs traffic')
 
-        # send encrypted extensions, certificate
-        hash_start = output_buf.tell()
-        push_encrypted_extensions(output_buf, EncryptedExtensions(
-            other_extensions=self.handshake_extensions))
-        push_certificate(output_buf, Certificate(
-            request_context=b'',
-            certificates=[
-                (self.certificate.public_bytes(Encoding.DER), b'')
-            ]))
-        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        # send encrypted extensions
+        with self._push_message(output_buf):
+            push_encrypted_extensions(output_buf, EncryptedExtensions(
+                other_extensions=self.handshake_extensions))
+
+        # send certificate
+        with self._push_message(output_buf):
+            push_certificate(output_buf, Certificate(
+                request_context=b'',
+                certificates=[
+                    (self.certificate.public_bytes(Encoding.DER), b'')
+                ]))
 
         # send certificate verify
         algorithm = hashes.SHA256()
@@ -914,17 +916,15 @@ class Context:
                 salt_length=algorithm.digest_size
             ),
             algorithm)
-        hash_start = output_buf.tell()
-        push_certificate_verify(output_buf, CertificateVerify(
-            algorithm=SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
-            signature=signature))
-        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        with self._push_message(output_buf):
+            push_certificate_verify(output_buf, CertificateVerify(
+                algorithm=SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+                signature=signature))
 
         # send finished
-        hash_start = output_buf.tell()
-        push_finished(output_buf, Finished(
-            verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
-        self.key_schedule.update_hash(output_buf.data_slice(hash_start, output_buf.tell()))
+        with self._push_message(output_buf):
+            push_finished(output_buf, Finished(
+                verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
 
         # prepare traffic keys
         assert self.key_schedule.generation == 2
@@ -932,7 +932,7 @@ class Context:
         self._setup_traffic_protection(Direction.ENCRYPT, Epoch.ONE_RTT, b's ap traffic')
         self._next_dec_key = self.key_schedule.derive_secret(b'c ap traffic')
 
-        self.state = State.SERVER_EXPECT_FINISHED
+        self._set_state(State.SERVER_EXPECT_FINISHED)
 
     def _server_handle_finished(self, input_buf, output_buf):
         finished = pull_finished(input_buf)
@@ -948,7 +948,13 @@ class Context:
 
         self.key_schedule.update_hash(input_buf.data)
 
-        self.state = State.SERVER_POST_HANDSHAKE
+        self._set_state(State.SERVER_POST_HANDSHAKE)
+
+    @contextmanager
+    def _push_message(self, buf: Buffer):
+        hash_start = buf.tell()
+        yield
+        self.key_schedule.update_hash(buf.data_slice(hash_start, buf.tell()))
 
     def _setup_traffic_protection(self, direction, epoch, label):
         key = self.key_schedule.derive_secret(label)
@@ -959,3 +965,7 @@ class Context:
             self.dec_key = key
 
         self.update_traffic_key_cb(direction, epoch, key)
+
+    def _set_state(self, state):
+        logger.info('%s -> %s', self.state, state)
+        self.state = state
