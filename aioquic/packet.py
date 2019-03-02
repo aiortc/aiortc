@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -138,8 +139,8 @@ def push_quic_header(buf, header):
     if (header.packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
         push_uint_var(buf, len(header.token))
         push_bytes(buf, header.token)
-        push_uint16(buf, 0)  # length
-        push_uint16(buf, 0)  # pn
+    push_uint16(buf, 0)  # length
+    push_uint16(buf, 0)  # pn
 
 
 def pull_ack_frame(buf):
@@ -167,3 +168,21 @@ def push_ack_frame(buf, ack):
     for r in ack.ack_ranges:
         push_uint_var(buf, r[0])
         push_uint_var(buf, r[1])
+
+
+def pull_crypto_frame(buf):
+    pull_uint_var(buf)
+    length = pull_uint_var(buf)
+    return pull_bytes(buf, length)
+
+
+@contextmanager
+def push_crypto_frame(buf, offset=0):
+    push_uint_var(buf, offset)
+    push_uint16(buf, 0)
+    start = buf.tell()
+    yield
+    end = buf.tell()
+    buf.seek(start - 2)
+    push_uint16(buf, (end - start) | 0x4000)
+    buf.seek(end)
