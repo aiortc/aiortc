@@ -15,6 +15,9 @@ from aioquic.tls import Buffer
 logger = logging.getLogger('quic')
 
 
+CLIENT_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
+    b'ff0000110031000500048010000000060004801000000007000480100000000'
+    b'4000481000000000100024258000800024064000a00010a')
 PACKET_MAX_SIZE = 1280
 SEND_PN_SIZE = 2
 
@@ -35,6 +38,9 @@ class QuicConnection:
         self.peer_cid = os.urandom(8)
         self.packet_number = 0
         self.tls = tls.Context(is_client=True)
+        self.tls.handshake_extensions.append(
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
+        )
         self.tls.update_traffic_key_cb = self.update_traffic_key
 
         self.send_buffer = Buffer(capacity=4096)
