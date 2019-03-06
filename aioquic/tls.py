@@ -767,9 +767,6 @@ class Context:
             ],
             supported_versions=[
                 TLS_VERSION_1_3,
-                TLS_VERSION_1_3_DRAFT_28,
-                TLS_VERSION_1_3_DRAFT_27,
-                TLS_VERSION_1_3_DRAFT_26,
             ],
 
             other_extensions=self.handshake_extensions

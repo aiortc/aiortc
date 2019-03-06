@@ -105,7 +105,7 @@ class ContextTest(TestCase):
         client_buf = Buffer(capacity=512)
         client.handle_message(b'', client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        self.assertEqual(client_buf.tell(), 254)
+        self.assertEqual(client_buf.tell(), 248)
         server_input = client_buf.data
         client_buf.seek(0)
 
