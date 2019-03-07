@@ -118,27 +118,28 @@ class FrameTest(TestCase):
 
         # parse
         buf = Buffer(data=data)
-        ack = pull_ack_frame(buf)
-        self.assertEqual(ack.largest_acknowledged, 0)
-        self.assertEqual(ack.ack_delay, 2)
-        self.assertEqual(ack.first_ack_range, 0)
-        self.assertEqual(ack.ack_ranges, [])
+        rangeset, delay = pull_ack_frame(buf)
+        self.assertEqual(rangeset.ranges, [
+            range(0, 1)
+        ])
+        self.assertEqual(delay, 2)
 
         # serialize
         buf = Buffer(capacity=8)
-        push_ack_frame(buf, ack)
+        push_ack_frame(buf, rangeset, delay)
         self.assertEqual(buf.data, data)
 
     def test_ack_frame_with_ranges(self):
-        data = b'\x00\x02\x01\x00\x02\x03'
+        data = b'\x05\x02\x01\x00\x02\x03'
 
         buf = Buffer(data=data)
-        ack = pull_ack_frame(buf)
-        self.assertEqual(ack.largest_acknowledged, 0)
-        self.assertEqual(ack.ack_delay, 2)
-        self.assertEqual(ack.first_ack_range, 0)
-        self.assertEqual(ack.ack_ranges, [(2, 3)])
+        rangeset, delay = pull_ack_frame(buf)
+        self.assertEqual(rangeset.ranges, [
+            range(0, 4),
+            range(5, 6)
+        ])
+        self.assertEqual(delay, 2)
 
         buf = Buffer(capacity=8)
-        push_ack_frame(buf, ack)
+        push_ack_frame(buf, rangeset, delay)
         self.assertEqual(buf.data, data)

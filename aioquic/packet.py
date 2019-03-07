@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import List, Tuple
 
+from .rangeset import RangeSet
 from .tls import (BufferReadError, pull_bytes, pull_uint8, pull_uint16,
                   pull_uint32, pull_uint64, push_bytes, push_uint8,
                   push_uint16, push_uint32, push_uint64)
@@ -39,14 +39,6 @@ class QuicHeader:
 class QuicShortHeader:
     packet_type: int
     destination_cid: bytes
-
-
-@dataclass
-class QuickAckFrame:
-    largest_acknowledged: int
-    ack_delay: int
-    first_ack_range: int
-    ack_ranges: List[Tuple[int, int]]
 
 
 def decode_cid_length(length):
@@ -144,30 +136,35 @@ def push_quic_header(buf, header):
 
 
 def pull_ack_frame(buf):
-    largest_acknowledged = pull_uint_var(buf)
-    ack_delay = pull_uint_var(buf)
+    rangeset = RangeSet()
+    end = pull_uint_var(buf)  # largest acknowledged
+    delay = pull_uint_var(buf)
     ack_range_count = pull_uint_var(buf)
-    first_ack_range = pull_uint_var(buf)
-    ack = QuickAckFrame(
-        largest_acknowledged=largest_acknowledged,
-        ack_delay=ack_delay,
-        first_ack_range=first_ack_range,
-        ack_ranges=[])
+    ack_count = pull_uint_var(buf)  # first ack range
+    rangeset.ranges.insert(0, range(end - ack_count, end + 1))
+    end -= ack_count
     for _ in range(ack_range_count):
-        ack.ack_ranges.append((
-            pull_uint_var(buf),
-            pull_uint_var(buf)))
-    return ack
+        end -= pull_uint_var(buf)
+        ack_count = pull_uint_var(buf)
+        rangeset.ranges.insert(0, range(end - ack_count, end + 1))
+        end -= ack_count
+    return rangeset, delay
 
 
-def push_ack_frame(buf, ack):
-    push_uint_var(buf, ack.largest_acknowledged)
-    push_uint_var(buf, ack.ack_delay)
-    push_uint_var(buf, len(ack.ack_ranges))
-    push_uint_var(buf, ack.first_ack_range)
-    for r in ack.ack_ranges:
-        push_uint_var(buf, r[0])
-        push_uint_var(buf, r[1])
+def push_ack_frame(buf, rangeset: RangeSet, delay: int):
+    index = len(rangeset.ranges) - 1
+    r = rangeset.ranges[index]
+    push_uint_var(buf, r.stop - 1)
+    push_uint_var(buf, delay)
+    push_uint_var(buf, index)
+    push_uint_var(buf, r.stop - 1 - r.start)
+    start = r.start
+    while index > 0:
+        index -= 1
+        r = rangeset.ranges[index]
+        push_uint_var(buf, start - r.stop + 1)
+        push_uint_var(buf, r.stop - r.start - 1)
+        start = r.start
 
 
 def pull_crypto_frame(buf):

@@ -64,7 +64,12 @@ class CryptoContext:
         payload = self.aead.decrypt(nonce, bytes(packet[encrypted_offset + pn_length:]),
                                     plain_header)
 
-        return plain_header, payload
+        # packet number
+        packet_number = 0
+        for i in range(pn_length):
+            packet_number = (packet_number << 8) | pn[i]
+
+        return plain_header, payload, packet_number
 
     def encrypt_packet(self, plain_header, plain_payload):
         pn_length = (plain_header[0] & 0x03) + 1

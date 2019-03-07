@@ -8,8 +8,9 @@ from aioquic.crypto import CryptoPair
 from aioquic.packet import (PACKET_TYPE_HANDSHAKE, PACKET_TYPE_INITIAL,
                             PROTOCOL_VERSION_DRAFT_17, QuicHeader,
                             pull_ack_frame, pull_crypto_frame,
-                            pull_quic_header, pull_uint_var, push_crypto_frame,
-                            push_quic_header, push_uint_var)
+                            pull_quic_header, pull_uint_var, push_ack_frame,
+                            push_crypto_frame, push_quic_header, push_uint_var)
+from aioquic.rangeset import RangeSet
 from aioquic.tls import Buffer
 
 logger = logging.getLogger('quic')
@@ -45,7 +46,6 @@ class QuicConnection:
     def __init__(self):
         self.host_cid = b''
         self.peer_cid = os.urandom(8)
-        self.packet_number = 0
         self.tls = tls.Context(is_client=True)
         self.tls.handshake_extensions.append(
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
@@ -56,10 +56,21 @@ class QuicConnection:
         self.send_ack = False
         self.send_datagrams = []
         self.send_padding = True
+
+        self.ack = {
+            tls.Epoch.INITIAL: RangeSet(),
+            tls.Epoch.HANDSHAKE: RangeSet(),
+            tls.Epoch.ONE_RTT: RangeSet(),
+        }
         self.crypto = {
             tls.Epoch.INITIAL: CryptoPair.initial(cid=self.peer_cid, is_client=True),
             tls.Epoch.HANDSHAKE: CryptoPair(),
             tls.Epoch.ONE_RTT: CryptoPair(),
+        }
+        self.packet_number = {
+            tls.Epoch.INITIAL: 0,
+            tls.Epoch.HANDSHAKE: 0,
+            tls.Epoch.ONE_RTT: 0,
         }
 
     def connection_made(self):
@@ -76,28 +87,37 @@ class QuicConnection:
             end_off = buf.tell() + header.rest_length
             tls.pull_bytes(buf, header.rest_length)
 
-            crypto = self.crypto[get_epoch(header.packet_type)]
-            plain_header, plain_payload = crypto.recv.decrypt_packet(
+            epoch = get_epoch(header.packet_type)
+            crypto = self.crypto[epoch]
+            plain_header, plain_payload, packet_number = crypto.recv.decrypt_packet(
                 data[start_off:end_off], encrypted_off)
+
             self.peer_cid = header.source_cid
-            self.send_ack = True
-            self.payload_received(plain_payload)
+            is_ack_only = self.payload_received(plain_payload)
+            self.ack[epoch].add(packet_number)
+            if not is_ack_only:
+                self.send_ack = True
+        self.write_crypto()
 
     def payload_received(self, plain):
         buf = Buffer(data=plain)
 
+        is_ack_only = True
         while not buf.eof():
             frame_type = pull_uint_var(buf)
-            if frame_type == QuicFrameType.ACK:
+            if frame_type == QuicFrameType.PADDING:
+                pass
+            elif frame_type == QuicFrameType.ACK:
                 pull_ack_frame(buf)
             elif frame_type == QuicFrameType.CRYPTO:
+                is_ack_only = False
                 data = pull_crypto_frame(buf)
                 assert len(data)
                 self.tls.handle_message(data, self.send_buffer)
-                self.write_crypto()
             else:
                 logger.warning('unhandled frame type %d', frame_type)
                 break
+        return is_ack_only
 
     def write_crypto(self):
         if not self.send_buffer.tell():
@@ -109,7 +129,8 @@ class QuicConnection:
             packet_type = PACKET_TYPE_INITIAL
         else:
             packet_type = PACKET_TYPE_HANDSHAKE
-        crypto = self.crypto[get_epoch(packet_type)]
+        epoch = get_epoch(packet_type)
+        crypto = self.crypto[epoch]
 
         # write header
         push_quic_header(buf, QuicHeader(
@@ -136,7 +157,7 @@ class QuicConnection:
         # ACK
         if self.send_ack:
             push_uint_var(buf, QuicFrameType.ACK)
-            tls.push_bytes(buf, binascii.unhexlify('01000001'))
+            push_ack_frame(buf, self.ack[epoch], 0)
             self.send_ack = False
 
         # finalize length
@@ -144,7 +165,7 @@ class QuicConnection:
         buf.seek(header_size - SEND_PN_SIZE - 2)
         length = packet_size - header_size + 2 + crypto.send.aead_tag_size
         tls.push_uint16(buf, length | 0x4000)
-        tls.push_uint16(buf, self.packet_number)
+        tls.push_uint16(buf, self.packet_number[epoch])
         buf.seek(packet_size)
 
         # encrypt
@@ -152,8 +173,7 @@ class QuicConnection:
         self.send_datagrams.append(
             crypto.send.encrypt_packet(data[0:header_size], data[header_size:packet_size]))
 
-        # FIXME: when do we raise packet number?
-        # self.packet_number += 1
+        self.packet_number[epoch] += 1
 
     def update_traffic_key(self, direction, epoch, secret):
         crypto = self.crypto[epoch]

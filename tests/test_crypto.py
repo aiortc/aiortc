@@ -91,16 +91,20 @@ class CryptoTest(TestCase):
     def test_decrypt_packet_client(self):
         pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=False)
 
-        plain_header, plain_payload = pair.recv.decrypt_packet(CLIENT_ENCRYPTED_PACKET, 17)
+        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+            CLIENT_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, CLIENT_PLAIN_PAYLOAD)
+        self.assertEqual(packet_number, 2)
 
     def test_decrypt_packet_server(self):
         pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
 
-        plain_header, plain_payload = pair.recv.decrypt_packet(SERVER_ENCRYPTED_PACKET, 17)
+        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+            SERVER_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SERVER_PLAIN_PAYLOAD)
+        self.assertEqual(packet_number, 1)
 
     def test_encrypt_packet_client(self):
         pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
