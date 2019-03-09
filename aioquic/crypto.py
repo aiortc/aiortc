@@ -33,6 +33,9 @@ def derive_key_iv_hp(algorithm, secret):
 
 
 class CryptoContext:
+    def __init__(self):
+        self.teardown()
+
     def decrypt_packet(self, packet, encrypted_offset):
         packet = bytearray(packet)
 
@@ -103,6 +106,9 @@ class CryptoContext:
 
         return packet
 
+    def is_valid(self):
+        return self.aead is not None
+
     def setup(self, algorithm, secret):
         key, self.iv, hp = derive_key_iv_hp(algorithm, secret)
         self.aead = aead.AESGCM(key)
@@ -113,6 +119,11 @@ class CryptoContext:
         algorithm, secret = derive_initial_secret(cid, is_client)
         self.setup(algorithm, secret)
 
+    def teardown(self):
+        self.aead = None
+        self.hp = None
+        self.iv = None
+
 
 class CryptoPair:
     def __init__(self):
@@ -122,6 +133,9 @@ class CryptoPair:
     @classmethod
     def initial(cls, cid, is_client):
         pair = cls()
-        pair.recv.setup_initial(cid, not is_client)
-        pair.send.setup_initial(cid, is_client)
+        pair.setup_initial(cid, is_client)
         return pair
+
+    def setup_initial(self, cid, is_client):
+        self.recv.setup_initial(cid, not is_client)
+        self.send.setup_initial(cid, is_client)

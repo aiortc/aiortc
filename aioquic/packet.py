@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import IntEnum
 
 from .rangeset import RangeSet
 from .tls import (BufferReadError, pull_bytes, pull_uint8, pull_uint16,
@@ -33,12 +34,6 @@ class QuicHeader:
     source_cid: bytes
     token: bytes = b''
     rest_length: int = 0
-
-
-@dataclass
-class QuicShortHeader:
-    packet_type: int
-    destination_cid: bytes
 
 
 def decode_cid_length(length):
@@ -135,6 +130,20 @@ def push_quic_header(buf, header):
     push_uint16(buf, 0)  # pn
 
 
+# FRAMES
+
+
+class QuicFrameType(IntEnum):
+    PADDING = 0
+    PING = 1
+    ACK = 2
+    ACK_WITH_ECN = 3
+    RESET_STREAM = 4
+    STOP_SENDING = 5
+    CRYPTO = 6
+    NEW_CONNECTION_ID = 0x18
+
+
 def pull_ack_frame(buf):
     rangeset = RangeSet()
     end = pull_uint_var(buf)  # largest acknowledged
@@ -183,3 +192,19 @@ def push_crypto_frame(buf, offset=0):
     buf.seek(start - 2)
     push_uint16(buf, (end - start) | 0x4000)
     buf.seek(end)
+
+
+def pull_new_connection_id_frame(buf):
+    sequence_number = pull_uint_var(buf)
+    length = pull_uint8(buf)
+    connection_id = pull_bytes(buf, length)
+    stateless_reset_token = pull_bytes(buf, 16)
+    return (sequence_number, connection_id, stateless_reset_token)
+
+
+def push_new_connection_id_frame(buf, sequence_number, connection_id, stateless_reset_token):
+    assert len(stateless_reset_token) == 16
+    push_uint_var(buf, sequence_number)
+    push_uint8(buf, len(connection_id))
+    push_bytes(buf, connection_id)
+    push_bytes(buf, stateless_reset_token)
