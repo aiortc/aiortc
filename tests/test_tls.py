@@ -12,11 +12,11 @@ from aioquic.tls import (Buffer, BufferReadError, Certificate,
                          pull_block, pull_bytes, pull_certificate,
                          pull_certificate_verify, pull_client_hello,
                          pull_encrypted_extensions, pull_finished,
-                         pull_server_hello, pull_uint8, pull_uint16,
-                         pull_uint32, pull_uint64, push_certificate,
-                         push_certificate_verify, push_client_hello,
-                         push_encrypted_extensions, push_finished,
-                         push_server_hello)
+                         pull_new_session_ticket, pull_server_hello,
+                         pull_uint8, pull_uint16, pull_uint32, pull_uint64,
+                         push_certificate, push_certificate_verify,
+                         push_client_hello, push_encrypted_extensions,
+                         push_finished, push_server_hello)
 
 from .utils import load
 
@@ -289,6 +289,15 @@ class TlsTest(TestCase):
         buf = Buffer(1000)
         push_server_hello(buf, hello)
         self.assertEqual(buf.data, load('tls_server_hello.bin'))
+
+    def test_pull_new_session_ticket(self):
+        buf = Buffer(data=load('tls_new_session_ticket.bin'))
+        new_session_ticket = pull_new_session_ticket(buf)
+        self.assertIsNotNone(new_session_ticket)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(new_session_ticket.lifetime_hint, 86400)
+        self.assertEqual(len(new_session_ticket.ticket), 49)
 
     def test_pull_encrypted_extensions(self):
         buf = Buffer(data=load('tls_encrypted_extensions.bin'))

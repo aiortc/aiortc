@@ -23,6 +23,10 @@ TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
 TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
 
+class AlertUnexpectedMessage(Exception):
+    pass
+
+
 class Direction(Enum):
     DECRYPT = 0
     ENCRYPT = 1
@@ -497,6 +501,23 @@ def push_server_hello(buf: Buffer, hello: ServerHello):
 
 
 @dataclass
+class NewSessionTicket:
+    lifetime_hint: int = 0
+    ticket: bytes = b''
+
+
+def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
+    new_session_ticket = NewSessionTicket()
+
+    assert pull_uint8(buf) == HandshakeType.NEW_SESSION_TICKET
+    with pull_block(buf, 3) as length:
+        new_session_ticket.lifetime_hint = pull_uint32(buf)
+        new_session_ticket.ticket = pull_bytes(buf, length - 4)
+
+    return new_session_ticket
+
+
+@dataclass
 class EncryptedExtensions:
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
@@ -704,6 +725,7 @@ class Context:
         self._receive_buffer += input_data
         while len(self._receive_buffer) >= 4:
             # determine message length
+            message_type = self._receive_buffer[0]
             message_length = 0
             for b in self._receive_buffer[1:4]:
                 message_length = (message_length << 8) | b
@@ -726,6 +748,12 @@ class Context:
                 self._client_handle_certificate_verify(input_buf, output_buf)
             elif self.state == State.CLIENT_EXPECT_FINISHED:
                 self._client_handle_finished(input_buf, output_buf)
+            elif self.state == State.CLIENT_POST_HANDSHAKE:
+                if message_type == HandshakeType.NEW_SESSION_TICKET:
+                    self._client_handle_new_session_ticket(input_buf, output_buf)
+                else:
+                    raise AlertUnexpectedMessage
+
             elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
                 self._server_handle_hello(input_buf, output_buf)
             elif self.state == State.SERVER_EXPECT_FINISHED:
@@ -853,6 +881,9 @@ class Context:
         self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self.enc_key)
 
         self._set_state(State.CLIENT_POST_HANDSHAKE)
+
+    def _client_handle_new_session_ticket(self, input_buf, output_buf):
+        pull_new_session_ticket(input_buf)
 
     def _server_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_client_hello(input_buf)
