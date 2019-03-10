@@ -1,7 +1,7 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.crypto import CryptoPair, derive_initial_secret, derive_key_iv_hp
+from aioquic.crypto import INITIAL_ALGORITHM, CryptoPair, derive_key_iv_hp
 
 CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
 CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
@@ -72,24 +72,36 @@ class CryptoTest(TestCase):
 
     https://tools.ietf.org/html/draft-ietf-quic-tls-18#appendix-A
     """
-    def test_client_initial(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        algorithm, secret = derive_initial_secret(cid, is_client=True)
-        key, iv, hp = derive_key_iv_hp(algorithm, secret)
+    def create_crypto(self, is_client):
+        pair = CryptoPair()
+        pair.setup_initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=is_client)
+        if is_client:
+            self.assertEqual(pair.send.iv, binascii.unhexlify('19e94387805eb0b46c03a788'))
+            self.assertEqual(pair.recv.iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
+        else:
+            self.assertEqual(pair.send.iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
+            self.assertEqual(pair.recv.iv, binascii.unhexlify('19e94387805eb0b46c03a788'))
+        return pair
+
+    def test_derive_key_iv_hp(self):
+        # client
+        secret = binascii.unhexlify(
+            '8a3515a14ae3c31b9c2d6d5bc58538ca5cd2baa119087143e60887428dcb52f6')
+        key, iv, hp = derive_key_iv_hp(INITIAL_ALGORITHM, secret)
         self.assertEqual(key, binascii.unhexlify('98b0d7e5e7a402c67c33f350fa65ea54'))
         self.assertEqual(iv, binascii.unhexlify('19e94387805eb0b46c03a788'))
         self.assertEqual(hp, binascii.unhexlify('0edd982a6ac527f2eddcbb7348dea5d7'))
 
-    def test_server_initial(self):
-        cid = binascii.unhexlify('8394c8f03e515708')
-        algorithm, secret = derive_initial_secret(cid, is_client=False)
-        key, iv, hp = derive_key_iv_hp(algorithm, secret)
+        # server
+        secret = binascii.unhexlify(
+            '47b2eaea6c266e32c0697a9e2a898bdf5c4fb3e5ac34f0e549bf2c58581a3811')
+        key, iv, hp = derive_key_iv_hp(INITIAL_ALGORITHM, secret)
         self.assertEqual(key, binascii.unhexlify('9a8be902a9bdd91d16064ca118045fb4'))
         self.assertEqual(iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
         self.assertEqual(hp, binascii.unhexlify('94b9452d2b3c7c7f6da7fdd8593537fd'))
 
     def test_decrypt_packet_client(self):
-        pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=False)
+        pair = self.create_crypto(is_client=False)
 
         plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
             CLIENT_ENCRYPTED_PACKET, 17)
@@ -98,7 +110,7 @@ class CryptoTest(TestCase):
         self.assertEqual(packet_number, 2)
 
     def test_decrypt_packet_server(self):
-        pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
+        pair = self.create_crypto(is_client=True)
 
         plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
             SERVER_ENCRYPTED_PACKET, 17)
@@ -107,13 +119,13 @@ class CryptoTest(TestCase):
         self.assertEqual(packet_number, 1)
 
     def test_encrypt_packet_client(self):
-        pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=True)
+        pair = self.create_crypto(is_client=True)
 
         packet = pair.send.encrypt_packet(CLIENT_PLAIN_HEADER, CLIENT_PLAIN_PAYLOAD)
         self.assertEqual(packet, CLIENT_ENCRYPTED_PACKET)
 
     def test_encrypt_packet_server(self):
-        pair = CryptoPair.initial(cid=binascii.unhexlify('8394c8f03e515708'), is_client=False)
+        pair = self.create_crypto(is_client=False)
 
         packet = pair.send.encrypt_packet(SERVER_PLAIN_HEADER, SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet, SERVER_ENCRYPTED_PACKET)

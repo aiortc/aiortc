@@ -8,20 +8,9 @@ from cryptography.hazmat.primitives.ciphers import (Cipher, aead, algorithms,
 from .packet import is_long_header
 from .tls import hkdf_expand_label, hkdf_extract
 
+INITIAL_ALGORITHM = hashes.SHA256()
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
 MAX_PN_SIZE = 4
-
-
-def derive_initial_secret(cid, is_client):
-    if is_client:
-        label = b'client in'
-    else:
-        label = b'server in'
-
-    algorithm = hashes.SHA256()
-    initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
-    secret = hkdf_expand_label(algorithm, initial_secret, label, b'', algorithm.digest_size)
-    return algorithm, secret
 
 
 def derive_key_iv_hp(algorithm, secret):
@@ -115,10 +104,6 @@ class CryptoContext:
         self.aead_tag_size = 16
         self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=default_backend())
 
-    def setup_initial(self, cid, is_client):
-        algorithm, secret = derive_initial_secret(cid, is_client)
-        self.setup(algorithm, secret)
-
     def teardown(self):
         self.aead = None
         self.hp = None
@@ -130,12 +115,17 @@ class CryptoPair:
         self.recv = CryptoContext()
         self.send = CryptoContext()
 
-    @classmethod
-    def initial(cls, cid, is_client):
-        pair = cls()
-        pair.setup_initial(cid, is_client)
-        return pair
-
     def setup_initial(self, cid, is_client):
-        self.recv.setup_initial(cid, not is_client)
-        self.send.setup_initial(cid, is_client)
+        if is_client:
+            recv_label, send_label = b'server in', b'client in'
+        else:
+            recv_label, send_label = b'client in', b'server in'
+
+        algorithm = INITIAL_ALGORITHM
+        initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
+        self.recv.setup(
+            algorithm,
+            hkdf_expand_label(algorithm, initial_secret, recv_label, b'', algorithm.digest_size))
+        self.send.setup(
+            algorithm,
+            hkdf_expand_label(algorithm, initial_secret, send_label, b'', algorithm.digest_size))
