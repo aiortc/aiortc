@@ -177,9 +177,9 @@ def push_ack_frame(buf, rangeset: RangeSet, delay: int):
 
 
 def pull_crypto_frame(buf):
-    pull_uint_var(buf)
+    offset = pull_uint_var(buf)
     length = pull_uint_var(buf)
-    return pull_bytes(buf, length)
+    return offset, pull_bytes(buf, length)
 
 
 @contextmanager

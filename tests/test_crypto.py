@@ -112,7 +112,7 @@ class CryptoTest(TestCase):
     def test_decrypt_long_client(self):
         pair = self.create_crypto(is_client=False)
 
-        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+        plain_header, plain_payload, packet_number = pair.decrypt_packet(
             LONG_CLIENT_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, LONG_CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
@@ -121,7 +121,7 @@ class CryptoTest(TestCase):
     def test_decrypt_long_server(self):
         pair = self.create_crypto(is_client=True)
 
-        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+        plain_header, plain_payload, packet_number = pair.decrypt_packet(
             LONG_SERVER_ENCRYPTED_PACKET, 17)
         self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
@@ -133,7 +133,7 @@ class CryptoTest(TestCase):
             INITIAL_ALGORITHM,
             binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
 
-        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+        plain_header, plain_payload, packet_number = pair.decrypt_packet(
             SHORT_SERVER_ENCRYPTED_PACKET, 9)
         self.assertEqual(plain_header, SHORT_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
@@ -142,13 +142,13 @@ class CryptoTest(TestCase):
     def test_encrypt_long_client(self):
         pair = self.create_crypto(is_client=True)
 
-        packet = pair.send.encrypt_packet(LONG_CLIENT_PLAIN_HEADER, LONG_CLIENT_PLAIN_PAYLOAD)
+        packet = pair.encrypt_packet(LONG_CLIENT_PLAIN_HEADER, LONG_CLIENT_PLAIN_PAYLOAD)
         self.assertEqual(packet, LONG_CLIENT_ENCRYPTED_PACKET)
 
     def test_encrypt_long_server(self):
         pair = self.create_crypto(is_client=False)
 
-        packet = pair.send.encrypt_packet(LONG_SERVER_PLAIN_HEADER, LONG_SERVER_PLAIN_PAYLOAD)
+        packet = pair.encrypt_packet(LONG_SERVER_PLAIN_HEADER, LONG_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet, LONG_SERVER_ENCRYPTED_PACKET)
 
     def test_encrypt_short_server(self):
@@ -157,5 +157,5 @@ class CryptoTest(TestCase):
             INITIAL_ALGORITHM,
             binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
 
-        packet = pair.send.encrypt_packet(SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD)
+        packet = pair.encrypt_packet(SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet, SHORT_SERVER_ENCRYPTED_PACKET)

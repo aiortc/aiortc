@@ -101,7 +101,6 @@ class CryptoContext:
     def setup(self, algorithm, secret):
         key, self.iv, hp = derive_key_iv_hp(algorithm, secret)
         self.aead = aead.AESGCM(key)
-        self.aead_tag_size = 16
         self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=default_backend())
 
     def teardown(self):
@@ -112,8 +111,15 @@ class CryptoContext:
 
 class CryptoPair:
     def __init__(self):
+        self.aead_tag_size = 16
         self.recv = CryptoContext()
         self.send = CryptoContext()
+
+    def decrypt_packet(self, packet, encrypted_offset):
+        return self.recv.decrypt_packet(packet, encrypted_offset)
+
+    def encrypt_packet(self, plain_header, plain_payload):
+        return self.send.encrypt_packet(plain_header, plain_payload)
 
     def setup_initial(self, cid, is_client):
         if is_client:
