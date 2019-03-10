@@ -9,9 +9,10 @@ aioquic
 .. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aioquic.svg
     :target: https://codecov.io/gh/aiortc/aioquic
 
-``aioquic`` is a library for Quick UDP Internet Connections (QUIC) in Python.
+``aioquic`` is a library for the QUIC network protocol in Python.
 
 .. toctree::
    :maxdepth: 2
 
+   api
    license

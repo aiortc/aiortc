@@ -1,7 +1,10 @@
 aioquic
 =======
 
-|travis| |codecov|
+|rtd| |travis| |codecov|
+
+.. |rtd| image:: https://readthedocs.org/projects/aioquic/badge/?version=latest
+   :target: https://aioquic.readthedocs.io/
 
 .. |travis| image:: https://img.shields.io/travis/com/aiortc/aioquic.svg
     :target: https://travis-ci.com/aiortc/aioquic
@@ -12,13 +15,27 @@ aioquic
 What is ``aioquic``?
 --------------------
 
-``aioquic`` is a library for Quick UDP Internet Connections (QUIC) in Python.
-It is built on top of ``asyncio``, Python's standard asynchronous I/O
-framework.
+``aioquic`` is a library for the QUIC network protocol in Python. It is built
+on top of ``asyncio``, Python's standard asynchronous I/O framework.
+
+``aioquic`` features a minimal TLS 1.3 implementation built upon the
+`cryptography`_ library. This is because QUIC requires some APIs which are
+currently unavailable in mainstream TLS implementations such as OpenSSL:
+
+- the ability to extract traffic secrets
+
+- the ability to operate directly on TLS messages, without using the TLS
+  record layer
+
+Status
+------
+
+``aioquic`` is still a work in progress, and the API is not finalized.
 
 License
 -------
 
 ``aioquic`` is released under the `BSD license`_.
 
+.. _cryptography: https://cryptography.io/
 .. _BSD license: https://aioquic.readthedocs.io/en/latest/license.html
