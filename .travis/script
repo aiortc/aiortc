@@ -9,7 +9,7 @@ if [ "$BUILD" = "sdist" ]; then
         python3 -m twine upload --skip-existing dist/*
     fi
 else
-    flake8 aioquic tests
+    flake8 aioquic examples tests
     coverage run setup.py test
     curl -s https://codecov.io/bash | bash
 fi
