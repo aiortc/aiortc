@@ -9,16 +9,9 @@ aioquic
 .. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aioquic.svg
     :target: https://codecov.io/gh/aiortc/aioquic
 
-What is ``aioquic``?
---------------------
-
 ``aioquic`` is a library for Quick UDP Internet Connections (QUIC) in Python.
-It is built on top of ``asyncio``, Python's standard asynchronous I/O
-framework.
 
-License
--------
+.. toctree::
+   :maxdepth: 2
 
-``aioquic`` is released under the `BSD license`_.
-
-.. _BSD license: https://aioquic.readthedocs.io/en/latest/license.html
+   license
