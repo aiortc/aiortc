@@ -3,8 +3,8 @@ from unittest import TestCase
 
 from aioquic.crypto import INITIAL_ALGORITHM, CryptoPair, derive_key_iv_hp
 
-CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
-CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
+LONG_CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
+LONG_CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
     '060040c4010000c003036660261ff947cea49cce6cfad687f457cf1b14531ba1'
     '4131a0e8f309a1d0b9c4000006130113031302010000910000000b0009000006'
     '736572766572ff01000100000a00140012001d00170018001901000101010201'
@@ -12,7 +12,7 @@ CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
     '2aedce005ff183d7bb1495207236647037002b0003020304000d0020001e0403'
     '05030603020308040805080604010501060102010402050206020202002d0002'
     '0101001c00024001') + bytes(963)
-CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
+LONG_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
     'c1ff000012508394c8f03e51570800449f0dbc195a0000f3a694c75775b4e546'
     '172ce9e047cd0b5bee5181648c727adc87f7eae54473ec6cba6bdad4f5982317'
     '4b769f12358abd292d4f3286934484fb8b239c38732e1f3bbbc6a003056487eb'
@@ -52,18 +52,27 @@ CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
     'c56af92c420797499ca431a7abaa461863bca656facfad564e6274d4a741033a'
     'ca1e31bf63200df41cdf41c10b912bec')
 
-SERVER_PLAIN_HEADER = binascii.unhexlify('c1ff00001205f067a5502a4262b50040740001')
-SERVER_PLAIN_PAYLOAD = binascii.unhexlify(
+LONG_SERVER_PLAIN_HEADER = binascii.unhexlify('c1ff00001205f067a5502a4262b50040740001')
+LONG_SERVER_PLAIN_PAYLOAD = binascii.unhexlify(
     '0d0000000018410a020000560303eefce7f7b37ba1d1632e96677825ddf73988'
     'cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c940d'
     '89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b0002'
     '0304')
-SERVER_ENCRYPTED_PACKET = binascii.unhexlify(
+LONG_SERVER_ENCRYPTED_PACKET = binascii.unhexlify(
     'c4ff00001205f067a5502a4262b5004074f7ed5f01c4c2a2303d297e3c519bf6'
     'b22386e3d0bd6dfc66121677298031041bb9a79c9f0f9d4c5877270a660f5da3'
     '6207d98b73839b2fdf2ef8e7df5a51b17b8c68d864fd3e708c6c1b71a98a3318'
     '15599ef5014ea38c44bdfd387c03b5275c35e009b6238f831420047c7271281c'
     'cb54df7884')
+
+SHORT_SERVER_PLAIN_HEADER = binascii.unhexlify('41b01fd24a586a9cf30003')
+SHORT_SERVER_PLAIN_PAYLOAD = binascii.unhexlify(
+    '06003904000035000151805a4bebf5000020b098c8dc4183e4c182572e10ac3e'
+    '2b88897e0524c8461847548bd2dffa2c0ae60008002a0004ffffffff')
+SHORT_SERVER_ENCRYPTED_PACKET = binascii.unhexlify(
+    '5db01fd24a586a9cf33dec094aaec6d6b4b7a5e15f5a3f05d06cf1ad0355c19d'
+    'cce0807eecf7bf1c844a66e1ecd1f74b2a2d69bfd25d217833edd973246597bd'
+    '5107ea15cb1e210045396afa602fe23432f4ab24ce251b')
 
 
 class CryptoTest(TestCase):
@@ -100,32 +109,53 @@ class CryptoTest(TestCase):
         self.assertEqual(iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
         self.assertEqual(hp, binascii.unhexlify('94b9452d2b3c7c7f6da7fdd8593537fd'))
 
-    def test_decrypt_packet_client(self):
+    def test_decrypt_long_client(self):
         pair = self.create_crypto(is_client=False)
 
         plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
-            CLIENT_ENCRYPTED_PACKET, 17)
-        self.assertEqual(plain_header, CLIENT_PLAIN_HEADER)
-        self.assertEqual(plain_payload, CLIENT_PLAIN_PAYLOAD)
+            LONG_CLIENT_ENCRYPTED_PACKET, 17)
+        self.assertEqual(plain_header, LONG_CLIENT_PLAIN_HEADER)
+        self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, 2)
 
-    def test_decrypt_packet_server(self):
+    def test_decrypt_long_server(self):
         pair = self.create_crypto(is_client=True)
 
         plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
-            SERVER_ENCRYPTED_PACKET, 17)
-        self.assertEqual(plain_header, SERVER_PLAIN_HEADER)
-        self.assertEqual(plain_payload, SERVER_PLAIN_PAYLOAD)
+            LONG_SERVER_ENCRYPTED_PACKET, 17)
+        self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
+        self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, 1)
 
-    def test_encrypt_packet_client(self):
+    def test_decrypt_short_server(self):
+        pair = CryptoPair()
+        pair.recv.setup(
+            INITIAL_ALGORITHM,
+            binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
+
+        plain_header, plain_payload, packet_number = pair.recv.decrypt_packet(
+            SHORT_SERVER_ENCRYPTED_PACKET, 9)
+        self.assertEqual(plain_header, SHORT_SERVER_PLAIN_HEADER)
+        self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
+        self.assertEqual(packet_number, 3)
+
+    def test_encrypt_long_client(self):
         pair = self.create_crypto(is_client=True)
 
-        packet = pair.send.encrypt_packet(CLIENT_PLAIN_HEADER, CLIENT_PLAIN_PAYLOAD)
-        self.assertEqual(packet, CLIENT_ENCRYPTED_PACKET)
+        packet = pair.send.encrypt_packet(LONG_CLIENT_PLAIN_HEADER, LONG_CLIENT_PLAIN_PAYLOAD)
+        self.assertEqual(packet, LONG_CLIENT_ENCRYPTED_PACKET)
 
-    def test_encrypt_packet_server(self):
+    def test_encrypt_long_server(self):
         pair = self.create_crypto(is_client=False)
 
-        packet = pair.send.encrypt_packet(SERVER_PLAIN_HEADER, SERVER_PLAIN_PAYLOAD)
-        self.assertEqual(packet, SERVER_ENCRYPTED_PACKET)
+        packet = pair.send.encrypt_packet(LONG_SERVER_PLAIN_HEADER, LONG_SERVER_PLAIN_PAYLOAD)
+        self.assertEqual(packet, LONG_SERVER_ENCRYPTED_PACKET)
+
+    def test_encrypt_short_server(self):
+        pair = CryptoPair()
+        pair.send.setup(
+            INITIAL_ALGORITHM,
+            binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
+
+        packet = pair.send.encrypt_packet(SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD)
+        self.assertEqual(packet, SHORT_SERVER_ENCRYPTED_PACKET)
