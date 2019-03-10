@@ -84,52 +84,118 @@ class BufferTest(TestCase):
         self.assertEqual(buf.tell(), 8)
 
 
+def create_buffers():
+    return {
+        tls.Epoch.INITIAL: Buffer(capacity=4096),
+        tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
+        tls.Epoch.ONE_RTT: Buffer(capacity=4096),
+    }
+
+
+def merge_buffers(buffers):
+    return b''.join(x.data for x in buffers.values())
+
+
+def reset_buffers(buffers):
+    for k in buffers.keys():
+        buffers[k].seek(0)
+
+
 class ContextTest(TestCase):
-    def test_handshake(self):
+    def create_client(self):
         client = Context(is_client=True)
         client.handshake_extensions = [
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
         ]
         self.assertEqual(client.state, State.CLIENT_HANDSHAKE_START)
+        return client
 
+    def create_server(self):
         server = Context(is_client=False)
         server.certificate = SERVER_CERTIFICATE
         server.certificate_private_key = SERVER_PRIVATE_KEY
-
         server.handshake_extensions = [
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
         ]
         self.assertEqual(server.state, State.SERVER_EXPECT_CLIENT_HELLO)
+        return server
+
+    def test_client_unexpected_message(self):
+        client = self.create_client()
+
+        client.state = State.CLIENT_EXPECT_SERVER_HELLO
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        client.state = State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        client.state = State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        client.state = State.CLIENT_EXPECT_CERTIFICATE_VERIFY
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        client.state = State.CLIENT_EXPECT_FINISHED
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        client.state = State.CLIENT_POST_HANDSHAKE
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            client.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+    def test_server_unexpected_message(self):
+        server = self.create_client()
+
+        server.state = State.SERVER_EXPECT_CLIENT_HELLO
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            server.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        server.state = State.SERVER_EXPECT_FINISHED
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            server.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+        server.state = State.SERVER_POST_HANDSHAKE
+        with self.assertRaises(tls.AlertUnexpectedMessage):
+            server.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+    def test_handshake(self):
+        client = self.create_client()
+        server = self.create_server()
 
         # send client hello
-        client_buf = Buffer(capacity=512)
+        client_buf = create_buffers()
         client.handle_message(b'', client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        self.assertEqual(client_buf.tell(), 248)
-        server_input = client_buf.data
-        client_buf.seek(0)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 248)
+        reset_buffers(client_buf)
 
         # handle client hello
         # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = Buffer(capacity=4096)
+        server_buf = create_buffers()
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        self.assertEqual(server_buf.tell(), 155 + 90 + 1538 + 392 + 36)
-        client_input = server_buf.data
-        server_buf.seek(0)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 155 + 90 + 1538 + 392 + 36)
+        reset_buffers(server_buf)
 
         # handle server hello, encrypted extensions, certificate, certificate verify, finished
         # send finished
         client.handle_message(client_input, client_buf)
         self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-        self.assertEqual(client_buf.tell(), 36)
-        server_input = client_buf.data
-        client_buf.seek(0)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 36)
+        reset_buffers(client_buf)
 
         # handle finished
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-        self.assertEqual(server_buf.tell(), 0)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 0)
 
         # check keys match
         self.assertEqual(client.dec_key, server.enc_key)

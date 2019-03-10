@@ -718,8 +718,8 @@ class Context:
         self.is_client = is_client
 
     def handle_message(self, input_data, output_buf):
-        if not input_data:
-            self._client_send_hello(output_buf)
+        if self.state == State.CLIENT_HANDSHAKE_START:
+            self._client_send_hello(output_buf[Epoch.INITIAL])
             return
 
         self._receive_buffer += input_data
@@ -738,26 +738,58 @@ class Context:
             self._receive_buffer = self._receive_buffer[message_length:]
 
             input_buf = Buffer(data=message)
+
+            # client states
+
             if self.state == State.CLIENT_EXPECT_SERVER_HELLO:
-                self._client_handle_hello(input_buf, output_buf)
+                if message_type == HandshakeType.SERVER_HELLO:
+                    self._client_handle_hello(input_buf, output_buf[Epoch.INITIAL])
+                else:
+                    raise AlertUnexpectedMessage
             elif self.state == State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS:
-                self._client_handle_encrypted_extensions(input_buf, output_buf)
+                if message_type == HandshakeType.ENCRYPTED_EXTENSIONS:
+                    self._client_handle_encrypted_extensions(input_buf)
+                else:
+                    raise AlertUnexpectedMessage
             elif self.state == State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE:
-                self._client_handle_certificate(input_buf, output_buf)
+                if message_type == HandshakeType.CERTIFICATE:
+                    self._client_handle_certificate(input_buf)
+                else:
+                    # FIXME: handle certificate request
+                    raise AlertUnexpectedMessage
             elif self.state == State.CLIENT_EXPECT_CERTIFICATE_VERIFY:
-                self._client_handle_certificate_verify(input_buf, output_buf)
+                if message_type == HandshakeType.CERTIFICATE_VERIFY:
+                    self._client_handle_certificate_verify(input_buf)
+                else:
+                    raise AlertUnexpectedMessage
             elif self.state == State.CLIENT_EXPECT_FINISHED:
-                self._client_handle_finished(input_buf, output_buf)
+                if message_type == HandshakeType.FINISHED:
+                    self._client_handle_finished(input_buf, output_buf[Epoch.HANDSHAKE])
+                else:
+                    raise AlertUnexpectedMessage
             elif self.state == State.CLIENT_POST_HANDSHAKE:
                 if message_type == HandshakeType.NEW_SESSION_TICKET:
-                    self._client_handle_new_session_ticket(input_buf, output_buf)
+                    self._client_handle_new_session_ticket(input_buf)
                 else:
                     raise AlertUnexpectedMessage
 
+            # server states
+
             elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
-                self._server_handle_hello(input_buf, output_buf)
+                if message_type == HandshakeType.CLIENT_HELLO:
+                    self._server_handle_hello(input_buf, output_buf[Epoch.INITIAL])
+                else:
+                    raise AlertUnexpectedMessage
             elif self.state == State.SERVER_EXPECT_FINISHED:
-                self._server_handle_finished(input_buf, output_buf)
+                if message_type == HandshakeType.FINISHED:
+                    self._server_handle_finished(input_buf)
+                else:
+                    raise AlertUnexpectedMessage
+            elif self.state == State.SERVER_POST_HANDSHAKE:
+                raise AlertUnexpectedMessage
+
+            # should not happen
+
             else:
                 raise Exception('unhandled state')
 
@@ -822,7 +854,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
 
-    def _client_handle_encrypted_extensions(self, input_buf, output_buf):
+    def _client_handle_encrypted_extensions(self, input_buf):
         pull_encrypted_extensions(input_buf)
 
         self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
@@ -830,7 +862,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
 
-    def _client_handle_certificate(self, input_buf, output_buf):
+    def _client_handle_certificate(self, input_buf):
         certificate = pull_certificate(input_buf)
 
         self._peer_certificate = x509.load_der_x509_certificate(
@@ -839,7 +871,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
 
-    def _client_handle_certificate_verify(self, input_buf, output_buf):
+    def _client_handle_certificate_verify(self, input_buf):
         verify = pull_certificate_verify(input_buf)
 
         # check signature
@@ -882,7 +914,7 @@ class Context:
 
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
-    def _client_handle_new_session_ticket(self, input_buf, output_buf):
+    def _client_handle_new_session_ticket(self, input_buf):
         pull_new_session_ticket(input_buf)
 
     def _server_handle_hello(self, input_buf, output_buf):
@@ -962,7 +994,7 @@ class Context:
 
         self._set_state(State.SERVER_EXPECT_FINISHED)
 
-    def _server_handle_finished(self, input_buf, output_buf):
+    def _server_handle_finished(self, input_buf):
         finished = pull_finished(input_buf)
 
         # check verify data

@@ -61,9 +61,6 @@ class QuicConnection:
 
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
-        self.send_buffer = Buffer(capacity=4096)
-        self.send_ack = False
-
         self.ack = {
             tls.Epoch.INITIAL: RangeSet(),
             tls.Epoch.HANDSHAKE: RangeSet(),
@@ -78,6 +75,16 @@ class QuicConnection:
             tls.Epoch.INITIAL: 0,
             tls.Epoch.HANDSHAKE: 0,
             tls.Epoch.ONE_RTT: 0,
+        }
+        self.send_ack = {
+            tls.Epoch.INITIAL: False,
+            tls.Epoch.HANDSHAKE: False,
+            tls.Epoch.ONE_RTT: False,
+        }
+        self.send_buffer = {
+            tls.Epoch.INITIAL: Buffer(capacity=4096),
+            tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
+            tls.Epoch.ONE_RTT: Buffer(capacity=4096),
         }
 
         self.crypto_initialized = False
@@ -117,11 +124,7 @@ class QuicConnection:
             is_ack_only = self._payload_received(plain_payload)
             self.ack[epoch].add(packet_number)
             if not is_ack_only:
-                self.send_ack = True
-
-            if epoch == tls.Epoch.INITIAL:
-                self.crypto[epoch].recv.teardown()
-                self.crypto[epoch].send.teardown()
+                self.send_ack[epoch] = True
 
     def pending_datagrams(self):
         for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
@@ -136,7 +139,7 @@ class QuicConnection:
         while not buf.eof():
             frame_type = pull_uint_var(buf)
             if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
-                pass
+                is_ack_only = False
             elif frame_type == QuicFrameType.ACK:
                 pull_ack_frame(buf)
             elif frame_type == QuicFrameType.CRYPTO:
@@ -145,6 +148,7 @@ class QuicConnection:
                 assert len(data)
                 self.tls.handle_message(data, self.send_buffer)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
+                is_ack_only = False
                 pull_new_connection_id_frame(buf)
             else:
                 logger.warning('unhandled frame type %d', frame_type)
@@ -161,7 +165,8 @@ class QuicConnection:
     def _write_application(self):
         epoch = tls.Epoch.ONE_RTT
         crypto = self.crypto[epoch]
-        if not crypto.send.is_valid() or not self.ack[epoch]:
+        send_ack = self.ack[epoch] if self.send_ack[epoch] else False
+        if not crypto.send.is_valid() or not send_ack:
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
@@ -173,10 +178,10 @@ class QuicConnection:
         header_size = buf.tell()
 
         # ACK
-        if self.send_ack and self.ack[epoch]:
+        if send_ack:
             push_uint_var(buf, QuicFrameType.ACK)
-            push_ack_frame(buf, self.ack[epoch], 0)
-            self.send_ack = False
+            push_ack_frame(buf, send_ack, 0)
+            self.send_ack[epoch] = False
 
         # encrypt
         packet_size = buf.tell()
@@ -187,7 +192,10 @@ class QuicConnection:
 
     def _write_handshake(self, epoch):
         crypto = self.crypto[epoch]
-        if not crypto.send.is_valid() or not self.send_buffer.tell():
+        send_ack = self.ack[epoch] if self.send_ack[epoch] else False
+        send_data = self.send_buffer[epoch].data
+        self.send_buffer[epoch].seek(0)
+        if not crypto.send.is_valid() or (not send_ack and not send_data):
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
@@ -206,12 +214,11 @@ class QuicConnection:
         ))
         header_size = buf.tell()
 
-        if self.send_buffer.tell():
+        if send_data:
             # CRYPTO
             push_uint_var(buf, QuicFrameType.CRYPTO)
             with push_crypto_frame(buf):
-                tls.push_bytes(buf, self.send_buffer.data)
-                self.send_buffer.seek(0)
+                tls.push_bytes(buf, send_data)
 
             # PADDING
             if epoch == tls.Epoch.INITIAL:
@@ -220,10 +227,10 @@ class QuicConnection:
                     bytes(PACKET_MAX_SIZE - crypto.send.aead_tag_size - buf.tell()))
 
         # ACK
-        if self.send_ack and self.ack[epoch]:
+        if send_ack:
             push_uint_var(buf, QuicFrameType.ACK)
-            push_ack_frame(buf, self.ack[epoch], 0)
-            self.send_ack = False
+            push_ack_frame(buf, send_ack, 0)
+            self.send_ack[epoch] = False
 
         # finalize length
         packet_size = buf.tell()
