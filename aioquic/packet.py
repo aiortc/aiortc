@@ -176,10 +176,16 @@ def push_ack_frame(buf, rangeset: RangeSet, delay: int):
         start = r.start
 
 
+@dataclass
+class QuicStreamFrame:
+    data: bytes = b''
+    offset: int = 0
+
+
 def pull_crypto_frame(buf):
     offset = pull_uint_var(buf)
     length = pull_uint_var(buf)
-    return offset, pull_bytes(buf, length)
+    return QuicStreamFrame(offset=offset, data=pull_bytes(buf, length))
 
 
 @contextmanager

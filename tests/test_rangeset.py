@@ -242,6 +242,12 @@ class RangeSetTest(TestCase):
         rangeset = RangeSet([range(0, 1)])
         self.assertEqual(len(rangeset), 1)
 
+    def test_pop(self):
+        rangeset = RangeSet([range(1, 2), range(3, 4)])
+        r = rangeset.shift()
+        self.assertEqual(r, range(1, 2))
+        self.assertEqual(list(rangeset), [range(3, 4)])
+
     def test_repr(self):
         rangeset = RangeSet([range(1, 2), range(3, 4)])
         self.assertEqual(repr(rangeset), 'RangeSet([range(1, 2), range(3, 4)])')

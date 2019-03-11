@@ -2,16 +2,17 @@ import binascii
 import logging
 import os
 
-from aioquic import tls
-from aioquic.crypto import CryptoPair
-from aioquic.packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
-                            PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17, QuicFrameType,
-                            QuicHeader, pull_ack_frame, pull_crypto_frame,
-                            pull_new_connection_id_frame, pull_quic_header,
-                            pull_uint_var, push_ack_frame, push_crypto_frame,
-                            push_quic_header, push_uint_var)
-from aioquic.rangeset import RangeSet
-from aioquic.tls import Buffer
+from . import tls
+from .crypto import CryptoPair
+from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
+                     PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
+                     QuicFrameType, QuicHeader, pull_ack_frame,
+                     pull_crypto_frame, pull_new_connection_id_frame,
+                     pull_quic_header, pull_uint_var, push_ack_frame,
+                     push_crypto_frame, push_quic_header, push_uint_var)
+from .rangeset import RangeSet
+from .stream import QuicStream
+from .tls import Buffer
 
 logger = logging.getLogger('quic')
 
@@ -82,6 +83,11 @@ class QuicConnection:
             tls.Epoch.HANDSHAKE: PacketSpace(),
             tls.Epoch.ONE_RTT: PacketSpace(),
         }
+        self.streams = {
+            tls.Epoch.INITIAL: QuicStream(),
+            tls.Epoch.HANDSHAKE: QuicStream(),
+            tls.Epoch.ONE_RTT: QuicStream(),
+        }
 
         self.crypto_initialized = False
         self.packet_number = 0
@@ -122,7 +128,7 @@ class QuicConnection:
                 self.peer_cid_set = True
 
             # record packet as received
-            is_ack_only = self._payload_received(plain_payload)
+            is_ack_only = self._payload_received(epoch, plain_payload)
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 self.send_ack[epoch] = True
@@ -136,7 +142,7 @@ class QuicConnection:
 
         yield from self._write_application()
 
-    def _payload_received(self, plain):
+    def _payload_received(self, epoch, plain):
         buf = Buffer(data=plain)
 
         is_ack_only = True
@@ -148,9 +154,11 @@ class QuicConnection:
                 pull_ack_frame(buf)
             elif frame_type == QuicFrameType.CRYPTO:
                 is_ack_only = False
-                offset, data = pull_crypto_frame(buf)
-                assert len(data)
-                self.tls.handle_message(data, self.send_buffer)
+                stream = self.streams[epoch]
+                stream.add_frame(pull_crypto_frame(buf))
+                data = stream.pull_data()
+                if data:
+                    self.tls.handle_message(data, self.send_buffer)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 is_ack_only = False
                 pull_new_connection_id_frame(buf)

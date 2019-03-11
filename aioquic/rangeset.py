@@ -38,6 +38,9 @@ class RangeSet(Sequence):
         # the added range is entirely after all existing items, append it
         self.__ranges.append(range(start, stop))
 
+    def shift(self):
+        return self.__ranges.pop(0)
+
     def __bool__(self):
         return bool(self.__ranges)
 
