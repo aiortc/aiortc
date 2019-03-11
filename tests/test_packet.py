@@ -121,7 +121,7 @@ class FrameTest(TestCase):
         # parse
         buf = Buffer(data=data)
         rangeset, delay = pull_ack_frame(buf)
-        self.assertEqual(rangeset.ranges, [
+        self.assertEqual(list(rangeset), [
             range(0, 1)
         ])
         self.assertEqual(delay, 2)
@@ -137,7 +137,7 @@ class FrameTest(TestCase):
         # parse
         buf = Buffer(data=data)
         rangeset, delay = pull_ack_frame(buf)
-        self.assertEqual(rangeset.ranges, [
+        self.assertEqual(list(rangeset), [
             range(0, 4),
             range(5, 6)
         ])

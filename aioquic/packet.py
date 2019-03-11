@@ -150,19 +150,19 @@ def pull_ack_frame(buf):
     delay = pull_uint_var(buf)
     ack_range_count = pull_uint_var(buf)
     ack_count = pull_uint_var(buf)  # first ack range
-    rangeset.ranges.insert(0, range(end - ack_count, end + 1))
+    rangeset.add(end - ack_count, end + 1)
     end -= ack_count
     for _ in range(ack_range_count):
         end -= pull_uint_var(buf)
         ack_count = pull_uint_var(buf)
-        rangeset.ranges.insert(0, range(end - ack_count, end + 1))
+        rangeset.add(end - ack_count, end + 1)
         end -= ack_count
     return rangeset, delay
 
 
 def push_ack_frame(buf, rangeset: RangeSet, delay: int):
-    index = len(rangeset.ranges) - 1
-    r = rangeset.ranges[index]
+    index = len(rangeset) - 1
+    r = rangeset[index]
     push_uint_var(buf, r.stop - 1)
     push_uint_var(buf, delay)
     push_uint_var(buf, index)
@@ -170,7 +170,7 @@ def push_ack_frame(buf, rangeset: RangeSet, delay: int):
     start = r.start
     while index > 0:
         index -= 1
-        r = rangeset.ranges[index]
+        r = rangeset[index]
         push_uint_var(buf, start - r.stop + 1)
         push_uint_var(buf, r.stop - r.start - 1)
         start = r.start
