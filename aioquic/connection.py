@@ -26,6 +26,11 @@ SERVER_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
     b'000000000000000800024064000a00010a')
 
 PACKET_MAX_SIZE = 1280
+SECRETS_LABELS = [
+    [None, 'QUIC_CLIENT_EARLY_TRAFFIC_SECRET', 'QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET',
+     'QUIC_CLIENT_TRAFFIC_SECRET_0'],
+    [None, None, 'QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET', 'QUIC_SERVER_TRAFFIC_SECRET_0']
+]
 SEND_PN_SIZE = 2
 
 
@@ -45,7 +50,7 @@ class PacketSpace:
 
 
 class QuicConnection:
-    def __init__(self, is_client=True, certificate=None, private_key=None):
+    def __init__(self, is_client=True, certificate=None, private_key=None, secrets_log_file=None):
         if not is_client:
             assert certificate is not None, 'SSL certificate is required'
             assert private_key is not None, 'SSL private key is required'
@@ -54,6 +59,7 @@ class QuicConnection:
         self.host_cid = os.urandom(8)
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
+        self.secrets_log_file = secrets_log_file
         self.tls = tls.Context(is_client=is_client)
         if is_client:
             self.tls.handshake_extensions.append(
@@ -170,6 +176,13 @@ class QuicConnection:
         return is_ack_only
 
     def _update_traffic_key(self, direction, epoch, secret):
+        if self.secrets_log_file is not None:
+            label_row = self.is_client == (direction == tls.Direction.DECRYPT)
+            label = SECRETS_LABELS[label_row][epoch.value]
+            self.secrets_log_file.write('%s %s %s\n' % (
+                label, self.tls.client_random.hex(), secret.hex()))
+            self.secrets_log_file.flush()
+
         crypto = self.spaces[epoch].crypto
         if direction == tls.Direction.ENCRYPT:
             crypto.send.setup(self.tls.key_schedule.algorithm, secret)
