@@ -127,8 +127,10 @@ class QuicConnection:
                 self.peer_cid = header.source_cid
                 self.peer_cid_set = True
 
-            # record packet as received
+            # handle payload
             is_ack_only = self._payload_received(epoch, plain_payload)
+
+            # record packet as received
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 self.send_ack[epoch] = True
@@ -205,55 +207,62 @@ class QuicConnection:
     def _write_handshake(self, epoch):
         space = self.spaces[epoch]
         send_ack = space.ack_queue if self.send_ack[epoch] else False
+        self.send_ack[epoch] = False
         send_data = self.send_buffer[epoch].data
         self.send_buffer[epoch].seek(0)
-        if not space.crypto.send.is_valid() or (not send_ack and not send_data):
-            return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
+        offset = 0
 
-        if epoch == tls.Epoch.INITIAL:
-            packet_type = PACKET_TYPE_INITIAL
-        else:
-            packet_type = PACKET_TYPE_HANDSHAKE
-
-        # write header
-        push_quic_header(buf, QuicHeader(
-            version=PROTOCOL_VERSION_DRAFT_17,
-            packet_type=packet_type | (SEND_PN_SIZE - 1),
-            destination_cid=self.peer_cid,
-            source_cid=self.host_cid,
-        ))
-        header_size = buf.tell()
-
-        if send_data:
-            # CRYPTO
-            push_uint_var(buf, QuicFrameType.CRYPTO)
-            with push_crypto_frame(buf):
-                tls.push_bytes(buf, send_data)
-
-            # PADDING
+        while space.crypto.send.is_valid() and (send_ack or send_data):
             if epoch == tls.Epoch.INITIAL:
-                tls.push_bytes(
-                    buf,
-                    bytes(PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()))
+                packet_type = PACKET_TYPE_INITIAL
+            else:
+                packet_type = PACKET_TYPE_HANDSHAKE
 
-        # ACK
-        if send_ack:
-            push_uint_var(buf, QuicFrameType.ACK)
-            push_ack_frame(buf, send_ack, 0)
-            self.send_ack[epoch] = False
+            # write header
+            push_quic_header(buf, QuicHeader(
+                version=PROTOCOL_VERSION_DRAFT_17,
+                packet_type=packet_type | (SEND_PN_SIZE - 1),
+                destination_cid=self.peer_cid,
+                source_cid=self.host_cid,
+            ))
+            header_size = buf.tell()
 
-        # finalize length
-        packet_size = buf.tell()
-        buf.seek(header_size - SEND_PN_SIZE - 2)
-        length = packet_size - header_size + 2 + space.crypto.aead_tag_size
-        tls.push_uint16(buf, length | 0x4000)
-        tls.push_uint16(buf, self.packet_number)
-        buf.seek(packet_size)
+            # ACK
+            if send_ack:
+                push_uint_var(buf, QuicFrameType.ACK)
+                push_ack_frame(buf, send_ack, 0)
+                send_ack = False
 
-        # encrypt
-        data = buf.data
-        yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+            if send_data:
+                # CRYPTO
+                chunk_size = min(len(send_data),
+                                 PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4)
+                push_uint_var(buf, QuicFrameType.CRYPTO)
+                with push_crypto_frame(buf, offset):
+                    chunk = send_data[:chunk_size]
+                    tls.push_bytes(buf, chunk)
+                    send_data = send_data[chunk_size:]
+                    offset += chunk_size
 
-        self.packet_number += 1
+                # PADDING
+                if epoch == tls.Epoch.INITIAL and self.is_client:
+                    tls.push_bytes(
+                        buf,
+                        bytes(PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()))
+
+            # finalize length
+            packet_size = buf.tell()
+            buf.seek(header_size - SEND_PN_SIZE - 2)
+            length = packet_size - header_size + 2 + space.crypto.aead_tag_size
+            tls.push_uint16(buf, length | 0x4000)
+            tls.push_uint16(buf, self.packet_number)
+            buf.seek(packet_size)
+
+            # encrypt
+            data = buf.data
+            yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+
+            self.packet_number += 1
+            buf.seek(0)

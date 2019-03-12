@@ -26,3 +26,12 @@ class QuicConnectionTest(TestCase):
         client.connection_made()
         for datagram in client.pending_datagrams():
             server.datagram_received(datagram)
+
+        for datagram in server.pending_datagrams():
+            client.datagram_received(datagram)
+
+        for datagram in client.pending_datagrams():
+            server.datagram_received(datagram)
+
+        for datagram in server.pending_datagrams():
+            client.datagram_received(datagram)
