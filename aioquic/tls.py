@@ -431,12 +431,12 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
             with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
                 push_list(buf, 2, push_uint16, hello.supported_groups)
 
+            with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
+                push_list(buf, 1, push_uint8, hello.key_exchange_modes)
+
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
                     push_bytes(buf, extension_value)
-
-            with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
-                push_list(buf, 1, push_uint8, hello.key_exchange_modes)
 
 
 @dataclass
