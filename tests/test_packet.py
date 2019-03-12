@@ -2,9 +2,9 @@ import binascii
 from unittest import TestCase
 
 from aioquic.packet import (PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
-                            QuicHeader, pull_ack_frame,
-                            pull_new_connection_id_frame, pull_quic_header,
-                            pull_uint_var, push_ack_frame,
+                            PROTOCOL_VERSION_NEGOTIATION, QuicHeader,
+                            pull_ack_frame, pull_new_connection_id_frame,
+                            pull_quic_header, pull_uint_var, push_ack_frame,
                             push_new_connection_id_frame, push_quic_header,
                             push_uint_var)
 from aioquic.tls import Buffer, BufferReadError
@@ -81,8 +81,19 @@ class PacketTest(TestCase):
         self.assertEqual(header.rest_length, 182)
         self.assertEqual(buf.tell(), 17)
 
+    def test_pull_version_negotiation(self):
+        buf = Buffer(data=load('version_negotiation.bin'))
+        header = pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(header.version, PROTOCOL_VERSION_NEGOTIATION)
+        self.assertEqual(header.packet_type, None)
+        self.assertEqual(header.destination_cid, binascii.unhexlify('dae1889b81a91c26'))
+        self.assertEqual(header.source_cid, binascii.unhexlify('f49243784f9bf3be'))
+        self.assertEqual(header.token, b'')
+        self.assertEqual(header.rest_length, 8)
+        self.assertEqual(buf.tell(), 22)
+
     def test_pull_long_header_no_fixed_bit(self):
-        buf = Buffer(data=b'\x80\x00\x00\x00\x00\x00')
+        buf = Buffer(data=b'\x80\xff\x00\x00\x11\x00')
         with self.assertRaises(ValueError) as cm:
             pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(str(cm.exception), 'Packet fixed bit is zero')

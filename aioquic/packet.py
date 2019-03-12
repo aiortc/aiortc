@@ -16,6 +16,7 @@ PACKET_TYPE_HANDSHAKE = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x20
 PACKET_TYPE_RETRY = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x30
 PACKET_TYPE_MASK = 0xf0
 
+PROTOCOL_VERSION_NEGOTIATION = 0
 PROTOCOL_VERSION_DRAFT_17 = 0xff000011  # draft 17
 
 UINT_VAR_FORMATS = [
@@ -75,11 +76,10 @@ def push_uint_var(buf, value):
 
 def pull_quic_header(buf, host_cid_length=None):
     first_byte = pull_uint8(buf)
-    if not (first_byte & PACKET_FIXED_BIT):
-        raise ValueError('Packet fixed bit is zero')
 
     token = b''
     if is_long_header(first_byte):
+        # long header packet
         version = pull_uint32(buf)
         cid_lengths = pull_uint8(buf)
 
@@ -89,11 +89,19 @@ def pull_quic_header(buf, host_cid_length=None):
         source_cid_length = decode_cid_length(cid_lengths % 16)
         source_cid = pull_bytes(buf, source_cid_length)
 
-        packet_type = first_byte & PACKET_TYPE_MASK
-        if packet_type == PACKET_TYPE_INITIAL:
-            token_length = pull_uint_var(buf)
-            token = pull_bytes(buf, token_length)
-        rest_length = pull_uint_var(buf)
+        if version == PROTOCOL_VERSION_NEGOTIATION:
+            # version negotiation
+            packet_type = None
+            rest_length = buf.capacity - buf.tell()
+        else:
+            if version and not (first_byte & PACKET_FIXED_BIT):
+                raise ValueError('Packet fixed bit is zero')
+
+            packet_type = first_byte & PACKET_TYPE_MASK
+            if packet_type == PACKET_TYPE_INITIAL:
+                token_length = pull_uint_var(buf)
+                token = pull_bytes(buf, token_length)
+            rest_length = pull_uint_var(buf)
 
         return QuicHeader(
             version=version,
@@ -104,6 +112,9 @@ def pull_quic_header(buf, host_cid_length=None):
             rest_length=rest_length)
     else:
         # short header packet
+        if not (first_byte & PACKET_FIXED_BIT):
+            raise ValueError('Packet fixed bit is zero')
+
         packet_type = first_byte & PACKET_TYPE_MASK
         destination_cid = pull_bytes(buf, host_cid_length)
         return QuicHeader(
