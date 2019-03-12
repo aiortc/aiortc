@@ -76,3 +76,16 @@ class QuicConnectionTest(TestCase):
             'QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET',
             'QUIC_SERVER_TRAFFIC_SECRET_0',
             'QUIC_CLIENT_TRAFFIC_SECRET_0'])
+
+    def test_version_negotiation_needed(self):
+        client = QuicConnection(
+            is_client=True)
+
+        client.connection_made()
+        for datagram in client.pending_datagrams():
+            pass
+
+        with self.assertRaises(Exception) as cm:
+            client.datagram_received(load('version_negotiation.bin'))
+        self.assertEqual(str(cm.exception),
+                         "Version negotiation needed: ['0xff000012', '0x1a2a3a4a']")

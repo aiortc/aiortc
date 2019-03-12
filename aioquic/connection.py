@@ -115,6 +115,12 @@ class QuicConnection:
         while not buf.eof():
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
+            if header.packet_type is None:
+                versions = []
+                while not buf.eof():
+                    versions.append('0x%x' % tls.pull_uint32(buf))
+                raise Exception('Version negotiation needed: %s' % versions)
+
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
             tls.pull_bytes(buf, header.rest_length)
