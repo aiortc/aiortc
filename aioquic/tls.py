@@ -77,8 +77,8 @@ def hkdf_extract(algorithm, salt, key_material):
 
 
 class CipherSuite(IntEnum):
-    AES_256_GCM_SHA384 = 0x1302
     AES_128_GCM_SHA256 = 0x1301
+    AES_256_GCM_SHA384 = 0x1302
     CHACHA20_POLY1305_SHA256 = 0x1303
 
 
@@ -104,7 +104,9 @@ class ExtensionType(IntEnum):
 
 
 class Group(IntEnum):
-    SECP256R1 = 23
+    SECP256R1 = 0x0017
+    SECP384R1 = 0x0018
+    SECP521R1 = 0x0019
 
 
 class HandshakeType(IntEnum):
@@ -692,6 +694,27 @@ class KeySchedule:
         self.hash.update(data)
 
 
+GROUP_TO_CURVE = {
+    Group.SECP256R1: ec.SECP256R1,
+    Group.SECP384R1: ec.SECP384R1,
+    Group.SECP521R1: ec.SECP521R1,
+}
+CURVE_TO_GROUP = dict((v, k) for k, v in GROUP_TO_CURVE.items())
+
+
+def decode_public_key(key_share):
+    return ec.EllipticCurvePublicKey.from_encoded_point(
+        GROUP_TO_CURVE[key_share[0]](), key_share[1])
+
+
+def encode_public_key(public_key):
+    return (
+        CURVE_TO_GROUP[public_key.curve.__class__],
+        public_key.public_bytes(
+            Encoding.X962, PublicFormat.UncompressedPoint),
+    )
+
+
 class Context:
     def __init__(self, is_client):
         self.certificate = None
@@ -810,17 +833,10 @@ class Context:
                 KeyExchangeMode.PSK_DHE_KE,
             ],
             key_share=[
-                (
-                    Group.SECP256R1,
-                    self.private_key.public_key().public_bytes(
-                        Encoding.X962, PublicFormat.UncompressedPoint),
-                )
+                encode_public_key(self.private_key.public_key()),
             ],
             signature_algorithms=[
                 SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
-                SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
-                SignatureAlgorithm.RSA_PKCS1_SHA256,
-                SignatureAlgorithm.RSA_PKCS1_SHA1,
             ],
             supported_groups=[
                 Group.SECP256R1,
@@ -843,8 +859,7 @@ class Context:
     def _client_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_server_hello(input_buf)
 
-        peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
-            ec.SECP256R1(), peer_hello.key_share[1])
+        peer_public_key = decode_public_key(peer_hello.key_share)
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
         self.key_schedule.update_hash(input_buf.data)
@@ -929,8 +944,7 @@ class Context:
         self.key_schedule.extract(None)
         self.key_schedule.update_hash(input_buf.data)
 
-        peer_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
-            ec.SECP256R1(), peer_hello.key_share[0][1])
+        peer_public_key = decode_public_key(peer_hello.key_share[0])
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
         # send hello
@@ -940,11 +954,7 @@ class Context:
             cipher_suite=CipherSuite.AES_128_GCM_SHA256,
             compression_method=CompressionMethod.NULL,
 
-            key_share=(
-                Group.SECP256R1,
-                self.private_key.public_key().public_bytes(
-                    Encoding.X962, PublicFormat.UncompressedPoint),
-            ),
+            key_share=encode_public_key(self.private_key.public_key()),
             supported_version=TLS_VERSION_1_3,
         )
         with self._push_message(output_buf):
