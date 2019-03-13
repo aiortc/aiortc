@@ -1,4 +1,3 @@
-import binascii
 import logging
 import os
 
@@ -6,24 +5,17 @@ from . import tls
 from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
                      PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
-                     QuicFrameType, QuicHeader, pull_ack_frame,
-                     pull_crypto_frame, pull_new_connection_id_frame,
-                     pull_quic_header, pull_uint_var, push_ack_frame,
-                     push_crypto_frame, push_quic_header, push_uint_var)
+                     QuicFrameType, QuicHeader, QuicTransportParameters,
+                     pull_ack_frame, pull_crypto_frame,
+                     pull_new_connection_id_frame, pull_quic_header,
+                     pull_uint_var, push_ack_frame, push_crypto_frame,
+                     push_quic_header, push_quic_transport_parameters,
+                     push_uint_var)
 from .rangeset import RangeSet
 from .stream import QuicStream
 from .tls import Buffer
 
 logger = logging.getLogger('quic')
-
-
-CLIENT_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
-    b'ff0000110031000500048010000000060004801000000007000480100000000'
-    b'4000481000000000100024258000800024064000a00010a')
-SERVER_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
-    b'ff00001104ff000011004500050004801000000006000480100000000700048'
-    b'010000000040004810000000001000242580002001000000000000000000000'
-    b'000000000000000800024064000a00010a')
 
 PACKET_MAX_SIZE = 1280
 SECRETS_LABELS = [
@@ -61,14 +53,23 @@ class QuicConnection:
         self.peer_cid_set = False
         self.secrets_log_file = secrets_log_file
         self.tls = tls.Context(is_client=is_client)
+
+        self.quic_transport_parameters = QuicTransportParameters(
+            idle_timeout=600,
+            initial_max_data=16777216,
+            initial_max_stream_data_bidi_local=1048576,
+            initial_max_stream_data_bidi_remote=1048576,
+            initial_max_stream_data_uni=1048576,
+            initial_max_streams_bidi=100,
+            ack_delay_exponent=10,
+        )
+
         if is_client:
-            self.tls.handshake_extensions.append(
-                (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
-            )
+            self.quic_transport_parameters.initial_version = PROTOCOL_VERSION_DRAFT_17
         else:
-            self.tls.handshake_extensions.append(
-                (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, SERVER_QUIC_TRANSPORT_PARAMETERS),
-            )
+            self.quic_transport_parameters.negotiated_version = PROTOCOL_VERSION_DRAFT_17
+            self.quic_transport_parameters.supported_versions = [PROTOCOL_VERSION_DRAFT_17]
+            self.quic_transport_parameters.stateless_reset_token = bytes(16)
             self.tls.certificate = certificate
             self.tls.certificate_private_key = private_key
 
@@ -104,6 +105,9 @@ class QuicConnection:
                                                                 is_client=self.is_client)
             self.crypto_initialized = True
 
+            self.tls.handshake_extensions.append(
+                (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
+            )
             self.tls.handle_message(b'', self.send_buffer)
 
     def datagram_received(self, data: bytes):
@@ -129,6 +133,10 @@ class QuicConnection:
                 self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=header.destination_cid,
                                                                     is_client=self.is_client)
                 self.crypto_initialized = True
+
+                self.tls.handshake_extensions.append(
+                    (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
+                )
 
             epoch = get_epoch(header.packet_type)
             space = self.spaces[epoch]
@@ -180,6 +188,12 @@ class QuicConnection:
                 logger.warning('unhandled frame type %d', frame_type)
                 break
         return is_ack_only
+
+    def _serialize_parameters(self):
+        buf = Buffer(capacity=512)
+        push_quic_transport_parameters(buf, self.quic_transport_parameters,
+                                       is_client=self.is_client)
+        return buf.data
 
     def _update_traffic_key(self, direction, epoch, secret):
         if self.secrets_log_file is not None:

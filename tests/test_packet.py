@@ -3,9 +3,11 @@ from unittest import TestCase
 
 from aioquic.packet import (PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
                             PROTOCOL_VERSION_NEGOTIATION, QuicHeader,
-                            pull_ack_frame, pull_new_connection_id_frame,
-                            pull_quic_header, pull_uint_var, push_ack_frame,
-                            push_new_connection_id_frame, push_quic_header,
+                            QuicTransportParameters, pull_ack_frame,
+                            pull_new_connection_id_frame, pull_quic_header,
+                            pull_quic_transport_parameters, pull_uint_var,
+                            push_ack_frame, push_new_connection_id_frame,
+                            push_quic_header, push_quic_transport_parameters,
                             push_uint_var)
 from aioquic.tls import Buffer, BufferReadError
 
@@ -123,6 +125,51 @@ class PacketTest(TestCase):
             source_cid=b'')
         push_quic_header(buf, header)
         self.assertEqual(buf.data, binascii.unhexlify('c0ff0000115090ed1e1c7b04b5d30000000000'))
+
+
+class ParamsTest(TestCase):
+    maxDiff = None
+
+    def test_client_params(self):
+        buf = Buffer(data=binascii.unhexlify(
+            'ff0000110031000500048010000000060004801000000007000480100000000'
+            '4000481000000000100024258000800024064000a00010a'))
+        params = pull_quic_transport_parameters(buf, is_client=True)
+        self.assertEqual(params, QuicTransportParameters(
+            initial_version=PROTOCOL_VERSION_DRAFT_17,
+            idle_timeout=600,
+            initial_max_data=16777216,
+            initial_max_stream_data_bidi_local=1048576,
+            initial_max_stream_data_bidi_remote=1048576,
+            initial_max_stream_data_uni=1048576,
+            initial_max_streams_bidi=100,
+            ack_delay_exponent=10,
+        ))
+
+        buf = Buffer(capacity=512)
+        push_quic_transport_parameters(buf, params, is_client=True)
+
+    def test_server_params(self):
+        buf = Buffer(data=binascii.unhexlify(
+            'ff00001104ff000011004500050004801000000006000480100000000700048'
+            '010000000040004810000000001000242580002001000000000000000000000'
+            '000000000000000800024064000a00010a'))
+        params = pull_quic_transport_parameters(buf, is_client=False)
+        self.assertEqual(params, QuicTransportParameters(
+            negotiated_version=PROTOCOL_VERSION_DRAFT_17,
+            supported_versions=[PROTOCOL_VERSION_DRAFT_17],
+            idle_timeout=600,
+            stateless_reset_token=bytes(16),
+            initial_max_data=16777216,
+            initial_max_stream_data_bidi_local=1048576,
+            initial_max_stream_data_bidi_remote=1048576,
+            initial_max_stream_data_uni=1048576,
+            initial_max_streams_bidi=100,
+            ack_delay_exponent=10,
+        ))
+
+        buf = Buffer(capacity=512)
+        push_quic_transport_parameters(buf, params, is_client=False)
 
 
 class FrameTest(TestCase):

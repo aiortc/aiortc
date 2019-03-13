@@ -1,11 +1,13 @@
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import List
 
 from .rangeset import RangeSet
-from .tls import (BufferReadError, pull_bytes, pull_uint8, pull_uint16,
-                  pull_uint32, pull_uint64, push_bytes, push_uint8,
-                  push_uint16, push_uint32, push_uint64)
+from .tls import (BufferReadError, pull_block, pull_bytes, pull_list,
+                  pull_uint8, pull_uint16, pull_uint32, pull_uint64,
+                  push_block, push_bytes, push_list, push_uint8, push_uint16,
+                  push_uint32, push_uint64)
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40
@@ -139,6 +141,92 @@ def push_quic_header(buf, header):
         push_bytes(buf, header.token)
     push_uint16(buf, 0)  # length
     push_uint16(buf, 0)  # pn
+
+
+# TLS EXTENSION
+
+
+@dataclass
+class QuicTransportParameters:
+    initial_version: int = None
+    negotiated_version: int = None
+    supported_versions: List[int] = field(default_factory=list)
+
+    original_connection_id: bytes = None
+    idle_timeout: int = None
+    stateless_reset_token: bytes = None
+    max_packet_size: int = None
+    initial_max_data: int = None
+    initial_max_stream_data_bidi_local: int = None
+    initial_max_stream_data_bidi_remote: int = None
+    initial_max_stream_data_uni: int = None
+    initial_max_streams_bidi: int = None
+    initial_max_streams_uni: int = None
+    ack_delay_exponent: int = None
+    max_ack_delay: int = None
+    disable_migration: bool = False
+    preferred_address: bytes = None
+
+
+PARAMS = [
+    ('original_connection_id', bytes),
+    ('idle_timeout', int),
+    ('stateless_reset_token', bytes),
+    ('max_packet_size', int),
+    ('initial_max_data', int),
+    ('initial_max_stream_data_bidi_local', int),
+    ('initial_max_stream_data_bidi_remote', int),
+    ('initial_max_stream_data_uni', int),
+    ('initial_max_streams_bidi', int),
+    ('initial_max_streams_uni', int),
+    ('ack_delay_exponent', int),
+    ('max_ack_delay', int),
+    ('disable_migration', bool),
+    ('preferred_address', bytes),
+]
+
+
+def pull_quic_transport_parameters(buf, is_client):
+    params = QuicTransportParameters()
+    if is_client:
+        params.initial_version = pull_uint32(buf)
+    else:
+        params.negotiated_version = pull_uint32(buf)
+        params.supported_versions = pull_list(buf, 1, pull_uint32)
+    with pull_block(buf, 2) as length:
+        end = buf.tell() + length
+        while buf.tell() < end:
+            param_id = pull_uint16(buf)
+            param_len = pull_uint16(buf)
+            param_start = buf.tell()
+            param_name, param_type = PARAMS[param_id]
+            if param_type == int:
+                setattr(params, param_name, pull_uint_var(buf))
+            elif param_type == bytes:
+                setattr(params, param_name, pull_bytes(buf, param_len))
+            else:
+                setattr(params, param_name, True)
+            assert buf.tell() == param_start + param_len
+
+    return params
+
+
+def push_quic_transport_parameters(buf, params, is_client):
+    if is_client:
+        push_uint32(buf, params.initial_version)
+    else:
+        push_uint32(buf, params.negotiated_version)
+        push_list(buf, 1, push_uint32, params.supported_versions)
+    with push_block(buf, 2):
+        for param_id, (param_name, param_type) in enumerate(PARAMS):
+            param_value = getattr(params, param_name)
+            if param_value not in [None, False]:
+                push_uint16(buf, param_id)
+                with push_block(buf, 2):
+                    if param_type == int:
+                        push_uint_var(buf, param_value)
+                    elif param_type == bytes:
+                        push_bytes(buf, param_value)
 
 
 # FRAMES
