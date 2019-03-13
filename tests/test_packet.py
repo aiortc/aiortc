@@ -116,6 +116,12 @@ class PacketTest(TestCase):
         self.assertEqual(header.rest_length, 12)
         self.assertEqual(buf.tell(), 9)
 
+    def test_pull_short_header_no_fixed_bit(self):
+        buf = Buffer(data=b'\x00')
+        with self.assertRaises(ValueError) as cm:
+            pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(str(cm.exception), 'Packet fixed bit is zero')
+
     def test_push_initial(self):
         buf = Buffer(capacity=32)
         header = QuicHeader(
