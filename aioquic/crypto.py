@@ -1,23 +1,27 @@
 import binascii
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import (Cipher, aead, algorithms,
-                                                    modes)
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .packet import is_long_header
-from .tls import hkdf_expand_label, hkdf_extract
+from .tls import (CipherSuite, cipher_suite_aead, cipher_suite_hash,
+                  hkdf_expand_label, hkdf_extract)
 
-INITIAL_ALGORITHM = hashes.SHA256()
+INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
 INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
 MAX_PN_SIZE = 4
 
 
-def derive_key_iv_hp(algorithm, secret):
+def derive_key_iv_hp(cipher_suite, secret):
+    algorithm = cipher_suite_hash(cipher_suite)
+    if cipher_suite == CipherSuite.AES_256_GCM_SHA384:
+        key_size = 32
+    else:
+        key_size = 16
     return (
-        hkdf_expand_label(algorithm, secret, b'quic key', b'', 16),
+        hkdf_expand_label(algorithm, secret, b'quic key', b'', key_size),
         hkdf_expand_label(algorithm, secret, b'quic iv', b'', 12),
-        hkdf_expand_label(algorithm, secret, b'quic hp', b'', 16)
+        hkdf_expand_label(algorithm, secret, b'quic hp', b'', key_size)
     )
 
 
@@ -98,9 +102,9 @@ class CryptoContext:
     def is_valid(self):
         return self.aead is not None
 
-    def setup(self, algorithm, secret):
-        key, self.iv, hp = derive_key_iv_hp(algorithm, secret)
-        self.aead = aead.AESGCM(key)
+    def setup(self, cipher_suite, secret):
+        key, self.iv, hp = derive_key_iv_hp(cipher_suite, secret)
+        self.aead = cipher_suite_aead(cipher_suite, key)
         self.hp = Cipher(algorithms.AES(hp), modes.ECB(), backend=default_backend())
 
     def teardown(self):
@@ -127,11 +131,11 @@ class CryptoPair:
         else:
             recv_label, send_label = b'client in', b'server in'
 
-        algorithm = INITIAL_ALGORITHM
+        algorithm = cipher_suite_hash(INITIAL_CIPHER_SUITE)
         initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
         self.recv.setup(
-            algorithm,
+            INITIAL_CIPHER_SUITE,
             hkdf_expand_label(algorithm, initial_secret, recv_label, b'', algorithm.digest_size))
         self.send.setup(
-            algorithm,
+            INITIAL_CIPHER_SUITE,
             hkdf_expand_label(algorithm, initial_secret, send_label, b'', algorithm.digest_size))

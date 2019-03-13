@@ -1,7 +1,7 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.crypto import INITIAL_ALGORITHM, CryptoPair, derive_key_iv_hp
+from aioquic.crypto import INITIAL_CIPHER_SUITE, CryptoPair, derive_key_iv_hp
 
 LONG_CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
 LONG_CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
@@ -96,7 +96,7 @@ class CryptoTest(TestCase):
         # client
         secret = binascii.unhexlify(
             '8a3515a14ae3c31b9c2d6d5bc58538ca5cd2baa119087143e60887428dcb52f6')
-        key, iv, hp = derive_key_iv_hp(INITIAL_ALGORITHM, secret)
+        key, iv, hp = derive_key_iv_hp(INITIAL_CIPHER_SUITE, secret)
         self.assertEqual(key, binascii.unhexlify('98b0d7e5e7a402c67c33f350fa65ea54'))
         self.assertEqual(iv, binascii.unhexlify('19e94387805eb0b46c03a788'))
         self.assertEqual(hp, binascii.unhexlify('0edd982a6ac527f2eddcbb7348dea5d7'))
@@ -104,7 +104,7 @@ class CryptoTest(TestCase):
         # server
         secret = binascii.unhexlify(
             '47b2eaea6c266e32c0697a9e2a898bdf5c4fb3e5ac34f0e549bf2c58581a3811')
-        key, iv, hp = derive_key_iv_hp(INITIAL_ALGORITHM, secret)
+        key, iv, hp = derive_key_iv_hp(INITIAL_CIPHER_SUITE, secret)
         self.assertEqual(key, binascii.unhexlify('9a8be902a9bdd91d16064ca118045fb4'))
         self.assertEqual(iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
         self.assertEqual(hp, binascii.unhexlify('94b9452d2b3c7c7f6da7fdd8593537fd'))
@@ -130,7 +130,7 @@ class CryptoTest(TestCase):
     def test_decrypt_short_server(self):
         pair = CryptoPair()
         pair.recv.setup(
-            INITIAL_ALGORITHM,
+            INITIAL_CIPHER_SUITE,
             binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
@@ -154,7 +154,7 @@ class CryptoTest(TestCase):
     def test_encrypt_short_server(self):
         pair = CryptoPair()
         pair.send.setup(
-            INITIAL_ALGORITHM,
+            INITIAL_CIPHER_SUITE,
             binascii.unhexlify('310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100'))
 
         packet = pair.encrypt_packet(SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD)

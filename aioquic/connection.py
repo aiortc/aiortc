@@ -215,9 +215,9 @@ class QuicConnection:
 
         crypto = self.spaces[epoch].crypto
         if direction == tls.Direction.ENCRYPT:
-            crypto.send.setup(self.tls.key_schedule.algorithm, secret)
+            crypto.send.setup(self.tls.key_schedule.cipher_suite, secret)
         else:
-            crypto.recv.setup(self.tls.key_schedule.algorithm, secret)
+            crypto.recv.setup(self.tls.key_schedule.cipher_suite, secret)
 
     def _write_application(self):
         epoch = tls.Epoch.ONE_RTT

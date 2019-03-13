@@ -171,7 +171,7 @@ class ContextTest(TestCase):
         client.handle_message(b'', client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
         server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 242)
+        self.assertEqual(len(server_input), 244)
         reset_buffers(client_buf)
 
         # handle client hello
@@ -180,7 +180,7 @@ class ContextTest(TestCase):
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
         client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 155 + 90 + 1538 + 392 + 36)
+        self.assertEqual(len(client_input), 2227)
         reset_buffers(server_buf)
 
         # handle server hello, encrypted extensions, certificate, certificate verify, finished
@@ -188,7 +188,7 @@ class ContextTest(TestCase):
         client.handle_message(client_input, client_buf)
         self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
         server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 36)
+        self.assertEqual(len(server_input), 52)
         reset_buffers(client_buf)
 
         # handle finished

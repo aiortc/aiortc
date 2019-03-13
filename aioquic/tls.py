@@ -11,6 +11,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import ec, padding
+from cryptography.hazmat.primitives.ciphers import aead
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -642,8 +643,9 @@ def push_finished(buf: Buffer, finished: Finished):
 
 
 class KeySchedule:
-    def __init__(self):
-        self.algorithm = hashes.SHA256()
+    def __init__(self, cipher_suite):
+        self.algorithm = cipher_suite_hash(cipher_suite)
+        self.cipher_suite = cipher_suite
         self.generation = 0
         self.hash = hashes.Hash(self.algorithm, default_backend())
         self.hash_empty_value = self.hash.copy().finalize()
@@ -694,12 +696,44 @@ class KeySchedule:
         self.hash.update(data)
 
 
+class KeyScheduleProxy:
+    def __init__(self, cipher_suites):
+        self.__items = list(map(KeySchedule, cipher_suites))
+
+    def extract(self, key_material=None):
+        for k in self.__items:
+            k.extract(key_material)
+
+    def select(self, cipher_suite):
+        for k in self.__items:
+            if k.cipher_suite == cipher_suite:
+                return k
+
+    def update_hash(self, data):
+        for k in self.__items:
+            k.update_hash(data)
+
+
+CIPHER_SUITES = {
+    CipherSuite.AES_128_GCM_SHA256: (aead.AESGCM, hashes.SHA256),
+    CipherSuite.AES_256_GCM_SHA384: (aead.AESGCM, hashes.SHA384),
+    CipherSuite.CHACHA20_POLY1305_SHA256: (aead.ChaCha20Poly1305, hashes.SHA256),
+}
+
 GROUP_TO_CURVE = {
     Group.SECP256R1: ec.SECP256R1,
     Group.SECP384R1: ec.SECP384R1,
     Group.SECP521R1: ec.SECP521R1,
 }
 CURVE_TO_GROUP = dict((v, k) for k, v in GROUP_TO_CURVE.items())
+
+
+def cipher_suite_aead(cipher_suite, key):
+    return CIPHER_SUITES[cipher_suite][0](key)
+
+
+def cipher_suite_hash(cipher_suite):
+    return CIPHER_SUITES[cipher_suite][1]()
 
 
 def decode_public_key(key_share):
@@ -722,6 +756,10 @@ class Context:
         self.handshake_extensions = []
         self.update_traffic_key_cb = lambda d, e, s: None
 
+        self._cipher_suites = [
+            CipherSuite.AES_256_GCM_SHA384,
+            CipherSuite.AES_128_GCM_SHA256,
+        ]
         self._peer_certificate = None
         self._receive_buffer = b''
         self.enc_key = None
@@ -822,9 +860,7 @@ class Context:
         hello = ClientHello(
             random=self.client_random,
             session_id=self.session_id,
-            cipher_suites=[
-                CipherSuite.AES_128_GCM_SHA256,
-            ],
+            cipher_suites=self._cipher_suites,
             compression_methods=[
                 CompressionMethod.NULL,
             ],
@@ -848,7 +884,7 @@ class Context:
             other_extensions=self.handshake_extensions
         )
 
-        self.key_schedule = KeySchedule()
+        self.key_schedule = KeyScheduleProxy(hello.cipher_suites)
         self.key_schedule.extract(None)
 
         with self._push_message(output_buf):
@@ -862,6 +898,7 @@ class Context:
         peer_public_key = decode_public_key(peer_hello.key_share)
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
+        self.key_schedule = self.key_schedule.select(peer_hello.cipher_suite)
         self.key_schedule.update_hash(input_buf.data)
         self.key_schedule.extract(shared_key)
 
@@ -940,7 +977,15 @@ class Context:
         self.session_id = peer_hello.session_id
         self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
 
-        self.key_schedule = KeySchedule()
+        # determine cipher suite
+        cipher_suite = None
+        for c in self._cipher_suites:
+            if c in peer_hello.cipher_suites:
+                cipher_suite = c
+                break
+        assert cipher_suite is not None
+
+        self.key_schedule = KeySchedule(cipher_suite)
         self.key_schedule.extract(None)
         self.key_schedule.update_hash(input_buf.data)
 
@@ -951,7 +996,7 @@ class Context:
         hello = ServerHello(
             random=self.server_random,
             session_id=self.session_id,
-            cipher_suite=CipherSuite.AES_128_GCM_SHA256,
+            cipher_suite=cipher_suite,
             compression_method=CompressionMethod.NULL,
 
             key_share=encode_public_key(self.private_key.public_key()),
