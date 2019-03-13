@@ -2577,6 +2577,149 @@ a=fmtp:98 apt=97
         self.assertEqual(pc2_states['signalingState'], [
             'stable', 'have-remote-offer', 'stable', 'closed'])
 
+    def test_connect_datachannel_modern_sdp_negotiated(self):
+        pc1 = RTCPeerConnection()
+        pc1._sctpLegacySdp = False
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        # create data channels
+        dc1 = pc1.createDataChannel('chat', protocol='bob', negotiated=True, id=100)
+        self.assertEqual(dc1.id, 100)
+        self.assertEqual(dc1.label, 'chat')
+        self.assertEqual(dc1.maxPacketLifeTime, None)
+        self.assertEqual(dc1.maxRetransmits, None)
+        self.assertEqual(dc1.ordered, True)
+        self.assertEqual(dc1.protocol, 'bob')
+        self.assertEqual(dc1.readyState, 'connecting')
+
+        dc2 = pc2.createDataChannel('chat', protocol='bob', negotiated=True, id=100)
+        self.assertEqual(dc2.id, 100)
+        self.assertEqual(dc2.label, 'chat')
+        self.assertEqual(dc2.maxPacketLifeTime, None)
+        self.assertEqual(dc2.maxRetransmits, None)
+        self.assertEqual(dc2.ordered, True)
+        self.assertEqual(dc2.protocol, 'bob')
+        self.assertEqual(dc2.readyState, 'connecting')
+
+        @dc1.on('message')
+        def on_message1(message):
+            pc1_data_messages.append(message)
+
+        @dc2.on('message')
+        def on_message2(message):
+            pc2_data_messages.append(message)
+            if isinstance(message, str):
+                dc2.send('string-echo: ' + message)
+            else:
+                dc2.send(b'binary-echo: ' + message)
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, 'offer')
+        self.assertTrue('m=application ' in offer.sdp)
+        self.assertFalse('a=candidate:' in offer.sdp)
+        self.assertFalse('a=end-of-candidates' in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, 'new')
+        self.assertEqual(pc1.iceGatheringState, 'complete')
+        self.assertEqual(mids(pc1), ['0'])
+        self.assertTrue('m=application ' in pc1.localDescription.sdp)
+        self.assertTrue('a=sctp-port:5000' in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, 'actpass')
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getTransceivers()), 0)
+        self.assertEqual(mids(pc2), ['0'])
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, 'answer')
+        self.assertTrue('m=application ' in answer.sdp)
+        self.assertFalse('a=candidate:' in answer.sdp)
+        self.assertFalse('a=end-of-candidates' in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, 'checking')
+        self.assertEqual(pc2.iceGatheringState, 'complete')
+        self.assertTrue('m=application ' in pc2.localDescription.sdp)
+        self.assertTrue('a=sctp-port:5000' in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, 'active')
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, 'checking')
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertEqual(dc1.readyState, 'open')
+        self.assertEqual(dc2.readyState, 'open')
+
+        # send message
+        dc1.send('hello')
+        dc1.send('')
+        dc1.send(b'\x00\x01\x02\x03')
+        dc1.send(b'')
+        dc1.send(LONG_DATA)
+        with self.assertRaises(ValueError) as cm:
+            dc1.send(1234)
+        self.assertEqual(str(cm.exception), "Cannot send unsupported data type: <class 'int'>")
+
+        # check pc2 got messages
+        run(asyncio.sleep(0.1))
+        self.assertEqual(pc2_data_messages, [
+            'hello',
+            '',
+            b'\x00\x01\x02\x03',
+            b'',
+            LONG_DATA,
+        ])
+
+        # check pc1 got replies
+        self.assertEqual(pc1_data_messages, [
+            'string-echo: hello',
+            'string-echo: ',
+            b'binary-echo: \x00\x01\x02\x03',
+            b'binary-echo: ',
+            b'binary-echo: ' + LONG_DATA,
+        ])
+
+        # close data channels
+        self.closeDataChannel(dc1)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, 'closed')
+        self.assertEqual(pc2.iceConnectionState, 'closed')
+
+        # check state changes
+        self.assertEqual(pc1_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc1_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc1_states['signalingState'], [
+            'stable', 'have-local-offer', 'stable', 'closed'])
+
+        self.assertEqual(pc2_states['iceConnectionState'], [
+            'new', 'checking', 'completed', 'closed'])
+        self.assertEqual(pc2_states['iceGatheringState'], [
+            'new', 'gathering', 'complete'])
+        self.assertEqual(pc2_states['signalingState'], [
+            'stable', 'have-remote-offer', 'stable', 'closed'])
+
     def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self):
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:

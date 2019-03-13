@@ -17,17 +17,28 @@ class RTCDataChannel(EventEmitter):
     :param: parameters: An :class:`RTCDataChannelParameters`.
     """
 
-    def __init__(self, transport, parameters, id=None):
+    def __init__(self, transport, parameters, send_open=True):
         super().__init__()
         self.__bufferedAmount = 0
         self.__bufferedAmountLowThreshold = 0
-        self.__id = id
+        self.__id = parameters.id
         self.__parameters = parameters
         self.__readyState = 'connecting'
         self.__transport = transport
+        self.__send_open = send_open
 
-        if self.__id is None:
-            self.__transport._data_channel_open(self)
+        if self.__parameters.negotiated and (
+            self.__id is None or self.__id < 0 or self.__id > 65534
+        ):
+            raise ValueError('ID must be in range 0-65534 '
+                             'if data channel is negotiated out-of-band')
+
+        if not self.__parameters.negotiated:
+            if self.__send_open:
+                self.__send_open = False
+                self.__transport._data_channel_open(self)
+        else:
+            self.__transport._data_channel_add_negotiated(self)
 
     @property
     def bufferedAmount(self):
@@ -48,6 +59,13 @@ class RTCDataChannel(EventEmitter):
         if value < 0 or value > 4294967295:
             raise ValueError('bufferedAmountLowThreshold must be in range 0 - 4294967295')
         self.__bufferedAmountLowThreshold = value
+
+    @property
+    def negotiated(self):
+        """
+        Whether data channel was negotiated out-of-band.
+        """
+        return self.__parameters.negotiated
 
     @property
     def id(self):
@@ -175,3 +193,15 @@ class RTCDataChannelParameters:
 
     protocol = attr.ib(default='')
     "The name of the subprotocol in use."
+
+    negotiated = attr.ib(default=False)
+    """
+    Whether data channel will be negotiated out of-band, where both sides
+    create data channel with an agreed-upon ID."""
+
+    id = attr.ib(default=None)
+    """
+    An numeric ID for the channel; permitted values are 0-65534.
+    If you don't include this option, the user agent will select an ID for you.
+    Must be set when negotiating out-of-band.
+    """

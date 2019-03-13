@@ -826,6 +826,384 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
+    def test_connect_then_client_creates_data_channel_with_custom_id(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel
+        channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat', id=100))
+        self.assertEqual(channel.id, 100)
+        self.assertEqual(channel.label, 'chat')
+
+        # create second data channel
+        channel2 = RTCDataChannel(client, RTCDataChannelParameters(label='chat', id=101))
+        self.assertEqual(channel2.id, 101)
+        self.assertEqual(channel2.label, 'chat')
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel.id, 100)
+        self.assertEqual(channel.label, 'chat')
+        self.assertEqual(channel2.id, 101)
+        self.assertEqual(channel2.label, 'chat')
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 2)
+        self.assertEqual(server_channels[0].id, 100)
+        self.assertEqual(server_channels[0].label, 'chat')
+        self.assertEqual(server_channels[1].id, 101)
+        self.assertEqual(server_channels[1].label, 'chat')
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel
+        channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat', id=1))
+        self.assertEqual(channel.id, 1)
+        self.assertEqual(channel.label, 'chat')
+
+        # create second data channel
+        channel2 = RTCDataChannel(client, RTCDataChannelParameters(label='chat'))
+        self.assertEqual(channel2.id, None)
+        self.assertEqual(channel2.label, 'chat')
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel.id, 1)
+        self.assertEqual(channel.label, 'chat')
+        self.assertEqual(channel2.id, 3)
+        self.assertEqual(channel2.label, 'chat')
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 2)
+        self.assertEqual(server_channels[0].id, 1)
+        self.assertEqual(server_channels[0].label, 'chat')
+        self.assertEqual(server_channels[1].id, 3)
+        self.assertEqual(server_channels[1].label, 'chat')
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel
+        channel = RTCDataChannel(client, RTCDataChannelParameters(label='chat', id=100))
+        self.assertEqual(channel.id, 100)
+        self.assertEqual(channel.label, 'chat')
+
+        # create second data channel with the same id
+        self.assertRaises(ValueError,
+                          lambda: RTCDataChannel(client,
+                                                 RTCDataChannelParameters(label='chat', id=100)))
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel.id, 100)
+        self.assertEqual(channel.label, 'chat')
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 1)
+        self.assertEqual(server_channels[0].id, 100)
+        self.assertEqual(server_channels[0].label, 'chat')
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_creates_negotiated_data_channel_without_id(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel
+        self.assertRaises(
+            ValueError,
+            lambda: RTCDataChannel(
+                client,
+                RTCDataChannelParameters(
+                    label="chat", negotiated=True
+                ),
+            ),
+        )
+
+        run(asyncio.sleep(0.1))
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_and_server_creates_negotiated_data_channel(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel for client
+        channel_client = RTCDataChannel(
+            client,
+            RTCDataChannelParameters(
+                label="chat", negotiated=True, id=100
+            ),
+        )
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, "chat")
+
+        # create data channel for server
+        channel_server = RTCDataChannel(
+            server,
+            RTCDataChannelParameters(
+                label="chat", negotiated=True, id=100
+            ),
+        )
+        self.assertEqual(channel_server.id, 100)
+        self.assertEqual(channel_server.label, "chat")
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, 'chat')
+        self.assertEqual(channel_server.id, 100)
+        self.assertEqual(channel_server.label, 'chat')
+        # both arrays should be 0 as they track data channels created by event
+        #   which is not the case in out-of-band
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 0)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_creates_negotiated_data_channel_with_used_id(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        # create data channel for client
+        channel_client = RTCDataChannel(
+            client,
+            RTCDataChannelParameters(
+                label="chat", negotiated=True, id=100
+            ),
+        )
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, "chat")
+
+        self.assertRaises(
+            ValueError,
+            lambda: RTCDataChannel(
+                client,
+                RTCDataChannelParameters(
+                    label="chat", negotiated=True, id=100
+                ),
+            ),
+        )
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, 'chat')
+        # both arrays should be 0 as they track data channels created by event
+        #   which is not the case in out-of-band
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 0)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+    def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(self):
+        client = RTCSctpTransport(self.client_transport)
+        self.assertFalse(client.is_server)
+        server = RTCSctpTransport(self.server_transport)
+        self.assertTrue(server.is_server)
+
+        client_channels = track_channels(client)
+        server_channels = track_channels(server)
+
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+        # create data channel for client
+        channel_client = RTCDataChannel(
+            client,
+            RTCDataChannelParameters(
+                label="chat", negotiated=True, id=100
+            ),
+        )
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, "chat")
+        self.assertEqual(channel_client.readyState, "connecting")
+
+        # create data channel for server
+        channel_server = RTCDataChannel(
+            server,
+            RTCDataChannelParameters(
+                label="chat", negotiated=True, id=100
+            ),
+        )
+        self.assertEqual(channel_server.id, 100)
+        self.assertEqual(channel_server.label, "chat")
+        self.assertEqual(channel_server.readyState, "connecting")
+
+        # connect
+        run(server.start(client.getCapabilities(), client.port))
+        run(client.start(server.getCapabilities(), server.port))
+
+        # check outcome
+        run(wait_for_outcome(client, server))
+        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(client._inbound_streams_count, 65535)
+        self.assertEqual(client._outbound_streams_count, 65535)
+        self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+        self.assertEqual(server._inbound_streams_count, 65535)
+        self.assertEqual(server._outbound_streams_count, 65535)
+        self.assertEqual(server._remote_extensions, [192, 130])
+
+        self.assertEqual(channel_client.readyState, 'open')
+        self.assertEqual(channel_server.readyState, 'open')
+
+        run(asyncio.sleep(0.1))
+        self.assertEqual(channel_client.id, 100)
+        self.assertEqual(channel_client.label, 'chat')
+        self.assertEqual(channel_server.id, 100)
+        self.assertEqual(channel_server.label, 'chat')
+        # both arrays should be 0 as they track data channels created by event
+        #   which is not the case in out-of-band
+        self.assertEqual(len(client_channels), 0)
+        self.assertEqual(len(server_channels), 0)
+
+        # shutdown
+        run(client.stop())
+        run(server.stop())
+        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
     def test_connect_then_server_creates_data_channel(self):
         client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
