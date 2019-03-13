@@ -669,6 +669,7 @@ class RTCSctpTransport(EventEmitter):
                 self.__log_debug = lambda msg, *args: logger.debug(prefix + msg, *args)
 
             # initialise local channel ID counter
+            # one side should be using even IDs, the other odd IDs
             if self.is_server:
                 self._data_channel_id = 0
             else:
@@ -1273,6 +1274,9 @@ class RTCSctpTransport(EventEmitter):
 
         if state == self.State.ESTABLISHED:
             self.__state = 'connected'
+            for channel in list(self._data_channels.values()):
+                if channel.negotiated and channel.readyState != 'open':
+                    channel._setReadyState('open')
             asyncio.ensure_future(self._data_channel_flush())
         elif state == self.State.CLOSED:
             self._t1_cancel()
@@ -1509,6 +1513,8 @@ class RTCSctpTransport(EventEmitter):
             # register channel if necessary
             stream_id = channel.id
             if stream_id is None:
+                while self._data_channel_id in self._data_channels:
+                    self._data_channel_id += 2
                 stream_id = self._data_channel_id
                 self._data_channels[stream_id] = channel
                 self._data_channel_id += 2
@@ -1528,7 +1534,22 @@ class RTCSctpTransport(EventEmitter):
                                  ordered=channel.ordered)
                 channel._addBufferedAmount(-len(user_data))
 
+    def _data_channel_add_negotiated(self, channel):
+        if channel.id in self._data_channels:
+            raise ValueError('Data channel with ID %d already registered' % channel.id)
+
+        self._data_channels[channel.id] = channel
+
+        if self._association_state == self.State.ESTABLISHED:
+            channel._setReadyState('open')
+
     def _data_channel_open(self, channel):
+        if channel.id is not None:
+            if channel.id in self._data_channels:
+                raise ValueError('Data channel with ID %d already registered' % channel.id)
+            else:
+                self._data_channels[channel.id] = channel
+
         channel_type = DATA_CHANNEL_RELIABLE
         priority = 0
         reliability = 0
@@ -1556,9 +1577,6 @@ class RTCSctpTransport(EventEmitter):
                 # we should not receive an open for an existing channel
                 assert stream_id not in self._data_channels
 
-                # one side should be using even IDs, the other odd IDs
-                assert (stream_id % 2) != (self._data_channel_id % 2)
-
                 (msg_type, channel_type, priority, reliability,
                  label_length, protocol_length) = unpack_from('!BBHLHH', data)
                 pos = 12
@@ -1580,8 +1598,9 @@ class RTCSctpTransport(EventEmitter):
                     ordered=(channel_type & 0x80) == 0,
                     maxPacketLifeTime=maxPacketLifeTime,
                     maxRetransmits=maxRetransmits,
-                    protocol=protocol)
-                channel = RTCDataChannel(self, parameters, id=stream_id)
+                    protocol=protocol,
+                    id=stream_id)
+                channel = RTCDataChannel(self, parameters, False)
                 channel._setReadyState('open')
                 self._data_channels[stream_id] = channel
 
