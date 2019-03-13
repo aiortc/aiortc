@@ -81,11 +81,13 @@ class QuicConnectionTest(TestCase):
         client = QuicConnection(
             is_client=True)
 
+        datagrams = 0
         client.connection_made()
         for datagram in client.pending_datagrams():
-            pass
+            datagrams += 1
+        self.assertEqual(datagrams, 1)
 
-        with self.assertRaises(Exception) as cm:
-            client.datagram_received(load('version_negotiation.bin'))
-        self.assertEqual(str(cm.exception),
-                         "Version negotiation needed: ['0xff000012', '0x1a2a3a4a']")
+        client.datagram_received(load('version_negotiation.bin'))
+        for datagram in client.pending_datagrams():
+            datagrams += 1
+        self.assertEqual(datagrams, 2)

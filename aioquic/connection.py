@@ -5,12 +5,12 @@ from . import tls
 from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
                      PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
-                     QuicFrameType, QuicHeader, QuicTransportParameters,
-                     pull_ack_frame, pull_crypto_frame,
-                     pull_new_connection_id_frame, pull_quic_header,
-                     pull_uint_var, push_ack_frame, push_crypto_frame,
-                     push_quic_header, push_quic_transport_parameters,
-                     push_uint_var)
+                     PROTOCOL_VERSION_DRAFT_18, QuicFrameType, QuicHeader,
+                     QuicTransportParameters, pull_ack_frame,
+                     pull_crypto_frame, pull_new_connection_id_frame,
+                     pull_quic_header, pull_uint_var, push_ack_frame,
+                     push_crypto_frame, push_quic_header,
+                     push_quic_transport_parameters, push_uint_var)
 from .rangeset import RangeSet
 from .stream import QuicStream
 from .tls import Buffer
@@ -47,12 +47,17 @@ class QuicConnection:
             assert certificate is not None, 'SSL certificate is required'
             assert private_key is not None, 'SSL private key is required'
 
+        self.certificate = certificate
         self.is_client = is_client
         self.host_cid = os.urandom(8)
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
+        self.private_key = private_key
         self.secrets_log_file = secrets_log_file
-        self.tls = tls.Context(is_client=is_client)
+
+        # protocol versions
+        self.version = PROTOCOL_VERSION_DRAFT_18
+        self.supported_versions = [PROTOCOL_VERSION_DRAFT_17, PROTOCOL_VERSION_DRAFT_18]
 
         self.quic_transport_parameters = QuicTransportParameters(
             idle_timeout=600,
@@ -63,17 +68,6 @@ class QuicConnection:
             initial_max_streams_bidi=100,
             ack_delay_exponent=10,
         )
-
-        if is_client:
-            self.quic_transport_parameters.initial_version = PROTOCOL_VERSION_DRAFT_17
-        else:
-            self.quic_transport_parameters.negotiated_version = PROTOCOL_VERSION_DRAFT_17
-            self.quic_transport_parameters.supported_versions = [PROTOCOL_VERSION_DRAFT_17]
-            self.quic_transport_parameters.stateless_reset_token = bytes(16)
-            self.tls.certificate = certificate
-            self.tls.certificate_private_key = private_key
-
-        self.tls.update_traffic_key_cb = self._update_traffic_key
 
         self.send_ack = {
             tls.Epoch.INITIAL: False,
@@ -103,11 +97,9 @@ class QuicConnection:
         if self.is_client:
             self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=self.peer_cid,
                                                                 is_client=self.is_client)
+            self._init_tls()
             self.crypto_initialized = True
 
-            self.tls.handshake_extensions.append(
-                (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
-            )
             self.tls.handle_message(b'', self.send_buffer)
 
     def datagram_received(self, data: bytes):
@@ -119,11 +111,16 @@ class QuicConnection:
         while not buf.eof():
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
-            if header.packet_type is None:
+
+            # version negotiation
+            if self.is_client and header.packet_type is None:
                 versions = []
                 while not buf.eof():
-                    versions.append('0x%x' % tls.pull_uint32(buf))
-                raise Exception('Version negotiation needed: %s' % versions)
+                    versions.append(tls.pull_uint32(buf))
+                common = set(self.supported_versions).intersection(versions)
+                self.version = max(common)
+                self.connection_made()
+                return
 
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
@@ -132,11 +129,8 @@ class QuicConnection:
             if not self.is_client and not self.crypto_initialized:
                 self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=header.destination_cid,
                                                                     is_client=self.is_client)
+                self._init_tls()
                 self.crypto_initialized = True
-
-                self.tls.handshake_extensions.append(
-                    (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
-                )
 
             epoch = get_epoch(header.packet_type)
             space = self.spaces[epoch]
@@ -163,6 +157,22 @@ class QuicConnection:
             yield from self._write_handshake(epoch)
 
         yield from self._write_application()
+
+    def _init_tls(self):
+        if self.is_client:
+            self.quic_transport_parameters.initial_version = self.version
+        else:
+            self.quic_transport_parameters.negotiated_version = self.version
+            self.quic_transport_parameters.supported_versions = self.supported_versions
+            self.quic_transport_parameters.stateless_reset_token = bytes(16)
+
+        self.tls = tls.Context(is_client=self.is_client)
+        self.tls.certificate = self.certificate
+        self.tls.certificate_private_key = self.private_key
+        self.tls.handshake_extensions = [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
+        ]
+        self.tls.update_traffic_key_cb = self._update_traffic_key
 
     def _payload_received(self, epoch, plain):
         buf = Buffer(data=plain)
@@ -255,7 +265,7 @@ class QuicConnection:
 
             # write header
             push_quic_header(buf, QuicHeader(
-                version=PROTOCOL_VERSION_DRAFT_17,
+                version=self.version,
                 packet_type=packet_type | (SEND_PN_SIZE - 1),
                 destination_cid=self.peer_cid,
                 source_cid=self.host_cid,
