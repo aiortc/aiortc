@@ -97,3 +97,39 @@ class QuicStreamTest(TestCase):
         self.assertEqual(bytes(stream._buffer), b'')
         self.assertEqual(list(stream._received), [])
         self.assertEqual(stream._start, 16)
+
+    def test_buffer_already_fully_consumed(self):
+        stream = QuicStream()
+
+        stream.add_frame(QuicStreamFrame(
+            offset=0,
+            data=b'01234567'))
+        self.assertEqual(stream.pull_data(), b'01234567')
+
+        stream.add_frame(QuicStreamFrame(
+            offset=0,
+            data=b'01234567'))
+        self.assertEqual(bytes(stream._buffer), b'')
+        self.assertEqual(list(stream._received), [])
+        self.assertEqual(stream._start, 8)
+
+        self.assertEqual(stream.pull_data(), b'')
+        self.assertEqual(stream._start, 8)
+
+    def test_buffer_already_partially_consumed(self):
+        stream = QuicStream()
+
+        stream.add_frame(QuicStreamFrame(
+            offset=0,
+            data=b'01234567'))
+        self.assertEqual(stream.pull_data(), b'01234567')
+
+        stream.add_frame(QuicStreamFrame(
+            offset=0,
+            data=b'0123456789012345'))
+        self.assertEqual(bytes(stream._buffer), b'89012345')
+        self.assertEqual(list(stream._received), [range(8, 16)])
+        self.assertEqual(stream._start, 8)
+
+        self.assertEqual(stream.pull_data(), b'89012345')
+        self.assertEqual(stream._start, 16)

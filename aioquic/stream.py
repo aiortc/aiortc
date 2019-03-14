@@ -9,14 +9,24 @@ class QuicStream:
         self._start = 0
 
     def add_frame(self, frame: QuicStreamFrame):
-        assert frame.offset >= self._start
+        pos = frame.offset - self._start
+        count = len(frame.data)
+
+        # frame has been entirely consumed
+        if pos + count <= 0:
+            return
+
+        # frame has been partially consumed
+        if pos < 0:
+            count += pos
+            frame.data = frame.data[-pos:]
+            frame.offset -= pos
+            pos = 0
 
         # marked received
-        count = len(frame.data)
         self._received.add(frame.offset, frame.offset + count)
 
         # add data
-        pos = frame.offset - self._start
         gap = pos - len(self._buffer)
         if gap > 0:
             self._buffer += bytearray(gap)
