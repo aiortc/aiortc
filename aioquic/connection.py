@@ -42,7 +42,8 @@ class PacketSpace:
 
 
 class QuicConnection:
-    def __init__(self, is_client=True, certificate=None, private_key=None, secrets_log_file=None):
+    def __init__(self, is_client=True, certificate=None, private_key=None, secrets_log_file=None,
+                 server_name=None):
         if not is_client:
             assert certificate is not None, 'SSL certificate is required'
             assert private_key is not None, 'SSL private key is required'
@@ -54,6 +55,7 @@ class QuicConnection:
         self.peer_cid_set = False
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
+        self.server_name = server_name
 
         # protocol versions
         self.version = PROTOCOL_VERSION_DRAFT_18
@@ -172,6 +174,7 @@ class QuicConnection:
         self.tls.handshake_extensions = [
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
         ]
+        self.tls.server_name = self.server_name
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
     def _payload_received(self, epoch, plain):
