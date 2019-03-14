@@ -365,6 +365,7 @@ class ClientHello:
     # extensions
     key_exchange_modes: List[int] = None
     key_share: List[Tuple[int, bytes]] = None
+    server_name: str = None
     signature_algorithms: List[int] = None
     supported_groups: List[int] = None
     supported_versions: List[int] = None
@@ -400,6 +401,11 @@ def pull_client_hello(buf: Buffer):
                 hello.supported_groups = pull_list(buf, 2, pull_uint16)
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
                 hello.key_exchange_modes = pull_list(buf, 1, pull_uint8)
+            elif extension_type == ExtensionType.SERVER_NAME:
+                with pull_block(buf, 2):
+                    assert pull_uint8(buf) == 0
+                    with pull_block(buf, 2) as length:
+                        hello.server_name = pull_bytes(buf, length).decode('ascii')
             else:
                 hello.other_extensions.append(
                     (extension_type, pull_bytes(buf, extension_length)),
@@ -436,6 +442,13 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
 
             with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
                 push_list(buf, 1, push_uint8, hello.key_exchange_modes)
+
+            if hello.server_name is not None:
+                with push_extension(buf, ExtensionType.SERVER_NAME):
+                    with push_block(buf, 2):
+                        push_uint8(buf, 0)
+                        with push_block(buf, 2):
+                            push_bytes(buf, hello.server_name.encode('ascii'))
 
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
@@ -754,6 +767,8 @@ class Context:
         self.certificate = None
         self.certificate_private_key = None
         self.handshake_extensions = []
+        self.is_client = is_client
+        self.server_name = None
         self.update_traffic_key_cb = lambda d, e, s: None
 
         self._cipher_suites = [
@@ -762,8 +777,8 @@ class Context:
         ]
         self._peer_certificate = None
         self._receive_buffer = b''
-        self.enc_key = None
-        self.dec_key = None
+        self._enc_key = None
+        self._dec_key = None
 
         if is_client:
             self.client_random = os.urandom(32)
@@ -775,8 +790,6 @@ class Context:
             self.session_id = None
             self.private_key = None
             self.state = State.SERVER_EXPECT_CLIENT_HELLO
-
-        self.is_client = is_client
 
     def handle_message(self, input_data, output_buf):
         if self.state == State.CLIENT_HANDSHAKE_START:
@@ -871,6 +884,7 @@ class Context:
             key_share=[
                 encode_public_key(self.private_key.public_key()),
             ],
+            server_name=self.server_name,
             signature_algorithms=[
                 SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
             ],
@@ -946,7 +960,7 @@ class Context:
         finished = pull_finished(input_buf)
 
         # check verify data
-        expected_verify_data = self.key_schedule.finished_verify_data(self.dec_key)
+        expected_verify_data = self.key_schedule.finished_verify_data(self._dec_key)
         assert finished.verify_data == expected_verify_data
         self.key_schedule.update_hash(input_buf.data)
 
@@ -958,11 +972,11 @@ class Context:
 
         # send finished
         push_finished(output_buf, Finished(
-            verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
+            verify_data=self.key_schedule.finished_verify_data(self._enc_key)))
 
         # commit traffic key
-        self.enc_key = next_enc_key
-        self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self.enc_key)
+        self._enc_key = next_enc_key
+        self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self._enc_key)
 
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
@@ -1039,7 +1053,7 @@ class Context:
         # send finished
         with self._push_message(output_buf):
             push_finished(output_buf, Finished(
-                verify_data=self.key_schedule.finished_verify_data(self.enc_key)))
+                verify_data=self.key_schedule.finished_verify_data(self._enc_key)))
 
         # prepare traffic keys
         assert self.key_schedule.generation == 2
@@ -1053,13 +1067,13 @@ class Context:
         finished = pull_finished(input_buf)
 
         # check verify data
-        expected_verify_data = self.key_schedule.finished_verify_data(self.dec_key)
+        expected_verify_data = self.key_schedule.finished_verify_data(self._dec_key)
         assert finished.verify_data == expected_verify_data
 
         # commit traffic key
-        self.dec_key = self._next_dec_key
+        self._dec_key = self._next_dec_key
         self._next_dec_key = None
-        self.update_traffic_key_cb(Direction.DECRYPT, Epoch.ONE_RTT, self.dec_key)
+        self.update_traffic_key_cb(Direction.DECRYPT, Epoch.ONE_RTT, self._dec_key)
 
         self.key_schedule.update_hash(input_buf.data)
 
@@ -1075,9 +1089,9 @@ class Context:
         key = self.key_schedule.derive_secret(label)
 
         if direction == Direction.ENCRYPT:
-            self.enc_key = key
+            self._enc_key = key
         else:
-            self.dec_key = key
+            self._dec_key = key
 
         self.update_traffic_key_cb(direction, epoch, key)
 

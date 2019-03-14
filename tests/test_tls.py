@@ -198,8 +198,8 @@ class ContextTest(TestCase):
         self.assertEqual(len(client_input), 0)
 
         # check keys match
-        self.assertEqual(client.dec_key, server.enc_key)
-        self.assertEqual(client.enc_key, server.dec_key)
+        self.assertEqual(client._dec_key, server._enc_key)
+        self.assertEqual(client._enc_key, server._dec_key)
 
 
 class TlsTest(TestCase):
@@ -238,6 +238,7 @@ class TlsTest(TestCase):
                     'b0'),
             )
         ])
+        self.assertEqual(hello.server_name, None)
         self.assertEqual(hello.signature_algorithms, [
             tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
             tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
@@ -257,6 +258,67 @@ class TlsTest(TestCase):
         self.assertEqual(hello.other_extensions, [
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
         ])
+
+    def test_pull_client_hello_with_sni(self):
+        buf = Buffer(data=load('tls_client_hello_with_sni.bin'))
+        hello = pull_client_hello(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            hello.random,
+            binascii.unhexlify(
+                '987d8934140b0a42cc5545071f3f9f7f61963d7b6404eb674c8dbe513604346b'))
+        self.assertEqual(
+            hello.session_id,
+            binascii.unhexlify(
+                '26b19bdd30dbf751015a3a16e13bd59002dfe420b799d2a5cd5e11b8fa7bcb66'))
+        self.assertEqual(hello.cipher_suites, [
+            tls.CipherSuite.AES_256_GCM_SHA384,
+            tls.CipherSuite.AES_128_GCM_SHA256,
+            tls.CipherSuite.CHACHA20_POLY1305_SHA256,
+        ])
+        self.assertEqual(hello.compression_methods, [
+            tls.CompressionMethod.NULL,
+        ])
+
+        # extensions
+        self.assertEqual(hello.key_exchange_modes, [
+            tls.KeyExchangeMode.PSK_DHE_KE,
+        ])
+        self.assertEqual(hello.key_share, [
+            (
+                tls.Group.SECP256R1,
+                binascii.unhexlify(
+                    '04b62d70f907c814cd65d0f73b8b991f06b70c77153f548410a191d2b19764a2'
+                    'ecc06065a480efa9e1f10c8da6e737d5bfc04be3f773e20a0c997f51b5621280'
+                    '40'),
+            )
+        ])
+        self.assertEqual(hello.server_name, 'cloudflare-quic.com')
+        self.assertEqual(hello.signature_algorithms, [
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA256,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA1,
+        ])
+        self.assertEqual(hello.supported_groups, [
+            tls.Group.SECP256R1,
+        ])
+        self.assertEqual(hello.supported_versions, [
+            tls.TLS_VERSION_1_3,
+            tls.TLS_VERSION_1_3_DRAFT_28,
+            tls.TLS_VERSION_1_3_DRAFT_27,
+            tls.TLS_VERSION_1_3_DRAFT_26,
+        ])
+
+        self.assertEqual(hello.other_extensions, [
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
+        ])
+
+        # serialize
+        buf = Buffer(1000)
+        push_client_hello(buf, hello)
+        self.assertEqual(buf.data, load('tls_client_hello_with_sni.bin'))
 
     def test_push_client_hello(self):
         hello = ClientHello(
