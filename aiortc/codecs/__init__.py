@@ -1,9 +1,7 @@
 from collections import OrderedDict
 
-from ..rtcrtpparameters import (RTCRtcpFeedback,
-                                RTCRtpCapabilities,
-                                RTCRtpCodecCapability,
-                                RTCRtpCodecParameters,
+from ..rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCapabilities,
+                                RTCRtpCodecCapability, RTCRtpCodecParameters,
                                 RTCRtpHeaderExtensionCapability,
                                 RTCRtpHeaderExtensionParameters)
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder

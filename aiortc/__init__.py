@@ -1,30 +1,26 @@
-from .exceptions import InvalidAccessError, InvalidStateError  # noqa
-from .mediastreams import (AudioStreamTrack,  # noqa
-                           MediaStreamTrack,
-                           VideoStreamTrack)
-from .rtcconfiguration import RTCConfiguration, RTCIceServer  # noqa
-from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters  # noqa
-from .rtcdtlstransport import (RTCCertificate, RTCDtlsFingerprint,  # noqa
+# flake8: noqa
+
+from .exceptions import InvalidAccessError, InvalidStateError
+from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
+from .rtcconfiguration import RTCConfiguration, RTCIceServer
+from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
+from .rtcdtlstransport import (RTCCertificate, RTCDtlsFingerprint,
                                RTCDtlsParameters, RTCDtlsTransport)
-from .rtcicetransport import (RTCIceCandidate, RTCIceGatherer,  # noqa
+from .rtcicetransport import (RTCIceCandidate, RTCIceGatherer,
                               RTCIceParameters, RTCIceTransport)
-from .rtcpeerconnection import RTCPeerConnection  # noqa
-from .rtcrtpparameters import (RTCRtcpParameters,  # noqa
-                               RTCRtpCapabilities,
-                               RTCRtpCodecCapability,
-                               RTCRtpCodecParameters,
+from .rtcpeerconnection import RTCPeerConnection
+from .rtcrtpparameters import (RTCRtcpParameters, RTCRtpCapabilities,
+                               RTCRtpCodecCapability, RTCRtpCodecParameters,
                                RTCRtpHeaderExtensionCapability,
                                RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters)
-from .rtcrtpreceiver import (RTCRtpContributingSource,  # noqa
-                             RTCRtpReceiver,
+from .rtcrtpreceiver import (RTCRtpContributingSource, RTCRtpReceiver,
                              RTCRtpSynchronizationSource)
-from .rtcrtpsender import RTCRtpSender  # noqa
-from .rtcrtptransceiver import RTCRtpTransceiver  # noqa
-from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport  # noqa
-from .rtcsessiondescription import RTCSessionDescription  # noqa
-from .stats import (RTCInboundRtpStreamStats,  # noqa
-                    RTCOutboundRtpStreamStats,
+from .rtcrtpsender import RTCRtpSender
+from .rtcrtptransceiver import RTCRtpTransceiver
+from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
+from .rtcsessiondescription import RTCSessionDescription
+from .stats import (RTCInboundRtpStreamStats, RTCOutboundRtpStreamStats,
                     RTCRemoteInboundRtpStreamStats,
-                    RTCRemoteOutboundRtpStreamStats,
-                    RTCStatsReport, RTCTransportStats)
+                    RTCRemoteOutboundRtpStreamStats, RTCStatsReport,
+                    RTCTransportStats)
