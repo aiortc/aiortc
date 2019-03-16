@@ -315,6 +315,19 @@ def push_crypto_frame(buf, offset=0):
     buf.seek(end)
 
 
+@contextmanager
+def push_stream_frame(buf, stream_id, offset):
+    push_uint_var(buf, stream_id)
+    push_uint_var(buf, offset)
+    push_uint16(buf, 0)
+    start = buf.tell()
+    yield
+    end = buf.tell()
+    buf.seek(start - 2)
+    push_uint16(buf, (end - start) | 0x4000)
+    buf.seek(end)
+
+
 def pull_new_connection_id_frame(buf):
     sequence_number = pull_uint_var(buf)
     length = pull_uint8(buf)

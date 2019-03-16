@@ -77,6 +77,39 @@ class QuicConnectionTest(TestCase):
             'QUIC_SERVER_TRAFFIC_SECRET_0',
             'QUIC_CLIENT_TRAFFIC_SECRET_0'])
 
+    def test_create_stream(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY)
+
+        # client
+        stream = client.create_stream()
+        self.assertEqual(stream.stream_id, 0)
+
+        stream = client.create_stream()
+        self.assertEqual(stream.stream_id, 4)
+
+        stream = client.create_stream(is_unidirectional=True)
+        self.assertEqual(stream.stream_id, 2)
+
+        stream = client.create_stream(is_unidirectional=True)
+        self.assertEqual(stream.stream_id, 6)
+
+        # server
+        stream = server.create_stream()
+        self.assertEqual(stream.stream_id, 1)
+
+        stream = server.create_stream()
+        self.assertEqual(stream.stream_id, 5)
+
+        stream = server.create_stream(is_unidirectional=True)
+        self.assertEqual(stream.stream_id, 3)
+
+        stream = server.create_stream(is_unidirectional=True)
+        self.assertEqual(stream.stream_id, 7)
+
     def test_version_negotiation_needed(self):
         client = QuicConnection(
             is_client=True)

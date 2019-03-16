@@ -6,11 +6,12 @@ from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
                      PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
                      PROTOCOL_VERSION_DRAFT_18, QuicFrameType, QuicHeader,
-                     QuicTransportParameters, pull_ack_frame,
+                     QuicStreamFrame, QuicTransportParameters, pull_ack_frame,
                      pull_crypto_frame, pull_new_connection_id_frame,
                      pull_quic_header, pull_uint_var, push_ack_frame,
                      push_crypto_frame, push_quic_header,
-                     push_quic_transport_parameters, push_uint_var)
+                     push_quic_transport_parameters, push_stream_frame,
+                     push_uint_var)
 from .rangeset import RangeSet
 from .stream import QuicStream
 from .tls import Buffer
@@ -24,6 +25,10 @@ SECRETS_LABELS = [
     [None, None, 'QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET', 'QUIC_SERVER_TRAFFIC_SECRET_0']
 ]
 SEND_PN_SIZE = 2
+STREAM_FLAGS = 0x07
+STREAM_FLAG_FIN = 1
+STREAM_FLAG_LEN = 2
+STREAM_FLAG_OFF = 4
 
 
 def get_epoch(packet_type):
@@ -103,6 +108,17 @@ class QuicConnection:
             self.crypto_initialized = True
 
             self.tls.handle_message(b'', self.send_buffer)
+            self._push_crypto_data()
+
+    def create_stream(self, is_unidirectional=False):
+        """
+        Create a stream and return it.
+        """
+        stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
+        while stream_id in self.streams:
+            stream_id += 4
+        self.streams[stream_id] = QuicStream(stream_id=stream_id)
+        return self.streams[stream_id]
 
     def datagram_received(self, data: bytes):
         """
@@ -183,24 +199,50 @@ class QuicConnection:
         is_ack_only = True
         while not buf.eof():
             frame_type = pull_uint_var(buf)
-            if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
+            if frame_type != QuicFrameType.ACK:
                 is_ack_only = False
+
+            if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
+                pass
             elif frame_type == QuicFrameType.ACK:
                 pull_ack_frame(buf)
             elif frame_type == QuicFrameType.CRYPTO:
-                is_ack_only = False
                 stream = self.streams[epoch]
                 stream.add_frame(pull_crypto_frame(buf))
                 data = stream.pull_data()
                 if data:
                     self.tls.handle_message(data, self.send_buffer)
+            elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
+                flags = frame_type & STREAM_FLAGS
+                stream_id = pull_uint_var(buf)
+                if flags & STREAM_FLAG_OFF:
+                    offset = pull_uint_var(buf)
+                else:
+                    offset = 0
+                if flags & STREAM_FLAG_LEN:
+                    length = pull_uint_var(buf)
+                else:
+                    length = buf.capacity - buf.tell()
+                stream = self.streams[stream_id]
+                stream.add_frame(QuicStreamFrame(offset=offset, data=tls.pull_bytes(buf, length)))
+            elif frame_type == QuicFrameType.MAX_DATA:
+                pull_uint_var(buf)
+            elif frame_type in [QuicFrameType.MAX_STREAMS_BIDI, QuicFrameType.MAX_STREAMS_UNI]:
+                pull_uint_var(buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
-                is_ack_only = False
                 pull_new_connection_id_frame(buf)
             else:
                 logger.warning('unhandled frame type %d', frame_type)
                 break
+
+        self._push_crypto_data()
+
         return is_ack_only
+
+    def _push_crypto_data(self):
+        for epoch, buf in self.send_buffer.items():
+            self.streams[epoch].push_data(buf.data)
+            buf.seek(0)
 
     def _serialize_parameters(self):
         buf = Buffer(capacity=512)
@@ -243,6 +285,15 @@ class QuicConnection:
             push_ack_frame(buf, send_ack, 0)
             self.send_ack[epoch] = False
 
+        # STREAM
+        for stream_id, stream in self.streams.items():
+            if isinstance(stream_id, int) and stream.has_data_to_send():
+                frame = stream.get_frame(
+                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6)
+                push_uint_var(buf, QuicFrameType.STREAM_BASE + 0x07)
+                with push_stream_frame(buf, 0, frame.offset):
+                    tls.push_bytes(buf, frame.data)
+
         # encrypt
         packet_size = buf.tell()
         data = buf.data
@@ -252,15 +303,13 @@ class QuicConnection:
 
     def _write_handshake(self, epoch):
         space = self.spaces[epoch]
+        stream = self.streams[epoch]
         send_ack = space.ack_queue if self.send_ack[epoch] else False
         self.send_ack[epoch] = False
-        send_data = self.send_buffer[epoch].data
-        self.send_buffer[epoch].seek(0)
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
-        offset = 0
 
-        while space.crypto.send.is_valid() and (send_ack or send_data):
+        while space.crypto.send.is_valid() and (send_ack or stream.has_data_to_send()):
             if epoch == tls.Epoch.INITIAL:
                 packet_type = PACKET_TYPE_INITIAL
             else:
@@ -281,16 +330,13 @@ class QuicConnection:
                 push_ack_frame(buf, send_ack, 0)
                 send_ack = False
 
-            if send_data:
+            if stream.has_data_to_send():
                 # CRYPTO
-                chunk_size = min(len(send_data),
-                                 PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4)
+                frame = stream.get_frame(
+                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4)
                 push_uint_var(buf, QuicFrameType.CRYPTO)
-                with push_crypto_frame(buf, offset):
-                    chunk = send_data[:chunk_size]
-                    tls.push_bytes(buf, chunk)
-                    send_data = send_data[chunk_size:]
-                    offset += chunk_size
+                with push_crypto_frame(buf, frame.offset):
+                    tls.push_bytes(buf, frame.data)
 
                 # PADDING
                 if epoch == tls.Epoch.INITIAL and self.is_client:

@@ -38,7 +38,12 @@ async def run(host, port, secrets_log_file):
         lambda: QuicProtocol(secrets_log_file=secrets_log_file, server_name=server_name),
         remote_addr=(host, port))
 
-    await asyncio.sleep(10)
+    stream = protocol._connection.create_stream()
+    stream.push_data(b'GET /\r\n')
+
+    await asyncio.sleep(5)
+
+    print(stream.pull_data())
 
 
 if __name__ == '__main__':
