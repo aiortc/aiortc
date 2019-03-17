@@ -22,13 +22,11 @@ pcs = set()
 class VideoTransformTrack(VideoStreamTrack):
     def __init__(self, track, transform):
         super().__init__()  # don't forget this!
-        self.counter = 0
         self.track = track
         self.transform = transform
 
     async def recv(self):
         frame = await self.track.recv()
-        self.counter += 1
 
         if self.transform == 'cartoon':
             img = frame.to_ndarray(format='bgr24')
