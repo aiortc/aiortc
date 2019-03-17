@@ -2,6 +2,7 @@
 *.pyc
 .coverage
 .eggs
+.idea
 .vscode
 /aiortc/codecs/_opus.*
 /aiortc/codecs/_vpx.*
