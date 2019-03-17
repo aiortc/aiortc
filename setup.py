@@ -29,7 +29,7 @@ if os.environ.get('READTHEDOCS') == 'True':
 
 setuptools.setup(
     name='aiortc',
-    version='0.9.19',
+    version='0.9.20',
     description='An implementation of WebRTC and ORTC',
     long_description=long_description,
     url='https://github.com/aiortc/aiortc',

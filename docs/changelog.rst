@@ -6,7 +6,10 @@ Changelog
 0.9.20
 ------
 
-*under development*
+Data channels
+.............
+
+  * Support out-of-band negotiation and custom channel id.
 
 Documentation
 .............
