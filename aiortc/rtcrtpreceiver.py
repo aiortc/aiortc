@@ -1,9 +1,7 @@
 import asyncio
 import datetime
 import logging
-import queue
 import random
-import threading
 import time
 
 import attr
@@ -26,15 +24,15 @@ from .utils import uint16_add, uint16_gt
 logger = logging.getLogger('rtp')
 
 
-def decoder_worker(loop, input_q, output_q):
+async def decoder_worker(input_q, output_q):
     codec_name = None
     decoder = None
 
     while True:
-        task = input_q.get()
+        task = await input_q.get()
         if task is None:
             # inform the track that is has ended
-            asyncio.run_coroutine_threadsafe(output_q.put(None), loop)
+            await output_q.put(task)
             break
         codec, encoded_frame = task
 
@@ -42,9 +40,9 @@ def decoder_worker(loop, input_q, output_q):
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
+        for frame in await asyncio.get_event_loop().run_in_executor(None, decoder.decode, encoded_frame):
             # pass the decoded frame to the track
-            asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+            await output_q.put(frame)
 
     if decoder is not None:
         del decoder
@@ -215,8 +213,8 @@ class RTCRtpReceiver:
 
         self.__active_ssrc = {}
         self.__codecs = {}
-        self.__decoder_queue = queue.Queue()
-        self.__decoder_thread = None
+        self.__decoder_queue = asyncio.Queue()
+        self.__decoder_task = None
         self.__kind = kind
         if kind == 'audio':
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
@@ -310,12 +308,10 @@ class RTCRtpReceiver:
                 if encoding.rtx:
                     self.__rtx_ssrc[encoding.rtx.ssrc] = encoding.ssrc
 
-            # start decoder thread
-            self.__decoder_thread = threading.Thread(
-                target=decoder_worker,
-                name=self.__kind + '-decoder',
-                args=(asyncio.get_event_loop(), self.__decoder_queue, self._track._queue))
-            self.__decoder_thread.start()
+            # start decoder task
+            self.__decoder_task = asyncio.ensure_future(
+                decoder_worker(self.__decoder_queue, self._track._queue)
+            )
 
             self.__transport._register_rtp_receiver(self, parameters)
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
@@ -330,12 +326,12 @@ class RTCRtpReceiver:
         """
         if self.__started:
             self.__transport._unregister_rtp_receiver(self)
-            self.__stop_decoder()
+            await self.__stop_decoder()
             self.__rtcp_task.cancel()
             await self.__rtcp_exited.wait()
 
     def _handle_disconnect(self):
-        self.__stop_decoder()
+        asyncio.run_coroutine_threadsafe(self.__stop_decoder(), asyncio.get_event_loop())
 
     async def _handle_rtcp_packet(self, packet):
         self.__log_debug('< %s', packet)
@@ -359,7 +355,7 @@ class RTCRtpReceiver:
             self.__lsr[packet.ssrc] = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
             self.__lsr_time[packet.ssrc] = time.time()
         elif isinstance(packet, RtcpByePacket):
-            self.__stop_decoder()
+            await self.__stop_decoder()
 
     async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int):
         """
@@ -430,9 +426,9 @@ class RTCRtpReceiver:
         encoded_frame = self.__jitter_buffer.add(packet)
 
         # if we have a complete encoded frame, decode it
-        if encoded_frame is not None and self.__decoder_thread:
+        if encoded_frame is not None and self.__decoder_task:
             encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
-            self.__decoder_queue.put((codec, encoded_frame))
+            await self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self):
         self.__log_debug('- RTCP started')
@@ -501,14 +497,14 @@ class RTCRtpReceiver:
     def _set_rtcp_ssrc(self, ssrc):
         self.__rtcp_ssrc = ssrc
 
-    def __stop_decoder(self):
+    async def __stop_decoder(self):
         """
         Stop the decoder thread, which will in turn stop the track.
         """
-        if self.__decoder_thread:
-            self.__decoder_queue.put(None)
-            self.__decoder_thread.join()
-            self.__decoder_thread = None
+        if self.__decoder_task:
+            await self.__decoder_queue.put(None)
+            await self.__decoder_task
+            self.__decoder_task = None
 
     def __log_debug(self, msg, *args):
         logger.debug('receiver(%s) ' + msg, self.__kind, *args)
