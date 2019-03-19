@@ -40,7 +40,9 @@ async def decoder_worker(input_q, output_q):
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in await asyncio.get_event_loop().run_in_executor(None, decoder.decode, encoded_frame):
+        for frame in await asyncio.get_event_loop().run_in_executor(
+                None, decoder.decode, encoded_frame
+        ):
             # pass the decoded frame to the track
             await output_q.put(frame)
 
