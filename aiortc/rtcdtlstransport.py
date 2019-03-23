@@ -137,11 +137,16 @@ def create_ssl_context(certificate):
 
     # specify an EDCH group for ECDHE ciphers, otherwise OpenSSL < 1.1.0
     # cannot negotiate them in server mode
-    if lib.OpenSSL_version_num() < 0x10100000:  # pragma: no cover
-        ecdh = lib.EC_KEY_new_by_curve_name(lib.NID_X9_62_prime256v1)
-        lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
-        lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
-        lib.EC_KEY_free(ecdh)
+    if lib.OpenSSL_version_num() < 0x101000000:
+        if lib.OpenSSL_version_num() >= 0x10002000:
+            logger.debug('OpenSSL version is 1.0.2, using AUTO ECDH')
+            lib.SSL_CTX_set_ecdh_auto(ctx, 1)
+        else:
+            logger.debug('OpenSSL version is < 1.0.2, using MANUAL ECDH')
+            ecdh = lib.EC_KEY_new_by_curve_name(lib.NID_X9_62_prime256v1)
+            lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
+            lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
+            lib.EC_KEY_free(ecdh)
 
     return ctx
 
