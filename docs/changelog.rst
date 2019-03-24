@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.21
+------
+
+*under development*
+
+DTLS
+....
+
+  * Call SSL_CTX_set_ecdh_auto for OpenSSL 1.0.2.
+
 0.9.20
 ------
 
