@@ -135,6 +135,8 @@ async def offer(request):
         elif track.kind == 'video':
             local_video = VideoTransformTrack(track, transform=params['video_transform'])
             pc.addTrack(local_video)
+            # create another track without transformation
+            pc.addTrack(VideoTransformTrack(track, transform=None))
 
         @track.on('ended')
         async def on_ended():

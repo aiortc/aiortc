@@ -10,6 +10,9 @@ var pc = null;
 // data channel
 var dc = null, dcInterval = null;
 
+//
+var streamsReceived = 0
+
 function createPeerConnection() {
     var config = {
         sdpSemantics: 'unified-plan'
@@ -40,7 +43,7 @@ function createPeerConnection() {
     // connect audio / video
     pc.addEventListener('track', function(evt) {
         if (evt.track.kind == 'video')
-            document.getElementById('video').srcObject = evt.streams[0];
+            document.getElementById('video' + (streamsReceived++).toString()).srcObject = evt.streams[0];
         else
             document.getElementById('audio').srcObject = evt.streams[0];
     });
@@ -170,6 +173,8 @@ function start() {
             stream.getTracks().forEach(function(track) {
                 pc.addTrack(track, stream);
             });
+            // add one more receive only video transceiver
+            pc.addTransceiver('video', {'direction': 'recvonly'})
             return negotiate();
         }, function(err) {
             alert('Could not acquire media: ' + err);
