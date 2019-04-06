@@ -169,7 +169,19 @@ def create_media_description_for_transceiver(transceiver, cname, direction, mid)
         profile='UDP/TLS/RTP/SAVPF',
         fmt=[c.payloadType for c in transceiver._codecs])
     media.direction = direction
-    media.msid = '%s %s' % (transceiver.sender._stream_id, transceiver.sender._track_id)
+
+    # WebRTC MediaStream Identification in the Session Description Protocol
+    # draft-ietf-mmusic-msid-17
+    #
+    # msid = msid-id msid-appdata
+    # The value of the "msid-id" field in the msid consists of the "id"
+    # attribute of a MediaStream, as defined in the MediaStream's WebIDL
+    # specification.  The special value "-" indicates "no MediaStream".
+    #
+    # The value of the "msid-appdata" field in the msid, if present,
+    # consists of the "id" attribute of a MediaStreamTrack, as defined in
+    # the MediaStreamTrack's WebIDL specification.
+    media.msid = '%s %s' % (transceiver.stream.id, transceiver.sender._track_id)
 
     media.rtp = RTCRtpParameters(
         codecs=transceiver._codecs,
@@ -333,6 +345,7 @@ class RTCPeerConnection(EventEmitter):
             if transceiver.kind == track.kind:
                 if transceiver.sender.track is None:
                     transceiver.sender.replaceTrack(track)
+                    print('found a sender {} for {}'.format(transceiver.sender._stream_id, transceiver.sender.track))
                     transceiver.direction = or_direction(transceiver.direction, 'sendonly')
                     return transceiver.sender
 
@@ -441,7 +454,7 @@ class RTCPeerConnection(EventEmitter):
         return wrap_session_description(description)
 
     def createDataChannel(self, label, maxPacketLifeTime=None, maxRetransmits=None,
-                          ordered=True, protocol='', negotiated=False, id=None):
+                          ordered=True, protocol=''):
         """
         Create a data channel with the given label.
 
@@ -454,11 +467,9 @@ class RTCPeerConnection(EventEmitter):
             self.__createSctpTransport()
 
         parameters = RTCDataChannelParameters(
-            id=id,
             label=label,
             maxPacketLifeTime=maxPacketLifeTime,
             maxRetransmits=maxRetransmits,
-            negotiated=negotiated,
             ordered=ordered,
             protocol=protocol)
         return RTCDataChannel(self.__sctp, parameters)

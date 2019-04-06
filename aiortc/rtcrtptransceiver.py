@@ -1,9 +1,31 @@
 import logging
+import uuid
 
 from aiortc.codecs import get_capabilities
 from aiortc.sdp import DIRECTIONS
 
 logger = logging.getLogger('rtp')
+
+class MediaStream:
+
+    """
+    A MediaStream is used to group several MediaStreamTracks 
+    to allow various track operations without a renigotiation.
+
+    9. Media Stream API Extensions for Network Use
+    WebRTC 1.0: Real-time Communication Between Browsers
+
+    4. Media Stream API
+    Media Capture And Streams
+    """
+
+    def __init__(self):
+        self.__id = str(uuid.uuid4())
+
+    @property
+    def id(self):
+        return self.__id
+    
 
 
 class RTCRtpTransceiver:
@@ -21,6 +43,7 @@ class RTCRtpTransceiver:
         self.__receiver = receiver
         self.__sender = sender
         self.__stopped = False
+        self.__stream = MediaStream()
 
         self._currentDirection = None
         self._offerDirection = None
@@ -77,6 +100,11 @@ class RTCRtpTransceiver:
     @property
     def stopped(self):
         return self.__stopped
+
+    @property
+    def stream(self):
+        return self.__stream
+    
 
     def setCodecPreferences(self, codecs):
         """
