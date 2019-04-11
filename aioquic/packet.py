@@ -331,6 +331,16 @@ def push_stream_frame(buf, stream_id, offset):
     buf.seek(end)
 
 
+def pull_new_token_frame(buf):
+    length = pull_uint_var(buf)
+    return pull_bytes(buf, length)
+
+
+def push_new_token_frame(buf, token):
+    push_uint_var(buf, len(token))
+    push_bytes(buf, token)
+
+
 def pull_new_connection_id_frame(buf):
     sequence_number = pull_uint_var(buf)
     length = pull_uint8(buf)

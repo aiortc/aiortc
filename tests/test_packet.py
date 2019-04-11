@@ -1,12 +1,11 @@
 import binascii
 from unittest import TestCase
 
+from aioquic import packet
 from aioquic.packet import (PACKET_TYPE_INITIAL, QuicHeader,
                             QuicProtocolVersion, QuicTransportParameters,
-                            pull_ack_frame, pull_new_connection_id_frame,
                             pull_quic_header, pull_quic_transport_parameters,
-                            pull_uint_var, push_ack_frame,
-                            push_new_connection_id_frame, push_quic_header,
+                            pull_uint_var, push_quic_header,
                             push_quic_transport_parameters, push_uint_var)
 from aioquic.tls import Buffer, BufferReadError
 
@@ -183,15 +182,15 @@ class FrameTest(TestCase):
 
         # parse
         buf = Buffer(data=data)
-        rangeset, delay = pull_ack_frame(buf)
+        rangeset, delay = packet.pull_ack_frame(buf)
         self.assertEqual(list(rangeset), [
             range(0, 1)
         ])
         self.assertEqual(delay, 2)
 
         # serialize
-        buf = Buffer(capacity=8)
-        push_ack_frame(buf, rangeset, delay)
+        buf = Buffer(capacity=len(data))
+        packet.push_ack_frame(buf, rangeset, delay)
         self.assertEqual(buf.data, data)
 
     def test_ack_frame_with_ranges(self):
@@ -199,7 +198,7 @@ class FrameTest(TestCase):
 
         # parse
         buf = Buffer(data=data)
-        rangeset, delay = pull_ack_frame(buf)
+        rangeset, delay = packet.pull_ack_frame(buf)
         self.assertEqual(list(rangeset), [
             range(0, 4),
             range(5, 6)
@@ -207,8 +206,21 @@ class FrameTest(TestCase):
         self.assertEqual(delay, 2)
 
         # serialize
-        buf = Buffer(capacity=8)
-        push_ack_frame(buf, rangeset, delay)
+        buf = Buffer(capacity=len(data))
+        packet.push_ack_frame(buf, rangeset, delay)
+        self.assertEqual(buf.data, data)
+
+    def test_new_token(self):
+        data = binascii.unhexlify('080102030405060708')
+
+        # parse
+        buf = Buffer(data=data)
+        token = packet.pull_new_token_frame(buf)
+        self.assertEqual(token, binascii.unhexlify('0102030405060708'))
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_new_token_frame(buf, token)
         self.assertEqual(buf.data, data)
 
     def test_new_connection_id(self):
@@ -217,12 +229,13 @@ class FrameTest(TestCase):
 
         # parse
         buf = Buffer(data=data)
-        frame = pull_new_connection_id_frame(buf)
+        frame = packet.pull_new_connection_id_frame(buf)
         self.assertEqual(frame, (
             2,
             binascii.unhexlify('7813f3d9e45e0cacbb491b4b66b039f204'),
             binascii.unhexlify('06f68fede38ec4c31aba8ab1245244e8')))
 
         # serialize
-        buf = Buffer(capacity=35)
-        push_new_connection_id_frame(buf, *frame)
+        buf = Buffer(capacity=len(data))
+        packet.push_new_connection_id_frame(buf, *frame)
+        self.assertEqual(buf.data, data)

@@ -1,17 +1,14 @@
 import logging
 import os
 
-from . import tls
+from . import packet, tls
 from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
                      PACKET_TYPE_INITIAL, QuicFrameType, QuicHeader,
                      QuicProtocolVersion, QuicStreamFrame,
-                     QuicTransportParameters, pull_ack_frame,
-                     pull_crypto_frame, pull_new_connection_id_frame,
-                     pull_quic_header, pull_uint_var, push_ack_frame,
-                     push_crypto_frame, push_quic_header,
-                     push_quic_transport_parameters, push_stream_frame,
-                     push_uint_var)
+                     QuicTransportParameters, pull_quic_header, pull_uint_var,
+                     push_quic_header, push_quic_transport_parameters,
+                     push_stream_frame, push_uint_var)
 from .rangeset import RangeSet
 from .stream import QuicStream
 from .tls import Buffer
@@ -211,13 +208,15 @@ class QuicConnection:
             if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
                 pass
             elif frame_type == QuicFrameType.ACK:
-                pull_ack_frame(buf)
+                packet.pull_ack_frame(buf)
             elif frame_type == QuicFrameType.CRYPTO:
                 stream = self.streams[epoch]
-                stream.add_frame(pull_crypto_frame(buf))
+                stream.add_frame(packet.pull_crypto_frame(buf))
                 data = stream.pull_data()
                 if data:
                     self.tls.handle_message(data, self.send_buffer)
+            elif frame_type == QuicFrameType.NEW_TOKEN:
+                packet.pull_new_token_frame(buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
                 flags = frame_type & STREAM_FLAGS
                 stream_id = pull_uint_var(buf)
@@ -236,7 +235,7 @@ class QuicConnection:
             elif frame_type in [QuicFrameType.MAX_STREAMS_BIDI, QuicFrameType.MAX_STREAMS_UNI]:
                 pull_uint_var(buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
-                pull_new_connection_id_frame(buf)
+                packet.pull_new_connection_id_frame(buf)
             else:
                 logger.warning('unhandled frame type %d', frame_type)
                 break
@@ -288,7 +287,7 @@ class QuicConnection:
         # ACK
         if send_ack:
             push_uint_var(buf, QuicFrameType.ACK)
-            push_ack_frame(buf, send_ack, 0)
+            packet.push_ack_frame(buf, send_ack, 0)
             self.send_ack[epoch] = False
 
         # STREAM
@@ -333,7 +332,7 @@ class QuicConnection:
             # ACK
             if send_ack:
                 push_uint_var(buf, QuicFrameType.ACK)
-                push_ack_frame(buf, send_ack, 0)
+                packet.push_ack_frame(buf, send_ack, 0)
                 send_ack = False
 
             if stream.has_data_to_send():
@@ -341,7 +340,7 @@ class QuicConnection:
                 frame = stream.get_frame(
                     PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4)
                 push_uint_var(buf, QuicFrameType.CRYPTO)
-                with push_crypto_frame(buf, frame.offset):
+                with packet.push_crypto_frame(buf, frame.offset):
                     tls.push_bytes(buf, frame.data)
 
                 # PADDING
