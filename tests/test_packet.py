@@ -290,3 +290,30 @@ class FrameTest(TestCase):
         buf = Buffer(capacity=len(data))
         packet.push_new_connection_id_frame(buf, *frame)
         self.assertEqual(buf.data, data)
+
+    def test_transport_close(self):
+        data = binascii.unhexlify(
+            '000a0212696c6c6567616c2041434b206672616d6500')
+
+        # parse
+        buf = Buffer(data=data)
+        frame = packet.pull_transport_close_frame(buf)
+        self.assertEqual(frame, (10, 2, b'illegal ACK frame\x00'))
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_transport_close_frame(buf, *frame)
+        self.assertEqual(buf.data, data)
+
+    def test_application_close(self):
+        data = binascii.unhexlify('000008676f6f6462796500')
+
+        # parse
+        buf = Buffer(data=data)
+        frame = packet.pull_application_close_frame(buf)
+        self.assertEqual(frame, (0, b'goodbye\x00'))
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_application_close_frame(buf, *frame)
+        self.assertEqual(buf.data, data)
