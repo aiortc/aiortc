@@ -1,14 +1,13 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.packet import (PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
-                            PROTOCOL_VERSION_NEGOTIATION, QuicHeader,
-                            QuicTransportParameters, pull_ack_frame,
-                            pull_new_connection_id_frame, pull_quic_header,
-                            pull_quic_transport_parameters, pull_uint_var,
-                            push_ack_frame, push_new_connection_id_frame,
-                            push_quic_header, push_quic_transport_parameters,
-                            push_uint_var)
+from aioquic.packet import (PACKET_TYPE_INITIAL, QuicHeader,
+                            QuicProtocolVersion, QuicTransportParameters,
+                            pull_ack_frame, pull_new_connection_id_frame,
+                            pull_quic_header, pull_quic_transport_parameters,
+                            pull_uint_var, push_ack_frame,
+                            push_new_connection_id_frame, push_quic_header,
+                            push_quic_transport_parameters, push_uint_var)
 from aioquic.tls import Buffer, BufferReadError
 
 from .utils import load
@@ -64,7 +63,7 @@ class PacketTest(TestCase):
     def test_pull_initial_client(self):
         buf = Buffer(data=load('initial_client.bin'))
         header = pull_quic_header(buf, host_cid_length=8)
-        self.assertEqual(header.version, PROTOCOL_VERSION_DRAFT_17)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_17)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, binascii.unhexlify('90ed1e1c7b04b5d3'))
         self.assertEqual(header.source_cid, b'')
@@ -75,7 +74,7 @@ class PacketTest(TestCase):
     def test_pull_initial_server(self):
         buf = Buffer(data=load('initial_server.bin'))
         header = pull_quic_header(buf, host_cid_length=8)
-        self.assertEqual(header.version, PROTOCOL_VERSION_DRAFT_17)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_17)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, b'')
         self.assertEqual(header.source_cid, binascii.unhexlify('0fcee9852fde8780'))
@@ -86,7 +85,7 @@ class PacketTest(TestCase):
     def test_pull_version_negotiation(self):
         buf = Buffer(data=load('version_negotiation.bin'))
         header = pull_quic_header(buf, host_cid_length=8)
-        self.assertEqual(header.version, PROTOCOL_VERSION_NEGOTIATION)
+        self.assertEqual(header.version, QuicProtocolVersion.NEGOTIATION)
         self.assertEqual(header.packet_type, None)
         self.assertEqual(header.destination_cid, binascii.unhexlify('dae1889b81a91c26'))
         self.assertEqual(header.source_cid, binascii.unhexlify('f49243784f9bf3be'))
@@ -125,7 +124,7 @@ class PacketTest(TestCase):
     def test_push_initial(self):
         buf = Buffer(capacity=32)
         header = QuicHeader(
-            version=PROTOCOL_VERSION_DRAFT_17,
+            version=QuicProtocolVersion.DRAFT_17,
             packet_type=PACKET_TYPE_INITIAL,
             destination_cid=binascii.unhexlify('90ed1e1c7b04b5d3'),
             source_cid=b'')
@@ -142,7 +141,7 @@ class ParamsTest(TestCase):
             '4000481000000000100024258000800024064000a00010a'))
         params = pull_quic_transport_parameters(buf, is_client=True)
         self.assertEqual(params, QuicTransportParameters(
-            initial_version=PROTOCOL_VERSION_DRAFT_17,
+            initial_version=QuicProtocolVersion.DRAFT_17,
             idle_timeout=600,
             initial_max_data=16777216,
             initial_max_stream_data_bidi_local=1048576,
@@ -162,8 +161,8 @@ class ParamsTest(TestCase):
             '000000000000000800024064000a00010a'))
         params = pull_quic_transport_parameters(buf, is_client=False)
         self.assertEqual(params, QuicTransportParameters(
-            negotiated_version=PROTOCOL_VERSION_DRAFT_17,
-            supported_versions=[PROTOCOL_VERSION_DRAFT_17],
+            negotiated_version=QuicProtocolVersion.DRAFT_17,
+            supported_versions=[QuicProtocolVersion.DRAFT_17],
             idle_timeout=600,
             stateless_reset_token=bytes(16),
             initial_max_data=16777216,

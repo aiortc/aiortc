@@ -4,9 +4,9 @@ import os
 from . import tls
 from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
-                     PACKET_TYPE_INITIAL, PROTOCOL_VERSION_DRAFT_17,
-                     PROTOCOL_VERSION_DRAFT_18, QuicFrameType, QuicHeader,
-                     QuicStreamFrame, QuicTransportParameters, pull_ack_frame,
+                     PACKET_TYPE_INITIAL, QuicFrameType, QuicHeader,
+                     QuicProtocolVersion, QuicStreamFrame,
+                     QuicTransportParameters, pull_ack_frame,
                      pull_crypto_frame, pull_new_connection_id_frame,
                      pull_quic_header, pull_uint_var, push_ack_frame,
                      push_crypto_frame, push_quic_header,
@@ -63,8 +63,11 @@ class QuicConnection:
         self.server_name = server_name
 
         # protocol versions
-        self.version = PROTOCOL_VERSION_DRAFT_18
-        self.supported_versions = [PROTOCOL_VERSION_DRAFT_17, PROTOCOL_VERSION_DRAFT_18]
+        self.version = QuicProtocolVersion.DRAFT_18
+        self.supported_versions = [
+            QuicProtocolVersion.DRAFT_17,
+            QuicProtocolVersion.DRAFT_18,
+        ]
 
         self.quic_transport_parameters = QuicTransportParameters(
             idle_timeout=600,
@@ -101,6 +104,9 @@ class QuicConnection:
         self.packet_number = 0
 
     def connection_made(self):
+        """
+        At startup the client initiates the crypto handshake.
+        """
         if self.is_client:
             self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=self.peer_cid,
                                                                 is_client=self.is_client)

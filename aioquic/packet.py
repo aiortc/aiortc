@@ -18,16 +18,19 @@ PACKET_TYPE_HANDSHAKE = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x20
 PACKET_TYPE_RETRY = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x30
 PACKET_TYPE_MASK = 0xf0
 
-PROTOCOL_VERSION_NEGOTIATION = 0
-PROTOCOL_VERSION_DRAFT_17 = 0xff000011
-PROTOCOL_VERSION_DRAFT_18 = 0xff000012
-
 UINT_VAR_FORMATS = [
     (pull_uint8, push_uint8, 0x3f),
     (pull_uint16, push_uint16, 0x3fff),
     (pull_uint32, push_uint32, 0x3fffffff),
     (pull_uint64, push_uint64, 0x3fffffffffffffff),
 ]
+
+
+class QuicProtocolVersion(IntEnum):
+    NEGOTIATION = 0
+    DRAFT_17 = 0xff000011
+    DRAFT_18 = 0xff000012
+    DRAFT_19 = 0xff000013
 
 
 @dataclass
@@ -92,7 +95,7 @@ def pull_quic_header(buf, host_cid_length=None):
         source_cid_length = decode_cid_length(cid_lengths % 16)
         source_cid = pull_bytes(buf, source_cid_length)
 
-        if version == PROTOCOL_VERSION_NEGOTIATION:
+        if version == QuicProtocolVersion.NEGOTIATION:
             # version negotiation
             packet_type = None
             rest_length = buf.capacity - buf.tell()
