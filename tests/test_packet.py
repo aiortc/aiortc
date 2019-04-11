@@ -175,6 +175,27 @@ class ParamsTest(TestCase):
         buf = Buffer(capacity=512)
         push_quic_transport_parameters(buf, params, is_client=False)
 
+    def test_params(self):
+        buf = Buffer(data=binascii.unhexlify(
+            '004700020010cc2fd6e7d97a53ab5be85b28d75c80080008000106000100026'
+            '710000600048000ffff000500048000ffff000400048005fffa000a00010300'
+            '0b0001190003000247e4'))
+
+        params = pull_quic_transport_parameters(buf, is_client=None)
+        self.assertEqual(params, QuicTransportParameters(
+            idle_timeout=10000,
+            stateless_reset_token=b'\xcc/\xd6\xe7\xd9zS\xab[\xe8[(\xd7\\\x80\x08',
+            max_packet_size=2020,
+            initial_max_data=393210,
+            initial_max_stream_data_bidi_local=65535,
+            initial_max_stream_data_bidi_remote=65535,
+            initial_max_stream_data_uni=None,
+            initial_max_streams_bidi=6,
+            initial_max_streams_uni=None,
+            ack_delay_exponent=3,
+            max_ack_delay=25
+        ))
+
 
 class FrameTest(TestCase):
     def test_ack_frame(self):

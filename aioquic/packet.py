@@ -194,7 +194,7 @@ def pull_quic_transport_parameters(buf, is_client):
     params = QuicTransportParameters()
     if is_client:
         params.initial_version = pull_uint32(buf)
-    else:
+    elif is_client is False:
         params.negotiated_version = pull_uint32(buf)
         params.supported_versions = pull_list(buf, 1, pull_uint32)
     with pull_block(buf, 2) as length:
@@ -218,7 +218,7 @@ def pull_quic_transport_parameters(buf, is_client):
 def push_quic_transport_parameters(buf, params, is_client):
     if is_client:
         push_uint32(buf, params.initial_version)
-    else:
+    elif is_client is False:
         push_uint32(buf, params.negotiated_version)
         push_list(buf, 1, push_uint32, params.supported_versions)
     with push_block(buf, 2):

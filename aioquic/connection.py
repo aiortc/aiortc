@@ -180,12 +180,16 @@ class QuicConnection:
         yield from self._write_application()
 
     def _init_tls(self):
-        if self.is_client:
-            self.quic_transport_parameters.initial_version = self.version
+        if self.version >= QuicProtocolVersion.DRAFT_19:
+            self.quic_transport_parameters.idle_timeout = 600000
         else:
-            self.quic_transport_parameters.negotiated_version = self.version
-            self.quic_transport_parameters.supported_versions = self.supported_versions
-            self.quic_transport_parameters.stateless_reset_token = bytes(16)
+            self.quic_transport_parameters.idle_timeout = 600
+            if self.is_client:
+                self.quic_transport_parameters.initial_version = self.version
+            else:
+                self.quic_transport_parameters.negotiated_version = self.version
+                self.quic_transport_parameters.supported_versions = self.supported_versions
+                self.quic_transport_parameters.stateless_reset_token = bytes(16)
 
         self.tls = tls.Context(is_client=self.is_client)
         self.tls.certificate = self.certificate
@@ -251,8 +255,12 @@ class QuicConnection:
 
     def _serialize_parameters(self):
         buf = Buffer(capacity=512)
+        if self.version >= QuicProtocolVersion.DRAFT_19:
+            is_client = None
+        else:
+            is_client = self.is_client
         push_quic_transport_parameters(buf, self.quic_transport_parameters,
-                                       is_client=self.is_client)
+                                       is_client=is_client)
         return buf.data
 
     def _update_traffic_key(self, direction, epoch, secret):
