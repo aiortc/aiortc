@@ -190,13 +190,16 @@ PARAMS = [
 ]
 
 
-def pull_quic_transport_parameters(buf, is_client):
+def pull_quic_transport_parameters(buf, is_client=None):
     params = QuicTransportParameters()
+
+    # version < DRAFT_17
     if is_client:
         params.initial_version = pull_uint32(buf)
     elif is_client is False:
         params.negotiated_version = pull_uint32(buf)
         params.supported_versions = pull_list(buf, 1, pull_uint32)
+
     with pull_block(buf, 2) as length:
         end = buf.tell() + length
         while buf.tell() < end:
@@ -215,12 +218,14 @@ def pull_quic_transport_parameters(buf, is_client):
     return params
 
 
-def push_quic_transport_parameters(buf, params, is_client):
+def push_quic_transport_parameters(buf, params, is_client=None):
+    # version < DRAFT_17
     if is_client:
         push_uint32(buf, params.initial_version)
     elif is_client is False:
         push_uint32(buf, params.negotiated_version)
         push_list(buf, 1, push_uint32, params.supported_versions)
+
     with push_block(buf, 2):
         for param_id, (param_name, param_type) in enumerate(PARAMS):
             param_value = getattr(params, param_name)

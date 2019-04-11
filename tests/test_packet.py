@@ -135,9 +135,12 @@ class ParamsTest(TestCase):
     maxDiff = None
 
     def test_client_params(self):
-        buf = Buffer(data=binascii.unhexlify(
+        data = binascii.unhexlify(
             'ff0000110031000500048010000000060004801000000007000480100000000'
-            '4000481000000000100024258000800024064000a00010a'))
+            '4000481000000000100024258000800024064000a00010a')
+
+        # parse
+        buf = Buffer(data=data)
         params = pull_quic_transport_parameters(buf, is_client=True)
         self.assertEqual(params, QuicTransportParameters(
             initial_version=QuicProtocolVersion.DRAFT_17,
@@ -150,14 +153,19 @@ class ParamsTest(TestCase):
             ack_delay_exponent=10,
         ))
 
-        buf = Buffer(capacity=512)
+        # serialize
+        buf = Buffer(capacity=len(data))
         push_quic_transport_parameters(buf, params, is_client=True)
+        self.assertEqual(len(buf.data), len(data))
 
     def test_server_params(self):
-        buf = Buffer(data=binascii.unhexlify(
+        data = binascii.unhexlify(
             'ff00001104ff000011004500050004801000000006000480100000000700048'
             '010000000040004810000000001000242580002001000000000000000000000'
-            '000000000000000800024064000a00010a'))
+            '000000000000000800024064000a00010a')
+
+        # parse
+        buf = Buffer(data=data)
         params = pull_quic_transport_parameters(buf, is_client=False)
         self.assertEqual(params, QuicTransportParameters(
             negotiated_version=QuicProtocolVersion.DRAFT_17,
@@ -172,16 +180,20 @@ class ParamsTest(TestCase):
             ack_delay_exponent=10,
         ))
 
-        buf = Buffer(capacity=512)
+        # serialize
+        buf = Buffer(capacity=len(data))
         push_quic_transport_parameters(buf, params, is_client=False)
+        self.assertEqual(len(buf.data), len(data))
 
     def test_params(self):
-        buf = Buffer(data=binascii.unhexlify(
+        data = binascii.unhexlify(
             '004700020010cc2fd6e7d97a53ab5be85b28d75c80080008000106000100026'
             '710000600048000ffff000500048000ffff000400048005fffa000a00010300'
-            '0b0001190003000247e4'))
+            '0b0001190003000247e4')
 
-        params = pull_quic_transport_parameters(buf, is_client=None)
+        # parse
+        buf = Buffer(data=data)
+        params = pull_quic_transport_parameters(buf)
         self.assertEqual(params, QuicTransportParameters(
             idle_timeout=10000,
             stateless_reset_token=b'\xcc/\xd6\xe7\xd9zS\xab[\xe8[(\xd7\\\x80\x08',
@@ -195,6 +207,24 @@ class ParamsTest(TestCase):
             ack_delay_exponent=3,
             max_ack_delay=25
         ))
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        push_quic_transport_parameters(buf, params)
+        self.assertEqual(len(buf.data), len(data))
+
+    def test_params_disable_migration(self):
+        data = binascii.unhexlify('0004000c0000')
+
+        # parse
+        buf = Buffer(data=data)
+        params = pull_quic_transport_parameters(buf)
+        self.assertEqual(params, QuicTransportParameters(disable_migration=True))
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        push_quic_transport_parameters(buf, params)
+        self.assertEqual(buf.data, data)
 
 
 class FrameTest(TestCase):
