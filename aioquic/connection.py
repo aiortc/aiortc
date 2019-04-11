@@ -76,39 +76,14 @@ class QuicConnection:
             ack_delay_exponent=10,
         )
 
-        self.send_ack = {
-            tls.Epoch.INITIAL: False,
-            tls.Epoch.HANDSHAKE: False,
-            tls.Epoch.ONE_RTT: False,
-        }
-        self.send_buffer = {
-            tls.Epoch.INITIAL: Buffer(capacity=4096),
-            tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
-            tls.Epoch.ONE_RTT: Buffer(capacity=4096),
-        }
-        self.spaces = {
-            tls.Epoch.INITIAL: PacketSpace(),
-            tls.Epoch.HANDSHAKE: PacketSpace(),
-            tls.Epoch.ONE_RTT: PacketSpace(),
-        }
-        self.streams = {
-            tls.Epoch.INITIAL: QuicStream(),
-            tls.Epoch.HANDSHAKE: QuicStream(),
-            tls.Epoch.ONE_RTT: QuicStream(),
-        }
-
-        self.crypto_initialized = False
-        self.packet_number = 0
+        self.__initialized = False
 
     def connection_made(self):
         """
         At startup the client initiates the crypto handshake.
         """
         if self.is_client:
-            self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=self.peer_cid,
-                                                                is_client=self.is_client)
-            self._init_tls()
-            self.crypto_initialized = True
+            self._initialize(self.peer_cid)
 
             self.tls.handle_message(b'', self.send_buffer)
             self._push_crypto_data()
@@ -147,11 +122,8 @@ class QuicConnection:
             end_off = buf.tell() + header.rest_length
             tls.pull_bytes(buf, header.rest_length)
 
-            if not self.is_client and not self.crypto_initialized:
-                self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=header.destination_cid,
-                                                                    is_client=self.is_client)
-                self._init_tls()
-                self.crypto_initialized = True
+            if not self.is_client and not self.__initialized:
+                self._initialize(header.destination_cid)
 
             epoch = get_epoch(header.packet_type)
             space = self.spaces[epoch]
@@ -184,7 +156,8 @@ class QuicConnection:
             self.streams[stream_id] = QuicStream(stream_id=stream_id)
         return self.streams[stream_id]
 
-    def _init_tls(self):
+    def _initialize(self, peer_cid):
+        # transport parameters
         if self.version >= QuicProtocolVersion.DRAFT_19:
             self.quic_transport_parameters.idle_timeout = 600000
         else:
@@ -196,6 +169,7 @@ class QuicConnection:
                 self.quic_transport_parameters.supported_versions = self.supported_versions
                 self.quic_transport_parameters.stateless_reset_token = bytes(16)
 
+        # TLS
         self.tls = tls.Context(is_client=self.is_client)
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
@@ -204,6 +178,34 @@ class QuicConnection:
         ]
         self.tls.server_name = self.server_name
         self.tls.update_traffic_key_cb = self._update_traffic_key
+
+        # packet spaces
+        self.send_ack = {
+            tls.Epoch.INITIAL: False,
+            tls.Epoch.HANDSHAKE: False,
+            tls.Epoch.ONE_RTT: False,
+        }
+        self.send_buffer = {
+            tls.Epoch.INITIAL: Buffer(capacity=4096),
+            tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
+            tls.Epoch.ONE_RTT: Buffer(capacity=4096),
+        }
+        self.spaces = {
+            tls.Epoch.INITIAL: PacketSpace(),
+            tls.Epoch.HANDSHAKE: PacketSpace(),
+            tls.Epoch.ONE_RTT: PacketSpace(),
+        }
+        self.streams = {
+            tls.Epoch.INITIAL: QuicStream(),
+            tls.Epoch.HANDSHAKE: QuicStream(),
+            tls.Epoch.ONE_RTT: QuicStream(),
+        }
+
+        self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=peer_cid,
+                                                            is_client=self.is_client)
+
+        self.__initialized = True
+        self.packet_number = 0
 
     def _payload_received(self, epoch, plain):
         buf = Buffer(data=plain)

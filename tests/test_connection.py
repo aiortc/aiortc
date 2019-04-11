@@ -107,10 +107,13 @@ class QuicConnectionTest(TestCase):
 
     def test_create_stream(self):
         client = QuicConnection(is_client=True)
+        client._initialize(b'')
+
         server = QuicConnection(
             is_client=False,
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY)
+        server._initialize(b'')
 
         # client
         stream = client.create_stream()
