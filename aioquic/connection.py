@@ -179,6 +179,11 @@ class QuicConnection:
 
         yield from self._write_application()
 
+    def _get_or_create_stream(self, stream_id):
+        if stream_id not in self.streams:
+            self.streams[stream_id] = QuicStream(stream_id=stream_id)
+        return self.streams[stream_id]
+
     def _init_tls(self):
         if self.version >= QuicProtocolVersion.DRAFT_19:
             self.quic_transport_parameters.idle_timeout = 600000
@@ -232,8 +237,9 @@ class QuicConnection:
                     length = pull_uint_var(buf)
                 else:
                     length = buf.capacity - buf.tell()
-                stream = self.streams[stream_id]
-                stream.add_frame(QuicStreamFrame(offset=offset, data=tls.pull_bytes(buf, length)))
+                frame = QuicStreamFrame(offset=offset, data=tls.pull_bytes(buf, length))
+                stream = self._get_or_create_stream(stream_id)
+                stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
                 pull_uint_var(buf)
             elif frame_type in [QuicFrameType.MAX_STREAMS_BIDI, QuicFrameType.MAX_STREAMS_UNI]:
@@ -281,7 +287,7 @@ class QuicConnection:
         epoch = tls.Epoch.ONE_RTT
         space = self.spaces[epoch]
         send_ack = space.ack_queue if self.send_ack[epoch] else False
-        if not space.crypto.send.is_valid() or not send_ack:
+        if not space.crypto.send.is_valid():
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
@@ -309,10 +315,11 @@ class QuicConnection:
 
         # encrypt
         packet_size = buf.tell()
-        data = buf.data
-        yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+        if packet_size > header_size:
+            data = buf.data
+            yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
 
-        self.packet_number += 1
+            self.packet_number += 1
 
     def _write_handshake(self, epoch):
         space = self.spaces[epoch]

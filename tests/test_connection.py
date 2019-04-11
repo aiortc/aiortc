@@ -38,6 +38,19 @@ class QuicConnectionTest(TestCase):
         for datagram in server.pending_datagrams():
             client.datagram_received(datagram)
 
+        # send data over stream
+        client_stream = client.create_stream()
+        client_stream.push_data(b'ping')
+
+        for datagram in client.pending_datagrams():
+            server.datagram_received(datagram)
+
+        for datagram in server.pending_datagrams():
+            client.datagram_received(datagram)
+
+        server_stream = server.streams[0]
+        self.assertEqual(server_stream.pull_data(), b'ping')
+
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
         client = QuicConnection(
