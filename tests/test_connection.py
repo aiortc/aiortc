@@ -6,6 +6,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic.connection import QuicConnection
+from aioquic.packet import QuicProtocolVersion
 
 from .utils import load
 
@@ -16,13 +17,18 @@ SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
 
 
 class QuicConnectionTest(TestCase):
-    def test_connect(self):
+    def _test_connect_with_version(self, version):
         client = QuicConnection(
             is_client=True)
+        client.supported_versions = [version]
+        client.version = version
+
         server = QuicConnection(
             is_client=False,
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY)
+        server.supported_versions = [version]
+        server.version = version
 
         # perform handshake
         client.connection_made()
@@ -50,6 +56,15 @@ class QuicConnectionTest(TestCase):
 
         server_stream = server.streams[0]
         self.assertEqual(server_stream.pull_data(), b'ping')
+
+    def test_connect_draft_17(self):
+        self._test_connect_with_version(QuicProtocolVersion.DRAFT_17)
+
+    def test_connect_draft_18(self):
+        self._test_connect_with_version(QuicProtocolVersion.DRAFT_18)
+
+    def test_connect_draft_19(self):
+        self._test_connect_with_version(QuicProtocolVersion.DRAFT_19)
 
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
