@@ -1,4 +1,3 @@
-import logging
 import os
 import struct
 from contextlib import contextmanager
@@ -14,8 +13,6 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.ciphers import aead
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-
-logger = logging.getLogger('tls')
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
@@ -763,7 +760,7 @@ def encode_public_key(public_key):
 
 
 class Context:
-    def __init__(self, is_client):
+    def __init__(self, is_client, logger=None):
         self.certificate = None
         self.certificate_private_key = None
         self.handshake_extensions = []
@@ -779,6 +776,7 @@ class Context:
         self._receive_buffer = b''
         self._enc_key = None
         self._dec_key = None
+        self.__logger = logger
 
         if is_client:
             self.client_random = os.urandom(32)
@@ -1096,5 +1094,6 @@ class Context:
         self.update_traffic_key_cb(direction, epoch, key)
 
     def _set_state(self, state):
-        logger.info('%s -> %s', self.state, state)
+        if self.__logger:
+            self.__logger.info('TLS %s -> %s', self.state, state)
         self.state = state

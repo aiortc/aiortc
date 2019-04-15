@@ -77,6 +77,7 @@ class QuicConnection:
         )
 
         self.__initialized = False
+        self.__logger = logger
 
     def connection_made(self):
         """
@@ -114,6 +115,9 @@ class QuicConnection:
                 while not buf.eof():
                     versions.append(tls.pull_uint32(buf))
                 common = set(self.supported_versions).intersection(versions)
+                if not common:
+                    self.__logger.error('Could not find a common protocol version')
+                    return
                 self.version = max(common)
                 self.connection_made()
                 return
@@ -170,7 +174,7 @@ class QuicConnection:
                 self.quic_transport_parameters.stateless_reset_token = bytes(16)
 
         # TLS
-        self.tls = tls.Context(is_client=self.is_client)
+        self.tls = tls.Context(is_client=self.is_client, logger=self.__logger)
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
         self.tls.handshake_extensions = [
@@ -249,7 +253,7 @@ class QuicConnection:
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 packet.pull_new_connection_id_frame(buf)
             else:
-                logger.warning('unhandled frame type %d', frame_type)
+                self.__logger.warning('unhandled frame type %d', frame_type)
                 break
 
         self._push_crypto_data()
