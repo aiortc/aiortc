@@ -5,10 +5,11 @@ import time
 import sys
 import os
 
-from os import path
-sys.path.append(path.dirname(path.abspath(__file__)) + "/../../")
+# from os import path
+# sys.path.append(path.dirname(path.abspath(__file__)) + "/../../")
 
-os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
+# if you install aiortc by setup_dc.py, need this line
+#os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
