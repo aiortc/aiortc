@@ -4,7 +4,8 @@ from typing import List, Tuple
 
 import attr
 
-from .rtcrtpparameters import RTCRtpParameters
+if os.getenv('AIORTC_MODE') != "DC_ONLY":
+	from .rtcrtpparameters import RTCRtpParameters
 
 # reserved to avoid confusion with RTCP
 FORBIDDEN_PAYLOAD_TYPES = range(72, 77)
