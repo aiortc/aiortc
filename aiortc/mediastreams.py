@@ -2,6 +2,7 @@ import asyncio
 import fractions
 import time
 import uuid
+import os
 
 from av import AudioFrame, VideoFrame
 from pyee import EventEmitter

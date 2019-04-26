@@ -1,7 +1,10 @@
 # flake8: noqa
 
+import os
+
 from .exceptions import InvalidAccessError, InvalidStateError
-from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
+if os.getenv('AIORTC_MODE') != 'DC_ONLY':
+	from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (RTCCertificate, RTCDtlsFingerprint,
@@ -14,13 +17,17 @@ from .rtcrtpparameters import (RTCRtcpParameters, RTCRtpCapabilities,
                                RTCRtpHeaderExtensionCapability,
                                RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters)
-from .rtcrtpreceiver import (RTCRtpContributingSource, RTCRtpReceiver,
-                             RTCRtpSynchronizationSource)
-from .rtcrtpsender import RTCRtpSender
-from .rtcrtptransceiver import RTCRtpTransceiver
+if os.getenv('AIORTC_MODE') != "DC_ONLY":
+	from .rtcrtpreceiver import (RTCRtpContributingSource, RTCRtpReceiver,
+	                             RTCRtpSynchronizationSource)
+	from .rtcrtpsender import RTCRtpSender
+	from .rtcrtptransceiver import RTCRtpTransceiver
+
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
-from .stats import (RTCInboundRtpStreamStats, RTCOutboundRtpStreamStats,
-                    RTCRemoteInboundRtpStreamStats,
-                    RTCRemoteOutboundRtpStreamStats, RTCStatsReport,
-                    RTCTransportStats)
+
+if os.getenv('AIORTC_MODE') != "DC_ONLY":
+	from .stats import (RTCInboundRtpStreamStats, RTCOutboundRtpStreamStats,
+	                    RTCRemoteInboundRtpStreamStats,
+	                    RTCRemoteOutboundRtpStreamStats, RTCStatsReport,
+	                    RTCTransportStats)
