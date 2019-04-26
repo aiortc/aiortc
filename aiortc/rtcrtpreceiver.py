@@ -5,18 +5,14 @@ import queue
 import random
 import threading
 import time
-import os
 
 import attr
 
 from . import clock
-if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
-	from .codecs import depayload, get_capabilities, get_decoder, is_rtx
+from .codecs import depayload, get_capabilities, get_decoder, is_rtx
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
-
 from .mediastreams import MediaStreamError, MediaStreamTrack
-
 from .rate import RemoteBitrateEstimator
 from .rtcrtpparameters import RTCRtpReceiveParameters
 from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,

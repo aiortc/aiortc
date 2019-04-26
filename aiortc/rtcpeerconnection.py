@@ -1,30 +1,26 @@
 import asyncio
 import copy
 import uuid
-import os
 from collections import OrderedDict
 
 from pyee import EventEmitter
 
 from . import clock, rtp, sdp
-if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
-	from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
-	from .events import RTCTrackEvent
+from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
+from .events import RTCTrackEvent
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceGatherer, RTCIceTransport
-if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
-	from .rtcrtpparameters import (RTCRtpDecodingParameters, RTCRtpParameters,
-	                               RTCRtpReceiveParameters, RTCRtpRtxParameters)
-	from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
-	from .rtcrtpsender import RTCRtpSender
-	from .rtcrtptransceiver import RTCRtpTransceiver
+from .rtcrtpparameters import (RTCRtpDecodingParameters, RTCRtpParameters,
+                               RTCRtpReceiveParameters, RTCRtpRtxParameters)
+from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
+from .rtcrtpsender import RTCRtpSender
+from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
-if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
-	from .stats import RTCStatsReport
+from .stats import RTCStatsReport
 
 DISCARD_HOST = '0.0.0.0'
 DISCARD_PORT = 9
