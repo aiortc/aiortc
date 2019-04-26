@@ -8,7 +8,7 @@ import os
 from os import path
 sys.path.append(path.dirname(path.abspath(__file__)) + "/../../")
 
-os.environ['AIORTC_MODE'] = 'DC_ONLY'
+os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from wssignaling import add_signaling_arguments, create_signaling
