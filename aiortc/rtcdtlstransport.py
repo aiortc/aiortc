@@ -20,12 +20,13 @@ from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
 from . import rtp
-if os.getenv('AIORTC_MODE') != "DC_ONLY":
+if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
 	from . import clock
+        
 from .rtcrtpparameters import RTCRtpReceiveParameters, RTCRtpSendParameters
 from .rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket, RtcpRrPacket,
                   RtcpRtpfbPacket, RtcpSrPacket, RtpPacket, is_rtcp)
-if os.getenv('AIORTC_MODE') != "DC_ONLY":
+if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
 	from .stats import RTCStatsReport, RTCTransportStats
 
 binding = Binding()

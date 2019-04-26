@@ -10,17 +10,16 @@ with open(readme_file, encoding='utf-8') as f:
 install_requires = [
     'aioice>=0.6.13,<0.7.0',
     'attrs',
-    'cffi>=1.0.0',
     'crc32c',
     'cryptography>=2.2',
     'pyee',
     'pylibsrtp>=0.5.6',
-    'pyopenssl',
+    'pyopenssl'
 ]
 
 setuptools.setup(
-    name='aiortc-dc',
-    version='0.9.20',
+    name='aiortc',
+    version='0.5.0',
     description='data channel feature only version of aiortc which implements WebRTC and ORTC',
     long_description=long_description,
     url='https://github.com/aiortc/aiortc',

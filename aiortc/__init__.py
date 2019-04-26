@@ -3,7 +3,7 @@
 import os
 
 from .exceptions import InvalidAccessError, InvalidStateError
-if os.getenv('AIORTC_MODE') != 'DC_ONLY':
+if os.getenv('AIORTC_SPECIAL_MODE') != 'DC_ONLY':
 	from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -17,7 +17,7 @@ from .rtcrtpparameters import (RTCRtcpParameters, RTCRtpCapabilities,
                                RTCRtpHeaderExtensionCapability,
                                RTCRtpHeaderExtensionParameters,
                                RTCRtpParameters)
-if os.getenv('AIORTC_MODE') != "DC_ONLY":
+if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
 	from .rtcrtpreceiver import (RTCRtpContributingSource, RTCRtpReceiver,
 	                             RTCRtpSynchronizationSource)
 	from .rtcrtpsender import RTCRtpSender
@@ -26,7 +26,7 @@ if os.getenv('AIORTC_MODE') != "DC_ONLY":
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 
-if os.getenv('AIORTC_MODE') != "DC_ONLY":
+if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
 	from .stats import (RTCInboundRtpStreamStats, RTCOutboundRtpStreamStats,
 	                    RTCRemoteInboundRtpStreamStats,
 	                    RTCRemoteOutboundRtpStreamStats, RTCStatsReport,
