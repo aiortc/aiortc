@@ -19,7 +19,7 @@ install_requires = [
 ]
 
 setuptools.setup(
-    name='aiortc-dc',
+    name='aiortc',
     version='0.5.0',
     description='data channel feature only version of aiortc which implements WebRTC and ORTC',
     long_description=long_description,
