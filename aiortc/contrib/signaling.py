@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sys
+import websockets
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
@@ -176,15 +177,44 @@ class UnixSocketSignaling:
         data = object_to_string(descr).encode('utf8')
         self._writer.write(data + b'\n')
 
+class WebsocketSignaling:
+    def __init__(self, host, port):
+        self._host = host
+        self._port = port
+        self._websocket = None
+
+    async def connect(self):
+        self._websocket = await websockets.connect("ws://" + str(self._host) + ":" + str(self._port))
+
+    async def close(self):
+        if self._websocket is not None and self._websocket.open is True:
+            await self.send(None)
+            await self._websocket.close()
+
+    async def receive(self):
+        try:
+            data = await self._websocket.recv()
+        except asyncio.IncompleteReadError: #TODO: replace to occur from websocket connection
+            print("IncompleteReadError")
+            return
+        ret = object_from_string(data)
+        if ret == None:
+            print("remote host says good bye!")
+
+        return ret
+
+    async def send(self, descr):
+        data = object_to_string(descr)
+        await self._websocket.send(data + '\n')
 
 def add_signaling_arguments(parser):
     """
     Add signaling method arguments to an argparse.ArgumentParser.
     """
     parser.add_argument('--signaling', '-s', choices=[
-        'copy-and-paste', 'tcp-socket', 'unix-socket'])
+        'copy-and-paste', 'tcp-socket', 'unix-socket', 'websocket'])
     parser.add_argument('--signaling-host', default='127.0.0.1',
-                        help='Signaling host (tcp-socket only)')
+                        help='Signaling host (tcp-socket and websocket only)')
     parser.add_argument('--signaling-port', default=1234,
                         help='Signaling port (tcp-socket only)')
     parser.add_argument('--signaling-path', default='aiortc.socket',
@@ -199,5 +229,7 @@ def create_signaling(args):
         return TcpSocketSignaling(args.signaling_host, args.signaling_port)
     elif args.signaling == 'unix-socket':
         return UnixSocketSignaling(args.signaling_path)
+    elif args.signaling == 'websocket':
+        return WebsocketSignaling(args.signaling_host, args.signaling_port)
     else:
         return CopyAndPasteSignaling()

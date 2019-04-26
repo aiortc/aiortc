@@ -11,7 +11,7 @@ sys.path.append(path.dirname(path.abspath(__file__)) + "/../../")
 os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from wssignaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 async def consume_signaling(pc, signaling):
     while True:
