@@ -17,11 +17,11 @@ To run the example, you will need instances of the `filexfer` example:
 
 .. code-block:: console
 
-   $ python cli.py send somefile.pdf
+   $ python filexfer.py send somefile.pdf
 
 - The second takes on the role of the answerer. When given an offer, it will
   generate an answer which you must copy-and-paste to the offerer.
 
 .. code-block:: console
 
-   $ python cli.py receive received.pdf
+   $ python filexfer.py receive received.pdf
