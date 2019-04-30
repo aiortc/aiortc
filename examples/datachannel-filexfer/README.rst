@@ -8,7 +8,13 @@ First install the required packages:
 
 .. code-block:: console
 
-    $ pip install aiortc uvloop
+    $ pip install aiortc
+
+On Linux and Mac OS X you can also install uvloop for better performance:
+
+.. code-block:: console
+
+    $ pip install uvloop
 
 To run the example, you will need instances of the `filexfer` example:
 

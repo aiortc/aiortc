@@ -3,10 +3,14 @@ import asyncio
 import logging
 import time
 
-import uvloop
-
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
+
+# optional, for better performance
+try:
+    import uvloop
+except ImportError:
+    uvloop = None
 
 
 async def consume_signaling(pc, signaling):
@@ -87,7 +91,9 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    if uvloop is not None:
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
     if args.role == 'send':
