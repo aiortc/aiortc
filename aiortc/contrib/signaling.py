@@ -194,8 +194,7 @@ class WebsocketSignaling:
     async def receive(self):
         try:
             data = await self._websocket.recv()
-        except asyncio.IncompleteReadError: #TODO: replace to occur from websocket connection
-            print("IncompleteReadError")
+        except asyncio.IncompleteReadError:
             return
         ret = object_from_string(data)
         if ret == None:
