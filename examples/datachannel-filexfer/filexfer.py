@@ -3,11 +3,19 @@ import asyncio
 import logging
 import time
 
-import uvloop
+# if you install aiortc by setup_dc.py, need this line
+#import os
+#os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
+
+from pip._internal.utils.misc import get_installed_distributions
+is_uvloop_usable = False
+pkgname_list = list(map(lambda pkginfo: str(pkginfo).split(" ")[0], get_installed_distributions()))
+if "uvloop" in pkgname_list:
+    import uvloop
+    is_uvloop_usable = True
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
-
 
 async def consume_signaling(pc, signaling):
     while True:
@@ -87,7 +95,8 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    if is_uvloop_usable:
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
     if args.role == 'send':
