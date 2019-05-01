@@ -43,5 +43,5 @@ Please visit `this repo`_ and press 'Deploy to Heroku' button!
 
 ``Deployed server is accessible``: --signaling websocket --signaling-host <your-appname>.herokuapp.com --signaling-port 80
 
-..  _this repo: https://github.com/ryogrid/punch_sctp_ws_signal_srv_for_sample
+..  _this repo: https://github.com/ryogrid/aiortc_ws_signal_srv_for_sample
 
