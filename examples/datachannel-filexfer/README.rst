@@ -1,17 +1,18 @@
 Data channel file transfer
 ==========================
 
-- ``Important``:
-
-  - Copy and paste signaling example can not work on Windows python environment due to restricton of asyncio.
-
-  - To try file transfer example on windows environment, please see `websocket signaling version`_.
-
 This example illustrates sending a file over a data channel using an
 RTCPeerConnection and a "copy and paste" signaling channel to exchange SDP.
 
-..  _websocket signaling version: https://github.com/aiortc/aiortc/blob/master/examples/datachannel-filexfer/README_WS_SIGNALING_VERSION.rst
+Currently, this "copy and paste" can't work on Windows platform due to asyncio functionality restriction.
 
+So, if you want to run file transfer example on windows platform. please try `websocket signaling`_ or `p2p tcp-socket signaling`_.
+
+..  _websocket signaling: https://github.com/aiortc/aiortc/blob/master/examples/datachannel-filexfer/README_WS_SIGNALING_VERSION.rst
+
+..  _p2p tcp-socket signaling: https://github.com/aiortc/aiortc/pull/172/files#r279630394
+
+.. 
 
 First install the required packages:
 
