@@ -30,6 +30,7 @@ binding.init_static_locks()
 ffi = binding.ffi
 lib = binding.lib
 
+NID_X9_62_prime256v1 = 415
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
 
@@ -120,7 +121,7 @@ def create_ssl_context(certificate):
     if hasattr(lib, 'DTLS_method'):
         # openssl >= 1.0.2
         method = lib.DTLS_method
-    else:  # pragma: no cover
+    else:
         # openssl < 1.0.2
         method = lib.DTLSv1_method
     ctx = lib.SSL_CTX_new(method())
@@ -135,13 +136,16 @@ def create_ssl_context(certificate):
     _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
     _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
 
-    # specify an EDCH group for ECDHE ciphers, otherwise OpenSSL < 1.1.0
-    # cannot negotiate them in server mode
-    if lib.OpenSSL_version_num() < 0x10100000:  # pragma: no cover
-        ecdh = lib.EC_KEY_new_by_curve_name(lib.NID_X9_62_prime256v1)
+    # Configure elliptic curve for ECDHE in server mode for older OpenSSL
+    if lib.OpenSSL_version_num() < 0x10002000:
+        # openssl < 1.0.2
+        ecdh = lib.EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)
         lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
         lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
         lib.EC_KEY_free(ecdh)
+    elif lib.OpenSSL_version_num() < 0x10100000:
+        # openssl >= 1.0.2, < 1.1.0
+        lib.SSL_CTX_set_ecdh_auto(ctx, 1)
 
     return ctx
 

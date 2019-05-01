@@ -41,7 +41,7 @@ async def offer(request):
             pcs.discard(pc)
 
     # open webcam
-    options = {'video_size': '640x480'}
+    options = {'framerate': '30', 'video_size': '640x480'}
     if platform.system() == 'Darwin':
         player = MediaPlayer('default:none', format='avfoundation', options=options)
     else:

@@ -22,8 +22,13 @@ matrix:
   - language: generic
     os: osx
   - python: "3.5"
+  - env: CRYPTOGRAPHY_NO_BINARY=1
+    dist: trusty
+    python: "3.5"
   - python: "3.6"
   - python: "3.7"
+  - env: CRYPTOGRAPHY_NO_BINARY=1
+    python: "3.7"
   - env: BUILD=sdist
     install: true
     python: "3.6"
