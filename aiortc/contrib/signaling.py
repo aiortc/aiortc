@@ -1,10 +1,21 @@
 import asyncio
 import json
+import logging
 import os
+import random
 import sys
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
+
+try:
+    import aiohttp
+    import websockets
+except ImportError:  # pragma: no cover
+    aiohttp = None
+    websockets = None
+
+logger = logging.getLogger('aiortc.contrib.signaling')
 
 
 def object_from_string(message_str):
@@ -34,6 +45,71 @@ def object_to_string(obj):
     else:
         message = {'type': 'bye'}
     return json.dumps(message, sort_keys=True)
+
+
+class ApprtcSignaling:
+    def __init__(self, room):
+        self._http = None
+        self._origin = 'https://appr.tc'
+        self._room = room
+        self._websocket = None
+
+    async def connect(self):
+        join_url = self._origin + '/join/' + self._room
+
+        # fetch room parameters
+        self._http = aiohttp.ClientSession()
+        async with self._http.post(join_url) as response:
+            # we cannot use response.json() due to:
+            # https://github.com/webrtc/apprtc/issues/562
+            data = json.loads(await response.text())
+        assert data['result'] == 'SUCCESS'
+        params = data['params']
+
+        self.__is_initiator = params['is_initiator'] == 'true'
+        self.__messages = params['messages']
+        self.__post_url = self._origin + '/message/' + self._room + '/' + params['client_id']
+
+        # connect to websocket
+        self._websocket = await websockets.connect(params['wss_url'], extra_headers={
+            'Origin': self._origin
+        })
+        await self._websocket.send(json.dumps({
+            'clientid': params['client_id'],
+            'cmd': 'register',
+            'roomid': params['room_id'],
+        }))
+
+        print('Room is %s' % params['room_id'])
+
+        return params
+
+    async def close(self):
+        if self._websocket:
+            await self.send(None)
+            self._websocket.close()
+        if self._http:
+            await self._http.close()
+
+    async def receive(self):
+        if self.__messages:
+            message = self.__messages.pop(0)
+        else:
+            message = await self._websocket.recv()
+            message = json.loads(message)['msg']
+        logger.info('< ' + message)
+        return object_from_string(message)
+
+    async def send(self, obj):
+        message = object_to_string(obj)
+        logger.info('> ' + message)
+        if self.__is_initiator:
+            await self._http.post(self.__post_url, data=message)
+        else:
+            await self._websocket.send(json.dumps({
+                'cmd': 'send',
+                'msg': message,
+            }))
 
 
 class CopyAndPasteSignaling:
@@ -182,20 +258,28 @@ def add_signaling_arguments(parser):
     Add signaling method arguments to an argparse.ArgumentParser.
     """
     parser.add_argument('--signaling', '-s', choices=[
-        'copy-and-paste', 'tcp-socket', 'unix-socket'])
+        'apprtc', 'copy-and-paste', 'tcp-socket', 'unix-socket'])
     parser.add_argument('--signaling-host', default='127.0.0.1',
                         help='Signaling host (tcp-socket only)')
     parser.add_argument('--signaling-port', default=1234,
                         help='Signaling port (tcp-socket only)')
     parser.add_argument('--signaling-path', default='aiortc.socket',
                         help='Signaling socket path (unix-socket only)')
+    parser.add_argument('--signaling-room', default=None,
+                        help='Signaling room (apprtc only)')
 
 
 def create_signaling(args):
     """
     Create a signaling method based on command-line arguments.
     """
-    if args.signaling == 'tcp-socket':
+    if args.signaling == 'apprtc':
+        if aiohttp is None or websockets is None:  # pragma: no cover
+            raise Exception('Please install aiohttp and websockets to use appr.tc')
+        if not args.signaling_room:
+            args.signaling_room = ''.join([random.choice('0123456789') for x in range(10)])
+        return ApprtcSignaling(args.signaling_room)
+    elif args.signaling == 'tcp-socket':
         return TcpSocketSignaling(args.signaling_host, args.signaling_port)
     elif args.signaling == 'unix-socket':
         return UnixSocketSignaling(args.signaling_path)

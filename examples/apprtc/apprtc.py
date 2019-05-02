@@ -1,85 +1,19 @@
 import argparse
 import asyncio
-import json
 import logging
 import os
 import random
 
-import aiohttp
 import cv2
-import websockets
 from av import VideoFrame
 
 from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.contrib.signaling import object_from_string, object_to_string
+from aiortc.contrib.signaling import ApprtcSignaling
 
 ROOT = os.path.dirname(__file__)
 PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
-
-
-class ApprtcSignaling:
-    def __init__(self, room):
-        self._http = None
-        self._origin = 'https://appr.tc'
-        self._room = room
-        self._websocket = None
-
-    async def connect(self):
-        join_url = self._origin + '/join/' + self._room
-
-        # fetch room parameters
-        self._http = aiohttp.ClientSession()
-        async with self._http.post(join_url) as response:
-            # we cannot use response.json() due to:
-            # https://github.com/webrtc/apprtc/issues/562
-            data = json.loads(await response.text())
-        assert data['result'] == 'SUCCESS'
-        params = data['params']
-
-        self.__is_initiator = params['is_initiator'] == 'true'
-        self.__messages = params['messages']
-        self.__post_url = self._origin + '/message/' + self._room + '/' + params['client_id']
-
-        # connect to websocket
-        self._websocket = await websockets.connect(params['wss_url'], extra_headers={
-            'Origin': self._origin
-        })
-        await self._websocket.send(json.dumps({
-            'clientid': params['client_id'],
-            'cmd': 'register',
-            'roomid': params['room_id'],
-        }))
-
-        return params
-
-    async def close(self):
-        if self._websocket:
-            await self.send(None)
-            self._websocket.close()
-        if self._http:
-            await self._http.close()
-
-    async def receive(self):
-        if self.__messages:
-            message = self.__messages.pop(0)
-        else:
-            message = await self._websocket.recv()
-            message = json.loads(message)['msg']
-        print('<', message)
-        return object_from_string(message)
-
-    async def send(self, obj):
-        message = object_to_string(obj)
-        print('>', message)
-        if self.__is_initiator:
-            await self._http.post(self.__post_url, data=message)
-        else:
-            await self._websocket.send(json.dumps({
-                'cmd': 'send',
-                'msg': message,
-            }))
 
 
 class VideoImageTrack(VideoStreamTrack):
