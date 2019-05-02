@@ -379,8 +379,8 @@ class RTCRtpReceiver:
                 if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
                     rtcp_packet = RtcpPsfbPacket(
-                        fmt=RTCP_PSFB_APP, ssrc=self.__rtcp_ssrc, media_ssrc=0)
-                    rtcp_packet.fci = pack_remb_fci(*remb)
+                        fmt=RTCP_PSFB_APP, ssrc=self.__rtcp_ssrc, media_ssrc=0,
+                        fci=pack_remb_fci(*remb))
                     await self._send_rtcp(rtcp_packet)
 
         # keep track of sources

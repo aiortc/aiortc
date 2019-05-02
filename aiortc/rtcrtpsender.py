@@ -209,9 +209,10 @@ class RTCRtpSender:
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
-                self.__log_debug('- receiver estimated maximum bitrate %d bps', bitrate)
-                if self.__encoder and hasattr(self.__encoder, 'target_bitrate'):
-                    self.__encoder.target_bitrate = bitrate
+                if self._ssrc in ssrcs:
+                    self.__log_debug('- receiver estimated maximum bitrate %d bps', bitrate)
+                    if self.__encoder and hasattr(self.__encoder, 'target_bitrate'):
+                        self.__encoder.target_bitrate = bitrate
             except ValueError:
                 pass
 

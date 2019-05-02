@@ -13,6 +13,11 @@ DTLS
 
   * Call SSL_CTX_set_ecdh_auto for OpenSSL 1.0.2.
 
+Media
+.....
+
+  * Correctly route REMB packets to the :class:`aiortc.RTCRtpSender`.
+
 0.9.20
 ------
 
