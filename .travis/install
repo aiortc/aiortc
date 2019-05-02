@@ -6,8 +6,8 @@ PREFIX=$HOME/.local
 
 if [ "$(uname -s)" != "Darwin" ]; then
     if [ ! -e "$PREFIX/bin/ffmpeg" ]; then
-        curl http://www.ffmpeg.org/releases/ffmpeg-3.2.12.tar.xz | tar xJ
-        cd ffmpeg-3.2.12
+        curl http://www.ffmpeg.org/releases/ffmpeg-4.1.3.tar.xz | tar xJ
+        cd ffmpeg-4.1.3
         ./configure --prefix=$PREFIX \
             --disable-static --enable-shared \
             --enable-gpl \
