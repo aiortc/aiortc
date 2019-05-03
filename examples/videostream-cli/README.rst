@@ -11,7 +11,7 @@ First install the required packages:
 
 .. code-block:: console
 
-   $ pip install aiortc
+   $ pip install aiortc opencv-python
 
 To run the example, you will need instances of the `cli` example:
 
