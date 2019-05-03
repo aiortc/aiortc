@@ -80,7 +80,7 @@ async def run(pc, player, recorder, signaling):
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
-        else:
+        elif obj is None:
             print('Exiting')
             break
 

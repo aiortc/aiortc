@@ -7,7 +7,8 @@ import cv2
 import numpy
 from av import VideoFrame
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
+                    VideoStreamTrack)
 from aiortc.contrib.media import MediaBlackhole, MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
@@ -91,7 +92,9 @@ async def run(pc, signaling, recorder, role):
                 pc.addTrack(FlagVideoStreamTrack())
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
-        else:
+        elif isinstance(obj, RTCIceCandidate):
+            pc.addIceCandidate(obj)
+        elif obj is None:
             print('Exiting')
             break
 
