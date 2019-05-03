@@ -2,16 +2,29 @@ Video channel CLI
 =================
 
 This example illustrates the establishment of a video stream using an
-RTCPeerConnection and a "copy and paste" signaling channel to exchange SDP.
+RTCPeerConnection.
 
-The video stream is composed of three separate streams that have been combined
-into a single stream that is three times as wide.
+By default the signaling channel used is "copy and paste", but a number of
+other signaling mecanisms are available, including Google's AppRTC demo
+application.
+
+By default the sent video is an animated French flag, but it is also possible
+to use a MediaPlayer to read media from a file.
+
+This example also illustrates how to use a MediaRecorder to capture media to a
+file.
 
 First install the required packages:
 
 .. code-block:: console
 
-   $ pip install aiortc opencv-python
+   $ pip install aiohttp aiortc opencv-python websockets
+
+The `aiohttp` and `websockets` packages are only needed if using AppRTC for
+signaling.
+
+Running the example
+-------------------
 
 To run the example, you will need instances of the `cli` example:
 
