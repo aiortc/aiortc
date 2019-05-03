@@ -80,7 +80,7 @@ class ApprtcSignaling:
             'roomid': params['room_id'],
         }))
 
-        print('Room is %s' % params['room_id'])
+        print('AppRTC room is %(room_id)s %(room_link)s' % params)
 
         return params
 

@@ -63,7 +63,6 @@ async def run(pc, player, recorder, signaling):
         add_tracks()
         await pc.setLocalDescription(await pc.createOffer())
         await signaling.send(pc.localDescription)
-        print('Please point a browser at %s' % params['room_link'])
 
     # consume signaling
     while True:
