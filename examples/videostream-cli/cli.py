@@ -9,7 +9,7 @@ from av import VideoFrame
 
 from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
                     VideoStreamTrack)
-from aiortc.contrib.media import MediaBlackhole, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 
@@ -64,18 +64,27 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return data_bgr
 
 
-async def run(pc, signaling, recorder, role):
-    await signaling.connect()
+async def run(pc, player, recorder, signaling, role):
+    def add_tracks():
+        if player and player.audio:
+            pc.addTrack(player.audio)
+
+        if player and player.video:
+            pc.addTrack(player.video)
+        else:
+            pc.addTrack(FlagVideoStreamTrack())
 
     @pc.on('track')
     def on_track(track):
-        print('Receiving video')
-        assert track.kind == 'video'
+        print('Receiving %s' % track.kind)
         recorder.addTrack(track)
+
+    # connect signaling
+    await signaling.connect()
 
     if role == 'offer':
         # send offer
-        pc.addTrack(FlagVideoStreamTrack())
+        add_tracks()
         await pc.setLocalDescription(await pc.createOffer())
         await signaling.send(pc.localDescription)
 
@@ -89,7 +98,7 @@ async def run(pc, signaling, recorder, role):
 
             if obj.type == 'offer':
                 # send answer
-                pc.addTrack(FlagVideoStreamTrack())
+                add_tracks()
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
@@ -102,6 +111,7 @@ async def run(pc, signaling, recorder, role):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Video stream from the command line')
     parser.add_argument('role', choices=['offer', 'answer'])
+    parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
     parser.add_argument('--record-to', help='Write received media to a file.'),
     parser.add_argument('--verbose', '-v', action='count')
     add_signaling_arguments(parser)
@@ -114,6 +124,12 @@ if __name__ == '__main__':
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
 
+    # create media source
+    if args.play_from:
+        player = MediaPlayer(args.play_from)
+    else:
+        player = None
+
     # create media sink
     if args.record_to:
         recorder = MediaRecorder(args.record_to)
@@ -125,9 +141,10 @@ if __name__ == '__main__':
     try:
         loop.run_until_complete(run(
             pc=pc,
+            player=player,
             recorder=recorder,
-            role=args.role,
-            signaling=signaling))
+            signaling=signaling,
+            role=args.role))
     except KeyboardInterrupt:
         pass
     finally:

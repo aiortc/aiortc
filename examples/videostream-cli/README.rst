@@ -29,6 +29,15 @@ To run the example, you will need instances of the `cli` example:
 
    $ python cli.py answer
 
+Additional options
+------------------
+
+If you want to play a media file instead of sending the example image, run:
+
+.. code-block:: console
+
+   $ python apprtc.py --play-from video.mp4
+
 If you want to recording the received video you can run one of the following:
 
 .. code-block:: console
