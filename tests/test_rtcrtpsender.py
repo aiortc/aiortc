@@ -13,7 +13,7 @@ from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecCapability,
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
                         RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                        RtcpRtpfbPacket, RtpPacket, is_rtcp)
+                        RtcpRtpfbPacket, RtpPacket, is_rtcp, pack_remb_fci)
 from aiortc.stats import RTCStatsReport
 
 from .utils import dummy_dtls_transport_pair, run
@@ -123,12 +123,12 @@ class RTCRtpSenderTest(TestCase):
         run(sender.send(RTCRtpParameters(codecs=[VP8_CODEC])))
 
         # receive RTCP feedback REMB
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=sender._ssrc,
-                                fci=b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
+                                fci=pack_remb_fci(4160000, [sender._ssrc]))
         run(sender._handle_rtcp_packet(packet))
 
         # receive RTCP feedback REMB (malformed)
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=sender._ssrc,
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
                                 fci=b'JUNK')
         run(sender._handle_rtcp_packet(packet))
 

@@ -7,7 +7,7 @@ import time
 #import os
 #os.environ['AIORTC_SPECIAL_MODE'] = 'DC_ONLY'
 
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 # optional, for better performance
@@ -27,7 +27,9 @@ async def consume_signaling(pc, signaling):
                 # send answer
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
-        else:
+        elif isinstance(obj, RTCIceCandidate):
+            pc.addIceCandidate(obj)
+        elif obj is None:
             print('Exiting')
             break
 

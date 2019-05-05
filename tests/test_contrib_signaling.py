@@ -20,14 +20,72 @@ answer = RTCSessionDescription(sdp='some-answer', type='answer')
 
 
 class SignalingTest(TestCase):
-    def test_copy_and_paste(self):
+    def setUp(self):
         def mock_print(v=''):
             pass
 
-        # hijack builtins
-        original_print = __builtins__['print']
+        # hijack print()
+        self.original_print = __builtins__['print']
         __builtins__['print'] = mock_print
 
+    def tearDown(self):
+        # restore print()
+        __builtins__['print'] = self.original_print
+
+    def test_apprtc(self):
+        parser = argparse.ArgumentParser()
+        add_signaling_arguments(parser)
+        args = parser.parse_args(['-s', 'apprtc'])
+
+        # connect
+        sig_server = create_signaling(args)
+        server_params = run(sig_server.connect())
+        self.assertTrue(server_params['is_initiator'])
+
+        args.signaling_room = server_params['room_id']
+        sig_client = create_signaling(args)
+        client_params = run(sig_client.connect())
+        self.assertTrue(client_params['is_initiator'])
+
+        # exchange signaling
+        res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
+        self.assertEqual(res[1], offer)
+
+        res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
+        self.assertEqual(res[1], answer)
+
+        # shutdown
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
+
+    def test_apprtc_with_buffered_message(self):
+        parser = argparse.ArgumentParser()
+        add_signaling_arguments(parser)
+        args = parser.parse_args(['-s', 'apprtc'])
+
+        # connect first party and send offer
+        sig_server = create_signaling(args)
+        server_params = run(sig_server.connect())
+        self.assertTrue(server_params['is_initiator'])
+
+        res = run(sig_server.send(offer))
+
+        # connect second party and receive offer
+        args.signaling_room = server_params['room_id']
+        sig_client = create_signaling(args)
+        client_params = run(sig_client.connect())
+        self.assertTrue(client_params['is_initiator'])
+
+        received = run(sig_client.receive())
+        self.assertEqual(received, offer)
+
+        # exchange answer
+        res = run(asyncio.gather(sig_client.send(answer), delay(sig_server.receive)))
+        self.assertEqual(res[1], answer)
+
+        # shutdown
+        run(asyncio.gather(sig_server.close(), sig_client.close()))
+
+    def test_copy_and_paste(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
         args = parser.parse_args(['-s', 'copy-and-paste'])
@@ -69,9 +127,6 @@ class SignalingTest(TestCase):
         self.assertEqual(res[1], answer)
 
         run(asyncio.gather(sig_server.close(), sig_client.close()))
-
-        # restore builtins
-        __builtins__['print'] = original_print
 
     def test_tcp_socket(self):
         parser = argparse.ArgumentParser()

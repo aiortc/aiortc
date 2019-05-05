@@ -271,6 +271,12 @@ class MediaPlayer:
             self.__thread.join()
             self.__thread = None
 
+        if self.__container:
+            if hasattr(self.__container, 'close'):  # pragma: no cover
+                # This is only available with PyAV > 6.1.2
+                self.__container.close()
+            self.__container = None
+
     def __log_debug(self, msg, *args):
         logger.debug('player(%s) ' + msg, self.__container.name, *args)
 

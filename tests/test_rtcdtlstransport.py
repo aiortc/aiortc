@@ -9,10 +9,10 @@ from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
 from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
                                      RTCRtpDecodingParameters,
                                      RTCRtpReceiveParameters)
-from aiortc.rtp import (RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
-                        RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                        RtcpRtpfbPacket, RtcpSenderInfo, RtcpSrPacket,
-                        RtpPacket)
+from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
+                        RtcpByePacket, RtcpPsfbPacket, RtcpReceiverInfo,
+                        RtcpRrPacket, RtcpRtpfbPacket, RtcpSenderInfo,
+                        RtcpSrPacket, RtpPacket, pack_remb_fci)
 
 from .utils import dummy_ice_transport_pair, load, run
 
@@ -372,9 +372,19 @@ class RtpRouterTest(TestCase):
                 jitter=1906, lsr=0, dlsr=0)])
         self.assertEqual(router.route_rtcp(packet), set([receiver, sender]))
 
-        # PSFB
+        # PSFB - PLI
         packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=3456)
         self.assertEqual(router.route_rtcp(packet), set([sender]))
+
+        # PSFB - REMB
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
+                                fci=pack_remb_fci(4160000, [3456]))
+        self.assertEqual(router.route_rtcp(packet), set([sender]))
+
+        # PSFB - JUNK
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
+                                fci=b'JUNK')
+        self.assertEqual(router.route_rtcp(packet), set())
 
         # RTPFB
         packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=3456)

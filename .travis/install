@@ -6,8 +6,8 @@ PREFIX=$HOME/.local
 
 if [ "$(uname -s)" != "Darwin" ]; then
     if [ ! -e "$PREFIX/bin/ffmpeg" ]; then
-        curl http://www.ffmpeg.org/releases/ffmpeg-3.2.12.tar.xz | tar xJ
-        cd ffmpeg-3.2.12
+        curl http://www.ffmpeg.org/releases/ffmpeg-4.1.3.tar.xz | tar xJ
+        cd ffmpeg-4.1.3
         ./configure --prefix=$PREFIX \
             --disable-static --enable-shared \
             --enable-gpl \
@@ -28,4 +28,4 @@ if [ -n "$CRYPTOGRAPHY_NO_BINARY" ]; then
     pip3 install cryptography --no-binary cryptography
 fi
 
-pip3 install coverage flake8 isort opencv-python
+pip3 install aiohttp coverage flake8 isort opencv-python websockets
