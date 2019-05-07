@@ -6,8 +6,6 @@ Changelog
 0.9.21
 ------
 
-*under development*
-
 DTLS
 ....
 
@@ -17,6 +15,15 @@ Media
 .....
 
   * Correctly route REMB packets to the :class:`aiortc.RTCRtpSender`.
+
+Examples
+........
+
+  * :class:`aiortc.contrib.media.MediaPlayer` : release resources (e.g. webcam) when the player stops.
+  * :class:`aiortc.contrib.signaling.ApprtcSignaling` : make AppRTC signaling available for more examples.
+  * `datachannel-cli` : make uvloop optional.
+  * `videostream-cli` : animate the flag with a wave effect.
+  * `webcam` : explicitly set frame rate to 30 fps.
 
 0.9.20
 ------
