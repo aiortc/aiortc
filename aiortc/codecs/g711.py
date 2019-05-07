@@ -51,16 +51,16 @@ class PcmEncoder:
 
 
 class PcmaEncoder(PcmEncoder):
-    _convert = audioop.lin2alaw
+    _convert = staticmethod(audioop.lin2alaw)
 
 
 class PcmaDecoder(PcmDecoder):
-    _convert = audioop.alaw2lin
+    _convert = staticmethod(audioop.alaw2lin)
 
 
 class PcmuDecoder(PcmDecoder):
-    _convert = audioop.ulaw2lin
+    _convert = staticmethod(audioop.ulaw2lin)
 
 
 class PcmuEncoder(PcmEncoder):
-    _convert = audioop.lin2ulaw
+    _convert = staticmethod(audioop.lin2ulaw)
