@@ -226,6 +226,7 @@ class TlsTest(TestCase):
         ])
 
         # extensions
+        self.assertEqual(hello.alpn_protocols, None)
         self.assertEqual(hello.key_exchange_modes, [
             tls.KeyExchangeMode.PSK_DHE_KE,
         ])
@@ -259,6 +260,72 @@ class TlsTest(TestCase):
             (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, CLIENT_QUIC_TRANSPORT_PARAMETERS),
         ])
 
+    def test_pull_client_hello_with_alpn(self):
+        buf = Buffer(data=load('tls_client_hello_with_alpn.bin'))
+        hello = pull_client_hello(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            hello.random,
+            binascii.unhexlify(
+                'ed575c6fbd599c4dfaabd003dca6e860ccdb0e1782c1af02e57bf27cb6479b76'))
+        self.assertEqual(hello.session_id, b'')
+        self.assertEqual(hello.cipher_suites, [
+            tls.CipherSuite.AES_128_GCM_SHA256,
+            tls.CipherSuite.AES_256_GCM_SHA384,
+            tls.CipherSuite.CHACHA20_POLY1305_SHA256,
+            tls.CipherSuite.EMPTY_RENEGOTIATION_INFO_SCSV,
+        ])
+        self.assertEqual(hello.compression_methods, [
+            tls.CompressionMethod.NULL,
+        ])
+
+        # extensions
+        self.assertEqual(hello.alpn_protocols, ['h3-19'])
+        self.assertEqual(hello.key_exchange_modes, [
+            tls.KeyExchangeMode.PSK_DHE_KE,
+        ])
+        self.assertEqual(hello.key_share, [
+            (
+                tls.Group.SECP256R1,
+                binascii.unhexlify(
+                    '048842315c437bb0ce2929c816fee4e942ec5cb6db6a6b9bf622680188ebb0d4'
+                    'b652e69033f71686aa01cbc79155866e264c9f33f45aa16b0dfa10a222e3a669'
+                    '22'),
+            )
+        ])
+        self.assertEqual(hello.server_name, 'cloudflare-quic.com')
+        self.assertEqual(hello.signature_algorithms, [
+            tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
+            tls.SignatureAlgorithm.ECDSA_SECP384R1_SHA384,
+            tls.SignatureAlgorithm.ECDSA_SECP521R1_SHA512,
+            tls.SignatureAlgorithm.ED25519,
+            tls.SignatureAlgorithm.ED448,
+            tls.SignatureAlgorithm.RSA_PSS_PSS_SHA256,
+            tls.SignatureAlgorithm.RSA_PSS_PSS_SHA384,
+            tls.SignatureAlgorithm.RSA_PSS_PSS_SHA512,
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA384,
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA512,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA256,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA384,
+            tls.SignatureAlgorithm.RSA_PKCS1_SHA512,
+        ])
+        self.assertEqual(hello.supported_groups, [
+            tls.Group.SECP256R1,
+            tls.Group.X25519,
+            tls.Group.SECP384R1,
+            tls.Group.SECP521R1,
+        ])
+        self.assertEqual(hello.supported_versions, [
+            tls.TLS_VERSION_1_3,
+        ])
+
+        # serialize
+        buf = Buffer(1000)
+        push_client_hello(buf, hello)
+        self.assertEqual(len(buf.data), len(load('tls_client_hello_with_alpn.bin')))
+
     def test_pull_client_hello_with_sni(self):
         buf = Buffer(data=load('tls_client_hello_with_sni.bin'))
         hello = pull_client_hello(buf)
@@ -282,6 +349,7 @@ class TlsTest(TestCase):
         ])
 
         # extensions
+        self.assertEqual(hello.alpn_protocols, None)
         self.assertEqual(hello.key_exchange_modes, [
             tls.KeyExchangeMode.PSK_DHE_KE,
         ])

@@ -78,6 +78,7 @@ class CipherSuite(IntEnum):
     AES_128_GCM_SHA256 = 0x1301
     AES_256_GCM_SHA384 = 0x1302
     CHACHA20_POLY1305_SHA256 = 0x1303
+    EMPTY_RENEGOTIATION_INFO_SCSV = 0x00ff
 
 
 class CompressionMethod(IntEnum):
@@ -105,6 +106,7 @@ class Group(IntEnum):
     SECP256R1 = 0x0017
     SECP384R1 = 0x0018
     SECP521R1 = 0x0019
+    X25519 = 0x001d
 
 
 class HandshakeType(IntEnum):
@@ -127,10 +129,21 @@ class KeyExchangeMode(IntEnum):
 
 
 class SignatureAlgorithm(IntEnum):
-    RSA_PSS_RSAE_SHA256 = 0x0804
     ECDSA_SECP256R1_SHA256 = 0x0403
-    RSA_PKCS1_SHA256 = 0x0401
+    ECDSA_SECP384R1_SHA384 = 0x0503
+    ECDSA_SECP521R1_SHA512 = 0x0603
+    ED25519 = 0x0807
+    ED448 = 0x0808
     RSA_PKCS1_SHA1 = 0x0201
+    RSA_PKCS1_SHA256 = 0x0401
+    RSA_PKCS1_SHA384 = 0x0501
+    RSA_PKCS1_SHA512 = 0x0601
+    RSA_PSS_PSS_SHA256 = 0x0809
+    RSA_PSS_PSS_SHA384 = 0x080a
+    RSA_PSS_PSS_SHA512 = 0x080b
+    RSA_PSS_RSAE_SHA256 = 0x0804
+    RSA_PSS_RSAE_SHA384 = 0x0805
+    RSA_PSS_RSAE_SHA512 = 0x0806
 
 
 class BufferReadError(ValueError):
@@ -350,6 +363,20 @@ def push_extension(buf: Buffer, extension_type: int):
         yield
 
 
+# ALPN
+
+
+def pull_alpn_protocol(buf: Buffer) -> str:
+    length = pull_uint8(buf)
+    return pull_bytes(buf, length).decode('ascii')
+
+
+def push_alpn_protocol(buf: Buffer, protocol: str):
+    data = protocol.encode('ascii')
+    push_uint8(buf, len(data))
+    push_bytes(buf, data)
+
+
 # MESSAGES
 
 @dataclass
@@ -360,6 +387,7 @@ class ClientHello:
     compression_methods: List[int] = None
 
     # extensions
+    alpn_protocols: List[str] = None
     key_exchange_modes: List[int] = None
     key_share: List[Tuple[int, bytes]] = None
     server_name: str = None
@@ -403,6 +431,8 @@ def pull_client_hello(buf: Buffer):
                     assert pull_uint8(buf) == 0
                     with pull_block(buf, 2) as length:
                         hello.server_name = pull_bytes(buf, length).decode('ascii')
+            elif extension_type == ExtensionType.ALPN:
+                hello.alpn_protocols = pull_list(buf, 2, pull_alpn_protocol)
             else:
                 hello.other_extensions.append(
                     (extension_type, pull_bytes(buf, extension_length)),
@@ -446,6 +476,10 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
                         push_uint8(buf, 0)
                         with push_block(buf, 2):
                             push_bytes(buf, hello.server_name.encode('ascii'))
+
+            if hello.alpn_protocols is not None:
+                with push_extension(buf, ExtensionType.ALPN):
+                    push_list(buf, 2, push_alpn_protocol, hello.alpn_protocols)
 
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
@@ -761,6 +795,7 @@ def encode_public_key(public_key):
 
 class Context:
     def __init__(self, is_client, logger=None):
+        self.alpn_protocols = None
         self.certificate = None
         self.certificate_private_key = None
         self.handshake_extensions = []
@@ -876,6 +911,7 @@ class Context:
                 CompressionMethod.NULL,
             ],
 
+            alpn_protocols=self.alpn_protocols,
             key_exchange_modes=[
                 KeyExchangeMode.PSK_DHE_KE,
             ],
