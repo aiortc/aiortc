@@ -1,3 +1,4 @@
+import binascii
 import io
 from unittest import TestCase
 
@@ -145,6 +146,23 @@ class QuicConnectionTest(TestCase):
 
         stream = server.create_stream(is_unidirectional=True)
         self.assertEqual(stream.stream_id, 7)
+
+    def test_retry(self):
+        client = QuicConnection(
+            is_client=True)
+        client.host_cid = binascii.unhexlify('c98343fe8f5f0ff4')
+        client.peer_cid = binascii.unhexlify('85abb547bf28be97')
+
+        datagrams = 0
+        client.connection_made()
+        for datagram in client.pending_datagrams():
+            datagrams += 1
+        self.assertEqual(datagrams, 1)
+
+        client.datagram_received(load('retry.bin'))
+        for datagram in client.pending_datagrams():
+            datagrams += 1
+        self.assertEqual(datagrams, 2)
 
     def test_version_negotiation_needed(self):
         client = QuicConnection(

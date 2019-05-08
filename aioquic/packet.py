@@ -54,6 +54,7 @@ class QuicHeader:
     packet_type: int
     destination_cid: bytes
     source_cid: bytes
+    original_destination_cid: bytes = b''
     token: bytes = b''
     rest_length: int = 0
 
@@ -98,6 +99,7 @@ def push_uint_var(buf, value):
 def pull_quic_header(buf, host_cid_length=None):
     first_byte = pull_uint8(buf)
 
+    original_destination_cid = b''
     token = b''
     if is_long_header(first_byte):
         # long header packet
@@ -122,13 +124,21 @@ def pull_quic_header(buf, host_cid_length=None):
             if packet_type == PACKET_TYPE_INITIAL:
                 token_length = pull_uint_var(buf)
                 token = pull_bytes(buf, token_length)
-            rest_length = pull_uint_var(buf)
+                rest_length = pull_uint_var(buf)
+            elif packet_type == PACKET_TYPE_RETRY:
+                original_destination_cid_length = decode_cid_length(first_byte & 0xf)
+                original_destination_cid = pull_bytes(buf, original_destination_cid_length)
+                token = pull_bytes(buf, buf.capacity - buf.tell())
+                rest_length = 0
+            else:
+                rest_length = pull_uint_var(buf)
 
         return QuicHeader(
             version=version,
             packet_type=packet_type,
             destination_cid=destination_cid,
             source_cid=source_cid,
+            original_destination_cid=original_destination_cid,
             token=token,
             rest_length=rest_length)
     else:

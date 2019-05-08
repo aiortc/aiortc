@@ -2,7 +2,7 @@ import binascii
 from unittest import TestCase
 
 from aioquic import packet
-from aioquic.packet import (PACKET_TYPE_INITIAL, QuicHeader,
+from aioquic.packet import (PACKET_TYPE_INITIAL, PACKET_TYPE_RETRY, QuicHeader,
                             QuicProtocolVersion, QuicTransportParameters,
                             pull_quic_header, pull_quic_transport_parameters,
                             pull_uint_var, push_quic_header,
@@ -66,6 +66,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, binascii.unhexlify('90ed1e1c7b04b5d3'))
         self.assertEqual(header.source_cid, b'')
+        self.assertEqual(header.original_destination_cid, b'')
         self.assertEqual(header.token, b'')
         self.assertEqual(header.rest_length, 1263)
         self.assertEqual(buf.tell(), 17)
@@ -77,9 +78,26 @@ class PacketTest(TestCase):
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, b'')
         self.assertEqual(header.source_cid, binascii.unhexlify('0fcee9852fde8780'))
+        self.assertEqual(header.original_destination_cid, b'')
         self.assertEqual(header.token, b'')
         self.assertEqual(header.rest_length, 182)
         self.assertEqual(buf.tell(), 17)
+
+    def test_pull_retry(self):
+        buf = Buffer(data=load('retry.bin'))
+        header = pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_19)
+        self.assertEqual(header.packet_type, PACKET_TYPE_RETRY)
+        self.assertEqual(header.destination_cid, binascii.unhexlify('c98343fe8f5f0ff4'))
+        self.assertEqual(
+            header.source_cid,
+            binascii.unhexlify('c17f7c0473e635351b85a17e9f3296d7246c'))
+        self.assertEqual(header.original_destination_cid, binascii.unhexlify('85abb547bf28be97'))
+        self.assertEqual(
+            header.token,
+            binascii.unhexlify('01652d68d17c8e9f968d4fb4b70c9e526c4f837dbd85abb547bf28be97'))
+        self.assertEqual(header.rest_length, 0)
+        self.assertEqual(buf.tell(), 69)
 
     def test_pull_version_negotiation(self):
         buf = Buffer(data=load('version_negotiation.bin'))
@@ -88,6 +106,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.packet_type, None)
         self.assertEqual(header.destination_cid, binascii.unhexlify('dae1889b81a91c26'))
         self.assertEqual(header.source_cid, binascii.unhexlify('f49243784f9bf3be'))
+        self.assertEqual(header.original_destination_cid, b'')
         self.assertEqual(header.token, b'')
         self.assertEqual(header.rest_length, 8)
         self.assertEqual(buf.tell(), 22)
@@ -110,6 +129,7 @@ class PacketTest(TestCase):
         self.assertEqual(header.packet_type, 0x50)
         self.assertEqual(header.destination_cid, binascii.unhexlify('f45aa7b59c0e1ad6'))
         self.assertEqual(header.source_cid, b'')
+        self.assertEqual(header.original_destination_cid, b'')
         self.assertEqual(header.token, b'')
         self.assertEqual(header.rest_length, 12)
         self.assertEqual(buf.tell(), 9)

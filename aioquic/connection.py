@@ -4,8 +4,8 @@ import os
 from . import packet, tls
 from .crypto import CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
-                     PACKET_TYPE_INITIAL, QuicFrameType, QuicHeader,
-                     QuicProtocolVersion, QuicStreamFrame,
+                     PACKET_TYPE_INITIAL, PACKET_TYPE_RETRY, QuicFrameType,
+                     QuicHeader, QuicProtocolVersion, QuicStreamFrame,
                      QuicTransportParameters, pull_quic_header, pull_uint_var,
                      push_quic_header, push_quic_transport_parameters,
                      push_stream_frame, push_uint_var)
@@ -55,6 +55,7 @@ class QuicConnection:
         self.host_cid = os.urandom(8)
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
+        self.peer_token = b''
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
         self.server_name = server_name
@@ -110,8 +111,8 @@ class QuicConnection:
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
 
-            # version negotiation
             if self.is_client and header.version == QuicProtocolVersion.NEGOTIATION:
+                # version negotiation
                 versions = []
                 while not buf.eof():
                     versions.append(tls.pull_uint32(buf))
@@ -121,6 +122,17 @@ class QuicConnection:
                     return
                 self.version = max(common)
                 self.connection_made()
+                return
+            elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
+                # stateless retry
+                if (
+                    header.destination_cid == self.host_cid and
+                    header.original_destination_cid == self.peer_cid
+                ):
+                    self.__logger.info('Performing stateless retry')
+                    self.peer_cid = header.source_cid
+                    self.peer_token = header.token
+                    self.connection_made()
                 return
 
             encrypted_off = buf.tell() - start_off
@@ -348,6 +360,7 @@ class QuicConnection:
                 packet_type=packet_type | (SEND_PN_SIZE - 1),
                 destination_cid=self.peer_cid,
                 source_cid=self.host_cid,
+                token=self.peer_token,
             ))
             header_size = buf.tell()
 
