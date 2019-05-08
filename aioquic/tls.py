@@ -806,6 +806,7 @@ class Context:
         self._cipher_suites = [
             CipherSuite.AES_256_GCM_SHA384,
             CipherSuite.AES_128_GCM_SHA256,
+            CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
         self._peer_certificate = None
         self._receive_buffer = b''
@@ -1031,7 +1032,7 @@ class Context:
             if c in peer_hello.cipher_suites:
                 cipher_suite = c
                 break
-        assert cipher_suite is not None
+        assert cipher_suite is not None, 'no supported cipher suites'
 
         self.key_schedule = KeySchedule(cipher_suite)
         self.key_schedule.extract(None)
