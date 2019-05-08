@@ -21,11 +21,15 @@ TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
 TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
 
-class AlertHandshakeFailure(Exception):
+class Alert(Exception):
     pass
 
 
-class AlertUnexpectedMessage(Exception):
+class AlertHandshakeFailure(Alert):
+    pass
+
+
+class AlertUnexpectedMessage(Alert):
     pass
 
 
@@ -803,10 +807,12 @@ def encode_public_key(public_key):
     )
 
 
-def negotiate(supported, offered):
+def negotiate(supported, offered, error_message):
     for c in supported:
         if c in offered:
             return c
+
+    raise AlertHandshakeFailure(error_message)
 
 
 class Context:
@@ -824,8 +830,14 @@ class Context:
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
+        self._compression_methods = [
+            CompressionMethod.NULL,
+        ]
         self._signature_algorithms = [
             SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+        ]
+        self._supported_versions = [
+            TLS_VERSION_1_3
         ]
 
         self._peer_certificate = None
@@ -928,9 +940,7 @@ class Context:
             random=self.client_random,
             session_id=self.session_id,
             cipher_suites=self._cipher_suites,
-            compression_methods=[
-                CompressionMethod.NULL,
-            ],
+            compression_methods=self._compression_methods,
 
             alpn_protocols=self.alpn_protocols,
             key_exchange_modes=[
@@ -944,9 +954,7 @@ class Context:
             supported_groups=[
                 Group.SECP256R1,
             ],
-            supported_versions=[
-                TLS_VERSION_1_3,
-            ],
+            supported_versions=self._supported_versions,
 
             other_extensions=self.handshake_extensions
         )
@@ -961,6 +969,10 @@ class Context:
 
     def _client_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_server_hello(input_buf)
+
+        assert peer_hello.cipher_suite in self._cipher_suites
+        assert peer_hello.compression_method in self._compression_methods
+        assert peer_hello.supported_version in self._supported_versions
 
         peer_public_key = decode_public_key(peer_hello.key_share)
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
@@ -1038,15 +1050,19 @@ class Context:
     def _server_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_client_hello(input_buf)
 
-        # negotiate cipher suite
-        cipher_suite = negotiate(self._cipher_suites, peer_hello.cipher_suites)
-        if cipher_suite is None:
-            raise AlertHandshakeFailure('No supported cipher suites')
-
-        # negotiate signature algorithm
-        signature_algorithm = negotiate(self._signature_algorithms, peer_hello.signature_algorithms)
-        if signature_algorithm is None:
-            raise AlertHandshakeFailure('No supported signature algorithms')
+        # negotiate parameters
+        cipher_suite = negotiate(
+            self._cipher_suites, peer_hello.cipher_suites,
+            'No supported cipher suite')
+        compression_method = negotiate(
+            self._compression_methods, peer_hello.compression_methods,
+            'No supported compression method')
+        signature_algorithm = negotiate(
+            self._signature_algorithms, peer_hello.signature_algorithms,
+            'No supported signature algorithm')
+        supported_version = negotiate(
+            self._supported_versions, peer_hello.supported_versions,
+            'No supported protocol version')
 
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
@@ -1065,10 +1081,10 @@ class Context:
             random=self.server_random,
             session_id=self.session_id,
             cipher_suite=cipher_suite,
-            compression_method=CompressionMethod.NULL,
+            compression_method=compression_method,
 
             key_share=encode_public_key(self.private_key.public_key()),
-            supported_version=TLS_VERSION_1_3,
+            supported_version=supported_version,
         )
         with self._push_message(output_buf):
             push_server_hello(output_buf, hello)

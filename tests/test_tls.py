@@ -162,6 +162,18 @@ class ContextTest(TestCase):
         with self.assertRaises(tls.AlertUnexpectedMessage):
             server.handle_message(b'\x00\x00\x00\x00', create_buffers())
 
+    def _server_fail_hello(self, client, server):
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b'', client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+
     def test_server_unsupported_cipher_suite(self):
         client = self.create_client()
         client._cipher_suites = [
@@ -173,18 +185,9 @@ class ContextTest(TestCase):
             tls.CipherSuite.AES_256_GCM_SHA384,
         ]
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b'', client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        server_buf = create_buffers()
         with self.assertRaises(tls.AlertHandshakeFailure) as cm:
-            server.handle_message(server_input, server_buf)
-        self.assertEqual(str(cm.exception), 'No supported cipher suites')
+            self._server_fail_hello(client, server)
+        self.assertEqual(str(cm.exception), 'No supported cipher suite')
 
     def test_server_unsupported_signature_algorithm(self):
         client = self.create_client()
@@ -193,22 +196,25 @@ class ContextTest(TestCase):
         ]
 
         server = self.create_server()
-        client._signature_algorithms = [
+        server._signature_algorithms = [
             tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA512,
         ]
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b'', client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        server_buf = create_buffers()
         with self.assertRaises(tls.AlertHandshakeFailure) as cm:
-            server.handle_message(server_input, server_buf)
-        self.assertEqual(str(cm.exception), 'No supported signature algorithms')
+            self._server_fail_hello(client, server)
+        self.assertEqual(str(cm.exception), 'No supported signature algorithm')
+
+    def test_server_unsupported_version(self):
+        client = self.create_client()
+        client._supported_versions = [
+            tls.TLS_VERSION_1_2
+        ]
+
+        server = self.create_server()
+
+        with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+            self._server_fail_hello(client, server)
+        self.assertEqual(str(cm.exception), 'No supported protocol version')
 
     def test_handshake(self):
         client = self.create_client()
