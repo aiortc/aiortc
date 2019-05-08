@@ -169,7 +169,26 @@ class QuicConnectionTest(TestCase):
             datagrams += 1
         self.assertEqual(datagrams, 2)
 
-    def test_version_negotiation_needed(self):
+    def test_version_negotiation_fail(self):
+        client = QuicConnection(
+            is_client=True)
+        client.supported_versions = [
+            QuicProtocolVersion.DRAFT_19
+        ]
+
+        datagrams = 0
+        client.connection_made()
+        for datagram in client.pending_datagrams():
+            datagrams += 1
+        self.assertEqual(datagrams, 1)
+
+        # no common version, no retry
+        client.datagram_received(load('version_negotiation.bin'))
+        for datagram in client.pending_datagrams():
+            datagrams += 1
+        self.assertEqual(datagrams, 1)
+
+    def test_version_negotiation_ok(self):
         client = QuicConnection(
             is_client=True)
 
@@ -179,6 +198,7 @@ class QuicConnectionTest(TestCase):
             datagrams += 1
         self.assertEqual(datagrams, 1)
 
+        # found a common version, retry
         client.datagram_received(load('version_negotiation.bin'))
         for datagram in client.pending_datagrams():
             datagrams += 1
