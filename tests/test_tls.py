@@ -249,6 +249,14 @@ class ContextTest(TestCase):
         self.assertEqual(client._dec_key, server._enc_key)
         self.assertEqual(client._enc_key, server._dec_key)
 
+        # handle new session ticket
+        new_session_ticket = binascii.unhexlify(
+            '04000035000151809468b842000020441fc19f9eb6ea425b48989c800258495'
+            'a2bc30cac3a55032a7c0822feb842eb0008002a0004ffffffff')
+        client.handle_message(new_session_ticket, client_buf)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 0)
+
 
 class TlsTest(TestCase):
     def test_pull_client_hello(self):
