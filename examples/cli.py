@@ -36,10 +36,13 @@ async def run(host, port, **kwargs):
         lambda: QuicProtocol(**kwargs),
         remote_addr=(host, port))
 
+    await asyncio.sleep(2)
+
     stream = protocol._connection.create_stream()
     stream.push_data(b'GET /\r\n')
+    protocol._send_pending()
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(1)
 
     print(stream.pull_data())
 
