@@ -7,9 +7,8 @@ from aioquic.connection import QuicConnection
 
 
 class QuicProtocol(asyncio.DatagramProtocol):
-    def __init__(self, secrets_log_file, server_name):
-        self._connection = QuicConnection(secrets_log_file=secrets_log_file,
-                                          server_name=server_name)
+    def __init__(self, **kwargs):
+        self._connection = QuicConnection(**kwargs)
         self._transport = None
 
     def connection_made(self, transport):
@@ -26,16 +25,15 @@ class QuicProtocol(asyncio.DatagramProtocol):
             self._transport.sendto(datagram)
 
 
-async def run(host, port, secrets_log_file):
+async def run(host, port, **kwargs):
     # if host is not an IP address, pass it to enable SNI
     try:
         ipaddress.ip_address(host)
-        server_name = None
     except ValueError:
-        server_name = host
+        kwargs['server_name'] = host
 
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicProtocol(secrets_log_file=secrets_log_file, server_name=server_name),
+        lambda: QuicProtocol(**kwargs),
         remote_addr=(host, port))
 
     stream = protocol._connection.create_stream()

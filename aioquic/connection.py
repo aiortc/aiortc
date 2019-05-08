@@ -45,11 +45,12 @@ class PacketSpace:
 
 class QuicConnection:
     def __init__(self, is_client=True, certificate=None, private_key=None, secrets_log_file=None,
-                 server_name=None):
+                 alpn_protocols=None, server_name=None):
         if not is_client:
             assert certificate is not None, 'SSL certificate is required'
             assert private_key is not None, 'SSL private key is required'
 
+        self.alpn_protocols = alpn_protocols
         self.certificate = certificate
         self.is_client = is_client
         self.host_cid = os.urandom(8)
@@ -121,7 +122,8 @@ class QuicConnection:
                 if not common:
                     self.__logger.error('Could not find a common protocol version')
                     return
-                self.version = max(common)
+                self.version = QuicProtocolVersion(max(common))
+                self.__logger.info('Retrying with %s' % self.version)
                 self.connection_made()
                 return
             elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
@@ -189,6 +191,7 @@ class QuicConnection:
 
         # TLS
         self.tls = tls.Context(is_client=self.is_client, logger=self.__logger)
+        self.tls.alpn_protocols = self.alpn_protocols
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
         self.tls.handshake_extensions = [
