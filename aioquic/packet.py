@@ -46,6 +46,7 @@ class QuicProtocolVersion(IntEnum):
     DRAFT_17 = 0xff000011
     DRAFT_18 = 0xff000012
     DRAFT_19 = 0xff000013
+    DRAFT_20 = 0xff000014
 
 
 @dataclass

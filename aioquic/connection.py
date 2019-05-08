@@ -65,8 +65,9 @@ class QuicConnection:
             QuicProtocolVersion.DRAFT_17,
             QuicProtocolVersion.DRAFT_18,
             QuicProtocolVersion.DRAFT_19,
+            QuicProtocolVersion.DRAFT_20,
         ]
-        self.version = QuicProtocolVersion.DRAFT_19
+        self.version = QuicProtocolVersion.DRAFT_20
 
         self.quic_transport_parameters = QuicTransportParameters(
             idle_timeout=600,

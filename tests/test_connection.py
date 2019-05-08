@@ -82,6 +82,11 @@ class QuicConnectionTest(TestCase):
             client_versions=[QuicProtocolVersion.DRAFT_19],
             server_versions=[QuicProtocolVersion.DRAFT_19])
 
+    def test_connect_draft_20(self):
+        self._test_connect_with_version(
+            client_versions=[QuicProtocolVersion.DRAFT_20],
+            server_versions=[QuicProtocolVersion.DRAFT_20])
+
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
         client = QuicConnection(
