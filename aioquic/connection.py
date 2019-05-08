@@ -60,11 +60,12 @@ class QuicConnection:
         self.server_name = server_name
 
         # protocol versions
-        self.version = QuicProtocolVersion.DRAFT_18
         self.supported_versions = [
             QuicProtocolVersion.DRAFT_17,
             QuicProtocolVersion.DRAFT_18,
+            QuicProtocolVersion.DRAFT_19,
         ]
+        self.version = QuicProtocolVersion.DRAFT_19
 
         self.quic_transport_parameters = QuicTransportParameters(
             idle_timeout=600,
