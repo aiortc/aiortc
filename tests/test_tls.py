@@ -148,7 +148,7 @@ class ContextTest(TestCase):
             client.handle_message(b'\x00\x00\x00\x00', create_buffers())
 
     def test_server_unexpected_message(self):
-        server = self.create_client()
+        server = self.create_server()
 
         server.state = State.SERVER_EXPECT_CLIENT_HELLO
         with self.assertRaises(tls.AlertUnexpectedMessage):
@@ -161,6 +161,54 @@ class ContextTest(TestCase):
         server.state = State.SERVER_POST_HANDSHAKE
         with self.assertRaises(tls.AlertUnexpectedMessage):
             server.handle_message(b'\x00\x00\x00\x00', create_buffers())
+
+    def test_server_unsupported_cipher_suite(self):
+        client = self.create_client()
+        client._cipher_suites = [
+            tls.CipherSuite.AES_128_GCM_SHA256,
+        ]
+
+        server = self.create_server()
+        server._cipher_suites = [
+            tls.CipherSuite.AES_256_GCM_SHA384,
+        ]
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b'', client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        server_buf = create_buffers()
+        with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+            server.handle_message(server_input, server_buf)
+        self.assertEqual(str(cm.exception), 'No supported cipher suites')
+
+    def test_server_unsupported_signature_algorithm(self):
+        client = self.create_client()
+        client._signature_algorithms = [
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+        ]
+
+        server = self.create_server()
+        client._signature_algorithms = [
+            tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA512,
+        ]
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b'', client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        server_buf = create_buffers()
+        with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+            server.handle_message(server_input, server_buf)
+        self.assertEqual(str(cm.exception), 'No supported signature algorithms')
 
     def test_handshake(self):
         client = self.create_client()

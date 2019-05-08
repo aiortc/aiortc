@@ -21,6 +21,10 @@ TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
 TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
 
 
+class AlertHandshakeFailure(Exception):
+    pass
+
+
 class AlertUnexpectedMessage(Exception):
     pass
 
@@ -764,6 +768,12 @@ CIPHER_SUITES = {
     CipherSuite.CHACHA20_POLY1305_SHA256: (aead.ChaCha20Poly1305, hashes.SHA256),
 }
 
+SIGNATURE_ALGORITHMS = {
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA256: hashes.SHA256,
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA384: hashes.SHA384,
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA512: hashes.SHA512,
+}
+
 GROUP_TO_CURVE = {
     Group.SECP256R1: ec.SECP256R1,
     Group.SECP384R1: ec.SECP384R1,
@@ -793,6 +803,12 @@ def encode_public_key(public_key):
     )
 
 
+def negotiate(supported, offered):
+    for c in supported:
+        if c in offered:
+            return c
+
+
 class Context:
     def __init__(self, is_client, logger=None):
         self.alpn_protocols = None
@@ -808,6 +824,10 @@ class Context:
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
+        self._signature_algorithms = [
+            SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+        ]
+
         self._peer_certificate = None
         self._receive_buffer = b''
         self._enc_key = None
@@ -920,9 +940,7 @@ class Context:
                 encode_public_key(self.private_key.public_key()),
             ],
             server_name=self.server_name,
-            signature_algorithms=[
-                SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
-            ],
+            signature_algorithms=self._signature_algorithms,
             supported_groups=[
                 Group.SECP256R1,
             ],
@@ -976,8 +994,7 @@ class Context:
         verify = pull_certificate_verify(input_buf)
 
         # check signature
-        assert verify.algorithm == SignatureAlgorithm.RSA_PSS_RSAE_SHA256
-        algorithm = hashes.SHA256()
+        algorithm = SIGNATURE_ALGORITHMS[verify.algorithm]()
         self._peer_certificate.public_key().verify(
             verify.signature,
             self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
@@ -1021,18 +1038,20 @@ class Context:
     def _server_handle_hello(self, input_buf, output_buf):
         peer_hello = pull_client_hello(input_buf)
 
+        # negotiate cipher suite
+        cipher_suite = negotiate(self._cipher_suites, peer_hello.cipher_suites)
+        if cipher_suite is None:
+            raise AlertHandshakeFailure('No supported cipher suites')
+
+        # negotiate signature algorithm
+        signature_algorithm = negotiate(self._signature_algorithms, peer_hello.signature_algorithms)
+        if signature_algorithm is None:
+            raise AlertHandshakeFailure('No supported signature algorithms')
+
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
         self.session_id = peer_hello.session_id
         self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-
-        # determine cipher suite
-        cipher_suite = None
-        for c in self._cipher_suites:
-            if c in peer_hello.cipher_suites:
-                cipher_suite = c
-                break
-        assert cipher_suite is not None, 'no supported cipher suites'
 
         self.key_schedule = KeySchedule(cipher_suite)
         self.key_schedule.extract(None)
@@ -1072,7 +1091,7 @@ class Context:
                 ]))
 
         # send certificate verify
-        algorithm = hashes.SHA256()
+        algorithm = SIGNATURE_ALGORITHMS[signature_algorithm]()
         signature = self.certificate_private_key.sign(
             self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
             padding.PSS(
@@ -1082,7 +1101,7 @@ class Context:
             algorithm)
         with self._push_message(output_buf):
             push_certificate_verify(output_buf, CertificateVerify(
-                algorithm=SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+                algorithm=signature_algorithm,
                 signature=signature))
 
         # send finished
