@@ -2,6 +2,18 @@ import binascii
 from unittest import TestCase
 
 from aioquic.crypto import INITIAL_CIPHER_SUITE, CryptoPair, derive_key_iv_hp
+from aioquic.tls import CipherSuite
+
+CHACHA20_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
+    'e7ff000014f5b06e20f064d8783dfab56c61e5e16e8024c0e1d6ddc2a43565a240175554'
+    'c9ead500f378c5b1dd3eebab26c089128698919bee'
+)
+CHACHA20_CLIENT_PLAIN_HEADER = binascii.unhexlify(
+    'e1ff000014f5b06e20f064d8783dfab56c61e5e16e8024c0e1d6ddc2a43565a240170002'
+)
+CHACHA20_CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
+    '0200000000'
+)
 
 LONG_CLIENT_PLAIN_HEADER = binascii.unhexlify('c3ff000012508394c8f03e51570800449f00000002')
 LONG_CLIENT_PLAIN_PAYLOAD = binascii.unhexlify(
@@ -109,6 +121,18 @@ class CryptoTest(TestCase):
         self.assertEqual(iv, binascii.unhexlify('0a82086d32205ba22241d8dc'))
         self.assertEqual(hp, binascii.unhexlify('94b9452d2b3c7c7f6da7fdd8593537fd'))
 
+    def test_decrypt_chacha20(self):
+        pair = CryptoPair()
+        pair.recv.setup(
+            CipherSuite.CHACHA20_POLY1305_SHA256,
+            binascii.unhexlify('fcc211ac3ff1f3fe1b096a41e701e30033cbd899494ebabbbc009ee2626d987e'))
+
+        plain_header, plain_payload, packet_number = pair.decrypt_packet(
+            CHACHA20_CLIENT_ENCRYPTED_PACKET, 34)
+        self.assertEqual(plain_header, CHACHA20_CLIENT_PLAIN_HEADER)
+        self.assertEqual(plain_payload, CHACHA20_CLIENT_PLAIN_PAYLOAD)
+        self.assertEqual(packet_number, 2)
+
     def test_decrypt_long_client(self):
         pair = self.create_crypto(is_client=False)
 
@@ -138,6 +162,15 @@ class CryptoTest(TestCase):
         self.assertEqual(plain_header, SHORT_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, 3)
+
+    def test_encrypt_chacha20(self):
+        pair = CryptoPair()
+        pair.send.setup(
+            CipherSuite.CHACHA20_POLY1305_SHA256,
+            binascii.unhexlify('fcc211ac3ff1f3fe1b096a41e701e30033cbd899494ebabbbc009ee2626d987e'))
+
+        packet = pair.encrypt_packet(CHACHA20_CLIENT_PLAIN_HEADER, CHACHA20_CLIENT_PLAIN_PAYLOAD)
+        self.assertEqual(packet, CHACHA20_CLIENT_ENCRYPTED_PACKET)
 
     def test_encrypt_long_client(self):
         pair = self.create_crypto(is_client=True)
