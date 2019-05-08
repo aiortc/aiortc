@@ -16,55 +16,70 @@ SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
     load('ssl_key.pem'), password=None, backend=default_backend())
 
 
+def exchange_data(client, server):
+    rounds = 0
+
+    while True:
+        client_sent = False
+        for datagram in client.pending_datagrams():
+            server.datagram_received(datagram)
+            client_sent = True
+
+        server_sent = False
+        for datagram in server.pending_datagrams():
+            client.datagram_received(datagram)
+            server_sent = True
+
+        if client_sent or server_sent:
+            rounds += 1
+        else:
+            break
+
+    return rounds
+
+
 class QuicConnectionTest(TestCase):
-    def _test_connect_with_version(self, version):
+    def _test_connect_with_version(self, client_versions, server_versions):
         client = QuicConnection(
             is_client=True)
-        client.supported_versions = [version]
-        client.version = version
+        client.supported_versions = client_versions
+        client.version = max(client_versions)
 
         server = QuicConnection(
             is_client=False,
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY)
-        server.supported_versions = [version]
-        server.version = version
+        server.supported_versions = server_versions
+        server.version = max(server_versions)
 
         # perform handshake
         client.connection_made()
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
-
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
+        self.assertEqual(exchange_data(client, server), 2)
 
         # send data over stream
         client_stream = client.create_stream()
         client_stream.push_data(b'ping')
-
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
+        self.assertEqual(exchange_data(client, server), 1)
 
         server_stream = server.streams[0]
         self.assertEqual(server_stream.pull_data(), b'ping')
 
+        return client, server
+
     def test_connect_draft_17(self):
-        self._test_connect_with_version(QuicProtocolVersion.DRAFT_17)
+        self._test_connect_with_version(
+            client_versions=[QuicProtocolVersion.DRAFT_17],
+            server_versions=[QuicProtocolVersion.DRAFT_17])
 
     def test_connect_draft_18(self):
-        self._test_connect_with_version(QuicProtocolVersion.DRAFT_18)
+        self._test_connect_with_version(
+            client_versions=[QuicProtocolVersion.DRAFT_18],
+            server_versions=[QuicProtocolVersion.DRAFT_18])
 
     def test_connect_draft_19(self):
-        self._test_connect_with_version(QuicProtocolVersion.DRAFT_19)
+        self._test_connect_with_version(
+            client_versions=[QuicProtocolVersion.DRAFT_19],
+            server_versions=[QuicProtocolVersion.DRAFT_19])
 
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
@@ -80,17 +95,7 @@ class QuicConnectionTest(TestCase):
 
         # perform handshake
         client.connection_made()
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
-
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
+        self.assertEqual(exchange_data(client, server), 2)
 
         # check secrets were logged
         client_log = client_log_file.getvalue()
