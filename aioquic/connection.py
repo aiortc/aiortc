@@ -111,7 +111,7 @@ class QuicConnection:
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
 
             # version negotiation
-            if self.is_client and header.packet_type is None:
+            if self.is_client and header.version == QuicProtocolVersion.NEGOTIATION:
                 versions = []
                 while not buf.eof():
                     versions.append(tls.pull_uint32(buf))

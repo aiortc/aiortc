@@ -106,7 +106,7 @@ class PacketTest(TestCase):
     def test_pull_short_header(self):
         buf = Buffer(data=load('short_header.bin'))
         header = pull_quic_header(buf, host_cid_length=8)
-        self.assertEqual(header.version, 0)
+        self.assertEqual(header.version, None)
         self.assertEqual(header.packet_type, 0x50)
         self.assertEqual(header.destination_cid, binascii.unhexlify('f45aa7b59c0e1ad6'))
         self.assertEqual(header.source_cid, b'')

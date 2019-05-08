@@ -124,7 +124,7 @@ def pull_quic_header(buf, host_cid_length=None):
         packet_type = first_byte & PACKET_TYPE_MASK
         destination_cid = pull_bytes(buf, host_cid_length)
         return QuicHeader(
-            version=0,
+            version=None,
             packet_type=packet_type,
             destination_cid=destination_cid,
             source_cid=b'',
