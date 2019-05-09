@@ -5,13 +5,15 @@ import queue
 import random
 import threading
 import time
-import os
 
 import attr
 
 from . import clock
-if os.getenv('AIORTC_SPECIAL_MODE') != "DC_ONLY":
+try:
 	from .codecs import depayload, get_capabilities, get_decoder, is_rtx
+except ImportError:
+	pass
+
 from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 
