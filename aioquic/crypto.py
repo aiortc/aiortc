@@ -1,5 +1,6 @@
 import binascii
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -58,8 +59,11 @@ class CryptoContext:
         nonce = bytearray(len(self.iv) - pn_length) + bytearray(pn)
         for i in range(len(self.iv)):
             nonce[i] ^= self.iv[i]
-        payload = self.aead.decrypt(nonce, bytes(packet[encrypted_offset + pn_length:]),
-                                    plain_header)
+        try:
+            payload = self.aead.decrypt(nonce, bytes(packet[encrypted_offset + pn_length:]),
+                                        plain_header)
+        except InvalidTag:
+            raise CryptoError('Payload decryption failed')
 
         # packet number
         packet_number = 0
@@ -133,6 +137,10 @@ class CryptoContext:
         self.cipher_suite = None
         self.hp = None
         self.iv = None
+
+
+class CryptoError(Exception):
+    pass
 
 
 class CryptoPair:

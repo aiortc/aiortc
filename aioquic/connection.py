@@ -2,7 +2,7 @@ import logging
 import os
 
 from . import packet, tls
-from .crypto import CryptoPair
+from .crypto import CryptoError, CryptoPair
 from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
                      PACKET_TYPE_INITIAL, PACKET_TYPE_RETRY, QuicFrameType,
                      QuicHeader, QuicProtocolVersion, QuicStreamFrame,
@@ -80,8 +80,16 @@ class QuicConnection:
             ack_delay_exponent=10,
         )
 
+        self.__close = None
         self.__initialized = False
         self.__logger = logger
+
+    def close(self, error_code, frame_type=None, reason_phrase=b''):
+        self.__close = {
+            'error_code': error_code,
+            'frame_type': frame_type,
+            'reason_phrase': reason_phrase
+        }
 
     def connection_made(self):
         """
@@ -147,8 +155,12 @@ class QuicConnection:
 
             epoch = get_epoch(header.packet_type)
             space = self.spaces[epoch]
-            plain_header, plain_payload, packet_number = space.crypto.decrypt_packet(
-                data[start_off:end_off], encrypted_off)
+            try:
+                plain_header, plain_payload, packet_number = space.crypto.decrypt_packet(
+                    data[start_off:end_off], encrypted_off)
+            except CryptoError as exc:
+                self.__logger.warning(exc)
+                return
 
             if not self.peer_cid_set:
                 self.peer_cid = header.source_cid
@@ -170,6 +182,10 @@ class QuicConnection:
             yield from self._write_handshake(epoch)
 
         yield from self._write_application()
+
+        if self.__close is not None:
+            yield from self._write_close(tls.Epoch.ONE_RTT, **self.__close)
+            self.__close = None
 
     def _get_or_create_stream(self, stream_id):
         if stream_id not in self.streams:
@@ -269,6 +285,14 @@ class QuicConnection:
                 pull_uint_var(buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 packet.pull_new_connection_id_frame(buf)
+            elif frame_type == QuicFrameType.TRANSPORT_CLOSE:
+                error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(buf)
+                self.__logger.info('Transport close code 0x%X, reason %s' % (
+                    error_code, reason_phrase))
+            elif frame_type == QuicFrameType.APPLICATION_CLOSE:
+                error_code, reason_phrase = packet.pull_application_close_frame(buf)
+                self.__logger.info('Application close code 0x%X, reason %s' % (
+                    error_code, reason_phrase))
             else:
                 self.__logger.warning('unhandled frame type %d', frame_type)
                 break
@@ -343,6 +367,39 @@ class QuicConnection:
             yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
 
             self.packet_number += 1
+
+    def _write_close(self, epoch, error_code, frame_type, reason_phrase):
+        assert epoch == tls.Epoch.ONE_RTT
+        space = self.spaces[epoch]
+
+        buf = Buffer(capacity=PACKET_MAX_SIZE)
+
+        # write header
+        tls.push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
+        tls.push_bytes(buf, self.peer_cid)
+        tls.push_uint16(buf, self.packet_number)
+        header_size = buf.tell()
+
+        # write frame
+        if frame_type is None:
+            push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
+            packet.push_application_close_frame(buf, error_code, reason_phrase)
+        else:
+            push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
+            packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
+
+        # finalize length
+        packet_size = buf.tell()
+        buf.seek(header_size - SEND_PN_SIZE - 2)
+        length = packet_size - header_size + 2 + space.crypto.aead_tag_size
+        tls.push_uint16(buf, length | 0x4000)
+        tls.push_uint16(buf, self.packet_number)
+        buf.seek(packet_size)
+
+        # encrypt
+        data = buf.data
+        yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+        self.packet_number += 1
 
     def _write_handshake(self, epoch):
         space = self.spaces[epoch]

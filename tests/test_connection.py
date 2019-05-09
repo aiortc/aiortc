@@ -6,8 +6,9 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+from aioquic import tls
 from aioquic.connection import QuicConnection
-from aioquic.packet import QuicProtocolVersion
+from aioquic.packet import QuicErrorCode, QuicFrameType, QuicProtocolVersion
 
 from .utils import load
 
@@ -152,6 +153,28 @@ class QuicConnectionTest(TestCase):
         stream = server.create_stream(is_unidirectional=True)
         self.assertEqual(stream.stream_id, 7)
 
+    def test_decryption_error(self):
+        client = QuicConnection(
+            is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY)
+
+        # perform handshake
+        client.connection_made()
+        self.assertEqual(exchange_data(client, server), 2)
+
+        # mess with encryption key
+        server.spaces[tls.Epoch.ONE_RTT].crypto.send.setup(
+            tls.CipherSuite.AES_128_GCM_SHA256,
+            bytes(48))
+
+        # close
+        server.close(error_code=QuicErrorCode.NO_ERROR)
+        self.assertEqual(exchange_data(client, server), 1)
+
     def test_retry(self):
         client = QuicConnection(
             is_client=True)
@@ -168,6 +191,41 @@ class QuicConnectionTest(TestCase):
         for datagram in client.pending_datagrams():
             datagrams += 1
         self.assertEqual(datagrams, 2)
+
+    def test_application_close(self):
+        client = QuicConnection(
+            is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY)
+
+        # perform handshake
+        client.connection_made()
+        self.assertEqual(exchange_data(client, server), 2)
+
+        # close
+        server.close(error_code=QuicErrorCode.NO_ERROR)
+        self.assertEqual(exchange_data(client, server), 2)
+
+    def test_transport_close(self):
+        client = QuicConnection(
+            is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY)
+
+        # perform handshake
+        client.connection_made()
+        self.assertEqual(exchange_data(client, server), 2)
+
+        # close
+        server.close(error_code=QuicErrorCode.NO_ERROR,
+                     frame_type=QuicFrameType.PADDING)
+        self.assertEqual(exchange_data(client, server), 2)
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(
