@@ -2,6 +2,7 @@ import logging
 import os
 
 from . import packet, tls
+from .buffer import pull_bytes, pull_uint32, push_bytes, push_uint8, push_uint16
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     PACKET_FIXED_BIT,
@@ -153,7 +154,7 @@ class QuicConnection:
                 # version negotiation
                 versions = []
                 while not buf.eof():
-                    versions.append(tls.pull_uint32(buf))
+                    versions.append(pull_uint32(buf))
                 common = set(self.supported_versions).intersection(versions)
                 if not common:
                     self.__logger.error("Could not find a common protocol version")
@@ -176,7 +177,7 @@ class QuicConnection:
 
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
-            tls.pull_bytes(buf, header.rest_length)
+            pull_bytes(buf, header.rest_length)
 
             if not self.is_client and not self.__initialized:
                 self._initialize(header.destination_cid)
@@ -306,7 +307,7 @@ class QuicConnection:
                     length = pull_uint_var(buf)
                 else:
                     length = buf.capacity - buf.tell()
-                frame = QuicStreamFrame(offset=offset, data=tls.pull_bytes(buf, length))
+                frame = QuicStreamFrame(offset=offset, data=pull_bytes(buf, length))
                 stream = self._get_or_create_stream(stream_id)
                 stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
@@ -380,9 +381,9 @@ class QuicConnection:
         buf = Buffer(capacity=PACKET_MAX_SIZE)
 
         # write header
-        tls.push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
-        tls.push_bytes(buf, self.peer_cid)
-        tls.push_uint16(buf, self.packet_number)
+        push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
+        push_bytes(buf, self.peer_cid)
+        push_uint16(buf, self.packet_number)
         header_size = buf.tell()
 
         # ACK
@@ -399,7 +400,7 @@ class QuicConnection:
                 )
                 push_uint_var(buf, QuicFrameType.STREAM_BASE + 0x07)
                 with push_stream_frame(buf, 0, frame.offset):
-                    tls.push_bytes(buf, frame.data)
+                    push_bytes(buf, frame.data)
 
         # encrypt
         packet_size = buf.tell()
@@ -418,9 +419,9 @@ class QuicConnection:
         buf = Buffer(capacity=PACKET_MAX_SIZE)
 
         # write header
-        tls.push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
-        tls.push_bytes(buf, self.peer_cid)
-        tls.push_uint16(buf, self.packet_number)
+        push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
+        push_bytes(buf, self.peer_cid)
+        push_uint16(buf, self.packet_number)
         header_size = buf.tell()
 
         # write frame
@@ -437,8 +438,8 @@ class QuicConnection:
         packet_size = buf.tell()
         buf.seek(header_size - SEND_PN_SIZE - 2)
         length = packet_size - header_size + 2 + space.crypto.aead_tag_size
-        tls.push_uint16(buf, length | 0x4000)
-        tls.push_uint16(buf, self.packet_number)
+        push_uint16(buf, length | 0x4000)
+        push_uint16(buf, self.packet_number)
         buf.seek(packet_size)
 
         # encrypt
@@ -488,11 +489,11 @@ class QuicConnection:
                 )
                 push_uint_var(buf, QuicFrameType.CRYPTO)
                 with packet.push_crypto_frame(buf, frame.offset):
-                    tls.push_bytes(buf, frame.data)
+                    push_bytes(buf, frame.data)
 
                 # PADDING
                 if epoch == tls.Epoch.INITIAL and self.is_client:
-                    tls.push_bytes(
+                    push_bytes(
                         buf,
                         bytes(
                             PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()
@@ -503,8 +504,8 @@ class QuicConnection:
             packet_size = buf.tell()
             buf.seek(header_size - SEND_PN_SIZE - 2)
             length = packet_size - header_size + 2 + space.crypto.aead_tag_size
-            tls.push_uint16(buf, length | 0x4000)
-            tls.push_uint16(buf, self.packet_number)
+            push_uint16(buf, length | 0x4000)
+            push_uint16(buf, self.packet_number)
             buf.seek(packet_size)
 
             # encrypt

@@ -6,9 +6,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic import tls
+from aioquic.buffer import Buffer, BufferReadError
 from aioquic.tls import (
-    Buffer,
-    BufferReadError,
     Certificate,
     CertificateVerify,
     ClientHello,
@@ -18,7 +17,6 @@ from aioquic.tls import (
     ServerHello,
     State,
     pull_block,
-    pull_bytes,
     pull_certificate,
     pull_certificate_verify,
     pull_client_hello,
@@ -26,10 +24,6 @@ from aioquic.tls import (
     pull_finished,
     pull_new_session_ticket,
     pull_server_hello,
-    pull_uint8,
-    pull_uint16,
-    pull_uint32,
-    pull_uint64,
     push_certificate,
     push_certificate_verify,
     push_client_hello,
@@ -68,44 +62,6 @@ class BufferTest(TestCase):
         with self.assertRaises(BufferReadError):
             with pull_block(buf, 1):
                 pass
-
-    def test_pull_bytes_truncated(self):
-        buf = Buffer(capacity=0)
-        with self.assertRaises(BufferReadError):
-            pull_bytes(buf, 2)
-
-    def test_pull_uint8_truncated(self):
-        buf = Buffer(capacity=0)
-        with self.assertRaises(BufferReadError):
-            pull_uint8(buf)
-
-    def test_pull_uint16_truncated(self):
-        buf = Buffer(capacity=1)
-        with self.assertRaises(BufferReadError):
-            pull_uint16(buf)
-
-    def test_pull_uint32_truncated(self):
-        buf = Buffer(capacity=3)
-        with self.assertRaises(BufferReadError):
-            pull_uint32(buf)
-
-    def test_pull_uint64_truncated(self):
-        buf = Buffer(capacity=7)
-        with self.assertRaises(BufferReadError):
-            pull_uint64(buf)
-
-    def test_seek(self):
-        buf = Buffer(data=b"01234567")
-        self.assertFalse(buf.eof())
-        self.assertEqual(buf.tell(), 0)
-
-        buf.seek(4)
-        self.assertFalse(buf.eof())
-        self.assertEqual(buf.tell(), 4)
-
-        buf.seek(8)
-        self.assertTrue(buf.eof())
-        self.assertEqual(buf.tell(), 8)
 
 
 def create_buffers():

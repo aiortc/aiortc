@@ -3,24 +3,21 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import List
 
-from .rangeset import RangeSet
-from .tls import (
+from .buffer import (
     BufferReadError,
-    pull_block,
     pull_bytes,
-    pull_list,
     pull_uint8,
     pull_uint16,
     pull_uint32,
     pull_uint64,
-    push_block,
     push_bytes,
-    push_list,
     push_uint8,
     push_uint16,
     push_uint32,
     push_uint64,
 )
+from .rangeset import RangeSet
+from .tls import pull_block, pull_list, push_block, push_list
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40

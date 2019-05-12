@@ -2,6 +2,7 @@ import binascii
 from unittest import TestCase
 
 from aioquic import packet
+from aioquic.buffer import Buffer, BufferReadError
 from aioquic.packet import (
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
@@ -15,7 +16,6 @@ from aioquic.packet import (
     push_quic_transport_parameters,
     push_uint_var,
 )
-from aioquic.tls import Buffer, BufferReadError
 
 from .utils import load
 
