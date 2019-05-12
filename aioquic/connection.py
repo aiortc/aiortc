@@ -60,6 +60,7 @@ class QuicConnection:
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
         self.server_name = server_name
+        self.streams = {}
 
         # protocol versions
         self.supported_versions = [
@@ -232,11 +233,9 @@ class QuicConnection:
             tls.Epoch.HANDSHAKE: PacketSpace(),
             tls.Epoch.ONE_RTT: PacketSpace(),
         }
-        self.streams = {
-            tls.Epoch.INITIAL: QuicStream(),
-            tls.Epoch.HANDSHAKE: QuicStream(),
-            tls.Epoch.ONE_RTT: QuicStream(),
-        }
+        self.streams[tls.Epoch.INITIAL] = QuicStream()
+        self.streams[tls.Epoch.HANDSHAKE] = QuicStream()
+        self.streams[tls.Epoch.ONE_RTT] = QuicStream()
 
         self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=peer_cid,
                                                             is_client=self.is_client)

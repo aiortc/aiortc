@@ -36,8 +36,6 @@ async def run(host, port, **kwargs):
         lambda: QuicProtocol(**kwargs),
         remote_addr=(host, port))
 
-    await asyncio.sleep(2)
-
     stream = protocol._connection.create_stream()
     stream.push_data(b'GET /\r\n')
     protocol._send_pending()
@@ -65,4 +63,5 @@ if __name__ == '__main__':
     loop.run_until_complete(run(
         host=args.host,
         port=args.port,
+        alpn_protocols=['http/0.9'],
         secrets_log_file=secrets_log_file))
