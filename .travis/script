@@ -10,6 +10,8 @@ if [ "$BUILD" = "sdist" ]; then
     fi
 else
     flake8 aioquic examples tests
+    isort -c -df -rc aioquic examples tests
+    black --check --diff aioquic examples tests
     coverage run setup.py test
     curl -s https://codecov.io/bash | bash
 fi

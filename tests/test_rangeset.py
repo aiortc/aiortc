@@ -8,125 +8,82 @@ class RangeSetTest(TestCase):
         rangeset = RangeSet()
 
         rangeset.add(0)
-        self.assertEqual(list(rangeset), [
-            range(0, 1),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 1)])
 
         rangeset.add(0)
-        self.assertEqual(list(rangeset), [
-            range(0, 1),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 1)])
 
     def test_add_single_ordered(self):
         rangeset = RangeSet()
 
         rangeset.add(0)
-        self.assertEqual(list(rangeset), [
-            range(0, 1),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 1)])
 
         rangeset.add(1)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(2)
-        self.assertEqual(list(rangeset), [
-            range(0, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 3)])
 
     def test_add_single_merge(self):
         rangeset = RangeSet()
 
         rangeset.add(0)
-        self.assertEqual(list(rangeset), [
-            range(0, 1),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 1)])
 
         rangeset.add(2)
-        self.assertEqual(list(rangeset), [
-            range(0, 1),
-            range(2, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 1), range(2, 3)])
 
         rangeset.add(1)
-        self.assertEqual(list(rangeset), [
-            range(0, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 3)])
 
     def test_add_single_reverse(self):
         rangeset = RangeSet()
 
         rangeset.add(2)
-        self.assertEqual(list(rangeset), [
-            range(2, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(2, 3)])
 
         rangeset.add(1)
-        self.assertEqual(list(rangeset), [
-            range(1, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(1, 3)])
 
         rangeset.add(0)
-        self.assertEqual(list(rangeset), [
-            range(0, 3),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 3)])
 
     def test_add_range_ordered(self):
         rangeset = RangeSet()
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(2, 4)
-        self.assertEqual(list(rangeset), [
-            range(0, 4),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 4)])
 
         rangeset.add(4, 6)
-        self.assertEqual(list(rangeset), [
-            range(0, 6),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 6)])
 
     def test_add_range_merge(self):
         rangeset = RangeSet()
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(3, 5)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(3, 5),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(3, 5)])
 
         rangeset.add(2, 3)
-        self.assertEqual(list(rangeset), [
-            range(0, 5),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 5)])
 
     def test_add_range_overlap(self):
         rangeset = RangeSet()
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(3, 5)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(3, 5),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(3, 5)])
 
         rangeset.add(1, 5)
-        self.assertEqual(list(rangeset), [
-            range(0, 5),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 5)])
 
     def test_add_range_overlap_2(self):
         rangeset = RangeSet()
@@ -135,79 +92,48 @@ class RangeSetTest(TestCase):
         rangeset.add(6, 8)
         rangeset.add(10, 12)
         rangeset.add(16, 18)
-        self.assertEqual(list(rangeset), [
-            range(2, 4),
-            range(6, 8),
-            range(10, 12),
-            range(16, 18),
-        ])
+        self.assertEqual(
+            list(rangeset), [range(2, 4), range(6, 8), range(10, 12), range(16, 18)]
+        )
 
         rangeset.add(1, 15)
-        self.assertEqual(list(rangeset), [
-            range(1, 15),
-            range(16, 18),
-        ])
+        self.assertEqual(list(rangeset), [range(1, 15), range(16, 18)])
 
     def test_add_range_reverse(self):
         rangeset = RangeSet()
 
         rangeset.add(6, 8)
-        self.assertEqual(list(rangeset), [
-            range(6, 8),
-        ])
+        self.assertEqual(list(rangeset), [range(6, 8)])
 
         rangeset.add(3, 5)
-        self.assertEqual(list(rangeset), [
-            range(3, 5),
-            range(6, 8),
-        ])
+        self.assertEqual(list(rangeset), [range(3, 5), range(6, 8)])
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(3, 5),
-            range(6, 8),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(3, 5), range(6, 8)])
 
     def test_add_range_unordered_contiguous(self):
         rangeset = RangeSet()
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(4, 6)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(4, 6),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(4, 6)])
 
         rangeset.add(2, 4)
-        self.assertEqual(list(rangeset), [
-            range(0, 6),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 6)])
 
     def test_add_range_unordered_sparse(self):
         rangeset = RangeSet()
 
         rangeset.add(0, 2)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2)])
 
         rangeset.add(6, 8)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(6, 8),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(6, 8)])
 
         rangeset.add(3, 5)
-        self.assertEqual(list(rangeset), [
-            range(0, 2),
-            range(3, 5),
-            range(6, 8),
-        ])
+        self.assertEqual(list(rangeset), [range(0, 2), range(3, 5), range(6, 8)])
 
     def test_bool(self):
         rangeset = RangeSet()
@@ -250,4 +176,4 @@ class RangeSetTest(TestCase):
 
     def test_repr(self):
         rangeset = RangeSet([range(1, 2), range(3, 4)])
-        self.assertEqual(repr(rangeset), 'RangeSet([range(1, 2), range(3, 4)])')
+        self.assertEqual(repr(rangeset), "RangeSet([range(1, 2), range(3, 4)])")

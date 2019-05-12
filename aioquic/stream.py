@@ -42,7 +42,7 @@ class QuicStream:
         gap = pos - len(self._recv_buffer)
         if gap > 0:
             self._recv_buffer += bytearray(gap)
-        self._recv_buffer[pos:pos + count] = frame.data
+        self._recv_buffer[pos : pos + count] = frame.data
 
     def get_frame(self, size):
         """
@@ -63,7 +63,7 @@ class QuicStream:
         """
         # no data, or gap at start
         if not self._recv_ranges or self._recv_ranges[0].start != self._recv_start:
-            return b''
+            return b""
 
         r = self._recv_ranges.shift()
         pos = r.stop - r.start

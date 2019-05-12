@@ -30,14 +30,14 @@ async def run(host, port, **kwargs):
     try:
         ipaddress.ip_address(host)
     except ValueError:
-        kwargs['server_name'] = host
+        kwargs["server_name"] = host
 
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicProtocol(**kwargs),
-        remote_addr=(host, port))
+        lambda: QuicProtocol(**kwargs), remote_addr=(host, port)
+    )
 
     stream = protocol._connection.create_stream()
-    stream.push_data(b'GET /\r\n')
+    stream.push_data(b"GET /\r\n")
     protocol._send_pending()
 
     await asyncio.sleep(1)
@@ -45,23 +45,26 @@ async def run(host, port, **kwargs):
     print(stream.pull_data())
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='QUIC client')
-    parser.add_argument('host', type=str)
-    parser.add_argument('port', type=int)
-    parser.add_argument('--secrets-log-file', type=str)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="QUIC client")
+    parser.add_argument("host", type=str)
+    parser.add_argument("port", type=int)
+    parser.add_argument("--secrets-log-file", type=str)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
 
     if args.secrets_log_file:
-        secrets_log_file = open(args.secrets_log_file, 'a')
+        secrets_log_file = open(args.secrets_log_file, "a")
     else:
         secrets_log_file = None
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(run(
-        host=args.host,
-        port=args.port,
-        alpn_protocols=['http/0.9'],
-        secrets_log_file=secrets_log_file))
+    loop.run_until_complete(
+        run(
+            host=args.host,
+            port=args.port,
+            alpn_protocols=["http/0.9"],
+            secrets_log_file=secrets_log_file,
+        )
+    )

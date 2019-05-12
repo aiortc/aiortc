@@ -3,23 +3,43 @@ import os
 
 from . import packet, tls
 from .crypto import CryptoError, CryptoPair
-from .packet import (PACKET_FIXED_BIT, PACKET_TYPE_HANDSHAKE,
-                     PACKET_TYPE_INITIAL, PACKET_TYPE_RETRY, QuicFrameType,
-                     QuicHeader, QuicProtocolVersion, QuicStreamFrame,
-                     QuicTransportParameters, pull_quic_header, pull_uint_var,
-                     push_quic_header, push_quic_transport_parameters,
-                     push_stream_frame, push_uint_var)
+from .packet import (
+    PACKET_FIXED_BIT,
+    PACKET_TYPE_HANDSHAKE,
+    PACKET_TYPE_INITIAL,
+    PACKET_TYPE_RETRY,
+    QuicFrameType,
+    QuicHeader,
+    QuicProtocolVersion,
+    QuicStreamFrame,
+    QuicTransportParameters,
+    pull_quic_header,
+    pull_uint_var,
+    push_quic_header,
+    push_quic_transport_parameters,
+    push_stream_frame,
+    push_uint_var,
+)
 from .rangeset import RangeSet
 from .stream import QuicStream
 from .tls import Buffer
 
-logger = logging.getLogger('quic')
+logger = logging.getLogger("quic")
 
 PACKET_MAX_SIZE = 1280
 SECRETS_LABELS = [
-    [None, 'QUIC_CLIENT_EARLY_TRAFFIC_SECRET', 'QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET',
-     'QUIC_CLIENT_TRAFFIC_SECRET_0'],
-    [None, None, 'QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET', 'QUIC_SERVER_TRAFFIC_SECRET_0']
+    [
+        None,
+        "QUIC_CLIENT_EARLY_TRAFFIC_SECRET",
+        "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+        "QUIC_CLIENT_TRAFFIC_SECRET_0",
+    ],
+    [
+        None,
+        None,
+        "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET",
+        "QUIC_SERVER_TRAFFIC_SECRET_0",
+    ],
 ]
 SEND_PN_SIZE = 2
 STREAM_FLAGS = 0x07
@@ -44,11 +64,18 @@ class PacketSpace:
 
 
 class QuicConnection:
-    def __init__(self, is_client=True, certificate=None, private_key=None, secrets_log_file=None,
-                 alpn_protocols=None, server_name=None):
+    def __init__(
+        self,
+        is_client=True,
+        certificate=None,
+        private_key=None,
+        secrets_log_file=None,
+        alpn_protocols=None,
+        server_name=None,
+    ):
         if not is_client:
-            assert certificate is not None, 'SSL certificate is required'
-            assert private_key is not None, 'SSL private key is required'
+            assert certificate is not None, "SSL certificate is required"
+            assert private_key is not None, "SSL private key is required"
 
         self.alpn_protocols = alpn_protocols
         self.certificate = certificate
@@ -56,7 +83,7 @@ class QuicConnection:
         self.host_cid = os.urandom(8)
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
-        self.peer_token = b''
+        self.peer_token = b""
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
         self.server_name = server_name
@@ -85,11 +112,11 @@ class QuicConnection:
         self.__initialized = False
         self.__logger = logger
 
-    def close(self, error_code, frame_type=None, reason_phrase=b''):
+    def close(self, error_code, frame_type=None, reason_phrase=b""):
         self.__close = {
-            'error_code': error_code,
-            'frame_type': frame_type,
-            'reason_phrase': reason_phrase
+            "error_code": error_code,
+            "frame_type": frame_type,
+            "reason_phrase": reason_phrase,
         }
 
     def connection_made(self):
@@ -99,7 +126,7 @@ class QuicConnection:
         if self.is_client:
             self._initialize(self.peer_cid)
 
-            self.tls.handle_message(b'', self.send_buffer)
+            self.tls.handle_message(b"", self.send_buffer)
             self._push_crypto_data()
 
     def create_stream(self, is_unidirectional=False):
@@ -129,19 +156,19 @@ class QuicConnection:
                     versions.append(tls.pull_uint32(buf))
                 common = set(self.supported_versions).intersection(versions)
                 if not common:
-                    self.__logger.error('Could not find a common protocol version')
+                    self.__logger.error("Could not find a common protocol version")
                     return
                 self.version = QuicProtocolVersion(max(common))
-                self.__logger.info('Retrying with %s' % self.version)
+                self.__logger.info("Retrying with %s" % self.version)
                 self.connection_made()
                 return
             elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
                 # stateless retry
                 if (
-                    header.destination_cid == self.host_cid and
-                    header.original_destination_cid == self.peer_cid
+                    header.destination_cid == self.host_cid
+                    and header.original_destination_cid == self.peer_cid
                 ):
-                    self.__logger.info('Performing stateless retry')
+                    self.__logger.info("Performing stateless retry")
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
                     self.connection_made()
@@ -158,7 +185,8 @@ class QuicConnection:
             space = self.spaces[epoch]
             try:
                 plain_header, plain_payload, packet_number = space.crypto.decrypt_packet(
-                    data[start_off:end_off], encrypted_off)
+                    data[start_off:end_off], encrypted_off
+                )
             except CryptoError as exc:
                 self.__logger.warning(exc)
                 return
@@ -203,7 +231,9 @@ class QuicConnection:
                 self.quic_transport_parameters.initial_version = self.version
             else:
                 self.quic_transport_parameters.negotiated_version = self.version
-                self.quic_transport_parameters.supported_versions = self.supported_versions
+                self.quic_transport_parameters.supported_versions = (
+                    self.supported_versions
+                )
                 self.quic_transport_parameters.stateless_reset_token = bytes(16)
 
         # TLS
@@ -212,7 +242,7 @@ class QuicConnection:
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
         self.tls.handshake_extensions = [
-            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters()),
+            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters())
         ]
         self.tls.server_name = self.server_name
         self.tls.update_traffic_key_cb = self._update_traffic_key
@@ -237,8 +267,9 @@ class QuicConnection:
         self.streams[tls.Epoch.HANDSHAKE] = QuicStream()
         self.streams[tls.Epoch.ONE_RTT] = QuicStream()
 
-        self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(cid=peer_cid,
-                                                            is_client=self.is_client)
+        self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(
+            cid=peer_cid, is_client=self.is_client
+        )
 
         self.__initialized = True
         self.packet_number = 0
@@ -280,20 +311,28 @@ class QuicConnection:
                 stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
                 pull_uint_var(buf)
-            elif frame_type in [QuicFrameType.MAX_STREAMS_BIDI, QuicFrameType.MAX_STREAMS_UNI]:
+            elif frame_type in [
+                QuicFrameType.MAX_STREAMS_BIDI,
+                QuicFrameType.MAX_STREAMS_UNI,
+            ]:
                 pull_uint_var(buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 packet.pull_new_connection_id_frame(buf)
             elif frame_type == QuicFrameType.TRANSPORT_CLOSE:
-                error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(buf)
-                self.__logger.info('Transport close code 0x%X, reason %s' % (
-                    error_code, reason_phrase))
+                error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(
+                    buf
+                )
+                self.__logger.info(
+                    "Transport close code 0x%X, reason %s" % (error_code, reason_phrase)
+                )
             elif frame_type == QuicFrameType.APPLICATION_CLOSE:
                 error_code, reason_phrase = packet.pull_application_close_frame(buf)
-                self.__logger.info('Application close code 0x%X, reason %s' % (
-                    error_code, reason_phrase))
+                self.__logger.info(
+                    "Application close code 0x%X, reason %s"
+                    % (error_code, reason_phrase)
+                )
             else:
-                self.__logger.warning('unhandled frame type %d', frame_type)
+                self.__logger.warning("unhandled frame type %d", frame_type)
                 break
 
         self._push_crypto_data()
@@ -311,16 +350,18 @@ class QuicConnection:
             is_client = None
         else:
             is_client = self.is_client
-        push_quic_transport_parameters(buf, self.quic_transport_parameters,
-                                       is_client=is_client)
+        push_quic_transport_parameters(
+            buf, self.quic_transport_parameters, is_client=is_client
+        )
         return buf.data
 
     def _update_traffic_key(self, direction, epoch, secret):
         if self.secrets_log_file is not None:
             label_row = self.is_client == (direction == tls.Direction.DECRYPT)
             label = SECRETS_LABELS[label_row][epoch.value]
-            self.secrets_log_file.write('%s %s %s\n' % (
-                label, self.tls.client_random.hex(), secret.hex()))
+            self.secrets_log_file.write(
+                "%s %s %s\n" % (label, self.tls.client_random.hex(), secret.hex())
+            )
             self.secrets_log_file.flush()
 
         crypto = self.spaces[epoch].crypto
@@ -354,7 +395,8 @@ class QuicConnection:
         for stream_id, stream in self.streams.items():
             if isinstance(stream_id, int) and stream.has_data_to_send():
                 frame = stream.get_frame(
-                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6)
+                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
+                )
                 push_uint_var(buf, QuicFrameType.STREAM_BASE + 0x07)
                 with push_stream_frame(buf, 0, frame.offset):
                     tls.push_bytes(buf, frame.data)
@@ -363,7 +405,9 @@ class QuicConnection:
         packet_size = buf.tell()
         if packet_size > header_size:
             data = buf.data
-            yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+            yield space.crypto.encrypt_packet(
+                data[0:header_size], data[header_size:packet_size]
+            )
 
             self.packet_number += 1
 
@@ -385,7 +429,9 @@ class QuicConnection:
             packet.push_application_close_frame(buf, error_code, reason_phrase)
         else:
             push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
-            packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
+            packet.push_transport_close_frame(
+                buf, error_code, frame_type, reason_phrase
+            )
 
         # finalize length
         packet_size = buf.tell()
@@ -397,7 +443,9 @@ class QuicConnection:
 
         # encrypt
         data = buf.data
-        yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+        yield space.crypto.encrypt_packet(
+            data[0:header_size], data[header_size:packet_size]
+        )
         self.packet_number += 1
 
     def _write_handshake(self, epoch):
@@ -415,13 +463,16 @@ class QuicConnection:
                 packet_type = PACKET_TYPE_HANDSHAKE
 
             # write header
-            push_quic_header(buf, QuicHeader(
-                version=self.version,
-                packet_type=packet_type | (SEND_PN_SIZE - 1),
-                destination_cid=self.peer_cid,
-                source_cid=self.host_cid,
-                token=self.peer_token,
-            ))
+            push_quic_header(
+                buf,
+                QuicHeader(
+                    version=self.version,
+                    packet_type=packet_type | (SEND_PN_SIZE - 1),
+                    destination_cid=self.peer_cid,
+                    source_cid=self.host_cid,
+                    token=self.peer_token,
+                ),
+            )
             header_size = buf.tell()
 
             # ACK
@@ -433,7 +484,8 @@ class QuicConnection:
             if stream.has_data_to_send():
                 # CRYPTO
                 frame = stream.get_frame(
-                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4)
+                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4
+                )
                 push_uint_var(buf, QuicFrameType.CRYPTO)
                 with packet.push_crypto_frame(buf, frame.offset):
                     tls.push_bytes(buf, frame.data)
@@ -442,7 +494,10 @@ class QuicConnection:
                 if epoch == tls.Epoch.INITIAL and self.is_client:
                     tls.push_bytes(
                         buf,
-                        bytes(PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()))
+                        bytes(
+                            PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()
+                        ),
+                    )
 
             # finalize length
             packet_size = buf.tell()
@@ -454,7 +509,9 @@ class QuicConnection:
 
             # encrypt
             data = buf.data
-            yield space.crypto.encrypt_packet(data[0:header_size], data[header_size:packet_size])
+            yield space.crypto.encrypt_packet(
+                data[0:header_size], data[header_size:packet_size]
+            )
 
             self.packet_number += 1
             buf.seek(0)

@@ -4,10 +4,23 @@ from enum import IntEnum
 from typing import List
 
 from .rangeset import RangeSet
-from .tls import (BufferReadError, pull_block, pull_bytes, pull_list,
-                  pull_uint8, pull_uint16, pull_uint32, pull_uint64,
-                  push_block, push_bytes, push_list, push_uint8, push_uint16,
-                  push_uint32, push_uint64)
+from .tls import (
+    BufferReadError,
+    pull_block,
+    pull_bytes,
+    pull_list,
+    pull_uint8,
+    pull_uint16,
+    pull_uint32,
+    pull_uint64,
+    push_block,
+    push_bytes,
+    push_list,
+    push_uint8,
+    push_uint16,
+    push_uint32,
+    push_uint64,
+)
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40
@@ -16,13 +29,13 @@ PACKET_TYPE_INITIAL = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x00
 PACKET_TYPE_0RTT = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x10
 PACKET_TYPE_HANDSHAKE = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x20
 PACKET_TYPE_RETRY = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x30
-PACKET_TYPE_MASK = 0xf0
+PACKET_TYPE_MASK = 0xF0
 
 UINT_VAR_FORMATS = [
-    (pull_uint8, push_uint8, 0x3f),
-    (pull_uint16, push_uint16, 0x3fff),
-    (pull_uint32, push_uint32, 0x3fffffff),
-    (pull_uint64, push_uint64, 0x3fffffffffffffff),
+    (pull_uint8, push_uint8, 0x3F),
+    (pull_uint16, push_uint16, 0x3FFF),
+    (pull_uint32, push_uint32, 0x3FFFFFFF),
+    (pull_uint64, push_uint64, 0x3FFFFFFFFFFFFFFF),
 ]
 
 
@@ -36,17 +49,17 @@ class QuicErrorCode(IntEnum):
     FINAL_SIZE_ERROR = 0x6
     FRAME_ENCODING_ERROR = 0x7
     TRANSPORT_PARAMETER_ERROR = 0x8
-    PROTOCOL_VIOLATION = 0xa
-    INVALID_MIGRATION = 0xc
-    CRYPTO_BUFFER_EXCEEDED = 0xd
+    PROTOCOL_VIOLATION = 0xA
+    INVALID_MIGRATION = 0xC
+    CRYPTO_BUFFER_EXCEEDED = 0xD
 
 
 class QuicProtocolVersion(IntEnum):
     NEGOTIATION = 0
-    DRAFT_17 = 0xff000011
-    DRAFT_18 = 0xff000012
-    DRAFT_19 = 0xff000013
-    DRAFT_20 = 0xff000014
+    DRAFT_17 = 0xFF000011
+    DRAFT_18 = 0xFF000012
+    DRAFT_19 = 0xFF000013
+    DRAFT_20 = 0xFF000014
 
 
 @dataclass
@@ -55,8 +68,8 @@ class QuicHeader:
     packet_type: int
     destination_cid: bytes
     source_cid: bytes
-    original_destination_cid: bytes = b''
-    token: bytes = b''
+    original_destination_cid: bytes = b""
+    token: bytes = b""
     rest_length: int = 0
 
 
@@ -94,14 +107,14 @@ def push_uint_var(buf, value):
             push(buf, value)
             buf._data[start] |= i * 64
             return
-    raise ValueError('Integer is too big for a variable-length integer')
+    raise ValueError("Integer is too big for a variable-length integer")
 
 
 def pull_quic_header(buf, host_cid_length=None):
     first_byte = pull_uint8(buf)
 
-    original_destination_cid = b''
-    token = b''
+    original_destination_cid = b""
+    token = b""
     if is_long_header(first_byte):
         # long header packet
         version = pull_uint32(buf)
@@ -119,7 +132,7 @@ def pull_quic_header(buf, host_cid_length=None):
             rest_length = buf.capacity - buf.tell()
         else:
             if version and not (first_byte & PACKET_FIXED_BIT):
-                raise ValueError('Packet fixed bit is zero')
+                raise ValueError("Packet fixed bit is zero")
 
             packet_type = first_byte & PACKET_TYPE_MASK
             if packet_type == PACKET_TYPE_INITIAL:
@@ -127,8 +140,10 @@ def pull_quic_header(buf, host_cid_length=None):
                 token = pull_bytes(buf, token_length)
                 rest_length = pull_uint_var(buf)
             elif packet_type == PACKET_TYPE_RETRY:
-                original_destination_cid_length = decode_cid_length(first_byte & 0xf)
-                original_destination_cid = pull_bytes(buf, original_destination_cid_length)
+                original_destination_cid_length = decode_cid_length(first_byte & 0xF)
+                original_destination_cid = pull_bytes(
+                    buf, original_destination_cid_length
+                )
                 token = pull_bytes(buf, buf.capacity - buf.tell())
                 rest_length = 0
             else:
@@ -141,11 +156,12 @@ def pull_quic_header(buf, host_cid_length=None):
             source_cid=source_cid,
             original_destination_cid=original_destination_cid,
             token=token,
-            rest_length=rest_length)
+            rest_length=rest_length,
+        )
     else:
         # short header packet
         if not (first_byte & PACKET_FIXED_BIT):
-            raise ValueError('Packet fixed bit is zero')
+            raise ValueError("Packet fixed bit is zero")
 
         packet_type = first_byte & PACKET_TYPE_MASK
         destination_cid = pull_bytes(buf, host_cid_length)
@@ -153,17 +169,20 @@ def pull_quic_header(buf, host_cid_length=None):
             version=None,
             packet_type=packet_type,
             destination_cid=destination_cid,
-            source_cid=b'',
-            token=b'',
-            rest_length=buf.capacity - buf.tell())
+            source_cid=b"",
+            token=b"",
+            rest_length=buf.capacity - buf.tell(),
+        )
 
 
 def push_quic_header(buf, header):
     push_uint8(buf, header.packet_type)
     push_uint32(buf, header.version)
-    push_uint8(buf,
-               (encode_cid_length(len(header.destination_cid)) << 4) |
-               encode_cid_length(len(header.source_cid)))
+    push_uint8(
+        buf,
+        (encode_cid_length(len(header.destination_cid)) << 4)
+        | encode_cid_length(len(header.source_cid)),
+    )
     push_bytes(buf, header.destination_cid)
     push_bytes(buf, header.source_cid)
     if (header.packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
@@ -199,20 +218,20 @@ class QuicTransportParameters:
 
 
 PARAMS = [
-    ('original_connection_id', bytes),
-    ('idle_timeout', int),
-    ('stateless_reset_token', bytes),
-    ('max_packet_size', int),
-    ('initial_max_data', int),
-    ('initial_max_stream_data_bidi_local', int),
-    ('initial_max_stream_data_bidi_remote', int),
-    ('initial_max_stream_data_uni', int),
-    ('initial_max_streams_bidi', int),
-    ('initial_max_streams_uni', int),
-    ('ack_delay_exponent', int),
-    ('max_ack_delay', int),
-    ('disable_migration', bool),
-    ('preferred_address', bytes),
+    ("original_connection_id", bytes),
+    ("idle_timeout", int),
+    ("stateless_reset_token", bytes),
+    ("max_packet_size", int),
+    ("initial_max_data", int),
+    ("initial_max_stream_data_bidi_local", int),
+    ("initial_max_stream_data_bidi_remote", int),
+    ("initial_max_stream_data_uni", int),
+    ("initial_max_streams_bidi", int),
+    ("initial_max_streams_uni", int),
+    ("ack_delay_exponent", int),
+    ("max_ack_delay", int),
+    ("disable_migration", bool),
+    ("preferred_address", bytes),
 ]
 
 
@@ -287,10 +306,10 @@ class QuicFrameType(IntEnum):
     STREAMS_BLOCKED_UNI = 0x17
     NEW_CONNECTION_ID = 0x18
     RETIRE_CONNECTION_ID = 0x19
-    PATH_CHALLENGE = 0x1a
-    PATH_RESPONSE = 0x1b
-    TRANSPORT_CLOSE = 0x1c
-    APPLICATION_CLOSE = 0x1d
+    PATH_CHALLENGE = 0x1A
+    PATH_RESPONSE = 0x1B
+    TRANSPORT_CLOSE = 0x1C
+    APPLICATION_CLOSE = 0x1D
 
 
 def pull_ack_frame(buf):
@@ -327,7 +346,7 @@ def push_ack_frame(buf, rangeset: RangeSet, delay: int):
 
 @dataclass
 class QuicStreamFrame:
-    data: bytes = b''
+    data: bytes = b""
     offset: int = 0
 
 
@@ -380,7 +399,9 @@ def pull_new_connection_id_frame(buf):
     return (sequence_number, connection_id, stateless_reset_token)
 
 
-def push_new_connection_id_frame(buf, sequence_number, connection_id, stateless_reset_token):
+def push_new_connection_id_frame(
+    buf, sequence_number, connection_id, stateless_reset_token
+):
     assert len(stateless_reset_token) == 16
     push_uint_var(buf, sequence_number)
     push_uint8(buf, len(connection_id))

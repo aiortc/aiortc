@@ -57,4 +57,4 @@ class RangeSet(Sequence):
         return len(self.__ranges)
 
     def __repr__(self):
-        return 'RangeSet({})'.format(repr(self.__ranges))
+        return "RangeSet({})".format(repr(self.__ranges))

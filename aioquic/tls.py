@@ -16,9 +16,9 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
-TLS_VERSION_1_3_DRAFT_28 = 0x7f1c
-TLS_VERSION_1_3_DRAFT_27 = 0x7f1b
-TLS_VERSION_1_3_DRAFT_26 = 0x7f1a
+TLS_VERSION_1_3_DRAFT_28 = 0x7F1C
+TLS_VERSION_1_3_DRAFT_27 = 0x7F1B
+TLS_VERSION_1_3_DRAFT_26 = 0x7F1A
 
 
 class Alert(Exception):
@@ -61,10 +61,13 @@ class State(Enum):
 
 
 def hkdf_label(label, hash_value, length):
-    full_label = b'tls13 ' + label
+    full_label = b"tls13 " + label
     return (
-        struct.pack('!HB', length, len(full_label)) + full_label +
-        struct.pack('!B', len(hash_value)) + hash_value)
+        struct.pack("!HB", length, len(full_label))
+        + full_label
+        + struct.pack("!B", len(hash_value))
+        + hash_value
+    )
 
 
 def hkdf_expand_label(algorithm, secret, label, hash_value, length):
@@ -72,7 +75,7 @@ def hkdf_expand_label(algorithm, secret, label, hash_value, length):
         algorithm=algorithm,
         length=length,
         info=hkdf_label(label, hash_value, length),
-        backend=default_backend()
+        backend=default_backend(),
     ).derive(secret)
 
 
@@ -86,7 +89,7 @@ class CipherSuite(IntEnum):
     AES_128_GCM_SHA256 = 0x1301
     AES_256_GCM_SHA384 = 0x1302
     CHACHA20_POLY1305_SHA256 = 0x1303
-    EMPTY_RENEGOTIATION_INFO_SCSV = 0x00ff
+    EMPTY_RENEGOTIATION_INFO_SCSV = 0x00FF
 
 
 class CompressionMethod(IntEnum):
@@ -114,7 +117,7 @@ class Group(IntEnum):
     SECP256R1 = 0x0017
     SECP384R1 = 0x0018
     SECP521R1 = 0x0019
-    X25519 = 0x001d
+    X25519 = 0x001D
 
 
 class HandshakeType(IntEnum):
@@ -147,8 +150,8 @@ class SignatureAlgorithm(IntEnum):
     RSA_PKCS1_SHA384 = 0x0501
     RSA_PKCS1_SHA512 = 0x0601
     RSA_PSS_PSS_SHA256 = 0x0809
-    RSA_PSS_PSS_SHA384 = 0x080a
-    RSA_PSS_PSS_SHA512 = 0x080b
+    RSA_PSS_PSS_SHA384 = 0x080A
+    RSA_PSS_PSS_SHA512 = 0x080B
     RSA_PSS_RSAE_SHA256 = 0x0804
     RSA_PSS_RSAE_SHA384 = 0x0805
     RSA_PSS_RSAE_SHA512 = 0x0806
@@ -174,7 +177,7 @@ class Buffer:
 
     @property
     def data(self):
-        return bytes(self._data[:self._pos])
+        return bytes(self._data[: self._pos])
 
     def data_slice(self, start, end):
         return bytes(self._data[start:end])
@@ -199,7 +202,7 @@ def pull_bytes(buf: Buffer, length: int) -> bytes:
     """
     if buf._pos + length > buf._length:
         raise BufferReadError
-    v = buf._data[buf._pos:buf._pos + length]
+    v = buf._data[buf._pos : buf._pos + length]
     buf._pos += length
     return v
 
@@ -209,7 +212,7 @@ def push_bytes(buf: Buffer, v: bytes):
     Push bytes.
     """
     length = len(v)
-    buf._data[buf._pos:buf._pos + length] = v
+    buf._data[buf._pos : buf._pos + length] = v
     buf._pos += length
 
 
@@ -241,7 +244,7 @@ def pull_uint16(buf: Buffer) -> int:
     Pull a 16-bit unsigned integer.
     """
     try:
-        v, = struct.unpack_from('!H', buf._data, buf._pos)
+        v, = struct.unpack_from("!H", buf._data, buf._pos)
         buf._pos += 2
         return v
     except struct.error:
@@ -252,7 +255,7 @@ def push_uint16(buf: Buffer, v: int):
     """
     Push a 16-bit unsigned integer.
     """
-    pack_into('!H', buf._data, buf._pos, v)
+    pack_into("!H", buf._data, buf._pos, v)
     buf._pos += 2
 
 
@@ -261,7 +264,7 @@ def pull_uint32(buf: Buffer) -> int:
     Pull a 32-bit unsigned integer.
     """
     try:
-        v, = struct.unpack_from('!L', buf._data, buf._pos)
+        v, = struct.unpack_from("!L", buf._data, buf._pos)
         buf._pos += 4
         return v
     except struct.error:
@@ -272,7 +275,7 @@ def push_uint32(buf: Buffer, v: int):
     """
     Push a 32-bit unsigned integer.
     """
-    pack_into('!L', buf._data, buf._pos, v)
+    pack_into("!L", buf._data, buf._pos, v)
     buf._pos += 4
 
 
@@ -281,7 +284,7 @@ def pull_uint64(buf: Buffer) -> int:
     Pull a 64-bit unsigned integer.
     """
     try:
-        v, = unpack_from('!Q', buf._data, buf._pos)
+        v, = unpack_from("!Q", buf._data, buf._pos)
         buf._pos += 8
         return v
     except struct.error:
@@ -292,7 +295,7 @@ def push_uint64(buf: Buffer, v: int):
     """
     Push a 64-bit unsigned integer.
     """
-    pack_into('!Q', buf._data, buf._pos, v)
+    pack_into("!Q", buf._data, buf._pos, v)
     buf._pos += 8
 
 
@@ -320,7 +323,7 @@ def push_block(buf: Buffer, capacity: int):
     yield
     length = buf._pos - start
     while capacity:
-        buf._data[start - capacity] = (length >> (8 * (capacity - 1))) & 0xff
+        buf._data[start - capacity] = (length >> (8 * (capacity - 1))) & 0xFF
         capacity -= 1
 
 
@@ -376,16 +379,17 @@ def push_extension(buf: Buffer, extension_type: int):
 
 def pull_alpn_protocol(buf: Buffer) -> str:
     length = pull_uint8(buf)
-    return pull_bytes(buf, length).decode('ascii')
+    return pull_bytes(buf, length).decode("ascii")
 
 
 def push_alpn_protocol(buf: Buffer, protocol: str):
-    data = protocol.encode('ascii')
+    data = protocol.encode("ascii")
     push_uint8(buf, len(data))
     push_bytes(buf, data)
 
 
 # MESSAGES
+
 
 @dataclass
 class ClientHello:
@@ -438,12 +442,12 @@ def pull_client_hello(buf: Buffer):
                 with pull_block(buf, 2):
                     assert pull_uint8(buf) == 0
                     with pull_block(buf, 2) as length:
-                        hello.server_name = pull_bytes(buf, length).decode('ascii')
+                        hello.server_name = pull_bytes(buf, length).decode("ascii")
             elif extension_type == ExtensionType.ALPN:
                 hello.alpn_protocols = pull_list(buf, 2, pull_alpn_protocol)
             else:
                 hello.other_extensions.append(
-                    (extension_type, pull_bytes(buf, extension_length)),
+                    (extension_type, pull_bytes(buf, extension_length))
                 )
 
         pull_list(buf, 2, pull_extension)
@@ -483,7 +487,7 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
                     with push_block(buf, 2):
                         push_uint8(buf, 0)
                         with push_block(buf, 2):
-                            push_bytes(buf, hello.server_name.encode('ascii'))
+                            push_bytes(buf, hello.server_name.encode("ascii"))
 
             if hello.alpn_protocols is not None:
                 with push_extension(buf, ExtensionType.ALPN):
@@ -558,7 +562,7 @@ def push_server_hello(buf: Buffer, hello: ServerHello):
 @dataclass
 class NewSessionTicket:
     lifetime_hint: int = 0
-    ticket: bytes = b''
+    ticket: bytes = b""
 
 
 def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
@@ -582,11 +586,12 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 
     assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
+
         def pull_extension(buf):
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
             extensions.other_extensions.append(
-                (extension_type, pull_bytes(buf, extension_length)),
+                (extension_type, pull_bytes(buf, extension_length))
             )
 
         pull_list(buf, 2, pull_extension)
@@ -605,7 +610,7 @@ def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions):
 
 @dataclass
 class Certificate:
-    request_context: bytes = b''
+    request_context: bytes = b""
     certificates: List = field(default_factory=list)
 
 
@@ -672,7 +677,7 @@ def push_certificate_verify(buf: Buffer, verify: CertificateVerify):
 
 @dataclass
 class Finished:
-    verify_data: bytes = b''
+    verify_data: bytes = b""
 
 
 def pull_finished(buf: Buffer) -> Finished:
@@ -704,15 +709,16 @@ class KeySchedule:
         self.secret = bytes(self.algorithm.digest_size)
 
     def certificate_verify_data(self, context_string):
-        return b' ' * 64 + context_string + b'\x00' + self.hash.copy().finalize()
+        return b" " * 64 + context_string + b"\x00" + self.hash.copy().finalize()
 
     def finished_verify_data(self, secret):
         hmac_key = hkdf_expand_label(
             algorithm=self.algorithm,
             secret=secret,
-            label=b'finished',
-            hash_value=b'',
-            length=self.algorithm.digest_size)
+            label=b"finished",
+            hash_value=b"",
+            length=self.algorithm.digest_size,
+        )
 
         h = hmac.HMAC(hmac_key, algorithm=self.algorithm, backend=default_backend())
         h.update(self.hash.copy().finalize())
@@ -724,7 +730,8 @@ class KeySchedule:
             secret=self.secret,
             label=label,
             hash_value=self.hash.copy().finalize(),
-            length=self.algorithm.digest_size)
+            length=self.algorithm.digest_size,
+        )
 
     def extract(self, key_material=None):
         if key_material is None:
@@ -734,15 +741,15 @@ class KeySchedule:
             self.secret = hkdf_expand_label(
                 algorithm=self.algorithm,
                 secret=self.secret,
-                label=b'derived',
+                label=b"derived",
                 hash_value=self.hash_empty_value,
-                length=self.algorithm.digest_size)
+                length=self.algorithm.digest_size,
+            )
 
         self.generation += 1
         self.secret = hkdf_extract(
-            algorithm=self.algorithm,
-            salt=self.secret,
-            key_material=key_material)
+            algorithm=self.algorithm, salt=self.secret, key_material=key_material
+        )
 
     def update_hash(self, data):
         self.hash.update(data)
@@ -796,14 +803,14 @@ def cipher_suite_hash(cipher_suite):
 
 def decode_public_key(key_share):
     return ec.EllipticCurvePublicKey.from_encoded_point(
-        GROUP_TO_CURVE[key_share[0]](), key_share[1])
+        GROUP_TO_CURVE[key_share[0]](), key_share[1]
+    )
 
 
 def encode_public_key(public_key):
     return (
         CURVE_TO_GROUP[public_key.curve.__class__],
-        public_key.public_bytes(
-            Encoding.X962, PublicFormat.UncompressedPoint),
+        public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint),
     )
 
 
@@ -830,18 +837,12 @@ class Context:
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
-        self._compression_methods = [
-            CompressionMethod.NULL,
-        ]
-        self._signature_algorithms = [
-            SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
-        ]
-        self._supported_versions = [
-            TLS_VERSION_1_3
-        ]
+        self._compression_methods = [CompressionMethod.NULL]
+        self._signature_algorithms = [SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
+        self._supported_versions = [TLS_VERSION_1_3]
 
         self._peer_certificate = None
-        self._receive_buffer = b''
+        self._receive_buffer = b""
         self._enc_key = None
         self._dec_key = None
         self.__logger = logger
@@ -849,7 +850,9 @@ class Context:
         if is_client:
             self.client_random = os.urandom(32)
             self.session_id = os.urandom(32)
-            self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+            self.private_key = ec.generate_private_key(
+                ec.SECP256R1(), default_backend()
+            )
             self.state = State.CLIENT_HANDSHAKE_START
         else:
             self.client_random = None
@@ -931,7 +934,7 @@ class Context:
             # should not happen
 
             else:
-                raise Exception('unhandled state')
+                raise Exception("unhandled state")
 
             assert input_buf.eof()
 
@@ -941,22 +944,14 @@ class Context:
             session_id=self.session_id,
             cipher_suites=self._cipher_suites,
             compression_methods=self._compression_methods,
-
             alpn_protocols=self.alpn_protocols,
-            key_exchange_modes=[
-                KeyExchangeMode.PSK_DHE_KE,
-            ],
-            key_share=[
-                encode_public_key(self.private_key.public_key()),
-            ],
+            key_exchange_modes=[KeyExchangeMode.PSK_DHE_KE],
+            key_share=[encode_public_key(self.private_key.public_key())],
             server_name=self.server_name,
             signature_algorithms=self._signature_algorithms,
-            supported_groups=[
-                Group.SECP256R1,
-            ],
+            supported_groups=[Group.SECP256R1],
             supported_versions=self._supported_versions,
-
-            other_extensions=self.handshake_extensions
+            other_extensions=self.handshake_extensions,
         )
 
         self.key_schedule = KeyScheduleProxy(hello.cipher_suites)
@@ -981,14 +976,18 @@ class Context:
         self.key_schedule.update_hash(input_buf.data)
         self.key_schedule.extract(shared_key)
 
-        self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b's hs traffic')
+        self._setup_traffic_protection(
+            Direction.DECRYPT, Epoch.HANDSHAKE, b"s hs traffic"
+        )
 
         self._set_state(State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
 
     def _client_handle_encrypted_extensions(self, input_buf):
         pull_encrypted_extensions(input_buf)
 
-        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+        self._setup_traffic_protection(
+            Direction.ENCRYPT, Epoch.HANDSHAKE, b"c hs traffic"
+        )
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
@@ -997,7 +996,8 @@ class Context:
         certificate = pull_certificate(input_buf)
 
         self._peer_certificate = x509.load_der_x509_certificate(
-            certificate.certificates[0][0], backend=default_backend())
+            certificate.certificates[0][0], backend=default_backend()
+        )
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
@@ -1009,12 +1009,12 @@ class Context:
         algorithm = SIGNATURE_ALGORITHMS[verify.algorithm]()
         self._peer_certificate.public_key().verify(
             verify.signature,
-            self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
-            padding.PSS(
-                mgf=padding.MGF1(algorithm),
-                salt_length=algorithm.digest_size
+            self.key_schedule.certificate_verify_data(
+                b"TLS 1.3, server CertificateVerify"
             ),
-            algorithm)
+            padding.PSS(mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size),
+            algorithm,
+        )
 
         self.key_schedule.update_hash(input_buf.data)
 
@@ -1031,12 +1031,16 @@ class Context:
         # prepare traffic keys
         assert self.key_schedule.generation == 2
         self.key_schedule.extract(None)
-        self._setup_traffic_protection(Direction.DECRYPT, Epoch.ONE_RTT, b's ap traffic')
-        next_enc_key = self.key_schedule.derive_secret(b'c ap traffic')
+        self._setup_traffic_protection(
+            Direction.DECRYPT, Epoch.ONE_RTT, b"s ap traffic"
+        )
+        next_enc_key = self.key_schedule.derive_secret(b"c ap traffic")
 
         # send finished
-        push_finished(output_buf, Finished(
-            verify_data=self.key_schedule.finished_verify_data(self._enc_key)))
+        push_finished(
+            output_buf,
+            Finished(verify_data=self.key_schedule.finished_verify_data(self._enc_key)),
+        )
 
         # commit traffic key
         self._enc_key = next_enc_key
@@ -1052,17 +1056,23 @@ class Context:
 
         # negotiate parameters
         cipher_suite = negotiate(
-            self._cipher_suites, peer_hello.cipher_suites,
-            'No supported cipher suite')
+            self._cipher_suites, peer_hello.cipher_suites, "No supported cipher suite"
+        )
         compression_method = negotiate(
-            self._compression_methods, peer_hello.compression_methods,
-            'No supported compression method')
+            self._compression_methods,
+            peer_hello.compression_methods,
+            "No supported compression method",
+        )
         signature_algorithm = negotiate(
-            self._signature_algorithms, peer_hello.signature_algorithms,
-            'No supported signature algorithm')
+            self._signature_algorithms,
+            peer_hello.signature_algorithms,
+            "No supported signature algorithm",
+        )
         supported_version = negotiate(
-            self._supported_versions, peer_hello.supported_versions,
-            'No supported protocol version')
+            self._supported_versions,
+            peer_hello.supported_versions,
+            "No supported protocol version",
+        )
 
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
@@ -1082,7 +1092,6 @@ class Context:
             session_id=self.session_id,
             cipher_suite=cipher_suite,
             compression_method=compression_method,
-
             key_share=encode_public_key(self.private_key.public_key()),
             supported_version=supported_version,
         )
@@ -1090,46 +1099,61 @@ class Context:
             push_server_hello(output_buf, hello)
         self.key_schedule.extract(shared_key)
 
-        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.HANDSHAKE, b's hs traffic')
-        self._setup_traffic_protection(Direction.DECRYPT, Epoch.HANDSHAKE, b'c hs traffic')
+        self._setup_traffic_protection(
+            Direction.ENCRYPT, Epoch.HANDSHAKE, b"s hs traffic"
+        )
+        self._setup_traffic_protection(
+            Direction.DECRYPT, Epoch.HANDSHAKE, b"c hs traffic"
+        )
 
         # send encrypted extensions
         with self._push_message(output_buf):
-            push_encrypted_extensions(output_buf, EncryptedExtensions(
-                other_extensions=self.handshake_extensions))
+            push_encrypted_extensions(
+                output_buf,
+                EncryptedExtensions(other_extensions=self.handshake_extensions),
+            )
 
         # send certificate
         with self._push_message(output_buf):
-            push_certificate(output_buf, Certificate(
-                request_context=b'',
-                certificates=[
-                    (self.certificate.public_bytes(Encoding.DER), b'')
-                ]))
+            push_certificate(
+                output_buf,
+                Certificate(
+                    request_context=b"",
+                    certificates=[(self.certificate.public_bytes(Encoding.DER), b"")],
+                ),
+            )
 
         # send certificate verify
         algorithm = SIGNATURE_ALGORITHMS[signature_algorithm]()
         signature = self.certificate_private_key.sign(
-            self.key_schedule.certificate_verify_data(b'TLS 1.3, server CertificateVerify'),
-            padding.PSS(
-                mgf=padding.MGF1(algorithm),
-                salt_length=algorithm.digest_size
+            self.key_schedule.certificate_verify_data(
+                b"TLS 1.3, server CertificateVerify"
             ),
-            algorithm)
+            padding.PSS(mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size),
+            algorithm,
+        )
         with self._push_message(output_buf):
-            push_certificate_verify(output_buf, CertificateVerify(
-                algorithm=signature_algorithm,
-                signature=signature))
+            push_certificate_verify(
+                output_buf,
+                CertificateVerify(algorithm=signature_algorithm, signature=signature),
+            )
 
         # send finished
         with self._push_message(output_buf):
-            push_finished(output_buf, Finished(
-                verify_data=self.key_schedule.finished_verify_data(self._enc_key)))
+            push_finished(
+                output_buf,
+                Finished(
+                    verify_data=self.key_schedule.finished_verify_data(self._enc_key)
+                ),
+            )
 
         # prepare traffic keys
         assert self.key_schedule.generation == 2
         self.key_schedule.extract(None)
-        self._setup_traffic_protection(Direction.ENCRYPT, Epoch.ONE_RTT, b's ap traffic')
-        self._next_dec_key = self.key_schedule.derive_secret(b'c ap traffic')
+        self._setup_traffic_protection(
+            Direction.ENCRYPT, Epoch.ONE_RTT, b"s ap traffic"
+        )
+        self._next_dec_key = self.key_schedule.derive_secret(b"c ap traffic")
 
         self._set_state(State.SERVER_EXPECT_FINISHED)
 
@@ -1167,5 +1191,5 @@ class Context:
 
     def _set_state(self, state):
         if self.__logger:
-            self.__logger.info('TLS %s -> %s', self.state, state)
+            self.__logger.info("TLS %s -> %s", self.state, state)
         self.state = state

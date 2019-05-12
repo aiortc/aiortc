@@ -5,11 +5,16 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .packet import is_long_header
-from .tls import (CipherSuite, cipher_suite_aead, cipher_suite_hash,
-                  hkdf_expand_label, hkdf_extract)
+from .tls import (
+    CipherSuite,
+    cipher_suite_aead,
+    cipher_suite_hash,
+    hkdf_expand_label,
+    hkdf_extract,
+)
 
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
-INITIAL_SALT = binascii.unhexlify('ef4fb0abb47470c41befcf8031334fae485e09a0')
+INITIAL_SALT = binascii.unhexlify("ef4fb0abb47470c41befcf8031334fae485e09a0")
 MAX_PN_SIZE = 4
 SAMPLE_SIZE = 16
 
@@ -24,9 +29,9 @@ def derive_key_iv_hp(cipher_suite, secret):
     else:
         key_size = 16
     return (
-        hkdf_expand_label(algorithm, secret, b'quic key', b'', key_size),
-        hkdf_expand_label(algorithm, secret, b'quic iv', b'', 12),
-        hkdf_expand_label(algorithm, secret, b'quic hp', b'', key_size)
+        hkdf_expand_label(algorithm, secret, b"quic key", b"", key_size),
+        hkdf_expand_label(algorithm, secret, b"quic iv", b"", 12),
+        hkdf_expand_label(algorithm, secret, b"quic hp", b"", key_size),
     )
 
 
@@ -39,31 +44,32 @@ class CryptoContext:
 
         # header protection
         sample_offset = encrypted_offset + MAX_PN_SIZE
-        sample = packet[sample_offset:sample_offset + SAMPLE_SIZE]
+        sample = packet[sample_offset : sample_offset + SAMPLE_SIZE]
         mask = self.header_protection_mask(sample)
 
         if is_long_header(packet[0]):
             # long header
-            packet[0] ^= (mask[0] & 0x0f)
+            packet[0] ^= mask[0] & 0x0F
         else:
             # short header
-            packet[0] ^= (mask[0] & 0x1f)
+            packet[0] ^= mask[0] & 0x1F
 
         pn_length = (packet[0] & 0x03) + 1
         for i in range(pn_length):
             packet[encrypted_offset + i] ^= mask[1 + i]
-        pn = packet[encrypted_offset:encrypted_offset + pn_length]
-        plain_header = bytes(packet[:encrypted_offset + pn_length])
+        pn = packet[encrypted_offset : encrypted_offset + pn_length]
+        plain_header = bytes(packet[: encrypted_offset + pn_length])
 
         # payload protection
         nonce = bytearray(len(self.iv) - pn_length) + bytearray(pn)
         for i in range(len(self.iv)):
             nonce[i] ^= self.iv[i]
         try:
-            payload = self.aead.decrypt(nonce, bytes(packet[encrypted_offset + pn_length:]),
-                                        plain_header)
+            payload = self.aead.decrypt(
+                nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
+            )
         except InvalidTag:
-            raise CryptoError('Payload decryption failed')
+            raise CryptoError("Payload decryption failed")
 
         # packet number
         packet_number = 0
@@ -75,7 +81,7 @@ class CryptoContext:
     def encrypt_packet(self, plain_header, plain_payload):
         pn_length = (plain_header[0] & 0x03) + 1
         pn_offset = len(plain_header) - pn_length
-        pn = plain_header[pn_offset:pn_offset + pn_length]
+        pn = plain_header[pn_offset : pn_offset + pn_length]
 
         # payload protection
         nonce = bytearray(len(self.iv) - pn_length) + bytearray(pn)
@@ -85,16 +91,16 @@ class CryptoContext:
 
         # header protection
         sample_offset = MAX_PN_SIZE - pn_length
-        sample = protected_payload[sample_offset:sample_offset + SAMPLE_SIZE]
+        sample = protected_payload[sample_offset : sample_offset + SAMPLE_SIZE]
         mask = self.header_protection_mask(sample)
 
         packet = bytearray(plain_header + protected_payload)
         if is_long_header(packet[0]):
             # long header
-            packet[0] ^= (mask[0] & 0x0f)
+            packet[0] ^= mask[0] & 0x0F
         else:
             # short header
-            packet[0] ^= (mask[0] & 0x1f)
+            packet[0] ^= mask[0] & 0x1F
 
         for i in range(pn_length):
             packet[pn_offset + i] ^= mask[1 + i]
@@ -106,15 +112,15 @@ class CryptoContext:
             encryptor = Cipher(
                 algorithms.ChaCha20(key=self.hp, nonce=sample),
                 mode=None,
-                backend=default_backend()).encryptor()
+                backend=default_backend(),
+            ).encryptor()
             buf = bytearray(5)
             encryptor.update_into(bytes(5), buf)
             return bytes(buf)
         else:
             encryptor = Cipher(
-                algorithms.AES(self.hp),
-                mode=modes.ECB(),
-                backend=default_backend()).encryptor()
+                algorithms.AES(self.hp), mode=modes.ECB(), backend=default_backend()
+            ).encryptor()
             buf = bytearray(31)
             encryptor.update_into(sample, buf)
             return buf[:5]
@@ -127,7 +133,7 @@ class CryptoContext:
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.AES_256_GCM_SHA384,
             CipherSuite.CHACHA20_POLY1305_SHA256,
-        ], 'unsupported cipher suite'
+        ], "unsupported cipher suite"
         key, self.iv, self.hp = derive_key_iv_hp(cipher_suite, secret)
         self.aead = cipher_suite_aead(cipher_suite, key)
         self.cipher_suite = cipher_suite
@@ -157,15 +163,21 @@ class CryptoPair:
 
     def setup_initial(self, cid, is_client):
         if is_client:
-            recv_label, send_label = b'server in', b'client in'
+            recv_label, send_label = b"server in", b"client in"
         else:
-            recv_label, send_label = b'client in', b'server in'
+            recv_label, send_label = b"client in", b"server in"
 
         algorithm = cipher_suite_hash(INITIAL_CIPHER_SUITE)
         initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
         self.recv.setup(
             INITIAL_CIPHER_SUITE,
-            hkdf_expand_label(algorithm, initial_secret, recv_label, b'', algorithm.digest_size))
+            hkdf_expand_label(
+                algorithm, initial_secret, recv_label, b"", algorithm.digest_size
+            ),
+        )
         self.send.setup(
             INITIAL_CIPHER_SUITE,
-            hkdf_expand_label(algorithm, initial_secret, send_label, b'', algorithm.digest_size))
+            hkdf_expand_label(
+                algorithm, initial_secret, send_label, b"", algorithm.digest_size
+            ),
+        )
