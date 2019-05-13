@@ -25,15 +25,18 @@ matrix:
   - language: generic
     os: osx
   - python: "3.5"
+    dist: trusty
   - env: CRYPTOGRAPHY_NO_BINARY=1
     dist: trusty
     python: "3.5"
   - python: "3.6"
+  - env: CRYPTOGRAPHY_NO_BINARY=1
+    python: "3.6"
   - python: "3.7"
   - env: CRYPTOGRAPHY_NO_BINARY=1
     python: "3.7"
   - env: BUILD=sdist
-    install: true
+    install: pip install twine
     python: "3.6"
 script: .travis/script
 sudo: true
