@@ -3,7 +3,13 @@ from .rangeset import RangeSet
 
 
 class QuicStream:
-    def __init__(self, stream_id=None):
+    """
+    A QUIC stream.
+    """
+
+    def __init__(self, stream_id=None, connection=None):
+        self._connection = connection
+
         self._recv_buffer = bytearray()
         self._recv_start = 0
         self._recv_ranges = RangeSet()
@@ -78,3 +84,5 @@ class QuicStream:
         """
         if data:
             self._send_buffer += data
+            if self._connection is not None:
+                self._connection._send_pending()

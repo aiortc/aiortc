@@ -12,11 +12,19 @@ from aioquic.packet import pull_quic_header
 from aioquic.tls import Buffer
 
 
-class QuicProtocol(asyncio.DatagramProtocol):
+class QuicConnectionTransport:
+    def __init__(self, protocol, addr):
+        self.__addr = addr
+        self.__protocol = protocol
+
+    def sendto(self, datagram):
+        self.__protocol._transport.sendto(datagram, self.__addr)
+
+
+class QuicServerProtocol(asyncio.DatagramProtocol):
     def __init__(self, **kwargs):
         self._connections = {}
         self._kwargs = kwargs
-        self._kwargs["is_client"] = False
         self._transport = None
 
     def connection_made(self, transport):
@@ -27,11 +35,10 @@ class QuicProtocol(asyncio.DatagramProtocol):
         header = pull_quic_header(buf, host_cid_length=8)
         connection = self._connections.get(header.destination_cid, None)
         if connection is None:
-            connection = QuicConnection(**self._kwargs)
+            connection = QuicConnection(is_client=False, **self._kwargs)
+            connection.connection_made(QuicConnectionTransport(self, addr))
             self._connections[connection.host_cid] = connection
         connection.datagram_received(datagram)
-        for datagram in connection.pending_datagrams():
-            self._transport.sendto(datagram, addr)
 
 
 async def run(host, port, **kwargs):
@@ -42,7 +49,7 @@ async def run(host, port, **kwargs):
         kwargs["server_name"] = host
 
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicProtocol(**kwargs), local_addr=(host, port)
+        lambda: QuicServerProtocol(**kwargs), local_addr=(host, port)
     )
     return protocol
 

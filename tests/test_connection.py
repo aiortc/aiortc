@@ -10,7 +10,7 @@ from aioquic import tls
 from aioquic.connection import QuicConnection
 from aioquic.packet import QuicErrorCode, QuicFrameType, QuicProtocolVersion
 
-from .utils import load
+from .utils import load, run
 
 SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
     load("ssl_cert.pem"), backend=default_backend()
@@ -20,26 +20,27 @@ SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
 )
 
 
-def exchange_data(client, server):
-    rounds = 0
+class FakeTransport:
+    sent = 0
+    target = None
 
-    while True:
-        client_sent = False
-        for datagram in client.pending_datagrams():
-            server.datagram_received(datagram)
-            client_sent = True
+    def sendto(self, data):
+        self.sent += 1
+        if self.target is not None:
+            self.target.datagram_received(data)
 
-        server_sent = False
-        for datagram in server.pending_datagrams():
-            client.datagram_received(datagram)
-            server_sent = True
 
-        if client_sent or server_sent:
-            rounds += 1
-        else:
-            break
+def create_transport(client, server):
+    client_transport = FakeTransport()
+    client_transport.target = server
 
-    return rounds
+    server_transport = FakeTransport()
+    server_transport.target = client
+
+    server.connection_made(server_transport)
+    client.connection_made(client_transport)
+
+    return client_transport, server_transport
 
 
 class QuicConnectionTest(TestCase):
@@ -57,13 +58,16 @@ class QuicConnectionTest(TestCase):
         server.version = max(server_versions)
 
         # perform handshake
-        client.connection_made()
-        self.assertEqual(exchange_data(client, server), 2)
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 3)
+        run(client.connect())
 
         # send data over stream
         client_stream = client.create_stream()
         client_stream.push_data(b"ping")
-        self.assertEqual(exchange_data(client, server), 1)
+        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 4)
 
         server_stream = server.streams[0]
         self.assertEqual(server_stream.pull_data(), b"ping")
@@ -106,8 +110,9 @@ class QuicConnectionTest(TestCase):
         )
 
         # perform handshake
-        client.connection_made()
-        self.assertEqual(exchange_data(client, server), 2)
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 3)
 
         # check secrets were logged
         client_log = client_log_file.getvalue()
@@ -173,8 +178,9 @@ class QuicConnectionTest(TestCase):
         )
 
         # perform handshake
-        client.connection_made()
-        self.assertEqual(exchange_data(client, server), 2)
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 3)
 
         # mess with encryption key
         server.spaces[tls.Epoch.ONE_RTT].crypto.send.setup(
@@ -183,23 +189,20 @@ class QuicConnectionTest(TestCase):
 
         # close
         server.close(error_code=QuicErrorCode.NO_ERROR)
-        self.assertEqual(exchange_data(client, server), 1)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
 
     def test_retry(self):
         client = QuicConnection(is_client=True)
         client.host_cid = binascii.unhexlify("c98343fe8f5f0ff4")
         client.peer_cid = binascii.unhexlify("85abb547bf28be97")
 
-        datagrams = 0
-        client.connection_made()
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 1)
+        client_transport = FakeTransport()
+        client.connection_made(client_transport)
+        self.assertEqual(client_transport.sent, 1)
 
         client.datagram_received(load("retry.bin"))
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 2)
+        self.assertEqual(client_transport.sent, 2)
 
     def test_application_close(self):
         client = QuicConnection(is_client=True)
@@ -211,12 +214,14 @@ class QuicConnectionTest(TestCase):
         )
 
         # perform handshake
-        client.connection_made()
-        self.assertEqual(exchange_data(client, server), 2)
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 3)
 
         # close
         server.close(error_code=QuicErrorCode.NO_ERROR)
-        self.assertEqual(exchange_data(client, server), 2)
+        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 4)
 
     def test_transport_close(self):
         client = QuicConnection(is_client=True)
@@ -228,42 +233,36 @@ class QuicConnectionTest(TestCase):
         )
 
         # perform handshake
-        client.connection_made()
-        self.assertEqual(exchange_data(client, server), 2)
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 3)
 
         # close
         server.close(
             error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
         )
-        self.assertEqual(exchange_data(client, server), 2)
+        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 4)
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)
         client.supported_versions = [QuicProtocolVersion.DRAFT_19]
 
-        datagrams = 0
-        client.connection_made()
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 1)
+        client_transport = FakeTransport()
+        client.connection_made(client_transport)
+        self.assertEqual(client_transport.sent, 1)
 
         # no common version, no retry
         client.datagram_received(load("version_negotiation.bin"))
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 1)
+        self.assertEqual(client_transport.sent, 1)
 
     def test_version_negotiation_ok(self):
         client = QuicConnection(is_client=True)
 
-        datagrams = 0
-        client.connection_made()
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 1)
+        client_transport = FakeTransport()
+        client.connection_made(client_transport)
+        self.assertEqual(client_transport.sent, 1)
 
         # found a common version, retry
         client.datagram_received(load("version_negotiation.bin"))
-        for datagram in client.pending_datagrams():
-            datagrams += 1
-        self.assertEqual(datagrams, 2)
+        self.assertEqual(client_transport.sent, 2)

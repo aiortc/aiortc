@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -65,6 +66,16 @@ class PacketSpace:
 
 
 class QuicConnection:
+    """
+    A QUIC connection.
+
+    :param: is_client: `True` for a client, `False` for a server.
+    :param: certificate: For a server, its certificate.
+            See :func:`cryptography.x509.load_pem_x509_certificate`.
+    :param: private_key: For a server, its private key.
+            See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
+    """
+
     def __init__(
         self,
         is_client=True,
@@ -110,37 +121,53 @@ class QuicConnection:
         )
 
         self.__close = None
+        self.__connected = asyncio.Event()
         self.__initialized = False
         self.__logger = logger
+        self.__transport = None
 
     def close(self, error_code, frame_type=None, reason_phrase=b""):
+        """
+        Close the connection.
+        """
         self.__close = {
             "error_code": error_code,
             "frame_type": frame_type,
             "reason_phrase": reason_phrase,
         }
+        self._send_pending()
 
-    def connection_made(self):
+    async def connect(self):
         """
-        At startup the client initiates the crypto handshake.
+        Wait for the TLS handshake to complete.
         """
+        return await self.__connected.wait()
+
+    def connection_made(self, transport):
+        """
+        Inform the connection of the transport used to send data. This object
+        must have a ``sendto`` method which accepts a datagram to send.
+
+        Calling :meth:`connection_made` on a client starts the TLS handshake.
+        """
+        self.__transport = transport
         if self.is_client:
             self._initialize(self.peer_cid)
 
             self.tls.handle_message(b"", self.send_buffer)
             self._push_crypto_data()
+            self._send_pending()
 
     def create_stream(self, is_unidirectional=False):
         """
-        Create a stream and return it.
+        Create a :class:`QuicStream` and return it.
         """
         stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
         while stream_id in self.streams:
             stream_id += 4
-        self.streams[stream_id] = QuicStream(stream_id=stream_id)
-        return self.streams[stream_id]
+        return self._get_or_create_stream(stream_id)
 
-    def datagram_received(self, data: bytes):
+    def datagram_received(self, data: bytes, *args):
         """
         Handle an incoming datagram.
         """
@@ -161,7 +188,7 @@ class QuicConnection:
                     return
                 self.version = QuicProtocolVersion(max(common))
                 self.__logger.info("Retrying with %s" % self.version)
-                self.connection_made()
+                self.connection_made(self.__transport)
                 return
             elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
                 # stateless retry
@@ -172,7 +199,7 @@ class QuicConnection:
                     self.__logger.info("Performing stateless retry")
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
-                    self.connection_made()
+                    self.connection_made(self.__transport)
                 return
 
             encrypted_off = buf.tell() - start_off
@@ -204,22 +231,11 @@ class QuicConnection:
             if not is_ack_only:
                 self.send_ack[epoch] = True
 
-    def pending_datagrams(self):
-        """
-        Retrieve outgoing datagrams.
-        """
-        for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
-            yield from self._write_handshake(epoch)
-
-        yield from self._write_application()
-
-        if self.__close is not None:
-            yield from self._write_close(tls.Epoch.ONE_RTT, **self.__close)
-            self.__close = None
+        self._send_pending()
 
     def _get_or_create_stream(self, stream_id):
         if stream_id not in self.streams:
-            self.streams[stream_id] = QuicStream(stream_id=stream_id)
+            self.streams[stream_id] = QuicStream(connection=self, stream_id=stream_id)
         return self.streams[stream_id]
 
     def _initialize(self, peer_cid):
@@ -294,6 +310,12 @@ class QuicConnection:
                 data = stream.pull_data()
                 if data:
                     self.tls.handle_message(data, self.send_buffer)
+                    if not self.__connected.is_set() and self.tls.state in [
+                        tls.State.CLIENT_POST_HANDSHAKE,
+                        tls.State.SERVER_POST_HANDSHAKE,
+                    ]:
+                        self.__connected.set()
+
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 packet.pull_new_token_frame(buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
@@ -340,10 +362,25 @@ class QuicConnection:
 
         return is_ack_only
 
+    def _pending_datagrams(self):
+        for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
+            yield from self._write_handshake(epoch)
+
+        yield from self._write_application()
+
+        if self.__close is not None:
+            close = self.__close
+            self.__close = None
+            yield from self._write_close(tls.Epoch.ONE_RTT, **close)
+
     def _push_crypto_data(self):
         for epoch, buf in self.send_buffer.items():
             self.streams[epoch].push_data(buf.data)
             buf.seek(0)
+
+    def _send_pending(self):
+        for datagram in self._pending_datagrams():
+            self.__transport.sendto(datagram)
 
     def _serialize_parameters(self):
         buf = Buffer(capacity=512)

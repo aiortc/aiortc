@@ -6,25 +6,6 @@ import logging
 from aioquic.connection import QuicConnection
 
 
-class QuicProtocol(asyncio.DatagramProtocol):
-    def __init__(self, **kwargs):
-        self._connection = QuicConnection(**kwargs)
-        self._transport = None
-
-    def connection_made(self, transport):
-        self._transport = transport
-        self._connection.connection_made()
-        self._send_pending()
-
-    def datagram_received(self, datagram, addr):
-        self._connection.datagram_received(datagram)
-        self._send_pending()
-
-    def _send_pending(self):
-        for datagram in self._connection.pending_datagrams():
-            self._transport.sendto(datagram)
-
-
 async def run(host, port, **kwargs):
     # if host is not an IP address, pass it to enable SNI
     try:
@@ -33,12 +14,12 @@ async def run(host, port, **kwargs):
         kwargs["server_name"] = host
 
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicProtocol(**kwargs), remote_addr=(host, port)
+        lambda: QuicConnection(is_client=True, **kwargs), remote_addr=(host, port)
     )
+    await protocol.connect()
 
-    stream = protocol._connection.create_stream()
+    stream = protocol.create_stream()
     stream.push_data(b"GET /\r\n")
-    protocol._send_pending()
 
     await asyncio.sleep(1)
 
