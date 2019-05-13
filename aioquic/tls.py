@@ -1,14 +1,26 @@
+import logging
 import os
 import struct
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import List, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
-from cryptography.hazmat.primitives.asymmetric import ec, padding
+from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import aead
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -29,6 +41,8 @@ TLS_VERSION_1_3 = 0x0304
 TLS_VERSION_1_3_DRAFT_28 = 0x7F1C
 TLS_VERSION_1_3_DRAFT_27 = 0x7F1B
 TLS_VERSION_1_3_DRAFT_26 = 0x7F1A
+
+T = TypeVar("T")
 
 
 class Alert(Exception):
@@ -70,7 +84,7 @@ class State(Enum):
     SERVER_POST_HANDSHAKE = 10
 
 
-def hkdf_label(label, hash_value, length):
+def hkdf_label(label: bytes, hash_value: bytes, length: int) -> bytes:
     full_label = b"tls13 " + label
     return (
         struct.pack("!HB", length, len(full_label))
@@ -80,7 +94,13 @@ def hkdf_label(label, hash_value, length):
     )
 
 
-def hkdf_expand_label(algorithm, secret, label, hash_value, length):
+def hkdf_expand_label(
+    algorithm: hashes.HashAlgorithm,
+    secret: bytes,
+    label: bytes,
+    hash_value: bytes,
+    length: int,
+) -> bytes:
     return HKDFExpand(
         algorithm=algorithm,
         length=length,
@@ -89,7 +109,9 @@ def hkdf_expand_label(algorithm, secret, label, hash_value, length):
     ).derive(secret)
 
 
-def hkdf_extract(algorithm, salt, key_material):
+def hkdf_extract(
+    algorithm: hashes.HashAlgorithm, salt: bytes, key_material: bytes
+) -> bytes:
     h = hmac.HMAC(salt, algorithm, backend=default_backend())
     h.update(key_material)
     return h.finalize()
@@ -167,11 +189,41 @@ class SignatureAlgorithm(IntEnum):
     RSA_PSS_RSAE_SHA512 = 0x0806
 
 
+# INTEGERS
+
+
+def pull_cipher_suite(buf: Buffer) -> CipherSuite:
+    return CipherSuite(pull_uint16(buf))
+
+
+def pull_compression_method(buf: Buffer) -> CompressionMethod:
+    return CompressionMethod(pull_uint8(buf))
+
+
+def pull_key_exchange_mode(buf: Buffer) -> KeyExchangeMode:
+    return KeyExchangeMode(pull_uint8(buf))
+
+
+def pull_group(buf: Buffer) -> Group:
+    return Group(pull_uint16(buf))
+
+
+def pull_signature_algorithm(buf: Buffer) -> SignatureAlgorithm:
+    return SignatureAlgorithm(pull_uint16(buf))
+
+
+push_cipher_suite = push_uint16
+push_compression_method = push_uint8
+push_group = push_uint16
+push_key_exchange_mode = push_uint8
+push_signature_algorithm = push_uint16
+
+
 # BLOCKS
 
 
 @contextmanager
-def pull_block(buf: Buffer, capacity: int):
+def pull_block(buf: Buffer, capacity: int) -> Generator:
     length = 0
     for b in pull_bytes(buf, capacity):
         length = (length << 8) | b
@@ -181,7 +233,7 @@ def pull_block(buf: Buffer, capacity: int):
 
 
 @contextmanager
-def push_block(buf: Buffer, capacity: int):
+def push_block(buf: Buffer, capacity: int) -> Generator:
     """
     Context manager to push a variable-length block, with `capacity` bytes
     to write the length.
@@ -198,7 +250,7 @@ def push_block(buf: Buffer, capacity: int):
 # LISTS
 
 
-def pull_list(buf: Buffer, capacity: int, func):
+def pull_list(buf: Buffer, capacity: int, func: Callable[[Buffer], T]) -> List[T]:
     """
     Pull a list of items.
     """
@@ -210,7 +262,9 @@ def pull_list(buf: Buffer, capacity: int, func):
     return items
 
 
-def push_list(buf: Buffer, capacity: int, func, values):
+def push_list(
+    buf: Buffer, capacity: int, func: Callable[[Buffer, T], None], values: Sequence[T]
+) -> None:
     """
     Push a list of items.
     """
@@ -222,21 +276,24 @@ def push_list(buf: Buffer, capacity: int, func, values):
 # KeyShareEntry
 
 
-def pull_key_share(buf: Buffer) -> Tuple[int, bytes]:
-    group = pull_uint16(buf)
+KeyShareEntry = Tuple[Group, bytes]
+
+
+def pull_key_share(buf: Buffer) -> KeyShareEntry:
+    group = pull_group(buf)
     data_length = pull_uint16(buf)
     data = pull_bytes(buf, data_length)
     return (group, data)
 
 
-def push_key_share(buf: Buffer, value: Tuple[int, bytes]):
-    push_uint16(buf, value[0])
+def push_key_share(buf: Buffer, value: KeyShareEntry) -> None:
+    push_group(buf, value[0])
     with push_block(buf, 2):
         push_bytes(buf, value[1])
 
 
 @contextmanager
-def push_extension(buf: Buffer, extension_type: int):
+def push_extension(buf: Buffer, extension_type: int) -> Generator:
     push_uint16(buf, extension_type)
     with push_block(buf, 2):
         yield
@@ -250,7 +307,7 @@ def pull_alpn_protocol(buf: Buffer) -> str:
     return pull_bytes(buf, length).decode("ascii")
 
 
-def push_alpn_protocol(buf: Buffer, protocol: str):
+def push_alpn_protocol(buf: Buffer, protocol: str) -> None:
     data = protocol.encode("ascii")
     push_uint8(buf, len(data))
     push_bytes(buf, data)
@@ -258,42 +315,44 @@ def push_alpn_protocol(buf: Buffer, protocol: str):
 
 # MESSAGES
 
+Extension = Tuple[int, bytes]
+
 
 @dataclass
 class ClientHello:
-    random: bytes = None
-    session_id: bytes = None
-    cipher_suites: List[int] = None
-    compression_methods: List[int] = None
+    random: bytes
+    session_id: bytes
+    cipher_suites: List[CipherSuite]
+    compression_methods: List[CompressionMethod]
 
     # extensions
-    alpn_protocols: List[str] = None
-    key_exchange_modes: List[int] = None
-    key_share: List[Tuple[int, bytes]] = None
-    server_name: str = None
-    signature_algorithms: List[int] = None
-    supported_groups: List[int] = None
-    supported_versions: List[int] = None
+    alpn_protocols: Optional[List[str]] = None
+    key_exchange_modes: Optional[List[KeyExchangeMode]] = None
+    key_share: Optional[List[KeyShareEntry]] = None
+    server_name: Optional[str] = None
+    signature_algorithms: Optional[List[SignatureAlgorithm]] = None
+    supported_groups: Optional[List[Group]] = None
+    supported_versions: Optional[List[int]] = None
 
-    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
+    other_extensions: List[Extension] = field(default_factory=list)
 
 
-def pull_client_hello(buf: Buffer):
-    hello = ClientHello()
-
+def pull_client_hello(buf: Buffer) -> ClientHello:
     assert pull_uint8(buf) == HandshakeType.CLIENT_HELLO
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
-        hello.random = pull_bytes(buf, 32)
-
+        client_random = pull_bytes(buf, 32)
         session_id_length = pull_uint8(buf)
-        hello.session_id = pull_bytes(buf, session_id_length)
 
-        hello.cipher_suites = pull_list(buf, 2, pull_uint16)
-        hello.compression_methods = pull_list(buf, 1, pull_uint8)
+        hello = ClientHello(
+            random=client_random,
+            session_id=pull_bytes(buf, session_id_length),
+            cipher_suites=pull_list(buf, 2, pull_cipher_suite),
+            compression_methods=pull_list(buf, 1, pull_compression_method),
+        )
 
         # extensions
-        def pull_extension(buf):
+        def pull_extension(buf: Buffer) -> None:
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
             if extension_type == ExtensionType.KEY_SHARE:
@@ -301,11 +360,11 @@ def pull_client_hello(buf: Buffer):
             elif extension_type == ExtensionType.SUPPORTED_VERSIONS:
                 hello.supported_versions = pull_list(buf, 1, pull_uint16)
             elif extension_type == ExtensionType.SIGNATURE_ALGORITHMS:
-                hello.signature_algorithms = pull_list(buf, 2, pull_uint16)
+                hello.signature_algorithms = pull_list(buf, 2, pull_signature_algorithm)
             elif extension_type == ExtensionType.SUPPORTED_GROUPS:
-                hello.supported_groups = pull_list(buf, 2, pull_uint16)
+                hello.supported_groups = pull_list(buf, 2, pull_group)
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
-                hello.key_exchange_modes = pull_list(buf, 1, pull_uint8)
+                hello.key_exchange_modes = pull_list(buf, 1, pull_key_exchange_mode)
             elif extension_type == ExtensionType.SERVER_NAME:
                 with pull_block(buf, 2):
                     assert pull_uint8(buf) == 0
@@ -323,15 +382,15 @@ def pull_client_hello(buf: Buffer):
     return hello
 
 
-def push_client_hello(buf: Buffer, hello: ClientHello):
+def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
     push_uint8(buf, HandshakeType.CLIENT_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
         push_bytes(buf, hello.random)
         with push_block(buf, 1):
             push_bytes(buf, hello.session_id)
-        push_list(buf, 2, push_uint16, hello.cipher_suites)
-        push_list(buf, 1, push_uint8, hello.compression_methods)
+        push_list(buf, 2, push_cipher_suite, hello.cipher_suites)
+        push_list(buf, 1, push_compression_method, hello.compression_methods)
 
         # extensions
         with push_block(buf, 2):
@@ -342,13 +401,13 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
                 push_list(buf, 1, push_uint16, hello.supported_versions)
 
             with push_extension(buf, ExtensionType.SIGNATURE_ALGORITHMS):
-                push_list(buf, 2, push_uint16, hello.signature_algorithms)
+                push_list(buf, 2, push_signature_algorithm, hello.signature_algorithms)
 
             with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
-                push_list(buf, 2, push_uint16, hello.supported_groups)
+                push_list(buf, 2, push_group, hello.supported_groups)
 
             with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
-                push_list(buf, 1, push_uint8, hello.key_exchange_modes)
+                push_list(buf, 1, push_key_exchange_mode, hello.key_exchange_modes)
 
             if hello.server_name is not None:
                 with push_extension(buf, ExtensionType.SERVER_NAME):
@@ -368,30 +427,32 @@ def push_client_hello(buf: Buffer, hello: ClientHello):
 
 @dataclass
 class ServerHello:
-    random: bytes = None
-    session_id: bytes = None
-    cipher_suite: int = None
-    compression_method: int = None
+    random: bytes
+    session_id: bytes
+    cipher_suite: CipherSuite
+    compression_method: CompressionMethod
 
     # extensions
-    key_share: Tuple[int, bytes] = None
-    supported_version: int = None
+    key_share: Optional[KeyShareEntry] = None
+    supported_version: Optional[int] = None
 
 
 def pull_server_hello(buf: Buffer) -> ServerHello:
-    hello = ServerHello()
-
     assert pull_uint8(buf) == HandshakeType.SERVER_HELLO
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
-        hello.random = pull_bytes(buf, 32)
+        server_random = pull_bytes(buf, 32)
         session_id_length = pull_uint8(buf)
-        hello.session_id = pull_bytes(buf, session_id_length)
-        hello.cipher_suite = pull_uint16(buf)
-        hello.compression_method = pull_uint8(buf)
+
+        hello = ServerHello(
+            random=server_random,
+            session_id=pull_bytes(buf, session_id_length),
+            cipher_suite=pull_cipher_suite(buf),
+            compression_method=pull_compression_method(buf),
+        )
 
         # extensions
-        def pull_extension(buf):
+        def pull_extension(buf: Buffer) -> None:
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
             if extension_type == ExtensionType.SUPPORTED_VERSIONS:
@@ -406,7 +467,7 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
     return hello
 
 
-def push_server_hello(buf: Buffer, hello: ServerHello):
+def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
     push_uint8(buf, HandshakeType.SERVER_HELLO)
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
@@ -415,16 +476,18 @@ def push_server_hello(buf: Buffer, hello: ServerHello):
         with push_block(buf, 1):
             push_bytes(buf, hello.session_id)
 
-        push_uint16(buf, hello.cipher_suite)
-        push_uint8(buf, hello.compression_method)
+        push_cipher_suite(buf, hello.cipher_suite)
+        push_compression_method(buf, hello.compression_method)
 
         # extensions
         with push_block(buf, 2):
-            with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
-                push_uint16(buf, hello.supported_version)
+            if hello.supported_version is not None:
+                with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
+                    push_uint16(buf, hello.supported_version)
 
-            with push_extension(buf, ExtensionType.KEY_SHARE):
-                push_key_share(buf, hello.key_share)
+            if hello.key_share is not None:
+                with push_extension(buf, ExtensionType.KEY_SHARE):
+                    push_key_share(buf, hello.key_share)
 
 
 @dataclass
@@ -455,7 +518,7 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
     assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
 
-        def pull_extension(buf):
+        def pull_extension(buf: Buffer) -> None:
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
             extensions.other_extensions.append(
@@ -467,7 +530,7 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
     return extensions
 
 
-def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions):
+def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> None:
     push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
     with push_block(buf, 3):
         with push_block(buf, 2):
@@ -476,10 +539,13 @@ def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions):
                     push_bytes(buf, extension_value)
 
 
+CertificateEntry = Tuple[bytes, bytes]
+
+
 @dataclass
 class Certificate:
     request_context: bytes = b""
-    certificates: List = field(default_factory=list)
+    certificates: List[CertificateEntry] = field(default_factory=list)
 
 
 def pull_certificate(buf: Buffer) -> Certificate:
@@ -490,7 +556,7 @@ def pull_certificate(buf: Buffer) -> Certificate:
         with pull_block(buf, 1) as length:
             certificate.request_context = pull_bytes(buf, length)
 
-        def pull_certificate_entry(buf):
+        def pull_certificate_entry(buf: Buffer) -> CertificateEntry:
             with pull_block(buf, 3) as length:
                 data = pull_bytes(buf, length)
             with pull_block(buf, 2) as length:
@@ -502,13 +568,13 @@ def pull_certificate(buf: Buffer) -> Certificate:
     return certificate
 
 
-def push_certificate(buf: Buffer, certificate: Certificate):
+def push_certificate(buf: Buffer, certificate: Certificate) -> None:
     push_uint8(buf, HandshakeType.CERTIFICATE)
     with push_block(buf, 3):
         with push_block(buf, 1):
             push_bytes(buf, certificate.request_context)
 
-        def push_certificate_entry(buf, entry):
+        def push_certificate_entry(buf: Buffer, entry: CertificateEntry) -> None:
             with push_block(buf, 3):
                 push_bytes(buf, entry[0])
             with push_block(buf, 2):
@@ -519,26 +585,24 @@ def push_certificate(buf: Buffer, certificate: Certificate):
 
 @dataclass
 class CertificateVerify:
-    algorithm: int = None
-    signature: bytes = None
+    algorithm: SignatureAlgorithm
+    signature: bytes
 
 
 def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
-    verify = CertificateVerify()
-
     assert pull_uint8(buf) == HandshakeType.CERTIFICATE_VERIFY
     with pull_block(buf, 3):
-        verify.algorithm = pull_uint16(buf)
+        algorithm = pull_signature_algorithm(buf)
         with pull_block(buf, 2) as length:
-            verify.signature = pull_bytes(buf, length)
+            signature = pull_bytes(buf, length)
 
-    return verify
+    return CertificateVerify(algorithm=algorithm, signature=signature)
 
 
-def push_certificate_verify(buf: Buffer, verify: CertificateVerify):
+def push_certificate_verify(buf: Buffer, verify: CertificateVerify) -> None:
     push_uint8(buf, HandshakeType.CERTIFICATE_VERIFY)
     with push_block(buf, 3):
-        push_uint16(buf, verify.algorithm)
+        push_signature_algorithm(buf, verify.algorithm)
         with push_block(buf, 2):
             push_bytes(buf, verify.signature)
 
@@ -558,7 +622,7 @@ def pull_finished(buf: Buffer) -> Finished:
     return finished
 
 
-def push_finished(buf: Buffer, finished: Finished):
+def push_finished(buf: Buffer, finished: Finished) -> None:
     push_uint8(buf, HandshakeType.FINISHED)
     with push_block(buf, 3):
         push_bytes(buf, finished.verify_data)
@@ -568,7 +632,7 @@ def push_finished(buf: Buffer, finished: Finished):
 
 
 class KeySchedule:
-    def __init__(self, cipher_suite):
+    def __init__(self, cipher_suite: CipherSuite):
         self.algorithm = cipher_suite_hash(cipher_suite)
         self.cipher_suite = cipher_suite
         self.generation = 0
@@ -576,10 +640,10 @@ class KeySchedule:
         self.hash_empty_value = self.hash.copy().finalize()
         self.secret = bytes(self.algorithm.digest_size)
 
-    def certificate_verify_data(self, context_string):
+    def certificate_verify_data(self, context_string: bytes) -> bytes:
         return b" " * 64 + context_string + b"\x00" + self.hash.copy().finalize()
 
-    def finished_verify_data(self, secret):
+    def finished_verify_data(self, secret: bytes) -> bytes:
         hmac_key = hkdf_expand_label(
             algorithm=self.algorithm,
             secret=secret,
@@ -592,7 +656,7 @@ class KeySchedule:
         h.update(self.hash.copy().finalize())
         return h.finalize()
 
-    def derive_secret(self, label):
+    def derive_secret(self, label: bytes) -> bytes:
         return hkdf_expand_label(
             algorithm=self.algorithm,
             secret=self.secret,
@@ -601,7 +665,7 @@ class KeySchedule:
             length=self.algorithm.digest_size,
         )
 
-    def extract(self, key_material=None):
+    def extract(self, key_material: Optional[bytes] = None) -> None:
         if key_material is None:
             key_material = bytes(self.algorithm.digest_size)
 
@@ -619,24 +683,25 @@ class KeySchedule:
             algorithm=self.algorithm, salt=self.secret, key_material=key_material
         )
 
-    def update_hash(self, data):
+    def update_hash(self, data: bytes) -> None:
         self.hash.update(data)
 
 
 class KeyScheduleProxy:
-    def __init__(self, cipher_suites):
+    def __init__(self, cipher_suites: List[CipherSuite]):
         self.__items = list(map(KeySchedule, cipher_suites))
 
-    def extract(self, key_material=None):
+    def extract(self, key_material: Optional[bytes] = None) -> None:
         for k in self.__items:
             k.extract(key_material)
 
-    def select(self, cipher_suite):
+    def select(self, cipher_suite: CipherSuite) -> KeySchedule:
         for k in self.__items:
             if k.cipher_suite == cipher_suite:
                 return k
+        raise KeyError
 
-    def update_hash(self, data):
+    def update_hash(self, data: bytes) -> None:
         for k in self.__items:
             k.update_hash(data)
 
@@ -661,28 +726,28 @@ GROUP_TO_CURVE = {
 CURVE_TO_GROUP = dict((v, k) for k, v in GROUP_TO_CURVE.items())
 
 
-def cipher_suite_aead(cipher_suite, key):
+def cipher_suite_aead(cipher_suite: CipherSuite, key: bytes) -> Any:
     return CIPHER_SUITES[cipher_suite][0](key)
 
 
-def cipher_suite_hash(cipher_suite):
+def cipher_suite_hash(cipher_suite: CipherSuite) -> hashes.HashAlgorithm:
     return CIPHER_SUITES[cipher_suite][1]()
 
 
-def decode_public_key(key_share):
+def decode_public_key(key_share: KeyShareEntry) -> ec.EllipticCurvePublicKey:
     return ec.EllipticCurvePublicKey.from_encoded_point(
         GROUP_TO_CURVE[key_share[0]](), key_share[1]
     )
 
 
-def encode_public_key(public_key):
+def encode_public_key(public_key: ec.EllipticCurvePublicKey) -> KeyShareEntry:
     return (
         CURVE_TO_GROUP[public_key.curve.__class__],
         public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint),
     )
 
 
-def negotiate(supported, offered, error_message):
+def negotiate(supported: List[T], offered: List[T], error_message: str) -> T:
     for c in supported:
         if c in offered:
             return c
@@ -691,13 +756,16 @@ def negotiate(supported, offered, error_message):
 
 
 class Context:
-    def __init__(self, is_client, logger=None):
-        self.alpn_protocols = None
-        self.certificate = None
-        self.certificate_private_key = None
-        self.handshake_extensions = []
+    def __init__(self, is_client: bool, logger: logging.Logger = None):
+        self.alpn_protocols: Optional[List[str]] = None
+        self.certificate: Optional[x509.Certificate] = None
+        self.certificate_private_key: Optional[
+            Union[dsa.DSAPublicKey, ec.EllipticCurvePublicKey, rsa.RSAPublicKey]
+        ] = None
+        self.handshake_extensions: List[Extension] = []
         self.is_client = is_client
-        self.server_name = None
+        self.key_schedule: KeySchedule
+        self.server_name: Optional[str] = None
         self.update_traffic_key_cb = lambda d, e, s: None
 
         self._cipher_suites = [
@@ -709,10 +777,10 @@ class Context:
         self._signature_algorithms = [SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
         self._supported_versions = [TLS_VERSION_1_3]
 
-        self._peer_certificate = None
+        self._peer_certificate: Optional[x509.Certificate] = None
         self._receive_buffer = b""
-        self._enc_key = None
-        self._dec_key = None
+        self._enc_key: Optional[bytes] = None
+        self._dec_key: Optional[bytes] = None
         self.__logger = logger
 
         if is_client:
@@ -728,7 +796,9 @@ class Context:
             self.private_key = None
             self.state = State.SERVER_EXPECT_CLIENT_HELLO
 
-    def handle_message(self, input_data, output_buf):
+    def handle_message(
+        self, input_data: bytes, output_buf: Dict[Epoch, Buffer]
+    ) -> None:
         if self.state == State.CLIENT_HANDSHAKE_START:
             self._client_send_hello(output_buf[Epoch.INITIAL])
             return
@@ -806,7 +876,7 @@ class Context:
 
             assert input_buf.eof()
 
-    def _client_send_hello(self, output_buf):
+    def _client_send_hello(self, output_buf: Buffer) -> None:
         hello = ClientHello(
             random=self.client_random,
             session_id=self.session_id,
@@ -830,7 +900,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_SERVER_HELLO)
 
-    def _client_handle_hello(self, input_buf, output_buf):
+    def _client_handle_hello(self, input_buf: Buffer, output_buf: Buffer) -> None:
         peer_hello = pull_server_hello(input_buf)
 
         assert peer_hello.cipher_suite in self._cipher_suites
@@ -850,7 +920,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
 
-    def _client_handle_encrypted_extensions(self, input_buf):
+    def _client_handle_encrypted_extensions(self, input_buf: Buffer) -> None:
         pull_encrypted_extensions(input_buf)
 
         self._setup_traffic_protection(
@@ -860,7 +930,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
 
-    def _client_handle_certificate(self, input_buf):
+    def _client_handle_certificate(self, input_buf: Buffer) -> None:
         certificate = pull_certificate(input_buf)
 
         self._peer_certificate = x509.load_der_x509_certificate(
@@ -870,7 +940,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
 
-    def _client_handle_certificate_verify(self, input_buf):
+    def _client_handle_certificate_verify(self, input_buf: Buffer) -> None:
         verify = pull_certificate_verify(input_buf)
 
         # check signature
@@ -888,7 +958,7 @@ class Context:
 
         self._set_state(State.CLIENT_EXPECT_FINISHED)
 
-    def _client_handle_finished(self, input_buf, output_buf):
+    def _client_handle_finished(self, input_buf: Buffer, output_buf: Buffer) -> None:
         finished = pull_finished(input_buf)
 
         # check verify data
@@ -916,10 +986,10 @@ class Context:
 
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
-    def _client_handle_new_session_ticket(self, input_buf):
+    def _client_handle_new_session_ticket(self, input_buf: Buffer) -> None:
         pull_new_session_ticket(input_buf)
 
-    def _server_handle_hello(self, input_buf, output_buf):
+    def _server_handle_hello(self, input_buf: Buffer, output_buf: Buffer) -> None:
         peer_hello = pull_client_hello(input_buf)
 
         # negotiate parameters
@@ -1025,7 +1095,7 @@ class Context:
 
         self._set_state(State.SERVER_EXPECT_FINISHED)
 
-    def _server_handle_finished(self, input_buf):
+    def _server_handle_finished(self, input_buf: Buffer) -> None:
         finished = pull_finished(input_buf)
 
         # check verify data
@@ -1042,12 +1112,14 @@ class Context:
         self._set_state(State.SERVER_POST_HANDSHAKE)
 
     @contextmanager
-    def _push_message(self, buf: Buffer):
+    def _push_message(self, buf: Buffer) -> Generator:
         hash_start = buf.tell()
         yield
         self.key_schedule.update_hash(buf.data_slice(hash_start, buf.tell()))
 
-    def _setup_traffic_protection(self, direction, epoch, label):
+    def _setup_traffic_protection(
+        self, direction: Direction, epoch: Epoch, label: bytes
+    ) -> None:
         key = self.key_schedule.derive_secret(label)
 
         if direction == Direction.ENCRYPT:
@@ -1057,7 +1129,7 @@ class Context:
 
         self.update_traffic_key_cb(direction, epoch, key)
 
-    def _set_state(self, state):
+    def _set_state(self, state: State) -> None:
         if self.__logger:
             self.__logger.info("TLS %s -> %s", self.state, state)
         self.state = state

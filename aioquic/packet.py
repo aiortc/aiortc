@@ -1,9 +1,10 @@
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import List
+from typing import Generator, List, Optional, Tuple
 
 from .buffer import (
+    Buffer,
     BufferReadError,
     pull_bytes,
     pull_uint8,
@@ -70,19 +71,23 @@ class QuicHeader:
     rest_length: int = 0
 
 
-def decode_cid_length(length):
+def decode_cid_length(length: int) -> int:
     return length + 3 if length else 0
 
 
-def encode_cid_length(length):
+def encode_cid_length(length: int) -> int:
     return length - 3 if length else 0
 
 
-def is_long_header(first_byte):
+def is_long_header(first_byte: int) -> bool:
     return bool(first_byte & PACKET_LONG_HEADER)
 
 
-def pull_uint_var(buf):
+def pull_protocol_version(buf: Buffer) -> QuicProtocolVersion:
+    return QuicProtocolVersion(pull_uint32(buf))
+
+
+def pull_uint_var(buf: Buffer) -> int:
     """
     Pull a QUIC variable-length unsigned integer.
     """
@@ -94,7 +99,10 @@ def pull_uint_var(buf):
     return pull(buf) & mask
 
 
-def push_uint_var(buf, value):
+push_protocol_version = push_uint32
+
+
+def push_uint_var(buf: Buffer, value: int) -> None:
     """
     Push a QUIC variable-length unsigned integer.
     """
@@ -107,14 +115,14 @@ def push_uint_var(buf, value):
     raise ValueError("Integer is too big for a variable-length integer")
 
 
-def pull_quic_header(buf, host_cid_length=None):
+def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> QuicHeader:
     first_byte = pull_uint8(buf)
 
     original_destination_cid = b""
     token = b""
     if is_long_header(first_byte):
         # long header packet
-        version = pull_uint32(buf)
+        version = pull_protocol_version(buf)
         cid_lengths = pull_uint8(buf)
 
         destination_cid_length = decode_cid_length(cid_lengths // 16)
@@ -172,9 +180,9 @@ def pull_quic_header(buf, host_cid_length=None):
         )
 
 
-def push_quic_header(buf, header):
+def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
     push_uint8(buf, header.packet_type)
-    push_uint32(buf, header.version)
+    push_protocol_version(buf, header.version)
     push_uint8(
         buf,
         (encode_cid_length(len(header.destination_cid)) << 4)
@@ -194,24 +202,24 @@ def push_quic_header(buf, header):
 
 @dataclass
 class QuicTransportParameters:
-    initial_version: int = None
-    negotiated_version: int = None
-    supported_versions: List[int] = field(default_factory=list)
+    initial_version: Optional[QuicProtocolVersion] = None
+    negotiated_version: Optional[QuicProtocolVersion] = None
+    supported_versions: List[QuicProtocolVersion] = field(default_factory=list)
 
-    original_connection_id: bytes = None
-    idle_timeout: int = None
-    stateless_reset_token: bytes = None
-    max_packet_size: int = None
-    initial_max_data: int = None
-    initial_max_stream_data_bidi_local: int = None
-    initial_max_stream_data_bidi_remote: int = None
-    initial_max_stream_data_uni: int = None
-    initial_max_streams_bidi: int = None
-    initial_max_streams_uni: int = None
-    ack_delay_exponent: int = None
-    max_ack_delay: int = None
-    disable_migration: bool = False
-    preferred_address: bytes = None
+    original_connection_id: Optional[bytes] = None
+    idle_timeout: Optional[int] = None
+    stateless_reset_token: Optional[bytes] = None
+    max_packet_size: Optional[int] = None
+    initial_max_data: Optional[int] = None
+    initial_max_stream_data_bidi_local: Optional[int] = None
+    initial_max_stream_data_bidi_remote: Optional[int] = None
+    initial_max_stream_data_uni: Optional[int] = None
+    initial_max_streams_bidi: Optional[int] = None
+    initial_max_streams_uni: Optional[int] = None
+    ack_delay_exponent: Optional[int] = None
+    max_ack_delay: Optional[int] = None
+    disable_migration: Optional[bool] = False
+    preferred_address: Optional[bytes] = None
 
 
 PARAMS = [
@@ -232,15 +240,17 @@ PARAMS = [
 ]
 
 
-def pull_quic_transport_parameters(buf, is_client=None):
+def pull_quic_transport_parameters(
+    buf: Buffer, is_client: Optional[bool] = None
+) -> QuicTransportParameters:
     params = QuicTransportParameters()
 
     # version < DRAFT_17
     if is_client:
-        params.initial_version = pull_uint32(buf)
+        params.initial_version = pull_protocol_version(buf)
     elif is_client is False:
-        params.negotiated_version = pull_uint32(buf)
-        params.supported_versions = pull_list(buf, 1, pull_uint32)
+        params.negotiated_version = pull_protocol_version(buf)
+        params.supported_versions = pull_list(buf, 1, pull_protocol_version)
 
     with pull_block(buf, 2) as length:
         end = buf.tell() + length
@@ -260,13 +270,15 @@ def pull_quic_transport_parameters(buf, is_client=None):
     return params
 
 
-def push_quic_transport_parameters(buf, params, is_client=None):
+def push_quic_transport_parameters(
+    buf: Buffer, params: QuicTransportParameters, is_client: Optional[bool] = None
+) -> None:
     # version < DRAFT_17
     if is_client:
-        push_uint32(buf, params.initial_version)
+        push_protocol_version(buf, params.initial_version)
     elif is_client is False:
-        push_uint32(buf, params.negotiated_version)
-        push_list(buf, 1, push_uint32, params.supported_versions)
+        push_protocol_version(buf, params.negotiated_version)
+        push_list(buf, 1, push_protocol_version, params.supported_versions)
 
     with push_block(buf, 2):
         for param_id, (param_name, param_type) in enumerate(PARAMS):
@@ -309,7 +321,7 @@ class QuicFrameType(IntEnum):
     APPLICATION_CLOSE = 0x1D
 
 
-def pull_ack_frame(buf):
+def pull_ack_frame(buf: Buffer) -> Tuple[RangeSet, int]:
     rangeset = RangeSet()
     end = pull_uint_var(buf)  # largest acknowledged
     delay = pull_uint_var(buf)
@@ -325,7 +337,7 @@ def pull_ack_frame(buf):
     return rangeset, delay
 
 
-def push_ack_frame(buf, rangeset: RangeSet, delay: int):
+def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
     index = len(rangeset) - 1
     r = rangeset[index]
     push_uint_var(buf, r.stop - 1)
@@ -347,14 +359,14 @@ class QuicStreamFrame:
     offset: int = 0
 
 
-def pull_crypto_frame(buf):
+def pull_crypto_frame(buf: Buffer) -> QuicStreamFrame:
     offset = pull_uint_var(buf)
     length = pull_uint_var(buf)
     return QuicStreamFrame(offset=offset, data=pull_bytes(buf, length))
 
 
 @contextmanager
-def push_crypto_frame(buf, offset=0):
+def push_crypto_frame(buf: Buffer, offset: int = 0) -> Generator:
     push_uint_var(buf, offset)
     push_uint16(buf, 0)
     start = buf.tell()
@@ -366,7 +378,7 @@ def push_crypto_frame(buf, offset=0):
 
 
 @contextmanager
-def push_stream_frame(buf, stream_id, offset):
+def push_stream_frame(buf: Buffer, stream_id: int, offset: int) -> Generator:
     push_uint_var(buf, stream_id)
     push_uint_var(buf, offset)
     push_uint16(buf, 0)
@@ -378,17 +390,17 @@ def push_stream_frame(buf, stream_id, offset):
     buf.seek(end)
 
 
-def pull_new_token_frame(buf):
+def pull_new_token_frame(buf: Buffer) -> bytes:
     length = pull_uint_var(buf)
     return pull_bytes(buf, length)
 
 
-def push_new_token_frame(buf, token):
+def push_new_token_frame(buf: Buffer, token: bytes) -> None:
     push_uint_var(buf, len(token))
     push_bytes(buf, token)
 
 
-def pull_new_connection_id_frame(buf):
+def pull_new_connection_id_frame(buf: Buffer) -> Tuple[int, bytes, bytes]:
     sequence_number = pull_uint_var(buf)
     length = pull_uint8(buf)
     connection_id = pull_bytes(buf, length)
@@ -397,8 +409,11 @@ def pull_new_connection_id_frame(buf):
 
 
 def push_new_connection_id_frame(
-    buf, sequence_number, connection_id, stateless_reset_token
-):
+    buf: Buffer,
+    sequence_number: int,
+    connection_id: bytes,
+    stateless_reset_token: bytes,
+) -> None:
     assert len(stateless_reset_token) == 16
     push_uint_var(buf, sequence_number)
     push_uint8(buf, len(connection_id))
@@ -406,7 +421,7 @@ def push_new_connection_id_frame(
     push_bytes(buf, stateless_reset_token)
 
 
-def pull_transport_close_frame(buf):
+def pull_transport_close_frame(buf: Buffer) -> Tuple[int, int, bytes]:
     error_code = pull_uint16(buf)
     frame_type = pull_uint_var(buf)
     reason_length = pull_uint_var(buf)
@@ -414,21 +429,25 @@ def pull_transport_close_frame(buf):
     return (error_code, frame_type, reason_phrase)
 
 
-def push_transport_close_frame(buf, error_code, frame_type, reason_phrase):
+def push_transport_close_frame(
+    buf: Buffer, error_code: int, frame_type: int, reason_phrase: bytes
+) -> None:
     push_uint16(buf, error_code)
     push_uint_var(buf, frame_type)
     push_uint_var(buf, len(reason_phrase))
     push_bytes(buf, reason_phrase)
 
 
-def pull_application_close_frame(buf):
+def pull_application_close_frame(buf: Buffer) -> Tuple[int, bytes]:
     error_code = pull_uint16(buf)
     reason_length = pull_uint_var(buf)
     reason_phrase = pull_bytes(buf, reason_length)
     return (error_code, reason_phrase)
 
 
-def push_application_close_frame(buf, error_code, reason_phrase):
+def push_application_close_frame(
+    buf: Buffer, error_code: int, reason_phrase: bytes
+) -> None:
     push_uint16(buf, error_code)
     push_uint_var(buf, len(reason_phrase))
     push_bytes(buf, reason_phrase)

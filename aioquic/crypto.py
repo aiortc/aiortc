@@ -1,4 +1,5 @@
 import binascii
+from typing import Optional, Tuple
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
@@ -19,7 +20,9 @@ MAX_PN_SIZE = 4
 SAMPLE_SIZE = 16
 
 
-def derive_key_iv_hp(cipher_suite, secret):
+def derive_key_iv_hp(
+    cipher_suite: CipherSuite, secret: bytes
+) -> Tuple[bytes, bytes, bytes]:
     algorithm = cipher_suite_hash(cipher_suite)
     if cipher_suite in [
         CipherSuite.AES_256_GCM_SHA384,
@@ -36,10 +39,16 @@ def derive_key_iv_hp(cipher_suite, secret):
 
 
 class CryptoContext:
-    def __init__(self):
+    def __init__(self) -> None:
+        self.cipher_suite: Optional[CipherSuite]
+        self.hp: Optional[bytes]
+        self.iv: Optional[bytes]
+
         self.teardown()
 
-    def decrypt_packet(self, packet, encrypted_offset):
+    def decrypt_packet(
+        self, packet: bytes, encrypted_offset: int
+    ) -> Tuple[bytes, bytes, int]:
         packet = bytearray(packet)
 
         # header protection
@@ -78,7 +87,7 @@ class CryptoContext:
 
         return plain_header, payload, packet_number
 
-    def encrypt_packet(self, plain_header, plain_payload):
+    def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
         pn_length = (plain_header[0] & 0x03) + 1
         pn_offset = len(plain_header) - pn_length
         pn = plain_header[pn_offset : pn_offset + pn_length]
@@ -105,9 +114,9 @@ class CryptoContext:
         for i in range(pn_length):
             packet[pn_offset + i] ^= mask[1 + i]
 
-        return packet
+        return bytes(packet)
 
-    def header_protection_mask(self, sample):
+    def header_protection_mask(self, sample: bytes) -> bytes:
         if self.cipher_suite == CipherSuite.CHACHA20_POLY1305_SHA256:
             encryptor = Cipher(
                 algorithms.ChaCha20(key=self.hp, nonce=sample),
@@ -125,10 +134,10 @@ class CryptoContext:
             encryptor.update_into(sample, buf)
             return buf[:5]
 
-    def is_valid(self):
+    def is_valid(self) -> bool:
         return self.aead is not None
 
-    def setup(self, cipher_suite, secret):
+    def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
         assert cipher_suite in [
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.AES_256_GCM_SHA384,
@@ -138,7 +147,7 @@ class CryptoContext:
         self.aead = cipher_suite_aead(cipher_suite, key)
         self.cipher_suite = cipher_suite
 
-    def teardown(self):
+    def teardown(self) -> None:
         self.aead = None
         self.cipher_suite = None
         self.hp = None
@@ -150,18 +159,20 @@ class CryptoError(Exception):
 
 
 class CryptoPair:
-    def __init__(self):
+    def __init__(self) -> None:
         self.aead_tag_size = 16
         self.recv = CryptoContext()
         self.send = CryptoContext()
 
-    def decrypt_packet(self, packet, encrypted_offset):
+    def decrypt_packet(
+        self, packet: bytes, encrypted_offset: int
+    ) -> Tuple[bytes, bytes, int]:
         return self.recv.decrypt_packet(packet, encrypted_offset)
 
-    def encrypt_packet(self, plain_header, plain_payload):
+    def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
         return self.send.encrypt_packet(plain_header, plain_payload)
 
-    def setup_initial(self, cid, is_client):
+    def setup_initial(self, cid: bytes, is_client: bool) -> None:
         if is_client:
             recv_label, send_label = b"server in", b"client in"
         else:

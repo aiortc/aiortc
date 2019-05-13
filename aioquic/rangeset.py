@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 
 class RangeSet(Sequence):
@@ -11,7 +11,7 @@ class RangeSet(Sequence):
             assert r.step == 1
             self.add(r.start, r.stop)
 
-    def add(self, start: int, stop: Optional[int] = None):
+    def add(self, start: int, stop: Optional[int] = None) -> None:
         if stop is None:
             stop = start + 1
         assert stop > start
@@ -38,23 +38,23 @@ class RangeSet(Sequence):
         # the added range is entirely after all existing items, append it
         self.__ranges.append(range(start, stop))
 
-    def shift(self):
+    def shift(self) -> range:
         return self.__ranges.pop(0)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.__ranges)
 
-    def __eq__(self, other: object):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, RangeSet):
             return NotImplemented
 
         return self.__ranges == other.__ranges
 
-    def __getitem__(self, key) -> range:
+    def __getitem__(self, key: Any) -> range:
         return self.__ranges[key]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.__ranges)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "RangeSet({})".format(repr(self.__ranges))

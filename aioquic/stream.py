@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, Optional
 
 from .packet import QuicStreamFrame
 from .rangeset import RangeSet
@@ -11,7 +12,9 @@ class QuicStream:
     Do not instanciate this class yourself, instead use :meth:`QuicConnection.create_stream`.
     """
 
-    def __init__(self, stream_id=None, connection=None):
+    def __init__(
+        self, stream_id: Optional[int] = None, connection: Optional[Any] = None
+    ) -> None:
         self._connection = connection
         self._eof = False
         self._loop = asyncio.get_event_loop()
@@ -19,7 +22,7 @@ class QuicStream:
         self._recv_buffer = bytearray()
         self._recv_start = 0
         self._recv_ranges = RangeSet()
-        self._recv_waiter = None
+        self._recv_waiter: Optional[asyncio.Future[Any]] = None
 
         self._send_buffer = bytearray()
         self._send_start = 0
@@ -27,10 +30,10 @@ class QuicStream:
         self.__stream_id = stream_id
 
     @property
-    def stream_id(self):
+    def stream_id(self) -> Optional[int]:
         return self.__stream_id
 
-    def add_frame(self, frame: QuicStreamFrame):
+    def add_frame(self, frame: QuicStreamFrame) -> None:
         """
         Add a frame of received data.
         """
@@ -60,11 +63,11 @@ class QuicStream:
         if not pos:
             self._wakeup_waiter()
 
-    def feed_eof(self):
+    def feed_eof(self) -> None:
         self._eof = True
         self._wakeup_waiter()
 
-    def get_frame(self, size):
+    def get_frame(self, size: int) -> QuicStreamFrame:
         """
         Get a frame of data to send.
         """
@@ -74,10 +77,10 @@ class QuicStream:
         self._send_start += size
         return frame
 
-    def has_data_to_send(self):
+    def has_data_to_send(self) -> bool:
         return bool(self._send_buffer)
 
-    def pull_data(self):
+    def pull_data(self) -> bytes:
         """
         Pull received data.
         """
@@ -92,7 +95,7 @@ class QuicStream:
         self._recv_start = r.stop
         return data
 
-    async def read(self):
+    async def read(self) -> bytes:
         """
         Read data from the stream.
         """
@@ -110,7 +113,7 @@ class QuicStream:
 
         return self.pull_data()
 
-    def _wakeup_waiter(self):
+    def _wakeup_waiter(self) -> None:
         """
         Wakeup read() function.
         """
@@ -120,7 +123,7 @@ class QuicStream:
             if not waiter.cancelled():
                 waiter.set_result(None)
 
-    def write(self, data: bytes):
+    def write(self, data: bytes) -> None:
         """
         Write some `data` bytes to the stream.
 

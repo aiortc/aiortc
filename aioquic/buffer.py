@@ -1,5 +1,6 @@
 import struct
 from struct import pack_into, unpack_from
+from typing import Optional
 
 
 class BufferReadError(ValueError):
@@ -7,9 +8,9 @@ class BufferReadError(ValueError):
 
 
 class Buffer:
-    def __init__(self, capacity=None, data=None):
+    def __init__(self, capacity: Optional[int] = 0, data: Optional[bytes] = None):
         if data is not None:
-            self._data = data
+            self._data = bytearray(data)
             self._length = len(data)
         else:
             self._data = bytearray(capacity)
@@ -17,24 +18,24 @@ class Buffer:
         self._pos = 0
 
     @property
-    def capacity(self):
+    def capacity(self) -> int:
         return self._length
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         return bytes(self._data[: self._pos])
 
-    def data_slice(self, start, end):
+    def data_slice(self, start: int, end: int) -> bytes:
         return bytes(self._data[start:end])
 
-    def eof(self):
+    def eof(self) -> bool:
         return self._pos == self._length
 
-    def seek(self, pos):
+    def seek(self, pos: int) -> None:
         assert pos <= self._length
         self._pos = pos
 
-    def tell(self):
+    def tell(self) -> int:
         return self._pos
 
 
@@ -49,10 +50,10 @@ def pull_bytes(buf: Buffer, length: int) -> bytes:
         raise BufferReadError
     v = buf._data[buf._pos : buf._pos + length]
     buf._pos += length
-    return v
+    return bytes(v)
 
 
-def push_bytes(buf: Buffer, v: bytes):
+def push_bytes(buf: Buffer, v: bytes) -> None:
     """
     Push bytes.
     """
@@ -76,7 +77,7 @@ def pull_uint8(buf: Buffer) -> int:
         raise BufferReadError
 
 
-def push_uint8(buf: Buffer, v: int):
+def push_uint8(buf: Buffer, v: int) -> None:
     """
     Push an 8-bit unsigned integer.
     """
@@ -96,7 +97,7 @@ def pull_uint16(buf: Buffer) -> int:
         raise BufferReadError
 
 
-def push_uint16(buf: Buffer, v: int):
+def push_uint16(buf: Buffer, v: int) -> None:
     """
     Push a 16-bit unsigned integer.
     """
@@ -116,7 +117,7 @@ def pull_uint32(buf: Buffer) -> int:
         raise BufferReadError
 
 
-def push_uint32(buf: Buffer, v: int):
+def push_uint32(buf: Buffer, v: int) -> None:
     """
     Push a 32-bit unsigned integer.
     """
@@ -136,7 +137,7 @@ def pull_uint64(buf: Buffer) -> int:
         raise BufferReadError
 
 
-def push_uint64(buf: Buffer, v: int):
+def push_uint64(buf: Buffer, v: int) -> None:
     """
     Push a 64-bit unsigned integer.
     """
