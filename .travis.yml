@@ -1,6 +1,13 @@
 dist: xenial
-install: pip3 install black coverage flake8 isort
+install: pip3 install coverage
 language: python
+matrix:
+  include:
+  - env: BUILD=lint
+    install: pip install black flake8 isort
+  - env: BUILD=test
+  - env: BUILD=sdist
+    install: pip install twine
 python: "3.7"
 script: .travis/script
 sudo: true

@@ -2,16 +2,16 @@
 
 set -e
 
-if [ "$BUILD" = "sdist" ]; then
-    python3 setup.py sdist bdist_wheel
-    if [ -n "$TRAVIS_TAG" ]; then
-        pip3 install pyopenssl twine
-        python3 -m twine upload --skip-existing dist/*
-    fi
-else
+if [ "$BUILD" = "lint" ]; then
     flake8 aioquic examples tests
     isort -c -df -rc aioquic examples tests
     black --check --diff aioquic examples tests
+elif [ "$BUILD" = "sdist" ]; then
+    python3 setup.py sdist
+    if [ -n "$TRAVIS_TAG" ]; then
+        python3 -m twine upload --skip-existing dist/*
+    fi
+else
     coverage run setup.py test
     curl -s https://codecov.io/bash | bash
 fi
