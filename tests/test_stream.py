@@ -1,7 +1,15 @@
+import asyncio
 from unittest import TestCase
 
 from aioquic.packet import QuicStreamFrame
 from aioquic.stream import QuicStream
+
+from .utils import run
+
+
+async def delay(coro):
+    await asyncio.sleep(0.1)
+    await coro()
 
 
 class QuicStreamTest(TestCase):
@@ -64,6 +72,15 @@ class QuicStreamTest(TestCase):
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_start, 16)
+
+    def test_recv_ordered_3(self):
+        stream = QuicStream()
+
+        async def add_frame():
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+
+        data, _ = run(asyncio.gather(stream.read(), delay(add_frame)))
+        self.assertEqual(data, b"01234567")
 
     def test_recv_unordered(self):
         stream = QuicStream()
