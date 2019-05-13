@@ -65,12 +65,15 @@ class QuicConnectionTest(TestCase):
 
         # send data over stream
         client_stream = client.create_stream()
-        client_stream.push_data(b"ping")
+        client_stream.write(b"ping")
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 4)
 
         server_stream = server.streams[0]
-        self.assertEqual(server_stream.pull_data(), b"ping")
+        self.assertEqual(run(server_stream.read()), b"ping")
+        server_stream.write(b"pong")
+
+        self.assertEqual(run(client_stream.read()), b"pong")
 
         return client, server
 

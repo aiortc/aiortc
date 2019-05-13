@@ -143,6 +143,10 @@ class QuicConnection:
         """
         return await self.__connected.wait()
 
+    def connection_lost(self, exc):
+        for stream in self.streams.values():
+            stream.feed_eof()
+
     def connection_made(self, transport):
         """
         Inform the connection of the transport used to send data. This object
@@ -348,12 +352,14 @@ class QuicConnection:
                 self.__logger.info(
                     "Transport close code 0x%X, reason %s" % (error_code, reason_phrase)
                 )
+                self.connection_lost(None)
             elif frame_type == QuicFrameType.APPLICATION_CLOSE:
                 error_code, reason_phrase = packet.pull_application_close_frame(buf)
                 self.__logger.info(
                     "Application close code 0x%X, reason %s"
                     % (error_code, reason_phrase)
                 )
+                self.connection_lost(None)
             else:
                 self.__logger.warning("unhandled frame type %d", frame_type)
                 break
@@ -375,7 +381,7 @@ class QuicConnection:
 
     def _push_crypto_data(self):
         for epoch, buf in self.send_buffer.items():
-            self.streams[epoch].push_data(buf.data)
+            self.streams[epoch].write(buf.data)
             buf.seek(0)
 
     def _send_pending(self):

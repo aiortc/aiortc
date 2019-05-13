@@ -18,12 +18,10 @@ async def run(host, port, **kwargs):
     )
     await protocol.connect()
 
+    # perform HTTP/0.9 request
     stream = protocol.create_stream()
-    stream.push_data(b"GET /\r\n")
-
-    await asyncio.sleep(1)
-
-    print(stream.pull_data())
+    stream.write(b"GET /\r\n")
+    print(await stream.read())
 
 
 if __name__ == "__main__":

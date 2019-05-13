@@ -6,5 +6,5 @@ API Reference
    .. autoclass:: QuicConnection
       :members:
 
-   .. autoclass:: QuicStream
-      :members: pull_data, push_data
+   .. autoclass:: QuicStream()
+      :members: read, write

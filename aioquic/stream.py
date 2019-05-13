@@ -1,3 +1,5 @@
+import asyncio
+
 from .packet import QuicStreamFrame
 from .rangeset import RangeSet
 
@@ -5,14 +7,19 @@ from .rangeset import RangeSet
 class QuicStream:
     """
     A QUIC stream.
+
+    Do not instanciate this class yourself, instead use :meth:`QuicConnection.create_stream`.
     """
 
     def __init__(self, stream_id=None, connection=None):
         self._connection = connection
+        self._eof = False
+        self._loop = asyncio.get_event_loop()
 
         self._recv_buffer = bytearray()
         self._recv_start = 0
         self._recv_ranges = RangeSet()
+        self._recv_waiter = None
 
         self._send_buffer = bytearray()
         self._send_start = 0
@@ -50,6 +57,13 @@ class QuicStream:
             self._recv_buffer += bytearray(gap)
         self._recv_buffer[pos : pos + count] = frame.data
 
+        if not pos:
+            self._wakeup_waiter()
+
+    def feed_eof(self):
+        self._eof = True
+        self._wakeup_waiter()
+
     def get_frame(self, size):
         """
         Get a frame of data to send.
@@ -78,9 +92,40 @@ class QuicStream:
         self._recv_start = r.stop
         return data
 
-    def push_data(self, data):
+    async def read(self):
         """
-        Push data to send.
+        Read data from the stream.
+        """
+        if (
+            not self._recv_ranges
+            or self._recv_ranges[0].start != self._recv_start
+            and not self._eof
+        ):
+            assert self._recv_waiter is None
+            self._recv_waiter = self._loop.create_future()
+            try:
+                await self._recv_waiter
+            finally:
+                self._recv_waiter = None
+
+        return self.pull_data()
+
+    def _wakeup_waiter(self):
+        """
+        Wakeup read() function.
+        """
+        waiter = self._recv_waiter
+        if waiter is not None:
+            self._recv_waiter = None
+            if not waiter.cancelled():
+                waiter.set_result(None)
+
+    def write(self, data: bytes):
+        """
+        Write some `data` bytes to the stream.
+
+        This method does not block; it buffers the data and arranges for it to
+        be sent out asynchronously.
         """
         if data:
             self._send_buffer += data
