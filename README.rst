@@ -1,16 +1,19 @@
 aioquic
 =======
 
-|rtd| |travis| |codecov|
+|rtd| |travis| |codecov| |black|
 
 .. |rtd| image:: https://readthedocs.org/projects/aioquic/badge/?version=latest
-   :target: https://aioquic.readthedocs.io/
+    :target: https://aioquic.readthedocs.io/
 
 .. |travis| image:: https://img.shields.io/travis/com/aiortc/aioquic.svg
     :target: https://travis-ci.com/aiortc/aioquic
 
 .. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aioquic.svg
     :target: https://codecov.io/gh/aiortc/aioquic
+
+.. |black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+    :target: https://github.com/python/black
 
 What is ``aioquic``?
 --------------------
