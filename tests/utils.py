@@ -9,7 +9,7 @@ from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 
 def lf2crlf(x):
-    return x.replace('\n', '\r\n')
+    return x.replace("\n", "\r\n")
 
 
 class DummyConnection:
@@ -74,8 +74,8 @@ def dummy_connection_pair():
 def dummy_ice_transport_pair():
     connection_a, connection_b = dummy_connection_pair()
     return (
-        DummyIceTransport(connection_a, 'controlling'),
-        DummyIceTransport(connection_b, 'controlled')
+        DummyIceTransport(connection_a, "controlling"),
+        DummyIceTransport(connection_b, "controlled"),
     )
 
 
@@ -83,16 +83,18 @@ def dummy_dtls_transport_pair():
     ice_a, ice_b = dummy_ice_transport_pair()
     dtls_a = RTCDtlsTransport(ice_a, [RTCCertificate.generateCertificate()])
     dtls_b = RTCDtlsTransport(ice_b, [RTCCertificate.generateCertificate()])
-    run(asyncio.gather(
-        dtls_b.start(dtls_a.getLocalParameters()),
-        dtls_a.start(dtls_b.getLocalParameters())
-    ))
+    run(
+        asyncio.gather(
+            dtls_b.start(dtls_a.getLocalParameters()),
+            dtls_a.start(dtls_b.getLocalParameters()),
+        )
+    )
     return (dtls_a, dtls_b)
 
 
 def load(name):
     path = os.path.join(os.path.dirname(__file__), name)
-    with open(path, 'rb') as fp:
+    with open(path, "rb") as fp:
         return fp.read()
 
 
@@ -100,8 +102,8 @@ def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
-if os.environ.get('AIORTC_DEBUG'):
+if os.environ.get("AIORTC_DEBUG"):
     logging.basicConfig(level=logging.DEBUG)
 
-if os.environ.get('TRAVIS'):
-    sys.stderr.write(backend.openssl_version_text() + '\n')
+if os.environ.get("TRAVIS"):
+    sys.stderr.write(backend.openssl_version_text() + "\n")

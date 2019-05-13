@@ -6,6 +6,7 @@ class RTCStats:
     """
     Base class for statistics.
     """
+
     timestamp = attr.ib()
     "The timestamp associated with this object."
     type = attr.ib()
@@ -40,6 +41,7 @@ class RTCInboundRtpStreamStats(RTCReceivedRtpStreamStats):
     The :class:`RTCInboundRtpStreamStats` dictionary represents the measurement
     metrics for the incoming RTP media stream.
     """
+
     pass
 
 
@@ -49,6 +51,7 @@ class RTCRemoteInboundRtpStreamStats(RTCReceivedRtpStreamStats):
     The :class:`RTCRemoteInboundRtpStreamStats` dictionary represents the remote
     endpoint's measurement metrics for a particular incoming RTP stream.
     """
+
     roundTripTime = attr.ib()
     fractionLost = attr.ib()
 
@@ -59,6 +62,7 @@ class RTCOutboundRtpStreamStats(RTCSentRtpStreamStats):
     The :class:`RTCOutboundRtpStreamStats` dictionary represents the measurement
     metrics for the outgoing RTP stream.
     """
+
     trackId = attr.ib(type=str)
 
 
@@ -68,6 +72,7 @@ class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
     The :class:`RTCRemoteOutboundRtpStreamStats` dictionary represents the remote
     endpoint's measurement metrics for its outgoing RTP stream.
     """
+
     remoteTimestamp = attr.ib(default=None)
 
 
@@ -102,5 +107,6 @@ class RTCStatsReport(dict):
     - :class:`RTCRemoteOutboundRtpStreamStats`
     - :class:`RTCTransportStats`
     """
+
     def add(self, stats):
         self[stats.id] = stats

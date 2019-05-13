@@ -12,17 +12,27 @@ import pylibsrtp
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.bindings.openssl.binding import Binding
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import (Encoding,
-                                                          NoEncryption,
-                                                          PrivateFormat)
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 from OpenSSL import crypto
 from pyee import EventEmitter
 from pylibsrtp import Policy, Session
 
 from . import clock, rtp
 from .rtcrtpparameters import RTCRtpReceiveParameters, RTCRtpSendParameters
-from .rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, RtpPacket, is_rtcp)
+from .rtp import (
+    RtcpByePacket,
+    RtcpPacket,
+    RtcpPsfbPacket,
+    RtcpRrPacket,
+    RtcpRtpfbPacket,
+    RtcpSrPacket,
+    RtpPacket,
+    is_rtcp,
+)
 from .stats import RTCStatsReport, RTCTransportStats
 
 binding = Binding()
@@ -34,7 +44,7 @@ NID_X9_62_prime256v1 = 415
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
 
-logger = logging.getLogger('dtls')
+logger = logging.getLogger("dtls")
 
 
 class DtlsError(Exception):
@@ -43,23 +53,26 @@ class DtlsError(Exception):
 
 def _openssl_assert(ok):
     if not ok:
-        raise DtlsError('OpenSSL call failed')
+        raise DtlsError("OpenSSL call failed")
 
 
 def certificate_digest(x509):
-    digest = lib.EVP_get_digestbyname(b'SHA256')
+    digest = lib.EVP_get_digestbyname(b"SHA256")
     _openssl_assert(digest != ffi.NULL)
 
-    result_buffer = ffi.new('unsigned char[]', lib.EVP_MAX_MD_SIZE)
-    result_length = ffi.new('unsigned int[]', 1)
+    result_buffer = ffi.new("unsigned char[]", lib.EVP_MAX_MD_SIZE)
+    result_length = ffi.new("unsigned int[]", 1)
     result_length[0] = len(result_buffer)
 
     digest_result = lib.X509_digest(x509, digest, result_buffer, result_length)
     assert digest_result == 1
 
-    return b":".join([
-        base64.b16encode(ch).upper() for ch
-        in ffi.buffer(result_buffer, result_length[0])]).decode('ascii')
+    return b":".join(
+        [
+            base64.b16encode(ch).upper()
+            for ch in ffi.buffer(result_buffer, result_length[0])
+        ]
+    ).decode("ascii")
 
 
 def generate_key():
@@ -67,20 +80,21 @@ def generate_key():
     key_pem = key.private_bytes(
         encoding=Encoding.PEM,
         format=PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=NoEncryption())
+        encryption_algorithm=NoEncryption(),
+    )
     return crypto.load_privatekey(crypto.FILETYPE_PEM, key_pem)
 
 
 def generate_certificate(key):
     cert = crypto.X509()
-    cert.get_subject().CN = binascii.hexlify(os.urandom(16)).decode('ascii')
+    cert.get_subject().CN = binascii.hexlify(os.urandom(16)).decode("ascii")
     cert.gmtime_adj_notBefore(-86400)
     cert.gmtime_adj_notAfter(30 * 86400)
     cert.set_version(2)
-    cert.set_serial_number(struct.unpack('!L', os.urandom(4))[0])
+    cert.set_serial_number(struct.unpack("!L", os.urandom(4))[0])
     cert.set_issuer(cert.get_subject())
     cert.set_pubkey(key)
-    cert.sign(key, 'sha256')
+    cert.sign(key, "sha256")
     return cert
 
 
@@ -88,17 +102,20 @@ def get_error_queue():
     errors = []
 
     def text(charp):
-        return ffi.string(charp).decode('utf-8') if charp else ''
+        return ffi.string(charp).decode("utf-8") if charp else ""
 
     while True:
         error = lib.ERR_get_error()
         if error == 0:
             break
 
-        errors.append((
-            text(lib.ERR_lib_error_string(error)),
-            text(lib.ERR_func_error_string(error)),
-            text(lib.ERR_reason_error_string(error))))
+        errors.append(
+            (
+                text(lib.ERR_lib_error_string(error)),
+                text(lib.ERR_func_error_string(error)),
+                text(lib.ERR_reason_error_string(error)),
+            )
+        )
 
     return errors
 
@@ -107,18 +124,18 @@ def get_srtp_key_salt(src, idx):
     key_start = idx * SRTP_KEY_LEN
     salt_start = 2 * SRTP_KEY_LEN + idx * SRTP_SALT_LEN
     return (
-        src[key_start:key_start + SRTP_KEY_LEN] +
-        src[salt_start:salt_start + SRTP_SALT_LEN]
+        src[key_start : key_start + SRTP_KEY_LEN]
+        + src[salt_start : salt_start + SRTP_SALT_LEN]
     )
 
 
-@ffi.callback('int(int, X509_STORE_CTX *)')
+@ffi.callback("int(int, X509_STORE_CTX *)")
 def verify_callback(x, y):
     return 1
 
 
 def create_ssl_context(certificate):
-    if hasattr(lib, 'DTLS_method'):
+    if hasattr(lib, "DTLS_method"):
         # openssl >= 1.0.2
         method = lib.DTLS_method
     else:
@@ -127,13 +144,16 @@ def create_ssl_context(certificate):
     ctx = lib.SSL_CTX_new(method())
     ctx = ffi.gc(ctx, lib.SSL_CTX_free)
 
-    lib.SSL_CTX_set_verify(ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
-                           verify_callback)
+    lib.SSL_CTX_set_verify(
+        ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT, verify_callback
+    )
 
     _openssl_assert(lib.SSL_CTX_use_certificate(ctx, certificate._cert._x509) == 1)
     _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, certificate._key._pkey) == 1)
-    _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b'HIGH:!CAMELLIA:!aNULL') == 1)
-    _openssl_assert(lib.SSL_CTX_set_tlsext_use_srtp(ctx, b'SRTP_AES128_CM_SHA1_80') == 0)
+    _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
+    _openssl_assert(
+        lib.SSL_CTX_set_tlsext_use_srtp(ctx, b"SRTP_AES128_CM_SHA1_80") == 0
+    )
     _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
 
     # Configure elliptic curve for ECDHE in server mode for older OpenSSL
@@ -165,6 +185,7 @@ class RTCCertificate:
 
     To generate a certificate and the corresponding private key use :func:`generateCertificate`.
     """
+
     def __init__(self, key, cert):
         self._key = key
         self._cert = cert
@@ -174,9 +195,10 @@ class RTCCertificate:
         """
         The date and time after which the certificate will be considered invalid.
         """
-        not_after = self._cert.get_notAfter().decode('ascii')
-        return datetime.datetime.strptime(not_after, '%Y%m%d%H%M%SZ').replace(
-            tzinfo=datetime.timezone.utc)
+        not_after = self._cert.get_notAfter().decode("ascii")
+        return datetime.datetime.strptime(not_after, "%Y%m%d%H%M%SZ").replace(
+            tzinfo=datetime.timezone.utc
+        )
 
     def getFingerprints(self):
         """
@@ -184,7 +206,9 @@ class RTCCertificate:
         with the digest algorithm used in the certificate signature.
         """
         return [
-            RTCDtlsFingerprint(algorithm='sha-256', value=certificate_digest(self._cert._x509))
+            RTCDtlsFingerprint(
+                algorithm="sha-256", value=certificate_digest(self._cert._x509)
+            )
         ]
 
     @classmethod
@@ -205,6 +229,7 @@ class RTCDtlsFingerprint:
     The :class:`RTCDtlsFingerprint` dictionary includes the hash function
     algorithm and certificate fingerprint.
     """
+
     algorithm = attr.ib()
     "The hash function name, for instance `'sha-256'`."
 
@@ -218,10 +243,11 @@ class RTCDtlsParameters:
     The :class:`RTCDtlsParameters` dictionary includes information relating to
     DTLS configuration.
     """
+
     fingerprints = attr.ib(default=attr.Factory(list))
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
-    role = attr.ib(default='auto')
+    role = attr.ib(default="auto")
     "The DTLS role, with a default of auto."
 
 
@@ -231,6 +257,7 @@ class RtpRouter:
 
     https://tools.ietf.org/html/draft-ietf-mmusic-sdp-bundle-negotiation-53
     """
+
     def __init__(self):
         self.receivers = set()
         self.senders = {}
@@ -320,6 +347,7 @@ class RTCDtlsTransport(EventEmitter):
     :param: transport: An :class:`RTCIceTransport`.
     :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
     """
+
     def __init__(self, transport, certificates):
         assert len(certificates) == 1
         certificate = certificates[0]
@@ -327,11 +355,11 @@ class RTCDtlsTransport(EventEmitter):
         super().__init__()
         self.encrypted = False
         self._data_receiver = None
-        self._role = 'auto'
+        self._role = "auto"
         self._rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self._rtp_router = RtpRouter()
         self._state = State.NEW
-        self._stats_id = 'transport_' + str(id(self))
+        self._stats_id = "transport_" + str(id(self))
         self._task = None
         self._transport = transport
 
@@ -352,9 +380,9 @@ class RTCDtlsTransport(EventEmitter):
         self.ssl = ffi.gc(ssl, lib.SSL_free)
 
         self.read_bio = lib.BIO_new(lib.BIO_s_mem())
-        self.read_cdata = ffi.new('char[]', 1500)
+        self.read_cdata = ffi.new("char[]", 1500)
         self.write_bio = lib.BIO_new(lib.BIO_s_mem())
-        self.write_cdata = ffi.new('char[]', 1500)
+        self.write_cdata = ffi.new("char[]", 1500)
         lib.SSL_set_bio(self.ssl, self.read_bio, self.write_bio)
 
         self.__local_certificate = certificate
@@ -381,7 +409,9 @@ class RTCDtlsTransport(EventEmitter):
 
         :rtype: :class:`RTCDtlsParameters`
         """
-        return RTCDtlsParameters(fingerprints=self.__local_certificate.getFingerprints())
+        return RTCDtlsParameters(
+            fingerprints=self.__local_certificate.getFingerprints()
+        )
 
     async def start(self, remoteParameters):
         """
@@ -393,11 +423,11 @@ class RTCDtlsTransport(EventEmitter):
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
 
-        if self.transport.role == 'controlling':
-            self._role = 'server'
+        if self.transport.role == "controlling":
+            self._role = "server"
             lib.SSL_set_accept_state(self.ssl)
         else:
-            self._role = 'client'
+            self._role = "client"
             lib.SSL_set_connect_state(self.ssl)
 
         self._set_state(State.CONNECTING)
@@ -414,13 +444,13 @@ class RTCDtlsTransport(EventEmitter):
                 if error == lib.SSL_ERROR_WANT_READ:
                     await self._recv_next()
                 else:
-                    self.__log_debug('x DTLS handshake failed (error %d)', error)
+                    self.__log_debug("x DTLS handshake failed (error %d)", error)
                     for info in get_error_queue():
-                        self.__log_debug('x %s', ':'.join(info))
+                        self.__log_debug("x %s", ":".join(info))
                     self._set_state(State.FAILED)
                     return
         except ConnectionError:
-            self.__log_debug('x DTLS handshake failed (connection error)')
+            self.__log_debug("x DTLS handshake failed (connection error)")
             self._set_state(State.FAILED)
             return
 
@@ -429,22 +459,29 @@ class RTCDtlsTransport(EventEmitter):
         remote_fingerprint = certificate_digest(x509)
         fingerprint_is_valid = False
         for f in remoteParameters.fingerprints:
-            if f.algorithm.lower() == 'sha-256' and f.value.lower() == remote_fingerprint.lower():
+            if (
+                f.algorithm.lower() == "sha-256"
+                and f.value.lower() == remote_fingerprint.lower()
+            ):
                 fingerprint_is_valid = True
                 break
         if not fingerprint_is_valid:
-            self.__log_debug('x DTLS handshake failed (fingerprint mismatch)')
+            self.__log_debug("x DTLS handshake failed (fingerprint mismatch)")
             self._set_state(State.FAILED)
             return
 
         # generate keying material
-        buf = ffi.new('unsigned char[]', 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
-        extractor = b'EXTRACTOR-dtls_srtp'
-        _openssl_assert(lib.SSL_export_keying_material(
-            self.ssl, buf, len(buf), extractor, len(extractor), ffi.NULL, 0, 0) == 1)
+        buf = ffi.new("unsigned char[]", 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN))
+        extractor = b"EXTRACTOR-dtls_srtp"
+        _openssl_assert(
+            lib.SSL_export_keying_material(
+                self.ssl, buf, len(buf), extractor, len(extractor), ffi.NULL, 0, 0
+            )
+            == 1
+        )
 
         view = ffi.buffer(buf)
-        if self._role == 'server':
+        if self._role == "server":
             srtp_tx_key = get_srtp_key_salt(view, 1)
             srtp_rx_key = get_srtp_key_salt(view, 0)
         else:
@@ -462,7 +499,7 @@ class RTCDtlsTransport(EventEmitter):
         self._tx_srtp = Session(tx_policy)
 
         # start data pump
-        self.__log_debug('- DTLS handshake complete')
+        self.__log_debug("- DTLS handshake complete")
         self._set_state(State.CONNECTED)
         self._task = asyncio.ensure_future(self.__run())
 
@@ -480,7 +517,7 @@ class RTCDtlsTransport(EventEmitter):
                 await self._write_ssl()
             except ConnectionError:
                 pass
-            self.__log_debug('- DTLS shutdown complete')
+            self.__log_debug("- DTLS shutdown complete")
 
     async def __run(self):
         try:
@@ -494,26 +531,28 @@ class RTCDtlsTransport(EventEmitter):
 
     def _get_stats(self):
         report = RTCStatsReport()
-        report.add(RTCTransportStats(
-            # RTCStats
-            timestamp=clock.current_datetime(),
-            type='transport',
-            id=self._stats_id,
-            # RTCTransportStats,
-            packetsSent=self.__tx_packets,
-            packetsReceived=self.__rx_packets,
-            bytesSent=self.__tx_bytes,
-            bytesReceived=self.__rx_bytes,
-            iceRole=self.transport.role,
-            dtlsState=self.state,
-        ))
+        report.add(
+            RTCTransportStats(
+                # RTCStats
+                timestamp=clock.current_datetime(),
+                type="transport",
+                id=self._stats_id,
+                # RTCTransportStats,
+                packetsSent=self.__tx_packets,
+                packetsReceived=self.__rx_packets,
+                bytesSent=self.__tx_bytes,
+                bytesReceived=self.__rx_bytes,
+                iceRole=self.transport.role,
+                dtlsState=self.state,
+            )
+        )
         return report
 
     async def _handle_rtcp_data(self, data):
         try:
             packets = RtcpPacket.parse(data)
         except ValueError as exc:
-            self.__log_debug('x RTCP parsing failed: %s', exc)
+            self.__log_debug("x RTCP parsing failed: %s", exc)
             return
 
         for packet in packets:
@@ -525,7 +564,7 @@ class RTCDtlsTransport(EventEmitter):
         try:
             packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
         except ValueError as exc:
-            self.__log_debug('x RTP parsing failed: %s', exc)
+            self.__log_debug("x RTP parsing failed: %s", exc)
             return
 
         # route RTP packet
@@ -537,8 +576,8 @@ class RTCDtlsTransport(EventEmitter):
         # get timeout
         timeout = None
         if not self.encrypted:
-            ptv_sec = ffi.new('time_t *')
-            ptv_usec = ffi.new('long *')
+            ptv_sec = ffi.new("time_t *")
+            ptv_usec = ffi.new("long *")
             if lib.Cryptography_DTLSv1_get_timeout(self.ssl, ptv_sec, ptv_usec):
                 timeout = ptv_sec[0] + (ptv_usec[0] / 1000000)
 
@@ -547,7 +586,7 @@ class RTCDtlsTransport(EventEmitter):
             try:
                 data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
             except asyncio.TimeoutError:
-                self.__log_debug('x DTLS handling timeout')
+                self.__log_debug("x DTLS handling timeout")
                 lib.DTLSv1_handle_timeout(self.ssl)
                 await self._write_ssl()
                 return
@@ -564,7 +603,7 @@ class RTCDtlsTransport(EventEmitter):
             result = lib.SSL_read(self.ssl, self.read_cdata, len(self.read_cdata))
             await self._write_ssl()
             if result == 0:
-                self.__log_debug('- DTLS shutdown by remote party')
+                self.__log_debug("- DTLS shutdown by remote party")
                 raise ConnectionError
             elif result > 0 and self._data_receiver:
                 data = ffi.buffer(self.read_cdata)[0:result]
@@ -580,7 +619,7 @@ class RTCDtlsTransport(EventEmitter):
                     data = self._rx_srtp.unprotect(data)
                     await self._handle_rtp_data(data, arrival_time_ms=arrival_time_ms)
             except pylibsrtp.Error as exc:
-                self.__log_debug('x SRTP unprotect failed: %s', exc)
+                self.__log_debug("x SRTP unprotect failed: %s", exc)
 
     def _register_data_receiver(self, receiver):
         assert self._data_receiver is None
@@ -596,7 +635,8 @@ class RTCDtlsTransport(EventEmitter):
             receiver,
             ssrcs=list(ssrcs),
             payload_types=[codec.payloadType for codec in parameters.codecs],
-            mid=parameters.muxId)
+            mid=parameters.muxId,
+        )
 
     def _register_rtp_sender(self, sender, parameters: RTCRtpSendParameters):
         self._rtp_header_extensions_map.configure(parameters)
@@ -604,14 +644,14 @@ class RTCDtlsTransport(EventEmitter):
 
     async def _send_data(self, data):
         if self._state != State.CONNECTED:
-            raise ConnectionError('Cannot send encrypted data, not connected')
+            raise ConnectionError("Cannot send encrypted data, not connected")
 
         lib.SSL_write(self.ssl, data, len(data))
         await self._write_ssl()
 
     async def _send_rtp(self, data):
         if self._state != State.CONNECTED:
-            raise ConnectionError('Cannot send encrypted RTP, not connected')
+            raise ConnectionError("Cannot send encrypted RTP, not connected")
 
         if is_rtcp(data):
             data = self._tx_srtp.protect_rtcp(data)
@@ -623,9 +663,9 @@ class RTCDtlsTransport(EventEmitter):
 
     def _set_state(self, state):
         if state != self._state:
-            self.__log_debug('- %s -> %s', self._state, state)
+            self.__log_debug("- %s -> %s", self._state, state)
             self._state = state
-            self.emit('statechange')
+            self.emit("statechange")
 
     def _unregister_data_receiver(self, receiver):
         if self._data_receiver == receiver:
@@ -643,10 +683,12 @@ class RTCDtlsTransport(EventEmitter):
         """
         pending = lib.BIO_ctrl_pending(self.write_bio)
         if pending > 0:
-            result = lib.BIO_read(self.write_bio, self.write_cdata, len(self.write_cdata))
+            result = lib.BIO_read(
+                self.write_bio, self.write_cdata, len(self.write_cdata)
+            )
             await self.transport._send(ffi.buffer(self.write_cdata)[0:result])
             self.__tx_bytes += result
             self.__tx_packets += 1
 
     def __log_debug(self, msg, *args):
-        logger.debug(self._role + ' ' + msg, *args)
+        logger.debug(self._role + " " + msg, *args)

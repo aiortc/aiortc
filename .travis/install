@@ -28,4 +28,4 @@ if [ -n "$CRYPTOGRAPHY_NO_BINARY" ]; then
     pip3 install cryptography --no-binary cryptography
 fi
 
-pip3 install aiohttp coverage flake8 isort opencv-python websockets
+pip3 install aiohttp coverage opencv-python websockets

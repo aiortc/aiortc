@@ -5,7 +5,7 @@ from pyee import EventEmitter
 
 from .exceptions import InvalidStateError
 
-logger = logging.getLogger('datachannel')
+logger = logging.getLogger("datachannel")
 
 
 class RTCDataChannel(EventEmitter):
@@ -23,15 +23,17 @@ class RTCDataChannel(EventEmitter):
         self.__bufferedAmountLowThreshold = 0
         self.__id = parameters.id
         self.__parameters = parameters
-        self.__readyState = 'connecting'
+        self.__readyState = "connecting"
         self.__transport = transport
         self.__send_open = send_open
 
         if self.__parameters.negotiated and (
             self.__id is None or self.__id < 0 or self.__id > 65534
         ):
-            raise ValueError('ID must be in range 0-65534 '
-                             'if data channel is negotiated out-of-band')
+            raise ValueError(
+                "ID must be in range 0-65534 "
+                "if data channel is negotiated out-of-band"
+            )
 
         if not self.__parameters.negotiated:
             if self.__send_open:
@@ -57,7 +59,9 @@ class RTCDataChannel(EventEmitter):
     @bufferedAmountLowThreshold.setter
     def bufferedAmountLowThreshold(self, value):
         if value < 0 or value > 4294967295:
-            raise ValueError('bufferedAmountLowThreshold must be in range 0 - 4294967295')
+            raise ValueError(
+                "bufferedAmountLowThreshold must be in range 0 - 4294967295"
+            )
         self.__bufferedAmountLowThreshold = value
 
     @property
@@ -135,42 +139,42 @@ class RTCDataChannel(EventEmitter):
         """
         Send `data` across the data channel to the remote peer.
         """
-        if self.readyState != 'open':
+        if self.readyState != "open":
             raise InvalidStateError
 
         if not isinstance(data, (str, bytes)):
-            raise ValueError('Cannot send unsupported data type: %s' % type(data))
+            raise ValueError("Cannot send unsupported data type: %s" % type(data))
 
         self.transport._data_channel_send(self, data)
 
     def _addBufferedAmount(self, amount):
         crosses_threshold = (
-            self.__bufferedAmount > self.bufferedAmountLowThreshold and
-            self.__bufferedAmount + amount <= self.bufferedAmountLowThreshold
+            self.__bufferedAmount > self.bufferedAmountLowThreshold
+            and self.__bufferedAmount + amount <= self.bufferedAmountLowThreshold
         )
         self.__bufferedAmount += amount
         if crosses_threshold:
-            self.emit('bufferedamountlow')
+            self.emit("bufferedamountlow")
 
     def _setId(self, id):
         self.__id = id
 
     def _setReadyState(self, state):
         if state != self.__readyState:
-            self.__log_debug('- %s -> %s', self.__readyState, state)
+            self.__log_debug("- %s -> %s", self.__readyState, state)
             self.__readyState = state
 
-            if state == 'open':
-                self.emit('open')
-            elif state == 'closed':
-                self.emit('close')
+            if state == "open":
+                self.emit("open")
+            elif state == "closed":
+                self.emit("close")
 
                 # no more events will be emitted, so remove all event listeners
                 # to facilitate garbage collection.
                 self.remove_all_listeners()
 
     def __log_debug(self, msg, *args):
-        logger.debug(str(self.id) + ' ' + msg, *args)
+        logger.debug(str(self.id) + " " + msg, *args)
 
 
 @attr.s
@@ -179,7 +183,8 @@ class RTCDataChannelParameters:
     The :class:`RTCDataChannelParameters` dictionary describes the
     configuration of an :class:`RTCDataChannel`.
     """
-    label = attr.ib(default='')
+
+    label = attr.ib(default="")
     "A name describing the data channel."
 
     maxPacketLifeTime = attr.ib(default=None)
@@ -191,7 +196,7 @@ class RTCDataChannelParameters:
     ordered = attr.ib(default=True)
     "Whether the data channel guarantees in-order delivery of messages."
 
-    protocol = attr.ib(default='')
+    protocol = attr.ib(default="")
     "The name of the subprotocol in use."
 
     negotiated = attr.ib(default=False)

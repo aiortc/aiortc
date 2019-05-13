@@ -1,7 +1,10 @@
 from unittest import TestCase
 
-from aiortc.rtcrtpparameters import (RTCRtcpFeedback, RTCRtpCodecParameters,
-                                     RTCRtpHeaderExtensionParameters)
+from aiortc.rtcrtpparameters import (
+    RTCRtcpFeedback,
+    RTCRtpCodecParameters,
+    RTCRtpHeaderExtensionParameters,
+)
 from aiortc.sdp import GroupDescription, SessionDescription, SsrcDescription
 
 from .utils import lf2crlf
@@ -11,7 +14,9 @@ class SdpTest(TestCase):
     maxDiff = None
 
     def test_audio_chrome(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=- 863426017819471768 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -51,97 +56,150 @@ a=rtpmap:126 telephone-event/8000
 a=ssrc:1944796561 cname:/vC4ULAr8vHNjXmq
 a=ssrc:1944796561 msid:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12
 a=ssrc:1944796561 mslabel:TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU
-a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""))  # noqa
+a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""
+            )
+        )
 
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['audio'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU'])])
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["audio"])]
+        )
+        self.assertEqual(
+            d.msid_semantic,
+            [
+                GroupDescription(
+                    semantic="WMS", items=["TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU"]
+                )
+            ],
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin, '- 863426017819471768 2 IN IP4 127.0.0.1')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(d.origin, "- 863426017819471768 2 IN IP4 127.0.0.1")
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'audio')
-        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].kind, "audio")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
         self.assertEqual(d.media[0].port, 45076)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
-        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
         self.assertEqual(d.media[0].msid, None)
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='audio/opus', clockRate=48000, channels=2,
-                                  payloadType=111,
-                                  rtcpFeedback=[RTCRtcpFeedback(type='transport-cc')],
-                                  parameters={'minptime': 10, 'useinbandfec': 1}),
-            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=16000, channels=1,
-                                  payloadType=103),
-            RTCRtpCodecParameters(mimeType='audio/ISAC', clockRate=32000, channels=1,
-                                  payloadType=104),
-            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, channels=1,
-                                  payloadType=9),
-            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1,
-                                  payloadType=0),
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1,
-                                  payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=32000, channels=1,
-                                  payloadType=106),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=16000, channels=1,
-                                  payloadType=105),
-            RTCRtpCodecParameters(mimeType='audio/CN', clockRate=8000, channels=1,
-                                  payloadType=13),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=48000, channels=1,
-                                  payloadType=110),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=32000, channels=1,
-                                  payloadType=112),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=16000, channels=1,
-                                  payloadType=113),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
-                                  payloadType=126),
-        ])
-        self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(id=1,
-                                            uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
-        ])
-        self.assertEqual(d.media[0].rtp.muxId, 'audio')
-        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/opus",
+                    clockRate=48000,
+                    channels=2,
+                    payloadType=111,
+                    rtcpFeedback=[RTCRtcpFeedback(type="transport-cc")],
+                    parameters={"minptime": 10, "useinbandfec": 1},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/ISAC", clockRate=16000, channels=1, payloadType=103
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/ISAC", clockRate=32000, channels=1, payloadType=104
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/G722", clockRate=8000, channels=1, payloadType=9
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/CN", clockRate=32000, channels=1, payloadType=106
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/CN", clockRate=16000, channels=1, payloadType=105
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/CN", clockRate=8000, channels=1, payloadType=13
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=48000,
+                    channels=1,
+                    payloadType=110,
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=32000,
+                    channels=1,
+                    payloadType=112,
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=16000,
+                    channels=1,
+                    payloadType=113,
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=8000,
+                    channels=1,
+                    payloadType=126,
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=1, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                )
+            ],
+        )
+        self.assertEqual(d.media[0].rtp.muxId, "audio")
+        self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(d.media[0].ssrc, [
-            SsrcDescription(
-                ssrc=1944796561,
-                cname='/vC4ULAr8vHNjXmq',
-                msid='TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12',
-                mslabel='TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU',
-                label='ec1eb8de-8df8-4956-ae81-879e5d062d12'),
-        ])
+        self.assertEqual(
+            d.media[0].ssrc,
+            [
+                SsrcDescription(
+                    ssrc=1944796561,
+                    cname="/vC4ULAr8vHNjXmq",
+                    msid="TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU ec1eb8de-8df8-4956-ae81-879e5d062d12",
+                    mslabel="TF6VRif1dxuAfe5uefrV2953LhUZt1keYvxU",
+                    label="ec1eb8de-8df8-4956-ae81-879e5d062d12",
+                )
+            ],
+        )
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
-        self.assertEqual(d.media[0].fmt, [
-            111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126])
+        self.assertEqual(
+            d.media[0].fmt, [111, 103, 104, 9, 0, 8, 106, 105, 13, 110, 112, 113, 126]
+        )
         self.assertEqual(d.media[0].sctpmap, {})
         self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '5+Ix')
-        self.assertEqual(d.media[0].ice.password, 'uK8IlylxzDMUhrkVzdmj0M+v')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "5+Ix")
+        self.assertEqual(d.media[0].ice.password, "uK8IlylxzDMUhrkVzdmj0M+v")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            '6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=- 863426017819471768 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -182,10 +240,14 @@ a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
 a=ice-options:trickle
 a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_audio_firefox(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -226,76 +288,119 @@ a=rtpmap:8 PCMA/8000
 a=rtpmap:101 telephone-event/8000
 a=setup:actpass
 a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
-"""))  # noqa
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['*'])])
+"""
+            )
+        )
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["sdparta_0"])]
+        )
+        self.assertEqual(
+            d.msid_semantic, [GroupDescription(semantic="WMS", items=["*"])]
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin,
-                         'mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(
+            d.origin,
+            "mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0",
+        )
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'audio')
-        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].kind, "audio")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
         self.assertEqual(d.media[0].port, 45274)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
-        self.assertEqual(d.media[0].direction, 'sendrecv')
-        self.assertEqual(d.media[0].msid, '{dee771c7-671a-451e-b847-f86f8e87c7d8} '
-                                          '{12692dea-686c-47ca-b3e9-48f38fc92b78}')
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(
-                mimeType='audio/opus', clockRate=48000, channels=2, payloadType=109,
-                parameters={
-                    'maxplaybackrate': 48000, 'stereo': 1, 'useinbandfec': 1
-                }),
-            RTCRtpCodecParameters(mimeType='audio/G722', clockRate=8000, channels=1, payloadType=9),
-            RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, channels=1, payloadType=0),
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
-                                  payloadType=101, parameters={'0-15': None}),
-        ])
-        self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(id=1,
-                                            uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
-            RTCRtpHeaderExtensionParameters(id=2, uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-        ])
-        self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
-        self.assertEqual(d.media[0].rtcp_host, '192.168.99.58')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
+        self.assertEqual(
+            d.media[0].msid,
+            "{dee771c7-671a-451e-b847-f86f8e87c7d8} "
+            "{12692dea-686c-47ca-b3e9-48f38fc92b78}",
+        )
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/opus",
+                    clockRate=48000,
+                    channels=2,
+                    payloadType=109,
+                    parameters={
+                        "maxplaybackrate": 48000,
+                        "stereo": 1,
+                        "useinbandfec": 1,
+                    },
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/G722", clockRate=8000, channels=1, payloadType=9
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=8000,
+                    channels=1,
+                    payloadType=101,
+                    parameters={"0-15": None},
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=1, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                ),
+            ],
+        )
+        self.assertEqual(d.media[0].rtp.muxId, "sdparta_0")
+        self.assertEqual(d.media[0].rtcp_host, "192.168.99.58")
         self.assertEqual(d.media[0].rtcp_port, 38612)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(d.media[0].ssrc, [
-            SsrcDescription(ssrc=882128807, cname='{ed463ac5-dabf-44d4-8b9f-e14318427b2b}'),
-        ])
+        self.assertEqual(
+            d.media[0].ssrc,
+            [
+                SsrcDescription(
+                    ssrc=882128807, cname="{ed463ac5-dabf-44d4-8b9f-e14318427b2b}"
+                )
+            ],
+        )
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
-        self.assertEqual(d.media[0].fmt, [
-            109, 9, 0, 8, 101])
+        self.assertEqual(d.media[0].fmt, [109, 9, 0, 8, 101])
         self.assertEqual(d.media[0].sctpmap, {})
         self.assertEqual(d.media[0].sctp_port, None)
 
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 10)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '403a81e1')
-        self.assertEqual(d.media[0].ice.password, 'f9b83487285016f7492197a5790ceee5')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "403a81e1")
+        self.assertEqual(d.media[0].ice.password, "f9b83487285016f7492197a5790ceee5")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            'EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 4934139885953732403 1 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -334,10 +439,14 @@ a=ice-pwd:f9b83487285016f7492197a5790ceee5
 a=ice-options:trickle
 a=fingerprint:sha-256 EB:A9:3E:50:D7:E3:B3:86:0F:7B:01:C1:EB:D6:AF:E4:97:DE:15:05:A8:DE:7B:83:56:C7:4B:6E:9D:75:D4:17
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_audio_freeswitch(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
@@ -358,44 +467,64 @@ a=end-of-candidates
 a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
 a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
 a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
-a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
+            )
+        )
 
         self.assertEqual(d.group, [])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys'])])
-        self.assertEqual(d.host, '1.2.3.4')
-        self.assertEqual(d.name, 'FreeSWITCH')
-        self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(
+            d.msid_semantic,
+            [
+                GroupDescription(
+                    semantic="WMS", items=["lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys"]
+                )
+            ],
+        )
+        self.assertEqual(d.host, "1.2.3.4")
+        self.assertEqual(d.name, "FreeSWITCH")
+        self.assertEqual(d.origin, "FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4")
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].kind, "audio")
         self.assertEqual(d.media[0].host, None)
         self.assertEqual(d.media[0].port, 16628)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
         self.assertEqual(d.media[0].direction, None)
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1,
-                                  payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
-                                  payloadType=101),
-        ])
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=8000,
+                    channels=1,
+                    payloadType=101,
+                ),
+            ],
+        )
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
-        self.assertEqual(d.media[0].rtp.muxId, '')
-        self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
+        self.assertEqual(d.media[0].rtp.muxId, "")
+        self.assertEqual(d.media[0].rtcp_host, "1.2.3.4")
         self.assertEqual(d.media[0].rtcp_port, 16628)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(d.media[0].ssrc, [
-            SsrcDescription(
-                ssrc=2690029308,
-                cname='rbaag6w9fGmRXQm6',
-                msid='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0',
-                mslabel='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys',
-                label='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0'),
-        ])
+        self.assertEqual(
+            d.media[0].ssrc,
+            [
+                SsrcDescription(
+                    ssrc=2690029308,
+                    cname="rbaag6w9fGmRXQm6",
+                    msid="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0",
+                    mslabel="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys",
+                    label="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0",
+                )
+            ],
+        )
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
@@ -407,18 +536,22 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, None)
-        self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
-        self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
+        self.assertEqual(d.media[0].ice.usernameFragment, "75EDuLTEOkEUd3cu")
+        self.assertEqual(d.media[0].ice.password, "5dvb9SbfooWc49814CupdeTS")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            '35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'client')
+            "35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B",
+        )
+        self.assertEqual(d.media[0].dtls.role, "client")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
@@ -439,10 +572,14 @@ a=ice-ufrag:75EDuLTEOkEUd3cu
 a=ice-pwd:5dvb9SbfooWc49814CupdeTS
 a=fingerprint:sha-256 35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B
 a=setup:active
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_audio_freeswitch_no_dtls(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
@@ -461,43 +598,64 @@ a=end-of-candidates
 a=ssrc:2690029308 cname:rbaag6w9fGmRXQm6
 a=ssrc:2690029308 msid:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0
 a=ssrc:2690029308 mslabel:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys
-a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
+a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
+            )
+        )
 
         self.assertEqual(d.group, [])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys'])])
-        self.assertEqual(d.host, '1.2.3.4')
-        self.assertEqual(d.name, 'FreeSWITCH')
-        self.assertEqual(d.origin, 'FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(
+            d.msid_semantic,
+            [
+                GroupDescription(
+                    semantic="WMS", items=["lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys"]
+                )
+            ],
+        )
+        self.assertEqual(d.host, "1.2.3.4")
+        self.assertEqual(d.name, "FreeSWITCH")
+        self.assertEqual(d.origin, "FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4")
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'audio')
+        self.assertEqual(d.media[0].kind, "audio")
         self.assertEqual(d.media[0].host, None)
         self.assertEqual(d.media[0].port, 16628)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
         self.assertEqual(d.media[0].direction, None)
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='audio/PCMA', clockRate=8000, channels=1, payloadType=8),
-            RTCRtpCodecParameters(mimeType='audio/telephone-event', clockRate=8000, channels=1,
-                                  payloadType=101),
-        ])
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/telephone-event",
+                    clockRate=8000,
+                    channels=1,
+                    payloadType=101,
+                ),
+            ],
+        )
         self.assertEqual(d.media[0].rtp.headerExtensions, [])
-        self.assertEqual(d.media[0].rtp.muxId, '')
-        self.assertEqual(d.media[0].rtcp_host, '1.2.3.4')
+        self.assertEqual(d.media[0].rtp.muxId, "")
+        self.assertEqual(d.media[0].rtcp_host, "1.2.3.4")
         self.assertEqual(d.media[0].rtcp_port, 16628)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(d.media[0].ssrc, [
-            SsrcDescription(
-                ssrc=2690029308,
-                cname='rbaag6w9fGmRXQm6',
-                msid='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0',
-                mslabel='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys',
-                label='lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0'),
-        ])
+        self.assertEqual(
+            d.media[0].ssrc,
+            [
+                SsrcDescription(
+                    ssrc=2690029308,
+                    cname="rbaag6w9fGmRXQm6",
+                    msid="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys a0",
+                    mslabel="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ys",
+                    label="lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0",
+                )
+            ],
+        )
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
@@ -509,13 +667,16 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""))  # noqa
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, None)
-        self.assertEqual(d.media[0].ice.usernameFragment, '75EDuLTEOkEUd3cu')
-        self.assertEqual(d.media[0].ice.password, '5dvb9SbfooWc49814CupdeTS')
+        self.assertEqual(d.media[0].ice.usernameFragment, "75EDuLTEOkEUd3cu")
+        self.assertEqual(d.media[0].ice.password, "5dvb9SbfooWc49814CupdeTS")
 
         # dtls
         self.assertEqual(d.media[0].dtls, None)
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=FreeSWITCH 1538380016 1538380017 IN IP4 1.2.3.4
 s=FreeSWITCH
 c=IN IP4 1.2.3.4
@@ -534,10 +695,14 @@ a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
 a=end-of-candidates
 a=ice-ufrag:75EDuLTEOkEUd3cu
 a=ice-pwd:5dvb9SbfooWc49814CupdeTS
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_datachannel_firefox(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -560,30 +725,34 @@ a=mid:sdparta_0
 a=sctpmap:5000 webrtc-datachannel 256
 a=setup:actpass
 a=max-message-size:1073741823
-"""))  # noqa
+"""
+            )
+        )
 
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['*'])])
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["sdparta_0"])]
+        )
+        self.assertEqual(
+            d.msid_semantic, [GroupDescription(semantic="WMS", items=["*"])]
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin,
-                         'mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(
+            d.origin,
+            "mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0",
+        )
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'application')
-        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].kind, "application")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
         self.assertEqual(d.media[0].port, 45791)
-        self.assertEqual(d.media[0].profile, 'DTLS/SCTP')
-        self.assertEqual(d.media[0].fmt, ['5000'])
+        self.assertEqual(d.media[0].profile, "DTLS/SCTP")
+        self.assertEqual(d.media[0].fmt, ["5000"])
 
         # sctp
-        self.assertEqual(d.media[0].sctpmap, {
-            5000: 'webrtc-datachannel 256',
-        })
+        self.assertEqual(d.media[0].sctpmap, {5000: "webrtc-datachannel 256"})
         self.assertEqual(d.media[0].sctp_port, None)
         self.assertIsNotNone(d.media[0].sctpCapabilities)
         self.assertEqual(d.media[0].sctpCapabilities.maxMessageSize, 1073741823)
@@ -591,19 +760,23 @@ a=max-message-size:1073741823
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
-        self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "9889e0c4")
+        self.assertEqual(d.media[0].ice.password, "d30a5aec4dd81f07d4ff3344209400ab")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -625,10 +798,14 @@ a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
 a=ice-options:trickle
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_datachannel_firefox_63(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -651,25 +828,31 @@ a=mid:sdparta_0
 a=sctp-port:5000
 a=setup:actpass
 a=max-message-size:1073741823
-"""))  # noqa
+"""
+            )
+        )
 
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['*'])])
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["sdparta_0"])]
+        )
+        self.assertEqual(
+            d.msid_semantic, [GroupDescription(semantic="WMS", items=["*"])]
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin,
-                         'mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(
+            d.origin,
+            "mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0",
+        )
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'application')
-        self.assertEqual(d.media[0].host, '192.168.99.58')
+        self.assertEqual(d.media[0].kind, "application")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
         self.assertEqual(d.media[0].port, 45791)
-        self.assertEqual(d.media[0].profile, 'UDP/DTLS/SCTP')
-        self.assertEqual(d.media[0].fmt, ['webrtc-datachannel'])
+        self.assertEqual(d.media[0].profile, "UDP/DTLS/SCTP")
+        self.assertEqual(d.media[0].fmt, ["webrtc-datachannel"])
 
         # sctp
         self.assertEqual(d.media[0].sctpmap, {})
@@ -680,19 +863,23 @@ a=max-message-size:1073741823
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '9889e0c4')
-        self.assertEqual(d.media[0].ice.password, 'd30a5aec4dd81f07d4ff3344209400ab')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "9889e0c4")
+        self.assertEqual(d.media[0].ice.password, "d30a5aec4dd81f07d4ff3344209400ab")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            '39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-58.0.1 7514673380034989017 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -714,10 +901,14 @@ a=ice-pwd:d30a5aec4dd81f07d4ff3344209400ab
 a=ice-options:trickle
 a=fingerprint:sha-256 39:4A:09:1E:0E:33:32:85:51:03:49:95:54:0B:41:09:A2:10:60:CC:39:8F:C0:C4:45:FC:37:3A:55:EA:11:74
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_video_chrome(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=- 5195484278799753993 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -773,96 +964,145 @@ a=ssrc:3305256354 cname:9iW3jspLCZJ5WjOZ
 a=ssrc:3305256354 msid:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4
 a=ssrc:3305256354 mslabel:bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ
 a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
-"""))  # noqa
+"""
+            )
+        )
 
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['video'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ'])])
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["video"])]
+        )
+        self.assertEqual(
+            d.msid_semantic,
+            [
+                GroupDescription(
+                    semantic="WMS", items=["bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ"]
+                )
+            ],
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin, '- 5195484278799753993 2 IN IP4 127.0.0.1')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(d.origin, "- 5195484278799753993 2 IN IP4 127.0.0.1")
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'video')
-        self.assertEqual(d.media[0].host, '10.101.2.67')
+        self.assertEqual(d.media[0].kind, "video")
+        self.assertEqual(d.media[0].host, "10.101.2.67")
         self.assertEqual(d.media[0].port, 34955)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
-        self.assertEqual(d.media[0].direction, 'sendrecv')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
         self.assertEqual(d.media[0].msid, None)
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=96,
-                                  rtcpFeedback=[
-                                    RTCRtcpFeedback(type='goog-remb'),
-                                    RTCRtcpFeedback(type='transport-cc'),
-                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
-                                    RTCRtcpFeedback(type='nack'),
-                                    RTCRtcpFeedback(type='nack', parameter='pli'),
-                                  ]),
-            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=97,
-                                  parameters={'apt': 96}),
-            RTCRtpCodecParameters(mimeType='video/VP9', clockRate=90000, payloadType=98,
-                                  rtcpFeedback=[
-                                    RTCRtcpFeedback(type='goog-remb'),
-                                    RTCRtcpFeedback(type='transport-cc'),
-                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
-                                    RTCRtcpFeedback(type='nack'),
-                                    RTCRtcpFeedback(type='nack', parameter='pli'),
-                                  ]),
-            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=99,
-                                  parameters={'apt': 98}),
-            RTCRtpCodecParameters(mimeType='video/red', clockRate=90000, payloadType=100),
-            RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
-                                  parameters={'apt': 100}),
-            RTCRtpCodecParameters(mimeType='video/ulpfec', clockRate=90000, payloadType=102)
-        ])
-        self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(
-                id=2,
-                uri='urn:ietf:params:rtp-hdrext:toffset'),
-            RTCRtpHeaderExtensionParameters(
-                id=3,
-                uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
-            RTCRtpHeaderExtensionParameters(
-                id=4,
-                uri='urn:3gpp:video-orientation'),
-            RTCRtpHeaderExtensionParameters(
-                id=5,
-                uri='http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01'),
-            RTCRtpHeaderExtensionParameters(
-                id=6,
-                uri='http://www.webrtc.org/experiments/rtp-hdrext/playout-delay'),
-            RTCRtpHeaderExtensionParameters(
-                id=7,
-                uri='http://www.webrtc.org/experiments/rtp-hdrext/video-content-type'),
-            RTCRtpHeaderExtensionParameters(
-                id=8,
-                uri='http://www.webrtc.org/experiments/rtp-hdrext/video-timing')
-        ])
-        self.assertEqual(d.media[0].rtp.muxId, 'video')
-        self.assertEqual(d.media[0].rtcp_host, '0.0.0.0')
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8",
+                    clockRate=90000,
+                    payloadType=96,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="goog-remb"),
+                        RTCRtcpFeedback(type="transport-cc"),
+                        RTCRtcpFeedback(type="ccm", parameter="fir"),
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                    ],
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/rtx",
+                    clockRate=90000,
+                    payloadType=97,
+                    parameters={"apt": 96},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/VP9",
+                    clockRate=90000,
+                    payloadType=98,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="goog-remb"),
+                        RTCRtcpFeedback(type="transport-cc"),
+                        RTCRtcpFeedback(type="ccm", parameter="fir"),
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                    ],
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/rtx",
+                    clockRate=90000,
+                    payloadType=99,
+                    parameters={"apt": 98},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/red", clockRate=90000, payloadType=100
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/rtx",
+                    clockRate=90000,
+                    payloadType=101,
+                    parameters={"apt": 100},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/ulpfec", clockRate=90000, payloadType=102
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:toffset"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=3,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                ),
+                RTCRtpHeaderExtensionParameters(id=4, uri="urn:3gpp:video-orientation"),
+                RTCRtpHeaderExtensionParameters(
+                    id=5,
+                    uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=6,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=7,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/video-content-type",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=8,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/video-timing",
+                ),
+            ],
+        )
+        self.assertEqual(d.media[0].rtp.muxId, "video")
+        self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(d.media[0].ssrc, [
-            SsrcDescription(
-                ssrc=1845476211,
-                cname='9iW3jspLCZJ5WjOZ',
-                msid='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4',
-                mslabel='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ',
-                label='420c6f28-439d-4ead-b93c-94e14c0a16b4'),
-            SsrcDescription(
-                ssrc=3305256354,
-                cname='9iW3jspLCZJ5WjOZ',
-                msid='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4',
-                mslabel='bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ',
-                label='420c6f28-439d-4ead-b93c-94e14c0a16b4'),
-        ])
-        self.assertEqual(d.media[0].ssrc_group, [
-            GroupDescription(semantic='FID', items=[1845476211, 3305256354])])
+        self.assertEqual(
+            d.media[0].ssrc,
+            [
+                SsrcDescription(
+                    ssrc=1845476211,
+                    cname="9iW3jspLCZJ5WjOZ",
+                    msid="bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4",
+                    mslabel="bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ",
+                    label="420c6f28-439d-4ead-b93c-94e14c0a16b4",
+                ),
+                SsrcDescription(
+                    ssrc=3305256354,
+                    cname="9iW3jspLCZJ5WjOZ",
+                    msid="bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ 420c6f28-439d-4ead-b93c-94e14c0a16b4",
+                    mslabel="bbgewhUzS6hvFDlSlrhQ6zYlwW7ttRrK8QeQ",
+                    label="420c6f28-439d-4ead-b93c-94e14c0a16b4",
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].ssrc_group,
+            [GroupDescription(semantic="FID", items=[1845476211, 3305256354])],
+        )
 
         # formats
         self.assertEqual(d.media[0].fmt, [96, 97, 98, 99, 100, 101, 102])
@@ -872,19 +1112,23 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 2)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '9KhP')
-        self.assertEqual(d.media[0].ice.password, 'mlPea2xBCmFmNLfmy/jlqw1D')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "9KhP")
+        self.assertEqual(d.media[0].ice.password, "mlPea2xBCmFmNLfmy/jlqw1D")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            '30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=- 5195484278799753993 2 IN IP4 127.0.0.1
 s=-
 t=0 0
@@ -939,10 +1183,14 @@ a=ice-pwd:mlPea2xBCmFmNLfmy/jlqw1D
 a=ice-options:trickle
 a=fingerprint:sha-256 30:4A:BF:65:23:D1:99:AB:AE:9F:FD:5D:B1:08:4F:09:7C:9F:F2:CC:50:16:13:81:1B:5D:DD:D0:98:45:81:1E
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )
 
     def test_video_firefox(self):
-        d = SessionDescription.parse(lf2crlf("""v=0
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -982,56 +1230,82 @@ a=rtpmap:120 VP8/90000
 a=rtpmap:121 VP9/90000
 a=setup:actpass
 a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
-"""))  # noqa
+"""
+            )
+        )
 
-        self.assertEqual(d.group, [
-            GroupDescription(semantic='BUNDLE', items=['sdparta_0'])])
-        self.assertEqual(d.msid_semantic, [
-            GroupDescription(semantic='WMS', items=['*'])])
+        self.assertEqual(
+            d.group, [GroupDescription(semantic="BUNDLE", items=["sdparta_0"])]
+        )
+        self.assertEqual(
+            d.msid_semantic, [GroupDescription(semantic="WMS", items=["*"])]
+        )
         self.assertEqual(d.host, None)
-        self.assertEqual(d.name, '-')
-        self.assertEqual(d.origin,
-                         'mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0')
-        self.assertEqual(d.time, '0 0')
+        self.assertEqual(d.name, "-")
+        self.assertEqual(
+            d.origin,
+            "mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0",
+        )
+        self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
         self.assertEqual(len(d.media), 1)
-        self.assertEqual(d.media[0].kind, 'video')
-        self.assertEqual(d.media[0].host, '192.168.99.7')
+        self.assertEqual(d.media[0].kind, "video")
+        self.assertEqual(d.media[0].host, "192.168.99.7")
         self.assertEqual(d.media[0].port, 42738)
-        self.assertEqual(d.media[0].profile, 'UDP/TLS/RTP/SAVPF')
-        self.assertEqual(d.media[0].direction, 'sendrecv')
-        self.assertEqual(d.media[0].msid, '{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} '
-                                          '{d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}')
-        self.assertEqual(d.media[0].rtp.codecs, [
-            RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=120,
-                                  rtcpFeedback=[
-                                    RTCRtcpFeedback(type='nack'),
-                                    RTCRtcpFeedback(type='nack', parameter='pli'),
-                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
-                                    RTCRtcpFeedback(type='goog-remb'),
-                                  ], parameters={'max-fs': 12288, 'max-fr': 60}),
-            RTCRtpCodecParameters(mimeType='video/VP9', clockRate=90000, payloadType=121,
-                                  rtcpFeedback=[
-                                    RTCRtcpFeedback(type='nack'),
-                                    RTCRtcpFeedback(type='nack', parameter='pli'),
-                                    RTCRtcpFeedback(type='ccm', parameter='fir'),
-                                    RTCRtcpFeedback(type='goog-remb'),
-                                  ], parameters={'max-fs': 12288, 'max-fr': 60}),
-        ])
-        self.assertEqual(d.media[0].rtp.headerExtensions, [
-            RTCRtpHeaderExtensionParameters(
-                id=3,
-                uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-            RTCRtpHeaderExtensionParameters(
-                id=4,
-                uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
-            RTCRtpHeaderExtensionParameters(
-                id=5,
-                uri='urn:ietf:params:rtp-hdrext:toffset'),
-        ])
-        self.assertEqual(d.media[0].rtp.muxId, 'sdparta_0')
-        self.assertEqual(d.media[0].rtcp_host, '192.168.99.7')
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
+        self.assertEqual(
+            d.media[0].msid,
+            "{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} "
+            "{d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}",
+        )
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8",
+                    clockRate=90000,
+                    payloadType=120,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                        RTCRtcpFeedback(type="ccm", parameter="fir"),
+                        RTCRtcpFeedback(type="goog-remb"),
+                    ],
+                    parameters={"max-fs": 12288, "max-fr": 60},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/VP9",
+                    clockRate=90000,
+                    payloadType=121,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                        RTCRtcpFeedback(type="ccm", parameter="fir"),
+                        RTCRtcpFeedback(type="goog-remb"),
+                    ],
+                    parameters={"max-fs": 12288, "max-fr": 60},
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=3, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=4,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=5, uri="urn:ietf:params:rtp-hdrext:toffset"
+                ),
+            ],
+        )
+        self.assertEqual(d.media[0].rtp.muxId, "sdparta_0")
+        self.assertEqual(d.media[0].rtcp_host, "192.168.99.7")
         self.assertEqual(d.media[0].rtcp_port, 52914)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
@@ -1043,19 +1317,23 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         # ice
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
-        self.assertEqual(d.media[0].ice_options, 'trickle')
-        self.assertEqual(d.media[0].ice.usernameFragment, '1a0e6b24')
-        self.assertEqual(d.media[0].ice.password, 'c43b0306087bb4de15f70e4405c4dafe')
+        self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.usernameFragment, "1a0e6b24")
+        self.assertEqual(d.media[0].ice.password, "c43b0306087bb4de15f70e4405c4dafe")
 
         # dtls
         self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
-        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
         self.assertEqual(
             d.media[0].dtls.fingerprints[0].value,
-            'AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5')  # noqa
-        self.assertEqual(d.media[0].dtls.role, 'auto')
+            "AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
 
-        self.assertEqual(str(d), lf2crlf("""v=0
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
 o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
 s=-
 t=0 0
@@ -1094,4 +1372,6 @@ a=ice-pwd:c43b0306087bb4de15f70e4405c4dafe
 a=ice-options:trickle
 a=fingerprint:sha-256 AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5
 a=setup:actpass
-"""))  # noqa
+"""
+            ),
+        )

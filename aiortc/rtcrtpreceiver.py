@@ -15,15 +15,29 @@ from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rate import RemoteBitrateEstimator
 from .rtcrtpparameters import RTCRtpReceiveParameters
-from .rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK, RtcpByePacket,
-                  RtcpPsfbPacket, RtcpReceiverInfo, RtcpRrPacket,
-                  RtcpRtpfbPacket, RtcpSrPacket, RtpPacket, clamp_packets_lost,
-                  pack_remb_fci, unwrap_rtx)
-from .stats import (RTCInboundRtpStreamStats, RTCRemoteOutboundRtpStreamStats,
-                    RTCStatsReport)
+from .rtp import (
+    RTCP_PSFB_APP,
+    RTCP_PSFB_PLI,
+    RTCP_RTPFB_NACK,
+    RtcpByePacket,
+    RtcpPsfbPacket,
+    RtcpReceiverInfo,
+    RtcpRrPacket,
+    RtcpRtpfbPacket,
+    RtcpSrPacket,
+    RtpPacket,
+    clamp_packets_lost,
+    pack_remb_fci,
+    unwrap_rtx,
+)
+from .stats import (
+    RTCInboundRtpStreamStats,
+    RTCRemoteOutboundRtpStreamStats,
+    RTCStatsReport,
+)
 from .utils import uint16_add, uint16_gt
 
-logger = logging.getLogger('rtp')
+logger = logging.getLogger("rtp")
 
 
 def decoder_worker(loop, input_q, output_q):
@@ -94,7 +108,9 @@ class StreamStatistics:
         self._received_prior = 0
 
     def add(self, packet):
-        in_order = self.max_seq is None or uint16_gt(packet.sequence_number, self.max_seq)
+        in_order = self.max_seq is None or uint16_gt(
+            packet.sequence_number, self.max_seq
+        )
         self.packets_received += 1
 
         if self.base_seq is None:
@@ -104,12 +120,14 @@ class StreamStatistics:
             arrival = int(time.time() * self._clockrate)
 
             if self.max_seq is not None and packet.sequence_number < self.max_seq:
-                self.cycles += (1 << 16)
+                self.cycles += 1 << 16
             self.max_seq = packet.sequence_number
 
             if packet.timestamp != self._last_timestamp and self.packets_received > 1:
-                diff = abs((arrival - self._last_arrival) -
-                           (packet.timestamp - self._last_timestamp))
+                diff = abs(
+                    (arrival - self._last_arrival)
+                    - (packet.timestamp - self._last_timestamp)
+                )
                 self._jitter_q4 += diff - ((self._jitter_q4 + 8) >> 4)
 
             self._last_arrival = arrival
@@ -122,7 +140,7 @@ class StreamStatistics:
         received_interval = self.packets_received - self._received_prior
         self._received_prior = self.packets_received
         lost_interval = expected_interval - received_interval
-        if (expected_interval == 0 or lost_interval <= 0):
+        if expected_interval == 0 or lost_interval <= 0:
             return 0
         else:
             return (lost_interval << 8) // expected_interval
@@ -150,7 +168,7 @@ class RemoteStreamTrack(MediaStreamTrack):
         """
         Receive the next frame.
         """
-        if self.readyState != 'live':
+        if self.readyState != "live":
             raise MediaStreamError
 
         frame = await self._queue.get()
@@ -171,7 +189,7 @@ class TimestampMapper:
             self._origin = timestamp
         elif timestamp < self._last:
             # RTP timestamp wrapped
-            self._origin -= (1 << 32)
+            self._origin -= 1 << 32
 
         self._last = timestamp
         return timestamp - self._origin
@@ -183,6 +201,7 @@ class RTCRtpContributingSource:
     The :class:`RTCRtpContributingSource` dictionary contains information about
     a contributing source (CSRC).
     """
+
     timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
     "The timestamp associated with this source."
     source = attr.ib(type=int)  # type: int
@@ -195,6 +214,7 @@ class RTCRtpSynchronizationSource:
     The :class:`RTCRtpSynchronizationSource` dictionary contains information about
     a synchronization source (SSRC).
     """
+
     timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
     "The timestamp associated with this source."
     source = attr.ib(type=int)  # type: int
@@ -209,8 +229,9 @@ class RTCRtpReceiver:
     :param: kind: The kind of media (`'audio'` or `'video'`).
     :param: transport: An :class:`RTCDtlsTransport`.
     """
+
     def __init__(self, kind, transport):
-        if transport.state == 'closed':
+        if transport.state == "closed":
             raise InvalidStateError
 
         self.__active_ssrc = {}
@@ -218,7 +239,7 @@ class RTCRtpReceiver:
         self.__decoder_queue = queue.Queue()
         self.__decoder_thread = None
         self.__kind = kind
-        if kind == 'audio':
+        if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
@@ -266,21 +287,23 @@ class RTCRtpReceiver:
         :rtype: :class:`RTCStatsReport`
         """
         for ssrc, stream in self.__remote_streams.items():
-            self.__stats.add(RTCInboundRtpStreamStats(
-                # RTCStats
-                timestamp=clock.current_datetime(),
-                type='inbound-rtp',
-                id='inbound-rtp_' + str(id(self)),
-                # RTCStreamStats
-                ssrc=ssrc,
-                kind=self.__kind,
-                transportId=self.transport._stats_id,
-                # RTCReceivedRtpStreamStats
-                packetsReceived=stream.packets_received,
-                packetsLost=stream.packets_lost,
-                jitter=stream.jitter,
-                # RTPInboundRtpStreamStats
-            ))
+            self.__stats.add(
+                RTCInboundRtpStreamStats(
+                    # RTCStats
+                    timestamp=clock.current_datetime(),
+                    type="inbound-rtp",
+                    id="inbound-rtp_" + str(id(self)),
+                    # RTCStreamStats
+                    ssrc=ssrc,
+                    kind=self.__kind,
+                    transportId=self.transport._stats_id,
+                    # RTCReceivedRtpStreamStats
+                    packetsReceived=stream.packets_received,
+                    packetsLost=stream.packets_lost,
+                    jitter=stream.jitter,
+                    # RTPInboundRtpStreamStats
+                )
+            )
         self.__stats.update(self.transport._get_stats())
 
         return self.__stats
@@ -294,7 +317,9 @@ class RTCRtpReceiver:
         sources = []
         for source, timestamp in self.__active_ssrc.items():
             if timestamp >= cutoff:
-                sources.append(RTCRtpSynchronizationSource(source=source, timestamp=timestamp))
+                sources.append(
+                    RTCRtpSynchronizationSource(source=source, timestamp=timestamp)
+                )
         return sources
 
     async def receive(self, parameters: RTCRtpReceiveParameters):
@@ -313,8 +338,13 @@ class RTCRtpReceiver:
             # start decoder thread
             self.__decoder_thread = threading.Thread(
                 target=decoder_worker,
-                name=self.__kind + '-decoder',
-                args=(asyncio.get_event_loop(), self.__decoder_queue, self._track._queue))
+                name=self.__kind + "-decoder",
+                args=(
+                    asyncio.get_event_loop(),
+                    self.__decoder_queue,
+                    self._track._queue,
+                ),
+            )
             self.__decoder_thread.start()
 
             self.__transport._register_rtp_receiver(self, parameters)
@@ -338,25 +368,31 @@ class RTCRtpReceiver:
         self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet):
-        self.__log_debug('< %s', packet)
+        self.__log_debug("< %s", packet)
 
         if isinstance(packet, RtcpSrPacket):
-            self.__stats.add(RTCRemoteOutboundRtpStreamStats(
-                # RTCStats
-                timestamp=clock.current_datetime(),
-                type='remote-outbound-rtp',
-                id='remote-outbound-rtp_' + str(id(self)),
-                # RTCStreamStats
-                ssrc=packet.ssrc,
-                kind=self.__kind,
-                transportId=self.transport._stats_id,
-                # RTCSentRtpStreamStats
-                packetsSent=packet.sender_info.packet_count,
-                bytesSent=packet.sender_info.octet_count,
-                # RTCRemoteOutboundRtpStreamStats
-                remoteTimestamp=clock.datetime_from_ntp(packet.sender_info.ntp_timestamp)
-            ))
-            self.__lsr[packet.ssrc] = ((packet.sender_info.ntp_timestamp) >> 16) & 0xffffffff
+            self.__stats.add(
+                RTCRemoteOutboundRtpStreamStats(
+                    # RTCStats
+                    timestamp=clock.current_datetime(),
+                    type="remote-outbound-rtp",
+                    id="remote-outbound-rtp_" + str(id(self)),
+                    # RTCStreamStats
+                    ssrc=packet.ssrc,
+                    kind=self.__kind,
+                    transportId=self.transport._stats_id,
+                    # RTCSentRtpStreamStats
+                    packetsSent=packet.sender_info.packet_count,
+                    bytesSent=packet.sender_info.octet_count,
+                    # RTCRemoteOutboundRtpStreamStats
+                    remoteTimestamp=clock.datetime_from_ntp(
+                        packet.sender_info.ntp_timestamp
+                    ),
+                )
+            )
+            self.__lsr[packet.ssrc] = (
+                (packet.sender_info.ntp_timestamp) >> 16
+            ) & 0xFFFFFFFF
             self.__lsr_time[packet.ssrc] = time.time()
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
@@ -365,7 +401,7 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
-        self.__log_debug('< %s', packet)
+        self.__log_debug("< %s", packet)
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
@@ -379,8 +415,11 @@ class RTCRtpReceiver:
                 if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
                     rtcp_packet = RtcpPsfbPacket(
-                        fmt=RTCP_PSFB_APP, ssrc=self.__rtcp_ssrc, media_ssrc=0,
-                        fci=pack_remb_fci(*remb))
+                        fmt=RTCP_PSFB_APP,
+                        ssrc=self.__rtcp_ssrc,
+                        media_ssrc=0,
+                        fci=pack_remb_fci(*remb),
+                    )
                     await self._send_rtcp(rtcp_packet)
 
         # keep track of sources
@@ -389,7 +428,9 @@ class RTCRtpReceiver:
         # check the codec is known
         codec = self.__codecs.get(packet.payload_type)
         if codec is None:
-            self.__log_debug('x RTP packet with unknown payload type %d', packet.payload_type)
+            self.__log_debug(
+                "x RTP packet with unknown payload type %d", packet.payload_type
+            )
             return
 
         # feed RTCP statistics
@@ -401,29 +442,31 @@ class RTCRtpReceiver:
         if is_rtx(codec):
             original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
             if original_ssrc is None:
-                self.__log_debug('x RTX packet from unknown SSRC %d', packet.ssrc)
+                self.__log_debug("x RTX packet from unknown SSRC %d", packet.ssrc)
                 return
 
             if len(packet.payload) < 2:
                 return
 
-            codec = self.__codecs[codec.parameters['apt']]
-            packet = unwrap_rtx(packet,
-                                payload_type=codec.payloadType,
-                                ssrc=original_ssrc)
+            codec = self.__codecs[codec.parameters["apt"]]
+            packet = unwrap_rtx(
+                packet, payload_type=codec.payloadType, ssrc=original_ssrc
+            )
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
-            await self._send_rtcp_nack(packet.ssrc, sorted(self.__nack_generator.missing))
+            await self._send_rtcp_nack(
+                packet.ssrc, sorted(self.__nack_generator.missing)
+            )
 
         # parse codec-specific information
         try:
             if packet.payload:
                 packet._data = depayload(codec, packet.payload)
             else:
-                packet._data = b''
+                packet._data = b""
         except ValueError as exc:
-            self.__log_debug('x RTP payload parsing failed: %s', exc)
+            self.__log_debug("x RTP payload parsing failed: %s", exc)
             return
 
         # try to re-assemble encoded frame
@@ -431,11 +474,13 @@ class RTCRtpReceiver:
 
         # if we have a complete encoded frame, decode it
         if encoded_frame is not None and self.__decoder_thread:
-            encoded_frame.timestamp = self.__timestamp_mapper.map(encoded_frame.timestamp)
+            encoded_frame.timestamp = self.__timestamp_mapper.map(
+                encoded_frame.timestamp
+            )
             self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self):
-        self.__log_debug('- RTCP started')
+        self.__log_debug("- RTCP started")
 
         try:
             while True:
@@ -454,14 +499,17 @@ class RTCRtpReceiver:
                         if delay > 0 and delay < 65536:
                             dlsr = int(delay * 65536)
 
-                    reports.append(RtcpReceiverInfo(
-                        ssrc=ssrc,
-                        fraction_lost=stream.fraction_lost,
-                        packets_lost=stream.packets_lost,
-                        highest_sequence=stream.max_seq,
-                        jitter=stream.jitter,
-                        lsr=lsr,
-                        dlsr=dlsr))
+                    reports.append(
+                        RtcpReceiverInfo(
+                            ssrc=ssrc,
+                            fraction_lost=stream.fraction_lost,
+                            packets_lost=stream.packets_lost,
+                            highest_sequence=stream.max_seq,
+                            jitter=stream.jitter,
+                            lsr=lsr,
+                            dlsr=dlsr,
+                        )
+                    )
 
                 if self.__rtcp_ssrc is not None and reports:
                     packet = RtcpRrPacket(ssrc=self.__rtcp_ssrc, reports=reports)
@@ -470,11 +518,11 @@ class RTCRtpReceiver:
         except asyncio.CancelledError:
             pass
 
-        self.__log_debug('- RTCP finished')
+        self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packet):
-        self.__log_debug('> %s', packet)
+        self.__log_debug("> %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
@@ -486,7 +534,8 @@ class RTCRtpReceiver:
         """
         if self.__rtcp_ssrc is not None:
             packet = RtcpRtpfbPacket(
-                fmt=RTCP_RTPFB_NACK, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc)
+                fmt=RTCP_RTPFB_NACK, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc
+            )
             packet.lost = lost
             await self._send_rtcp(packet)
 
@@ -495,7 +544,9 @@ class RTCRtpReceiver:
         Send an RTCP packet to report picture loss.
         """
         if self.__rtcp_ssrc is not None:
-            packet = RtcpPsfbPacket(fmt=RTCP_PSFB_PLI, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc)
+            packet = RtcpPsfbPacket(
+                fmt=RTCP_PSFB_PLI, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc
+            )
             await self._send_rtcp(packet)
 
     def _set_rtcp_ssrc(self, ssrc):
@@ -511,4 +562,4 @@ class RTCRtpReceiver:
             self.__decoder_thread = None
 
     def __log_debug(self, msg, *args):
-        logger.debug('receiver(%s) ' + msg, self.__kind, *args)
+        logger.debug("receiver(%s) " + msg, self.__kind, *args)

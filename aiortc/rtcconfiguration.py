@@ -7,6 +7,7 @@ class RTCConfiguration:
     The :class:`RTCConfiguration` dictionary is used to provide configuration
     options for an :class:`RTCPeerConnection`.
     """
+
     iceServers = attr.ib(default=None)
     "A list of :class:`RTCIceServer` objects to configure STUN / TURN servers."
 
@@ -18,6 +19,7 @@ class RTCIceServer:
     STUN or TURN server. It includes both the URL and the necessary credentials,
     if any, to connect to the server.
     """
+
     urls = attr.ib()
     """
     This required property is either a single string or a list of strings,
@@ -27,4 +29,4 @@ class RTCIceServer:
     "The username to use during authentication (for TURN only)."
     credential = attr.ib(default=None)
     "The credential to use during authentication (for TURN only)."
-    credentialType = attr.ib(default='password')
+    credentialType = attr.ib(default="password")

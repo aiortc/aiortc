@@ -1,7 +1,13 @@
 from unittest import TestCase
 
-from aiortc.utils import (uint16_add, uint16_gt, uint16_gte, uint32_add,
-                          uint32_gt, uint32_gte)
+from aiortc.utils import (
+    uint16_add,
+    uint16_gt,
+    uint16_gte,
+    uint32_add,
+    uint32_gt,
+    uint32_gte,
+)
 
 
 class UtilsTest(TestCase):

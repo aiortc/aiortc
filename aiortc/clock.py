@@ -17,8 +17,8 @@ def current_ntp_time():
 
 
 def datetime_from_ntp(ntp):
-    seconds = (ntp >> 32)
-    microseconds = ((ntp & 0xffffffff) * 1000000) / (1 << 32)
+    seconds = ntp >> 32
+    microseconds = ((ntp & 0xFFFFFFFF) * 1000000) / (1 << 32)
     return NTP_EPOCH + datetime.timedelta(seconds=seconds, microseconds=microseconds)
 
 

@@ -9,29 +9,29 @@ from av import AudioFrame, VideoFrame
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 
-logger = logging.getLogger('media')
+logger = logging.getLogger("media")
 
 
 REAL_TIME_FORMATS = [
-    'alsa',
-    'android_camera',
-    'avfoundation',
-    'bktr',
-    'decklink',
-    'dshow',
-    'fbdev',
-    'gdigrab',
-    'iec61883',
-    'jack',
-    'kmsgrab',
-    'openal',
-    'oss',
-    'pulse',
-    'sndio',
-    'rtsp',
-    'v4l2',
-    'vfwcap',
-    'x11grab',
+    "alsa",
+    "android_camera",
+    "avfoundation",
+    "bktr",
+    "decklink",
+    "dshow",
+    "fbdev",
+    "gdigrab",
+    "iec61883",
+    "jack",
+    "kmsgrab",
+    "openal",
+    "oss",
+    "pulse",
+    "sndio",
+    "rtsp",
+    "v4l2",
+    "vfwcap",
+    "x11grab",
 ]
 
 
@@ -47,6 +47,7 @@ class MediaBlackhole:
     """
     A media sink that consumes and discards all media.
     """
+
     def __init__(self):
         self.__tracks = {}
 
@@ -77,18 +78,18 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
-def player_worker(loop, container, streams, audio_track, video_track, quit_event,
-                  throttle_playback):
+def player_worker(
+    loop, container, streams, audio_track, video_track, quit_event, throttle_playback
+):
     audio_fifo = av.AudioFifo()
-    audio_format_name = 's16'
-    audio_layout_name = 'stereo'
+    audio_format_name = "s16"
+    audio_layout_name = "stereo"
     audio_sample_rate = 48000
     audio_samples = 0
     audio_samples_per_frame = int(audio_sample_rate * AUDIO_PTIME)
     audio_resampler = av.AudioResampler(
-        format=audio_format_name,
-        layout=audio_layout_name,
-        rate=audio_sample_rate)
+        format=audio_format_name, layout=audio_layout_name, rate=audio_sample_rate
+    )
 
     video_first_pts = None
 
@@ -107,14 +108,16 @@ def player_worker(loop, container, streams, audio_track, video_track, quit_event
 
         # read up to 1 second ahead
         if throttle_playback:
-            elapsed_time = (time.time() - start_time)
+            elapsed_time = time.time() - start_time
             if frame_time and frame_time > elapsed_time + 1:
                 time.sleep(0.1)
 
         if isinstance(frame, AudioFrame) and audio_track:
-            if (frame.format.name != audio_format_name or
-               frame.layout.name != audio_layout_name or
-               frame.sample_rate != audio_sample_rate):
+            if (
+                frame.format.name != audio_format_name
+                or frame.layout.name != audio_layout_name
+                or frame.sample_rate != audio_sample_rate
+            ):
                 frame.pts = None
                 frame = audio_resampler.resample(frame)
 
@@ -128,12 +131,14 @@ def player_worker(loop, container, streams, audio_track, video_track, quit_event
                 frame = audio_fifo.read(audio_samples_per_frame)
                 if frame:
                     frame_time = frame.time
-                    asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
+                    asyncio.run_coroutine_threadsafe(
+                        audio_track._queue.put(frame), loop
+                    )
                 else:
                     break
         elif isinstance(frame, VideoFrame) and video_track:
             if frame.pts is None:  # pragma: no cover
-                logger.warning('Skipping video frame with no pts')
+                logger.warning("Skipping video frame with no pts")
                 continue
 
             # video from a webcam doesn't start at pts 0, cancel out offset
@@ -154,7 +159,7 @@ class PlayerStreamTrack(MediaStreamTrack):
         self._start = None
 
     async def recv(self):
-        if self.readyState != 'live':
+        if self.readyState != "live":
             raise MediaStreamError
 
         self._player._start(self)
@@ -211,8 +216,9 @@ class MediaPlayer:
     :param: format: The format to use, defaults to autodect.
     :param: options: Additional options to pass to FFmpeg.
     """
+
     def __init__(self, file, format=None, options={}):
-        self.__container = av.open(file=file, format=format, mode='r', options=options)
+        self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread = None
         self.__thread_quit = None
 
@@ -222,15 +228,15 @@ class MediaPlayer:
         self.__audio = None
         self.__video = None
         for stream in self.__container.streams:
-            if stream.type == 'audio' and not self.__audio:
-                self.__audio = PlayerStreamTrack(self, kind='audio')
+            if stream.type == "audio" and not self.__audio:
+                self.__audio = PlayerStreamTrack(self, kind="audio")
                 self.__streams.append(stream)
-            elif stream.type == 'video' and not self.__video:
-                self.__video = PlayerStreamTrack(self, kind='video')
+            elif stream.type == "video" and not self.__video:
+                self.__video = PlayerStreamTrack(self, kind="video")
                 self.__streams.append(stream)
 
         # check whether we need to throttle playback
-        container_format = set(self.__container.format.name.split(','))
+        container_format = set(self.__container.format.name.split(","))
         self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
 
     @property
@@ -250,23 +256,27 @@ class MediaPlayer:
     def _start(self, track):
         self.__started.add(track)
         if self.__thread is None:
-            self.__log_debug('Starting worker thread')
+            self.__log_debug("Starting worker thread")
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(
-                name='media-player',
+                name="media-player",
                 target=player_worker,
                 args=(
                     asyncio.get_event_loop(),
-                    self.__container, self.__streams,
-                    self.__audio, self.__video,
+                    self.__container,
+                    self.__streams,
+                    self.__audio,
+                    self.__video,
                     self.__thread_quit,
-                    self._throttle_playback))
+                    self._throttle_playback,
+                ),
+            )
             self.__thread.start()
 
     def _stop(self, track):
         self.__started.discard(track)
         if not self.__started and self.__thread is not None:
-            self.__log_debug('Stopping worker thread')
+            self.__log_debug("Stopping worker thread")
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
@@ -276,7 +286,7 @@ class MediaPlayer:
             self.__container = None
 
     def __log_debug(self, msg, *args):
-        logger.debug('player(%s) ' + msg, self.__container.name, *args)
+        logger.debug("player(%s) " + msg, self.__container.name, *args)
 
 
 class MediaRecorderContext:
@@ -303,8 +313,9 @@ class MediaRecorder:
     :param: format: The format to use, defaults to autodect.
     :param: options: Additional options to pass to FFmpeg.
     """
+
     def __init__(self, file, format=None, options={}):
-        self.__container = av.open(file=file, format=format, mode='w', options=options)
+        self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__tracks = {}
 
     def addTrack(self, track):
@@ -313,21 +324,21 @@ class MediaRecorder:
 
         :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
         """
-        if track.kind == 'audio':
-            if self.__container.format.name == 'wav':
-                codec_name = 'pcm_s16le'
-            elif self.__container.format.name == 'mp3':
-                codec_name = 'mp3'
+        if track.kind == "audio":
+            if self.__container.format.name == "wav":
+                codec_name = "pcm_s16le"
+            elif self.__container.format.name == "mp3":
+                codec_name = "mp3"
             else:
-                codec_name = 'aac'
+                codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
         else:
-            if self.__container.format.name == 'image2':
-                stream = self.__container.add_stream('png', rate=30)
-                stream.pix_fmt = 'rgb24'
+            if self.__container.format.name == "image2":
+                stream = self.__container.add_stream("png", rate=30)
+                stream.pix_fmt = "rgb24"
             else:
-                stream = self.__container.add_stream('libx264', rate=30)
-                stream.pix_fmt = 'yuv420p'
+                stream = self.__container.add_stream("libx264", rate=30)
+                stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
 
     async def start(self):

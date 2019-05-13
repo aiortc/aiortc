@@ -7,19 +7,24 @@ import random
 import cv2
 from av import VideoFrame
 
-from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import (
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
+    VideoStreamTrack,
+)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.contrib.signaling import ApprtcSignaling
 
 ROOT = os.path.dirname(__file__)
-PHOTO_PATH = os.path.join(ROOT, 'photo.jpg')
+PHOTO_PATH = os.path.join(ROOT, "photo.jpg")
 
 
 class VideoImageTrack(VideoStreamTrack):
     """
     A video stream track that returns a rotating image.
     """
+
     def __init__(self):
         super().__init__()  # don't forget this!
         self.img = cv2.imread(PHOTO_PATH, cv2.IMREAD_COLOR)
@@ -33,7 +38,7 @@ class VideoImageTrack(VideoStreamTrack):
         img = cv2.warpAffine(self.img, M, (cols, rows))
 
         # create video frame
-        frame = VideoFrame.from_ndarray(img, format='bgr24')
+        frame = VideoFrame.from_ndarray(img, format="bgr24")
         frame.pts = pts
         frame.time_base = time_base
 
@@ -50,15 +55,15 @@ async def run(pc, player, recorder, signaling):
         else:
             pc.addTrack(VideoImageTrack())
 
-    @pc.on('track')
+    @pc.on("track")
     def on_track(track):
-        print('Track %s received' % track.kind)
+        print("Track %s received" % track.kind)
         recorder.addTrack(track)
 
     # connect to websocket and join
     params = await signaling.connect()
 
-    if params['is_initiator'] == 'true':
+    if params["is_initiator"] == "true":
         # send offer
         add_tracks()
         await pc.setLocalDescription(await pc.createOffer())
@@ -72,7 +77,7 @@ async def run(pc, player, recorder, signaling):
             await pc.setRemoteDescription(obj)
             await recorder.start()
 
-            if obj.type == 'offer':
+            if obj.type == "offer":
                 # send answer
                 add_tracks()
                 await pc.setLocalDescription(await pc.createAnswer())
@@ -80,20 +85,20 @@ async def run(pc, player, recorder, signaling):
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
         elif obj is None:
-            print('Exiting')
+            print("Exiting")
             break
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='AppRTC')
-    parser.add_argument('room', nargs='?')
-    parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
-    parser.add_argument('--record-to', help='Write received media to a file.'),
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="AppRTC")
+    parser.add_argument("room", nargs="?")
+    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--record-to", help="Write received media to a file."),
+    parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
     if not args.room:
-        args.room = ''.join([random.choice('0123456789') for x in range(10)])
+        args.room = "".join([random.choice("0123456789") for x in range(10)])
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
@@ -117,11 +122,9 @@ if __name__ == '__main__':
     # run event loop
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(
-            pc=pc,
-            player=player,
-            recorder=recorder,
-            signaling=signaling))
+        loop.run_until_complete(
+            run(pc=pc, player=player, recorder=recorder, signaling=signaling)
+        )
     except KeyboardInterrupt:
         pass
     finally:

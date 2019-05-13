@@ -2,9 +2,17 @@ from unittest import TestCase
 
 from numpy import random
 
-from aiortc.rate import (AimdRateControl, BandwidthUsage, InterArrival,
-                         OveruseDetector, OveruseEstimator, RateBucket,
-                         RateControlState, RateCounter, RemoteBitrateEstimator)
+from aiortc.rate import (
+    AimdRateControl,
+    BandwidthUsage,
+    InterArrival,
+    OveruseDetector,
+    OveruseEstimator,
+    RateBucket,
+    RateControlState,
+    RateCounter,
+    RemoteBitrateEstimator,
+)
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20
@@ -72,30 +80,40 @@ class AimdRateControlTest(TestCase):
         acked_bitrate = 100000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
-            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+            estimate = self.rate_control.update(
+                BandwidthUsage.NORMAL, acked_bitrate, now_ms
+            )
         self.assertEqual(estimate, 160000)
         self.assertEqual(self.rate_control.near_max, False)
 
         # overuse -> hold
-        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, acked_bitrate, now_ms)
+        estimate = self.rate_control.update(
+            BandwidthUsage.OVERUSING, acked_bitrate, now_ms
+        )
         self.assertEqual(estimate, 85000)
         self.assertEqual(self.rate_control.near_max, True)
         now_ms += 1000
 
         # back to normal -> hold
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        estimate = self.rate_control.update(
+            BandwidthUsage.NORMAL, acked_bitrate, now_ms
+        )
         self.assertEqual(estimate, 85000)
         self.assertEqual(self.rate_control.near_max, True)
         now_ms += 1000
 
         # still normal -> additive increase
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+        estimate = self.rate_control.update(
+            BandwidthUsage.NORMAL, acked_bitrate, now_ms
+        )
         self.assertEqual(estimate, 94444)
         self.assertEqual(self.rate_control.near_max, True)
         now_ms += 1000
 
         # overuse -> hold
-        estimate = self.rate_control.update(BandwidthUsage.OVERUSING, acked_bitrate, now_ms)
+        estimate = self.rate_control.update(
+            BandwidthUsage.OVERUSING, acked_bitrate, now_ms
+        )
         self.assertEqual(estimate, 85000)
         self.assertEqual(self.rate_control.near_max, True)
         now_ms += 1000
@@ -137,54 +155,81 @@ class AimdRateControlTest(TestCase):
         acked_bitrate = 10000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
-            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+            estimate = self.rate_control.update(
+                BandwidthUsage.NORMAL, acked_bitrate, now_ms
+            )
         self.assertEqual(estimate, 25000)
 
     def test_bwe_not_limited_by_decreasing_acked_bitrate(self):
         acked_bitrate = 100000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
-            estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate, now_ms)
+            estimate = self.rate_control.update(
+                BandwidthUsage.NORMAL, acked_bitrate, now_ms
+            )
         self.assertEqual(estimate, 160000)
 
         # estimate doesn't change
-        estimate = self.rate_control.update(BandwidthUsage.NORMAL, acked_bitrate // 2, now_ms)
+        estimate = self.rate_control.update(
+            BandwidthUsage.NORMAL, acked_bitrate // 2, now_ms
+        )
         self.assertEqual(estimate, 160000)
 
 
 class InterArrivalTest(TestCase):
     def setUp(self):
         self.inter_arrival_ast = InterArrival(
-            abs_send_time(TIMESTAMP_GROUP_LENGTH_US), 1000 / (1 << 26))
+            abs_send_time(TIMESTAMP_GROUP_LENGTH_US), 1000 / (1 << 26)
+        )
         self.inter_arrival_rtp = InterArrival(
-            rtp_timestamp(TIMESTAMP_GROUP_LENGTH_US), 1 / 9)
+            rtp_timestamp(TIMESTAMP_GROUP_LENGTH_US), 1 / 9
+        )
 
-    def assertComputed(self, timestamp_us, arrival_time_ms, packet_size,
-                       timestamp_delta_us, arrival_time_delta_ms, packet_size_delta,
-                       timestamp_near=0):
+    def assertComputed(
+        self,
+        timestamp_us,
+        arrival_time_ms,
+        packet_size,
+        timestamp_delta_us,
+        arrival_time_delta_ms,
+        packet_size_delta,
+        timestamp_near=0,
+    ):
         # AbsSendTime
-        deltas = self.inter_arrival_ast.compute_deltas(abs_send_time(timestamp_us),
-                                                       arrival_time_ms, packet_size)
+        deltas = self.inter_arrival_ast.compute_deltas(
+            abs_send_time(timestamp_us), arrival_time_ms, packet_size
+        )
         self.assertIsNotNone(deltas)
-        self.assertAlmostEqual(deltas.timestamp, abs_send_time(timestamp_delta_us),
-                               delta=timestamp_near << 8)
+        self.assertAlmostEqual(
+            deltas.timestamp,
+            abs_send_time(timestamp_delta_us),
+            delta=timestamp_near << 8,
+        )
         self.assertEqual(deltas.arrival_time, arrival_time_delta_ms)
         self.assertEqual(deltas.size, packet_size_delta)
 
         # RtpTimestamp
-        deltas = self.inter_arrival_rtp.compute_deltas(rtp_timestamp(timestamp_us),
-                                                       arrival_time_ms, packet_size)
+        deltas = self.inter_arrival_rtp.compute_deltas(
+            rtp_timestamp(timestamp_us), arrival_time_ms, packet_size
+        )
         self.assertIsNotNone(deltas)
-        self.assertAlmostEqual(deltas.timestamp, rtp_timestamp(timestamp_delta_us),
-                               delta=timestamp_near)
+        self.assertAlmostEqual(
+            deltas.timestamp, rtp_timestamp(timestamp_delta_us), delta=timestamp_near
+        )
         self.assertEqual(deltas.arrival_time, arrival_time_delta_ms)
         self.assertEqual(deltas.size, packet_size_delta)
 
     def assertNotComputed(self, timestamp_us, arrival_time_ms, packet_size):
-        self.assertIsNone(self.inter_arrival_ast.compute_deltas(
-            abs_send_time(timestamp_us), arrival_time_ms, packet_size))
-        self.assertIsNone(self.inter_arrival_rtp.compute_deltas(
-            rtp_timestamp(timestamp_us), arrival_time_ms, packet_size))
+        self.assertIsNone(
+            self.inter_arrival_ast.compute_deltas(
+                abs_send_time(timestamp_us), arrival_time_ms, packet_size
+            )
+        )
+        self.assertIsNone(
+            self.inter_arrival_rtp.compute_deltas(
+                rtp_timestamp(timestamp_us), arrival_time_ms, packet_size
+            )
+        )
 
     def wrapTest(self, wrap_start_us, unorderly_within_group):
         timestamp_near = 1
@@ -199,23 +244,34 @@ class InterArrivalTest(TestCase):
 
         # G3
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(wrap_start_us // 2, arrival_time, 1,
-                            wrap_start_us // 4, 6, 0)
+        self.assertComputed(
+            wrap_start_us // 2, arrival_time, 1, wrap_start_us // 4, 6, 0
+        )
 
         # G4
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(wrap_start_us // 2 + wrap_start_us // 4, arrival_time, 1,
-                            wrap_start_us // 4, 6, 0, timestamp_near)
+        self.assertComputed(
+            wrap_start_us // 2 + wrap_start_us // 4,
+            arrival_time,
+            1,
+            wrap_start_us // 4,
+            6,
+            0,
+            timestamp_near,
+        )
         g4_arrival_time = arrival_time
 
         # G5
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(wrap_start_us, arrival_time, 2,
-                            wrap_start_us // 4, 6, 0, timestamp_near)
+        self.assertComputed(
+            wrap_start_us, arrival_time, 2, wrap_start_us // 4, 6, 0, timestamp_near
+        )
         for i in range(10):
             arrival_time += BURST_THRESHOLD_MS + 1
             if unorderly_within_group:
-                self.assertNotComputed(wrap_start_us + (9 - i) * MIN_STEP_US, arrival_time, 1)
+                self.assertNotComputed(
+                    wrap_start_us + (9 - i) * MIN_STEP_US, arrival_time, 1
+                )
             else:
                 self.assertNotComputed(wrap_start_us + i * MIN_STEP_US, arrival_time, 1)
         g5_arrival_time = arrival_time
@@ -226,22 +282,34 @@ class InterArrivalTest(TestCase):
 
         # G6
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(wrap_start_us + TRIGGER_NEW_GROUP_US, arrival_time, 10,
-                            wrap_start_us // 4 + 9 * MIN_STEP_US,
-                            g5_arrival_time - g4_arrival_time,
-                            11, timestamp_near)
+        self.assertComputed(
+            wrap_start_us + TRIGGER_NEW_GROUP_US,
+            arrival_time,
+            10,
+            wrap_start_us // 4 + 9 * MIN_STEP_US,
+            g5_arrival_time - g4_arrival_time,
+            11,
+            timestamp_near,
+        )
         g6_arrival_time = arrival_time
 
         # out of order
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertNotComputed(wrap_start_us + TIMESTAMP_GROUP_LENGTH_US, arrival_time, 100)
+        self.assertNotComputed(
+            wrap_start_us + TIMESTAMP_GROUP_LENGTH_US, arrival_time, 100
+        )
 
         # G7
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(wrap_start_us + 2 * TRIGGER_NEW_GROUP_US, arrival_time, 10,
-                            TRIGGER_NEW_GROUP_US - 9 * MIN_STEP_US,
-                            g6_arrival_time - g5_arrival_time,
-                            -2, timestamp_near)
+        self.assertComputed(
+            wrap_start_us + 2 * TRIGGER_NEW_GROUP_US,
+            arrival_time,
+            10,
+            TRIGGER_NEW_GROUP_US - 9 * MIN_STEP_US,
+            g6_arrival_time - g5_arrival_time,
+            -2,
+            timestamp_near,
+        )
 
     def test_first_packet(self):
         self.assertNotComputed(0, 17, 1)
@@ -262,8 +330,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp += TRIGGER_NEW_GROUP_US
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(timestamp, arrival_time, 1,
-                            TRIGGER_NEW_GROUP_US, g2_arrival_time - g1_arrival_time, 1)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            1,
+            TRIGGER_NEW_GROUP_US,
+            g2_arrival_time - g1_arrival_time,
+            1,
+        )
 
     def test_second_group(self):
         # G1
@@ -281,15 +355,27 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp += TRIGGER_NEW_GROUP_US
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(timestamp, arrival_time, 1,
-                            TRIGGER_NEW_GROUP_US, g2_arrival_time - g1_arrival_time, 1)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            1,
+            TRIGGER_NEW_GROUP_US,
+            g2_arrival_time - g1_arrival_time,
+            1,
+        )
         g3_arrival_time = arrival_time
 
         # G4
         timestamp += TRIGGER_NEW_GROUP_US
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(timestamp, arrival_time, 2,
-                            TRIGGER_NEW_GROUP_US, g3_arrival_time - g2_arrival_time, -1)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            2,
+            TRIGGER_NEW_GROUP_US,
+            g3_arrival_time - g2_arrival_time,
+            -1,
+        )
 
     def test_accumulated_group(self):
         # G1
@@ -313,8 +399,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp = 2 * TRIGGER_NEW_GROUP_US
         arrival_time = 500
-        self.assertComputed(timestamp, arrival_time, 100,
-                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            100,
+            g2_timestamp - g1_timestamp,
+            g2_arrival_time - g1_arrival_time,
+            11,
+        )
 
     def test_out_of_order_packet(self):
         # G1
@@ -342,8 +434,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp = 2 * TRIGGER_NEW_GROUP_US
         arrival_time = 500
-        self.assertComputed(timestamp, arrival_time, 100,
-                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            100,
+            g2_timestamp - g1_timestamp,
+            g2_arrival_time - g1_arrival_time,
+            11,
+        )
 
     def test_out_of_order_within_group(self):
         # G1
@@ -372,8 +470,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp = 2 * TRIGGER_NEW_GROUP_US
         arrival_time = 500
-        self.assertComputed(timestamp, arrival_time, 100,
-                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 11)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            100,
+            g2_timestamp - g1_timestamp,
+            g2_arrival_time - g1_arrival_time,
+            11,
+        )
 
     def test_two_bursts(self):
         # G1
@@ -396,8 +500,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp += 30000
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(timestamp, arrival_time, 100,
-                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 9)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            100,
+            g2_timestamp - g1_timestamp,
+            g2_arrival_time - g1_arrival_time,
+            9,
+        )
 
     def test_no_bursts(self):
         # G1
@@ -417,8 +527,14 @@ class InterArrivalTest(TestCase):
         # G3
         timestamp += 30000
         arrival_time += BURST_THRESHOLD_MS + 1
-        self.assertComputed(timestamp, arrival_time, 100,
-                            g2_timestamp - g1_timestamp, g2_arrival_time - g1_arrival_time, 1)
+        self.assertComputed(
+            timestamp,
+            arrival_time,
+            100,
+            g2_timestamp - g1_timestamp,
+            g2_arrival_time - g1_arrival_time,
+            1,
+        )
 
     def test_wrap_abs_send_time(self):
         self.wrapTest(START_ABS_SEND_TIME_WRAP_US, False)
@@ -486,11 +602,14 @@ class OveruseDetectorTest(TestCase):
         drift_per_frame_ms = 1
         sigma_ms = 0
 
-        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        unique_overuse = self.run_100000_samples(
+            packets_per_frame, frame_duration_ms, sigma_ms
+        )
         self.assertEqual(unique_overuse, 0)
 
-        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
-                                                      sigma_ms, drift_per_frame_ms)
+        frames_until_overuse = self.run_until_overuse(
+            packets_per_frame, frame_duration_ms, sigma_ms, drift_per_frame_ms
+        )
         self.assertEqual(frames_until_overuse, 7)
 
     def test_simple_overuse_100Kbit_10fps(self):
@@ -499,11 +618,14 @@ class OveruseDetectorTest(TestCase):
         drift_per_frame_ms = 1
         sigma_ms = 0
 
-        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        unique_overuse = self.run_100000_samples(
+            packets_per_frame, frame_duration_ms, sigma_ms
+        )
         self.assertEqual(unique_overuse, 0)
 
-        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
-                                                      sigma_ms, drift_per_frame_ms)
+        frames_until_overuse = self.run_until_overuse(
+            packets_per_frame, frame_duration_ms, sigma_ms, drift_per_frame_ms
+        )
         self.assertEqual(frames_until_overuse, 7)
 
     def test_overuse_with_low_variance_2000Kbit_30fps(self):
@@ -541,11 +663,14 @@ class OveruseDetectorTest(TestCase):
         drift_per_frame_ms = 100
         sigma_ms = 3
 
-        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        unique_overuse = self.run_100000_samples(
+            packets_per_frame, frame_duration_ms, sigma_ms
+        )
         self.assertEqual(unique_overuse, 0)
 
-        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
-                                                      sigma_ms, drift_per_frame_ms)
+        frames_until_overuse = self.run_until_overuse(
+            packets_per_frame, frame_duration_ms, sigma_ms, drift_per_frame_ms
+        )
         self.assertEqual(frames_until_overuse, 4)
 
     def test_high_haussian_variance_30Kbit_3fps(self):
@@ -554,11 +679,14 @@ class OveruseDetectorTest(TestCase):
         drift_per_frame_ms = 1
         sigma_ms = 10
 
-        unique_overuse = self.run_100000_samples(packets_per_frame, frame_duration_ms, sigma_ms)
+        unique_overuse = self.run_100000_samples(
+            packets_per_frame, frame_duration_ms, sigma_ms
+        )
         self.assertEqual(unique_overuse, 0)
 
-        frames_until_overuse = self.run_until_overuse(packets_per_frame, frame_duration_ms,
-                                                      sigma_ms, drift_per_frame_ms)
+        frames_until_overuse = self.run_until_overuse(
+            packets_per_frame, frame_duration_ms, sigma_ms, drift_per_frame_ms
+        )
         self.assertEqual(frames_until_overuse, 44)
 
     def run_100000_samples(self, packets_per_frame, mean_ms, standard_deviation_ms):
@@ -572,7 +700,8 @@ class OveruseDetectorTest(TestCase):
             self.now_ms += mean_ms
             self.receive_time_ms = max(
                 self.receive_time_ms,
-                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5))
+                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5),
+            )
 
             if self.detector.state() == BandwidthUsage.OVERUSING:
                 if last_overuse + 1 != i:
@@ -581,8 +710,9 @@ class OveruseDetectorTest(TestCase):
 
         return unique_overuse
 
-    def run_until_overuse(self, packets_per_frame, mean_ms, standard_deviation_ms,
-                          drift_per_frame_ms):
+    def run_until_overuse(
+        self, packets_per_frame, mean_ms, standard_deviation_ms, drift_per_frame_ms
+    ):
         for i in range(100000):
             for j in range(packets_per_frame):
                 self.update_detector(self.rtp_timestamp, self.receive_time_ms)
@@ -590,37 +720,52 @@ class OveruseDetectorTest(TestCase):
             self.now_ms += mean_ms + drift_per_frame_ms
             self.receive_time_ms = max(
                 self.receive_time_ms,
-                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5))
+                int(self.now_ms + random.normal(0, standard_deviation_ms) + 0.5),
+            )
 
             if self.detector.state() == BandwidthUsage.OVERUSING:
                 return i + 1
         return -1
 
     def update_detector(self, timestamp, receive_time_ms):
-        deltas = self.inter_arrival.compute_deltas(timestamp, receive_time_ms, self.packet_size)
+        deltas = self.inter_arrival.compute_deltas(
+            timestamp, receive_time_ms, self.packet_size
+        )
         if deltas is not None:
             timestamp_delta_ms = deltas.timestamp / 90
-            self.estimator.update(deltas.arrival_time, timestamp_delta_ms, deltas.size,
-                                  self.detector.state(), receive_time_ms)
-            self.detector.detect(self.estimator.offset(), timestamp_delta_ms,
-                                 self.estimator.num_of_deltas(), receive_time_ms)
+            self.estimator.update(
+                deltas.arrival_time,
+                timestamp_delta_ms,
+                deltas.size,
+                self.detector.state(),
+                receive_time_ms,
+            )
+            self.detector.detect(
+                self.estimator.offset(),
+                timestamp_delta_ms,
+                self.estimator.num_of_deltas(),
+                receive_time_ms,
+            )
 
 
 class RateCounterTest(TestCase):
     def test_constructor(self):
         counter = RateCounter(10)
-        self.assertEqual(counter._buckets, [
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+            ],
+        )
         self.assertIsNone(counter._origin_ms)
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._total, RateBucket())
@@ -630,126 +775,147 @@ class RateCounterTest(TestCase):
         counter = RateCounter(10)
 
         counter.add(500, 123)
-        self.assertEqual(counter._buckets, [
-            RateBucket(1, 500),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(1, 500),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+            ],
+        )
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._origin_ms, 123)
         self.assertEqual(counter._total, RateBucket(1, 500))
         self.assertIsNone(counter.rate(123))
 
         counter.add(501, 123)
-        self.assertEqual(counter._buckets, [
-            RateBucket(2, 1001),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(2, 1001),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+            ],
+        )
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._origin_ms, 123)
         self.assertEqual(counter._total, RateBucket(2, 1001))
         self.assertIsNone(counter.rate(123))
 
         counter.add(502, 125)
-        self.assertEqual(counter._buckets, [
-            RateBucket(2, 1001),
-            RateBucket(),
-            RateBucket(1, 502),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(2, 1001),
+                RateBucket(),
+                RateBucket(1, 502),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+            ],
+        )
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._origin_ms, 123)
         self.assertEqual(counter._total, RateBucket(3, 1503))
         self.assertEqual(counter.rate(125), 4008000)
 
         counter.add(503, 128)
-        self.assertEqual(counter._buckets, [
-            RateBucket(2, 1001),
-            RateBucket(),
-            RateBucket(1, 502),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 503),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(2, 1001),
+                RateBucket(),
+                RateBucket(1, 502),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 503),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+            ],
+        )
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._origin_ms, 123)
         self.assertEqual(counter._total, RateBucket(4, 2006))
         self.assertEqual(counter.rate(128), 2674667)
 
         counter.add(504, 132)
-        self.assertEqual(counter._buckets, [
-            RateBucket(2, 1001),
-            RateBucket(),
-            RateBucket(1, 502),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 503),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 504),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(2, 1001),
+                RateBucket(),
+                RateBucket(1, 502),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 503),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 504),
+            ],
+        )
         self.assertEqual(counter._origin_index, 0)
         self.assertEqual(counter._origin_ms, 123)
         self.assertEqual(counter._total, RateBucket(5, 2510))
         self.assertEqual(counter.rate(132), 2008000)
 
         counter.add(505, 134)
-        self.assertEqual(counter._buckets, [
-            RateBucket(),
-            RateBucket(1, 505),
-            RateBucket(1, 502),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 503),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 504),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(),
+                RateBucket(1, 505),
+                RateBucket(1, 502),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 503),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 504),
+            ],
+        )
         self.assertEqual(counter._origin_index, 2)
         self.assertEqual(counter._origin_ms, 125)
         self.assertEqual(counter._total, RateBucket(4, 2014))
         self.assertEqual(counter.rate(134), 1611200)
 
         counter.add(506, 135)
-        self.assertEqual(counter._buckets, [
-            RateBucket(),
-            RateBucket(1, 505),
-            RateBucket(1, 506),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 503),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(),
-            RateBucket(1, 504),
-        ])
+        self.assertEqual(
+            counter._buckets,
+            [
+                RateBucket(),
+                RateBucket(1, 505),
+                RateBucket(1, 506),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 503),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(),
+                RateBucket(1, 504),
+            ],
+        )
         self.assertEqual(counter._origin_index, 3)
         self.assertEqual(counter._origin_ms, 126)
         self.assertEqual(counter._total, RateBucket(4, 2018))
@@ -768,10 +934,10 @@ class Stream:
     def generate_frames(self, count):
         for i in range(count):
             abs_send_time = self.send_time_us * (1 << 18) // 1000000
-            self.arrival_time_us = (
-                max(self.arrival_time_us, self.send_time_us) +
-                round((self.payload_size * 8000000) / self.capacity))
-            self.send_time_us += (1000000 // self.framerate)
+            self.arrival_time_us = max(self.arrival_time_us, self.send_time_us) + round(
+                (self.payload_size * 8000000) / self.capacity
+            )
+            self.send_time_us += 1000000 // self.framerate
             yield abs_send_time, self.arrival_time_us // 1000, self.payload_size
 
 
@@ -781,12 +947,15 @@ class RemoteBitrateEstimatorTest(TestCase):
         stream = Stream(capacity=500000)
         target_bitrate = None
 
-        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(1000):
+        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(
+            1000
+        ):
             res = estimator.add(
                 abs_send_time=abs_send_time,
                 arrival_time_ms=arrival_time_ms,
                 payload_size=payload_size,
-                ssrc=1234)
+                ssrc=1234,
+            )
             if res is not None:
                 target_bitrate = res[0]
         self.assertEqual(target_bitrate, 550000)
@@ -794,12 +963,15 @@ class RemoteBitrateEstimatorTest(TestCase):
         # reduce capacity
         stream.capacity = 250000
 
-        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(1000):
+        for abs_send_time, arrival_time_ms, payload_size in stream.generate_frames(
+            1000
+        ):
             res = estimator.add(
                 abs_send_time=abs_send_time,
                 arrival_time_ms=arrival_time_ms,
                 payload_size=payload_size,
-                ssrc=1234)
+                ssrc=1234,
+            )
             if res is not None:
                 target_bitrate = res[0]
         self.assertEqual(target_bitrate, 214200)

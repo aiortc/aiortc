@@ -7,15 +7,23 @@ from unittest.mock import patch
 from aiortc.codecs import PCMU_CODEC, get_encoder
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import MediaStreamError
-from aiortc.rtcrtpparameters import (RTCRtpCapabilities, RTCRtpCodecCapability,
-                                     RTCRtpCodecParameters,
-                                     RTCRtpEncodingParameters,
-                                     RTCRtpHeaderExtensionCapability,
-                                     RTCRtpReceiveParameters,
-                                     RTCRtpRtxParameters)
-from aiortc.rtcrtpreceiver import (NackGenerator, RemoteStreamTrack,
-                                   RTCRtpReceiver, RTCRtpSynchronizationSource,
-                                   StreamStatistics, TimestampMapper)
+from aiortc.rtcrtpparameters import (
+    RTCRtpCapabilities,
+    RTCRtpCodecCapability,
+    RTCRtpCodecParameters,
+    RTCRtpEncodingParameters,
+    RTCRtpHeaderExtensionCapability,
+    RTCRtpReceiveParameters,
+    RTCRtpRtxParameters,
+)
+from aiortc.rtcrtpreceiver import (
+    NackGenerator,
+    RemoteStreamTrack,
+    RTCRtpReceiver,
+    RTCRtpSynchronizationSource,
+    StreamStatistics,
+    TimestampMapper,
+)
 from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
@@ -23,17 +31,22 @@ from aiortc.utils import uint16_add
 from .codecs import CodecTestCase
 from .utils import dummy_dtls_transport_pair, load, run
 
-VP8_CODEC = RTCRtpCodecParameters(mimeType='video/VP8', clockRate=90000, payloadType=100)
+VP8_CODEC = RTCRtpCodecParameters(
+    mimeType="video/VP8", clockRate=90000, payloadType=100
+)
 
 
 def create_rtp_packets(count, seq=0):
     packets = []
     for i in range(count):
-        packets.append(RtpPacket(
-            payload_type=0,
-            sequence_number=uint16_add(seq, i),
-            ssrc=1234,
-            timestamp=i * 160))
+        packets.append(
+            RtpPacket(
+                payload_type=0,
+                sequence_number=uint16_add(seq, i),
+                ssrc=1234,
+                timestamp=i * 160,
+            )
+        )
     return packets
 
 
@@ -47,7 +60,8 @@ def create_rtp_video_packets(self, codec, frames, seq=0):
             payload_type=codec.payloadType,
             sequence_number=seq,
             ssrc=1234,
-            timestamp=timestamp)
+            timestamp=timestamp,
+        )
         packet.payload = payloads[0]
         packet.marker = 1
         packets.append(packet)
@@ -57,7 +71,7 @@ def create_rtp_video_packets(self, codec, frames, seq=0):
 
 
 class ClosedDtlsTransport:
-    state = 'closed'
+    state = "closed"
 
 
 class NackGeneratorTest(TestCase):
@@ -149,7 +163,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.packets_lost, 1)
         self.assertEqual(counter.fraction_lost, 0)
 
-    @patch('time.time')
+    @patch("time.time")
     def test_no_jitter(self, mock_time):
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
@@ -169,7 +183,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter._jitter_q4, 0)
         self.assertEqual(counter.jitter, 0)
 
-    @patch('time.time')
+    @patch("time.time")
     def test_with_jitter(self, mock_time):
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
@@ -200,56 +214,92 @@ class RTCRtpReceiverTest(CodecTestCase):
 
     def test_capabilities(self):
         # audio
-        capabilities = RTCRtpReceiver.getCapabilities('audio')
+        capabilities = RTCRtpReceiver.getCapabilities("audio")
         self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
-        self.assertEqual(capabilities.codecs, [
-            RTCRtpCodecCapability(mimeType='audio/opus', clockRate=48000, channels=2),
-            RTCRtpCodecCapability(mimeType='audio/PCMU', clockRate=8000, channels=1),
-            RTCRtpCodecCapability(mimeType='audio/PCMA', clockRate=8000, channels=1),
-        ])
-        self.assertEqual(capabilities.headerExtensions, [
-            RTCRtpHeaderExtensionCapability(uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-        ])
+        self.assertEqual(
+            capabilities.codecs,
+            [
+                RTCRtpCodecCapability(
+                    mimeType="audio/opus", clockRate=48000, channels=2
+                ),
+                RTCRtpCodecCapability(
+                    mimeType="audio/PCMU", clockRate=8000, channels=1
+                ),
+                RTCRtpCodecCapability(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1
+                ),
+            ],
+        )
+        self.assertEqual(
+            capabilities.headerExtensions,
+            [
+                RTCRtpHeaderExtensionCapability(
+                    uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                )
+            ],
+        )
 
         # video
-        capabilities = RTCRtpReceiver.getCapabilities('video')
+        capabilities = RTCRtpReceiver.getCapabilities("video")
         self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
-        self.assertEqual(capabilities.codecs, [
-            RTCRtpCodecCapability(mimeType='video/VP8', clockRate=90000),
-            RTCRtpCodecCapability(mimeType='video/rtx', clockRate=90000),
-            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000, parameters=OrderedDict([
-                ('packetization-mode', '1'),
-                ('level-asymmetry-allowed', '1'),
-                ('profile-level-id', '42001f')
-            ])),
-            RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000, parameters=OrderedDict([
-                ('packetization-mode', '1'),
-                ('level-asymmetry-allowed', '1'),
-                ('profile-level-id', '42e01f')
-            ])),
-        ])
-        self.assertEqual(capabilities.headerExtensions, [
-            RTCRtpHeaderExtensionCapability(uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-            RTCRtpHeaderExtensionCapability(uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),  # noqa
-        ])
+        self.assertEqual(
+            capabilities.codecs,
+            [
+                RTCRtpCodecCapability(mimeType="video/VP8", clockRate=90000),
+                RTCRtpCodecCapability(mimeType="video/rtx", clockRate=90000),
+                RTCRtpCodecCapability(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    parameters=OrderedDict(
+                        [
+                            ("packetization-mode", "1"),
+                            ("level-asymmetry-allowed", "1"),
+                            ("profile-level-id", "42001f"),
+                        ]
+                    ),
+                ),
+                RTCRtpCodecCapability(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    parameters=OrderedDict(
+                        [
+                            ("packetization-mode", "1"),
+                            ("level-asymmetry-allowed", "1"),
+                            ("profile-level-id", "42e01f"),
+                        ]
+                    ),
+                ),
+            ],
+        )
+        self.assertEqual(
+            capabilities.headerExtensions,
+            [
+                RTCRtpHeaderExtensionCapability(
+                    uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                ),
+                RTCRtpHeaderExtensionCapability(
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+                ),
+            ],
+        )
 
         # bogus
-        capabilities = RTCRtpReceiver.getCapabilities('bogus')
+        capabilities = RTCRtpReceiver.getCapabilities("bogus")
         self.assertIsNone(capabilities)
 
     def test_connection_error(self):
         """
         Close the underlying transport before the receiver.
         """
-        receiver = RTCRtpReceiver('audio', self.local_transport)
+        receiver = RTCRtpReceiver("audio", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='audio')
+        receiver._track = RemoteStreamTrack(kind="audio")
         receiver._set_rtcp_ssrc(1234)
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC])))
 
         # receive a packet to prime RTCP
-        packet = RtpPacket.parse(load('rtp.bin'))
+        packet = RtpPacket.parse(load("rtp.bin"))
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # break connection
@@ -262,22 +312,22 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_rtp_and_rtcp(self):
-        receiver = RTCRtpReceiver('audio', self.local_transport)
+        receiver = RTCRtpReceiver("audio", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='audio')
-        self.assertEqual(receiver._track.readyState, 'live')
+        receiver._track = RemoteStreamTrack(kind="audio")
+        self.assertEqual(receiver._track.readyState, "live")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
         for i in range(10):
-            packet = RtpPacket.parse(load('rtp.bin'))
+            packet = RtpPacket.parse(load("rtp.bin"))
             packet.sequence_number += i
             packet.timestamp += i * 160
             run(receiver._handle_rtp_packet(packet, arrival_time_ms=i * 20))
 
         # receive RTCP SR
-        for packet in RtcpPacket.parse(load('rtcp_sr.bin')):
+        for packet in RtcpPacket.parse(load("rtcp_sr.bin")):
             run(receiver._handle_rtcp_packet(packet))
 
         # check stats
@@ -285,7 +335,8 @@ class RTCRtpReceiverTest(CodecTestCase):
         self.assertTrue(isinstance(report, RTCStatsReport))
         self.assertEqual(
             sorted([s.type for s in report.values()]),
-            ['inbound-rtp', 'remote-outbound-rtp', 'transport'])
+            ["inbound-rtp", "remote-outbound-rtp", "transport"],
+        )
 
         # check sources
         sources = receiver.getSynchronizationSources()
@@ -311,7 +362,7 @@ class RTCRtpReceiverTest(CodecTestCase):
         with self.assertRaises(MediaStreamError):
             while True:
                 run(receiver._track.recv())
-        self.assertEqual(receiver._track.readyState, 'ended')
+        self.assertEqual(receiver._track.readyState, "ended")
 
         # try reading again
         with self.assertRaises(MediaStreamError):
@@ -323,11 +374,11 @@ class RTCRtpReceiverTest(CodecTestCase):
         async def mock_send_rtcp_nack(*args):
             nacks.append(args)
 
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._send_rtcp_nack = mock_send_rtcp_nack
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # generate some packets
@@ -344,10 +395,10 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_rtp_empty_video_packet(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # receive RTP with empty payload
@@ -358,24 +409,24 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_rtp_invalid_payload(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # receive RTP with unknown payload type
-        packet = RtpPacket(payload_type=100, payload=b'\x80')
+        packet = RtpPacket(payload_type=100, payload=b"\x80")
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # shutdown
         run(receiver.stop())
 
     def test_rtp_unknown_payload_type(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # receive RTP with unknown payload type
@@ -386,23 +437,35 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_rtp_rtx(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='video')
-        run(receiver.receive(RTCRtpReceiveParameters(
-            codecs=[
-                VP8_CODEC,
-                RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
-                                      parameters={'apt': 100}),
-            ],
-            encodings=[
-                RTCRtpEncodingParameters(ssrc=1234, payloadType=100,
-                                         rtx=RTCRtpRtxParameters(ssrc=2345))
-            ])))
+        receiver._track = RemoteStreamTrack(kind="video")
+        run(
+            receiver.receive(
+                RTCRtpReceiveParameters(
+                    codecs=[
+                        VP8_CODEC,
+                        RTCRtpCodecParameters(
+                            mimeType="video/rtx",
+                            clockRate=90000,
+                            payloadType=101,
+                            parameters={"apt": 100},
+                        ),
+                    ],
+                    encodings=[
+                        RTCRtpEncodingParameters(
+                            ssrc=1234,
+                            payloadType=100,
+                            rtx=RTCRtpRtxParameters(ssrc=2345),
+                        )
+                    ],
+                )
+            )
+        )
 
         # receive RTX with payload
-        packet = RtpPacket(payload_type=101, ssrc=2345, payload=b'\x00\x00')
+        packet = RtpPacket(payload_type=101, ssrc=2345, payload=b"\x00\x00")
         run(receiver._handle_rtp_packet(packet, arrival_time_ms=0))
 
         # receive RTX without payload
@@ -413,16 +476,25 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_rtp_rtx_unknown_ssrc(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
-        receiver._track = RemoteStreamTrack(kind='video')
-        run(receiver.receive(RTCRtpReceiveParameters(
-            codecs=[
-                VP8_CODEC,
-                RTCRtpCodecParameters(mimeType='video/rtx', clockRate=90000, payloadType=101,
-                                      parameters={'apt': 100}),
-            ])))
+        receiver._track = RemoteStreamTrack(kind="video")
+        run(
+            receiver.receive(
+                RTCRtpReceiveParameters(
+                    codecs=[
+                        VP8_CODEC,
+                        RTCRtpCodecParameters(
+                            mimeType="video/rtx",
+                            clockRate=90000,
+                            payloadType=101,
+                            parameters={"apt": 100},
+                        ),
+                    ]
+                )
+            )
+        )
 
         # receive RTX with unknown SSRC
         packet = RtpPacket(payload_type=101, ssrc=1234)
@@ -432,9 +504,9 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_send_rtcp_nack(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         receiver._set_rtcp_ssrc(1234)
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
 
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
@@ -445,9 +517,9 @@ class RTCRtpReceiverTest(CodecTestCase):
         run(receiver.stop())
 
     def test_send_rtcp_pli(self):
-        receiver = RTCRtpReceiver('video', self.local_transport)
+        receiver = RTCRtpReceiver("video", self.local_transport)
         receiver._set_rtcp_ssrc(1234)
-        receiver._track = RemoteStreamTrack(kind='video')
+        receiver._track = RemoteStreamTrack(kind="video")
 
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
@@ -460,7 +532,7 @@ class RTCRtpReceiverTest(CodecTestCase):
     def test_invalid_dtls_transport_state(self):
         dtlsTransport = ClosedDtlsTransport()
         with self.assertRaises(InvalidStateError):
-            RTCRtpReceiver('audio', dtlsTransport)
+            RTCRtpReceiver("audio", dtlsTransport)
 
 
 class TimestampMapperTest(TestCase):

@@ -18,11 +18,11 @@ from .utils import random32, uint16_add, uint16_gt, uint32_gt, uint32_gte
 try:
     from crc32c import crc32
 except ImportError:  # pragma: no cover
-    os.environ['CRC32C_SW_MODE'] = '1'
+    os.environ["CRC32C_SW_MODE"] = "1"
     from crc32c import crc32
 
 
-logger = logging.getLogger('sctp')
+logger = logging.getLogger("sctp")
 
 # local constants
 COOKIE_LENGTH = 24
@@ -52,11 +52,11 @@ RECONFIG_MAX_STREAMS = 135
 
 # parameters
 SCTP_STATE_COOKIE = 0x0007
-SCTP_STR_RESET_OUT_REQUEST = 0x000d
+SCTP_STR_RESET_OUT_REQUEST = 0x000D
 SCTP_STR_RESET_RESPONSE = 0x0010
 SCTP_STR_RESET_ADD_OUT_STREAMS = 0x0011
 SCTP_SUPPORTED_CHUNK_EXT = 0x8008
-SCTP_PRSCTP_SUPPORTED = 0xc000
+SCTP_PRSCTP_SUPPORTED = 0xC000
 
 # data channel constants
 DATA_CHANNEL_ACK = 2
@@ -84,20 +84,20 @@ def decode_params(body):
     params = []
     pos = 0
     while pos <= len(body) - 4:
-        param_type, param_length = unpack_from('!HH', body, pos)
-        params.append((param_type, body[pos + 4:pos + param_length]))
+        param_type, param_length = unpack_from("!HH", body, pos)
+        params.append((param_type, body[pos + 4 : pos + param_length]))
         pos += param_length + padl(param_length)
     return params
 
 
 def encode_params(params):
-    body = b''
-    padding = b''
+    body = b""
+    padding = b""
     for param_type, param_value in params:
         param_length = len(param_value) + 4
         body += padding
-        body += pack('!HH', param_type, param_length) + param_value
-        padding = b'\x00' * padl(param_length)
+        body += pack("!HH", param_type, param_length) + param_value
+        padding = b"\x00" * padl(param_length)
     return body
 
 
@@ -115,18 +115,18 @@ def tsn_plus_one(a):
 
 
 class Chunk:
-    def __init__(self, flags=0, body=b''):
+    def __init__(self, flags=0, body=b""):
         self.flags = flags
         self.body = body
 
     def __bytes__(self):
         body = self.body
-        data = pack('!BBH', self.type, self.flags, len(body) + 4) + body
-        data += b'\x00' * padl(len(body))
+        data = pack("!BBH", self.type, self.flags, len(body) + 4) + body
+        data += b"\x00" * padl(len(body))
         return data
 
     def __repr__(self):
-        return '%s(flags=%d)' % (chunk_type(self), self.flags)
+        return "%s(flags=%d)" % (chunk_type(self), self.flags)
 
 
 class BaseParamsChunk(Chunk):
@@ -160,28 +160,43 @@ class DataChunk:
     def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
-            (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack_from('!LHHL', body)
+            (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack_from(
+                "!LHHL", body
+            )
             self.user_data = body[12:]
         else:
             self.tsn = 0
             self.stream_id = 0
             self.stream_seq = 0
             self.protocol = 0
-            self.user_data = b''
+            self.user_data = b""
 
     def __bytes__(self):
         length = 16 + len(self.user_data)
-        data = pack(
-            '!BBHLHHL',
-            self.type, self.flags, length,
-            self.tsn, self.stream_id, self.stream_seq, self.protocol) + self.user_data
+        data = (
+            pack(
+                "!BBHLHHL",
+                self.type,
+                self.flags,
+                length,
+                self.tsn,
+                self.stream_id,
+                self.stream_seq,
+                self.protocol,
+            )
+            + self.user_data
+        )
         if length % 4:
-            data += b'\x00' * padl(length)
+            data += b"\x00" * padl(length)
         return data
 
     def __repr__(self):
-        return 'DataChunk(flags=%d, tsn=%d, stream_id=%d, stream_seq=%d)' % (
-            self.flags, self.tsn, self.stream_id, self.stream_seq)
+        return "DataChunk(flags=%d, tsn=%d, stream_id=%d, stream_seq=%d)" % (
+            self.flags,
+            self.tsn,
+            self.stream_id,
+            self.stream_seq,
+        )
 
 
 class ErrorChunk(BaseParamsChunk):
@@ -195,24 +210,26 @@ class ForwardTsnChunk(Chunk):
         self.flags = flags
         self.streams = []
         if body:
-            self.cumulative_tsn = unpack_from('!L', body, 0)[0]
+            self.cumulative_tsn = unpack_from("!L", body, 0)[0]
             pos = 4
             while pos < len(body):
-                self.streams.append(unpack_from('!HH', body, pos))
+                self.streams.append(unpack_from("!HH", body, pos))
                 pos += 4
         else:
             self.cumulative_tsn = 0
 
     @property
     def body(self):
-        body = pack('!L', self.cumulative_tsn)
+        body = pack("!L", self.cumulative_tsn)
         for stream_id, stream_seq in self.streams:
-            body += pack('!HH', stream_id, stream_seq)
+            body += pack("!HH", stream_id, stream_seq)
         return body
 
     def __repr__(self):
-        return 'ForwardTsnChunk(cumulative_tsn=%d, streams=%s)' % (
-            self.cumulative_tsn, self.streams)
+        return "ForwardTsnChunk(cumulative_tsn=%d, streams=%s)" % (
+            self.cumulative_tsn,
+            self.streams,
+        )
 
 
 class HeartbeatChunk(BaseParamsChunk):
@@ -227,8 +244,13 @@ class BaseInitChunk(Chunk):
     def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
-            (self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
-             self.inbound_streams, self.initial_tsn) = unpack_from('!LLHHL', body)
+            (
+                self.initiate_tag,
+                self.advertised_rwnd,
+                self.outbound_streams,
+                self.inbound_streams,
+                self.initial_tsn,
+            ) = unpack_from("!LLHHL", body)
             self.params = decode_params(body[16:])
         else:
             self.initiate_tag = 0
@@ -241,8 +263,13 @@ class BaseInitChunk(Chunk):
     @property
     def body(self):
         body = pack(
-            '!LLHHL', self.initiate_tag, self.advertised_rwnd, self.outbound_streams,
-            self.inbound_streams, self.initial_tsn)
+            "!LLHHL",
+            self.initiate_tag,
+            self.advertised_rwnd,
+            self.outbound_streams,
+            self.inbound_streams,
+            self.initial_tsn,
+        )
         body += encode_params(self.params)
         return body
 
@@ -268,13 +295,14 @@ class SackChunk:
         self.duplicates = []
         if body:
             self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack_from(
-                '!LLHH', body)
+                "!LLHH", body
+            )
             pos = 12
             for i in range(nb_gaps):
-                self.gaps.append(unpack_from('!HH', body, pos))
+                self.gaps.append(unpack_from("!HH", body, pos))
                 pos += 4
             for i in range(nb_duplicates):
-                self.duplicates.append(unpack_from('!L', body, pos)[0])
+                self.duplicates.append(unpack_from("!L", body, pos)[0])
                 pos += 4
         else:
             self.cumulative_tsn = 0
@@ -283,18 +311,28 @@ class SackChunk:
     def __bytes__(self):
         length = 16 + 4 * (len(self.gaps) + len(self.duplicates))
         data = pack(
-            '!BBHLLHH',
-            self.type, self.flags, length,
-            self.cumulative_tsn, self.advertised_rwnd, len(self.gaps), len(self.duplicates))
+            "!BBHLLHH",
+            self.type,
+            self.flags,
+            length,
+            self.cumulative_tsn,
+            self.advertised_rwnd,
+            len(self.gaps),
+            len(self.duplicates),
+        )
         for gap in self.gaps:
-            data += pack('!HH', *gap)
+            data += pack("!HH", *gap)
         for tsn in self.duplicates:
-            data += pack('!L', tsn)
+            data += pack("!L", tsn)
         return data
 
     def __repr__(self):
-        return 'SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d, gaps=%s)' % (
-            self.flags, self.advertised_rwnd, self.cumulative_tsn, self.gaps)
+        return "SackChunk(flags=%d, advertised_rwnd=%d, cumulative_tsn=%d, gaps=%s)" % (
+            self.flags,
+            self.advertised_rwnd,
+            self.cumulative_tsn,
+            self.gaps,
+        )
 
 
 class ShutdownChunk(Chunk):
@@ -303,17 +341,19 @@ class ShutdownChunk(Chunk):
     def __init__(self, flags=0, body=None):
         self.flags = flags
         if body:
-            self.cumulative_tsn = unpack_from('!L', body)[0]
+            self.cumulative_tsn = unpack_from("!L", body)[0]
         else:
             self.cumulative_tsn = 0
 
     @property
     def body(self):
-        return pack('!L', self.cumulative_tsn)
+        return pack("!L", self.cumulative_tsn)
 
     def __repr__(self):
-        return 'ShutdownChunk(flags=%d, cumulative_tsn=%d)' % (
-            self.flags, self.cumulative_tsn)
+        return "ShutdownChunk(flags=%d, cumulative_tsn=%d)" % (
+            self.flags,
+            self.cumulative_tsn,
+        )
 
 
 class ShutdownAckChunk(Chunk):
@@ -347,41 +387,36 @@ CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 def parse_packet(data):
     length = len(data)
     if length < 12:
-        raise ValueError('SCTP packet length is less than 12 bytes')
+        raise ValueError("SCTP packet length is less than 12 bytes")
 
-    source_port, destination_port, verification_tag = unpack_from('!HHL', data)
+    source_port, destination_port, verification_tag = unpack_from("!HHL", data)
 
     # verify checksum
-    checksum = unpack_from('<L', data, 8)[0]
-    if checksum != crc32(data[0:8] + b'\x00\x00\x00\x00' + data[12:]):
-        raise ValueError('SCTP packet has invalid checksum')
+    checksum = unpack_from("<L", data, 8)[0]
+    if checksum != crc32(data[0:8] + b"\x00\x00\x00\x00" + data[12:]):
+        raise ValueError("SCTP packet has invalid checksum")
 
     chunks = []
     pos = 12
     while pos <= length - 4:
-        chunk_type, chunk_flags, chunk_length = unpack_from('!BBH', data, pos)
-        chunk_body = data[pos + 4:pos + chunk_length]
+        chunk_type, chunk_flags, chunk_length = unpack_from("!BBH", data, pos)
+        chunk_body = data[pos + 4 : pos + chunk_length]
         chunk_cls = CHUNK_TYPES.get(chunk_type)
         if chunk_cls:
-            chunks.append(chunk_cls(
-                flags=chunk_flags,
-                body=chunk_body))
+            chunks.append(chunk_cls(flags=chunk_flags, body=chunk_body))
         pos += chunk_length + padl(chunk_length)
     return source_port, destination_port, verification_tag, chunks
 
 
 def serialize_packet(source_port, destination_port, verification_tag, chunk):
-    header = pack(
-        '!HHL',
-        source_port,
-        destination_port,
-        verification_tag)
+    header = pack("!HHL", source_port, destination_port, verification_tag)
     data = bytes(chunk)
-    checksum = crc32(header + b'\x00\x00\x00\x00' + data)
-    return header + pack('<L', checksum) + data
+    checksum = crc32(header + b"\x00\x00\x00\x00" + data)
+    return header + pack("<L", checksum) + data
 
 
 # RFC 6525
+
 
 @attr.s
 class StreamResetOutgoingParam:
@@ -392,25 +427,24 @@ class StreamResetOutgoingParam:
 
     def __bytes__(self):
         data = pack(
-            '!LLL',
-            self.request_sequence,
-            self.response_sequence,
-            self.last_tsn)
+            "!LLL", self.request_sequence, self.response_sequence, self.last_tsn
+        )
         for stream in self.streams:
-            data += pack('!H', stream)
+            data += pack("!H", stream)
         return data
 
     @classmethod
     def parse(cls, data):
-        request_sequence, response_sequence, last_tsn = unpack_from('!LLL', data)
+        request_sequence, response_sequence, last_tsn = unpack_from("!LLL", data)
         streams = []
         for pos in range(12, len(data), 2):
-            streams.append(unpack_from('!H', data, pos)[0])
+            streams.append(unpack_from("!H", data, pos)[0])
         return cls(
             request_sequence=request_sequence,
             response_sequence=response_sequence,
             last_tsn=last_tsn,
-            streams=streams)
+            streams=streams,
+        )
 
 
 @attr.s
@@ -419,19 +453,13 @@ class StreamAddOutgoingParam:
     new_streams = attr.ib()
 
     def __bytes__(self):
-        data = pack(
-            '!LHH',
-            self.request_sequence,
-            self.new_streams,
-            0)
+        data = pack("!LHH", self.request_sequence, self.new_streams, 0)
         return data
 
     @classmethod
     def parse(cls, data):
-        request_sequence, new_streams, reserved = unpack_from('!LHH', data)
-        return cls(
-            request_sequence=request_sequence,
-            new_streams=new_streams)
+        request_sequence, new_streams, reserved = unpack_from("!LHH", data)
+        return cls(request_sequence=request_sequence, new_streams=new_streams)
 
 
 @attr.s
@@ -440,18 +468,18 @@ class StreamResetResponseParam:
     result = attr.ib()
 
     def __bytes__(self):
-        return pack('!LL', self.response_sequence, self.result)
+        return pack("!LL", self.response_sequence, self.result)
 
     @classmethod
     def parse(cls, data):
-        response_sequence, result = unpack_from('!LL', data)
+        response_sequence, result = unpack_from("!LL", data)
         return cls(response_sequence=response_sequence, result=result)
 
 
 RECONFIG_PARAM_TYPES = {
     13: StreamResetOutgoingParam,
     16: StreamResetResponseParam,
-    17: StreamAddOutgoingParam
+    17: StreamAddOutgoingParam,
 }
 
 
@@ -468,7 +496,7 @@ class InboundStream:
         for i, rchunk in enumerate(self.reassembly):
             # should never happen, the chunk should have been eliminated
             # as a duplicate when _mark_received() is called
-            assert rchunk.tsn != chunk.tsn, 'duplicate chunk in reassembly'
+            assert rchunk.tsn != chunk.tsn, "duplicate chunk in reassembly"
 
             if uint32_gt(rchunk.tsn, chunk.tsn):
                 self.reassembly.insert(i, chunk)
@@ -499,9 +527,13 @@ class InboundStream:
                     pos += 1
                     continue
 
-            if (chunk.flags & SCTP_DATA_LAST_FRAG):
-                user_data = b''.join([c.user_data for c in self.reassembly[start_pos:pos + 1]])
-                self.reassembly = self.reassembly[:start_pos] + self.reassembly[pos + 1:]
+            if chunk.flags & SCTP_DATA_LAST_FRAG:
+                user_data = b"".join(
+                    [c.user_data for c in self.reassembly[start_pos : pos + 1]]
+                )
+                self.reassembly = (
+                    self.reassembly[:start_pos] + self.reassembly[pos + 1 :]
+                )
                 if ordered and chunk.stream_seq == self.sequence_number:
                     self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = start_pos
@@ -524,7 +556,7 @@ class InboundStream:
             else:
                 break
 
-        self.reassembly = self.reassembly[pos + 1:]
+        self.reassembly = self.reassembly[pos + 1 :]
         return size
 
 
@@ -534,6 +566,7 @@ class RTCSctpCapabilities:
     The :class:`RTCSctpCapabilities` dictionary provides information about the
     capabilities of the :class:`RTCSctpTransport`.
     """
+
     maxMessageSize = attr.ib()
     """
     The maximum size of data that the implementation can send or
@@ -548,15 +581,16 @@ class RTCSctpTransport(EventEmitter):
 
     :param: transport: An :class:`RTCDtlsTransport`.
     """
+
     def __init__(self, transport, port=5000):
-        if transport.state == 'closed':
+        if transport.state == "closed":
             raise InvalidStateError
 
         super().__init__()
         self._association_state = self.State.CLOSED
         self.__log_debug = lambda *args: None
         self.__started = False
-        self.__state = 'new'
+        self.__state = "new"
         self.__transport = transport
 
         self._loop = asyncio.get_event_loop()
@@ -619,7 +653,7 @@ class RTCSctpTransport(EventEmitter):
 
     @property
     def is_server(self):
-        return self.transport.transport.role != 'controlling'
+        return self.transport.transport.role != "controlling"
 
     @property
     def port(self):
@@ -660,12 +694,12 @@ class RTCSctpTransport(EventEmitter):
         """
         if not self.__started:
             self.__started = True
-            self.__state = 'connecting'
+            self.__state = "connecting"
             self._remote_port = remotePort
 
             # configure logging
             if logger.isEnabledFor(logging.DEBUG):
-                prefix = self.is_server and 'server ' or 'client '
+                prefix = self.is_server and "server " or "client "
                 self.__log_debug = lambda msg, *args: logger.debug(prefix + msg, *args)
 
             # initialise local channel ID counter
@@ -737,7 +771,7 @@ class RTCSctpTransport(EventEmitter):
         """
         extensions = []
         if self._local_partial_reliability:
-            params.append((SCTP_PRSCTP_SUPPORTED, b''))
+            params.append((SCTP_PRSCTP_SUPPORTED, b""))
             extensions.append(ForwardTsnChunk.type)
 
         extensions.append(ReconfigChunk.type)
@@ -773,8 +807,9 @@ class RTCSctpTransport(EventEmitter):
 
         # verify tag
         if verification_tag != expected_tag:
-            self.__log_debug('Bad verification tag %d vs %d',
-                             verification_tag, expected_tag)
+            self.__log_debug(
+                "Bad verification tag %d vs %d", verification_tag, expected_tag
+            )
             return
 
         # handle chunks
@@ -796,9 +831,9 @@ class RTCSctpTransport(EventEmitter):
             return True
 
         abandon = (
-            (chunk._max_retransmits is not None and chunk._sent_count > chunk._max_retransmits) or
-            (chunk._expiry is not None and chunk._expiry < time.time())
-        )
+            chunk._max_retransmits is not None
+            and chunk._sent_count > chunk._max_retransmits
+        ) or (chunk._expiry is not None and chunk._expiry < time.time())
         if not abandon:
             return False
 
@@ -807,13 +842,13 @@ class RTCSctpTransport(EventEmitter):
             ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
-            if (ochunk.flags & SCTP_DATA_FIRST_FRAG):
+            if ochunk.flags & SCTP_DATA_FIRST_FRAG:
                 break
         for pos in range(chunk_pos, len(self._sent_queue)):
             ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
-            if (ochunk.flags & SCTP_DATA_LAST_FRAG):
+            if ochunk.flags & SCTP_DATA_LAST_FRAG:
                 break
 
         return True
@@ -838,6 +873,7 @@ class RTCSctpTransport(EventEmitter):
         # filter out obsolete entries
         def is_obsolete(x):
             return uint32_gt(x, self._last_received_tsn)
+
         self._sack_duplicates = list(filter(is_obsolete, self._sack_duplicates))
         self._sack_misordered = set(filter(is_obsolete, self._sack_misordered))
 
@@ -851,7 +887,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Handle an incoming chunk.
         """
-        self.__log_debug('< %s', chunk)
+        self.__log_debug("< %s", chunk)
 
         # common
         if isinstance(chunk, DataChunk):
@@ -865,7 +901,7 @@ class RTCSctpTransport(EventEmitter):
             ack.params = chunk.params
             await self._send_chunk(ack)
         elif isinstance(chunk, AbortChunk):
-            self.__log_debug('x Association was aborted by remote party')
+            self.__log_debug("x Association was aborted by remote party")
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
             self._t2_cancel()
@@ -874,12 +910,16 @@ class RTCSctpTransport(EventEmitter):
             await self._send_chunk(ack)
             self._t2_start(ack)
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
-        elif (isinstance(chunk, ShutdownCompleteChunk) and
-              self._association_state == self.State.SHUTDOWN_ACK_SENT):
+        elif (
+            isinstance(chunk, ShutdownCompleteChunk)
+            and self._association_state == self.State.SHUTDOWN_ACK_SENT
+        ):
             self._t2_cancel()
             self._set_state(self.State.CLOSED)
-        elif (isinstance(chunk, ReconfigChunk) and
-              self._association_state == self.State.ESTABLISHED):
+        elif (
+            isinstance(chunk, ReconfigChunk)
+            and self._association_state == self.State.ESTABLISHED
+        ):
             for param in chunk.params:
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls:
@@ -893,10 +933,17 @@ class RTCSctpTransport(EventEmitter):
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
-            self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
-                             chunk.outbound_streams, chunk.inbound_streams)
-            self._inbound_streams_count = min(chunk.outbound_streams, self._inbound_streams_max)
-            self._outbound_streams_count = min(self._outbound_streams_count, chunk.inbound_streams)
+            self.__log_debug(
+                "- Peer supports %d outbound streams, %d max inbound streams",
+                chunk.outbound_streams,
+                chunk.inbound_streams,
+            )
+            self._inbound_streams_count = min(
+                chunk.outbound_streams, self._inbound_streams_max
+            )
+            self._outbound_streams_count = min(
+                self._outbound_streams_count, chunk.inbound_streams
+            )
 
             ack = InitAckChunk()
             ack.initiate_tag = self._local_verification_tag
@@ -907,25 +954,27 @@ class RTCSctpTransport(EventEmitter):
             self._set_extensions(ack.params)
 
             # generate state cookie
-            cookie = pack('!L', self._get_timestamp())
-            cookie += hmac.new(self._hmac_key, cookie, 'sha1').digest()
+            cookie = pack("!L", self._get_timestamp())
+            cookie += hmac.new(self._hmac_key, cookie, "sha1").digest()
             ack.params.append((SCTP_STATE_COOKIE, cookie))
             await self._send_chunk(ack)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             # check state cookie MAC
             cookie = chunk.body
-            if (len(cookie) != COOKIE_LENGTH or
-               hmac.new(self._hmac_key, cookie[0:4], 'sha1').digest() != cookie[4:]):
-                self.__log_debug('x State cookie is invalid')
+            if (
+                len(cookie) != COOKIE_LENGTH
+                or hmac.new(self._hmac_key, cookie[0:4], "sha1").digest() != cookie[4:]
+            ):
+                self.__log_debug("x State cookie is invalid")
                 return
 
             # check state cookie lifetime
             now = self._get_timestamp()
-            stamp = unpack_from('!L', cookie)[0]
+            stamp = unpack_from("!L", cookie)[0]
             if stamp < now - COOKIE_LIFETIME or stamp > now:
-                self.__log_debug('x State cookie has expired')
+                self.__log_debug("x State cookie has expired")
                 error = ErrorChunk()
-                error.params.append((SCTP_CAUSE_STALE_COOKIE, b'\x00' * 8))
+                error.params.append((SCTP_CAUSE_STALE_COOKIE, b"\x00" * 8))
                 await self._send_chunk(error)
                 return
 
@@ -934,7 +983,10 @@ class RTCSctpTransport(EventEmitter):
             self._set_state(self.State.ESTABLISHED)
 
         # client
-        elif isinstance(chunk, InitAckChunk) and self._association_state == self.State.COOKIE_WAIT:
+        elif (
+            isinstance(chunk, InitAckChunk)
+            and self._association_state == self.State.COOKIE_WAIT
+        ):
             # cancel T1 timer and process chunk
             self._t1_cancel()
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
@@ -943,10 +995,17 @@ class RTCSctpTransport(EventEmitter):
             self._ssthresh = chunk.advertised_rwnd
             self._get_extensions(chunk.params)
 
-            self.__log_debug('- Peer supports %d outbound streams, %d max inbound streams',
-                             chunk.outbound_streams, chunk.inbound_streams)
-            self._inbound_streams_count = min(chunk.outbound_streams, self._inbound_streams_max)
-            self._outbound_streams_count = min(self._outbound_streams_count, chunk.inbound_streams)
+            self.__log_debug(
+                "- Peer supports %d outbound streams, %d max inbound streams",
+                chunk.outbound_streams,
+                chunk.inbound_streams,
+            )
+            self._inbound_streams_count = min(
+                chunk.outbound_streams, self._inbound_streams_max
+            )
+            self._outbound_streams_count = min(
+                self._outbound_streams_count, chunk.inbound_streams
+            )
 
             echo = CookieEchoChunk()
             for k, v in chunk.params:
@@ -958,16 +1017,20 @@ class RTCSctpTransport(EventEmitter):
             # start T1 timer and enter COOKIE-ECHOED state
             self._t1_start(echo)
             self._set_state(self.State.COOKIE_ECHOED)
-        elif (isinstance(chunk, CookieAckChunk) and
-              self._association_state == self.State.COOKIE_ECHOED):
+        elif (
+            isinstance(chunk, CookieAckChunk)
+            and self._association_state == self.State.COOKIE_ECHOED
+        ):
             # cancel T1 timer and enter ESTABLISHED state
             self._t1_cancel()
             self._set_state(self.State.ESTABLISHED)
-        elif (isinstance(chunk, ErrorChunk) and
-              self._association_state in [self.State.COOKIE_WAIT, self.State.COOKIE_ECHOED]):
+        elif isinstance(chunk, ErrorChunk) and self._association_state in [
+            self.State.COOKIE_WAIT,
+            self.State.COOKIE_ECHOED,
+        ]:
             self._t1_cancel()
             self._set_state(self.State.CLOSED)
-            self.__log_debug('x Could not establish association')
+            self.__log_debug("x Could not establish association")
             return
 
     async def _receive_data_chunk(self, chunk):
@@ -1028,7 +1091,9 @@ class RTCSctpTransport(EventEmitter):
 
         # prune obsolete chunks
         for stream_id, inbound_stream in self._inbound_streams.items():
-            self._advertised_rwnd += inbound_stream.prune_chunks(self._last_received_tsn)
+            self._advertised_rwnd += inbound_stream.prune_chunks(
+                self._last_received_tsn
+            )
 
     async def _receive_sack_chunk(self, chunk):
         """
@@ -1039,12 +1104,14 @@ class RTCSctpTransport(EventEmitter):
 
         received_time = time.time()
         self._last_sacked_tsn = chunk.cumulative_tsn
-        cwnd_fully_utilized = (self._flight_size >= self._cwnd)
+        cwnd_fully_utilized = self._flight_size >= self._cwnd
         done = 0
         done_bytes = 0
 
         # handle acknowledged data
-        while self._sent_queue and uint32_gte(self._last_sacked_tsn, self._sent_queue[0].tsn):
+        while self._sent_queue and uint32_gte(
+            self._last_sacked_tsn, self._sent_queue[0].tsn
+        ):
             schunk = self._sent_queue.popleft()
             done += 1
             if not schunk._acked:
@@ -1127,7 +1194,7 @@ class RTCSctpTransport(EventEmitter):
         """
         Handle a RE-CONFIG parameter.
         """
-        self.__log_debug('<< %s', param)
+        self.__log_debug("<< %s", param)
 
         if isinstance(param, StreamResetOutgoingParam):
             # mark closed inbound streams
@@ -1141,8 +1208,8 @@ class RTCSctpTransport(EventEmitter):
 
             # send response
             response_param = StreamResetResponseParam(
-                response_sequence=param.request_sequence,
-                result=1)
+                response_sequence=param.request_sequence, result=1
+            )
             self._reconfig_response_seq = param.request_sequence
 
             await self._send_reconfig_param(response_param)
@@ -1152,14 +1219,16 @@ class RTCSctpTransport(EventEmitter):
 
             # send response
             response_param = StreamResetResponseParam(
-                response_sequence=param.request_sequence,
-                result=1)
+                response_sequence=param.request_sequence, result=1
+            )
             self._reconfig_response_seq = param.request_sequence
 
             await self._send_reconfig_param(response_param)
         elif isinstance(param, StreamResetResponseParam):
-            if (self._reconfig_request and
-               param.response_sequence == self._reconfig_request.request_sequence):
+            if (
+                self._reconfig_request
+                and param.response_sequence == self._reconfig_request.request_sequence
+            ):
                 # mark closed streams
                 for stream_id in self._reconfig_request.streams:
                     self._outbound_stream_seq.pop(stream_id, None)
@@ -1168,8 +1237,15 @@ class RTCSctpTransport(EventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
-    async def _send(self, stream_id, pp_id, user_data,
-                    expiry=None, max_retransmits=None, ordered=True):
+    async def _send(
+        self,
+        stream_id,
+        pp_id,
+        user_data,
+        expiry=None,
+        max_retransmits=None,
+        ordered=True,
+    ):
         """
         Send data ULP -> stream.
         """
@@ -1193,7 +1269,7 @@ class RTCSctpTransport(EventEmitter):
             chunk.stream_id = stream_id
             chunk.stream_seq = stream_seq
             chunk.protocol = pp_id
-            chunk.user_data = user_data[pos:pos + USERDATA_MAX_LENGTH]
+            chunk.user_data = user_data[pos : pos + USERDATA_MAX_LENGTH]
 
             # initialize counters
             chunk._abandoned = False
@@ -1221,12 +1297,15 @@ class RTCSctpTransport(EventEmitter):
         """
         Transmit a chunk (no bundling for now).
         """
-        self.__log_debug('> %s', chunk)
-        await self.__transport._send_data(serialize_packet(
-            self._local_port,
-            self._remote_port,
-            self._remote_verification_tag,
-            chunk))
+        self.__log_debug("> %s", chunk)
+        await self.__transport._send_data(
+            serialize_packet(
+                self._local_port,
+                self._remote_port,
+                self._remote_verification_tag,
+                chunk,
+            )
+        )
 
     async def _send_reconfig_param(self, param):
         chunk = ReconfigChunk()
@@ -1236,7 +1315,7 @@ class RTCSctpTransport(EventEmitter):
                 break
         chunk.params.append((param_type, bytes(param)))
 
-        self.__log_debug('>> %s', param)
+        self.__log_debug(">> %s", param)
         await self._send_chunk(chunk)
 
     async def _send_sack(self):
@@ -1269,20 +1348,20 @@ class RTCSctpTransport(EventEmitter):
         Transition the SCTP association to a new state.
         """
         if state != self._association_state:
-            self.__log_debug('- %s -> %s', self._association_state, state)
+            self.__log_debug("- %s -> %s", self._association_state, state)
             self._association_state = state
 
         if state == self.State.ESTABLISHED:
-            self.__state = 'connected'
+            self.__state = "connected"
             for channel in list(self._data_channels.values()):
-                if channel.negotiated and channel.readyState != 'open':
-                    channel._setReadyState('open')
+                if channel.negotiated and channel.readyState != "open":
+                    channel._setReadyState("open")
             asyncio.ensure_future(self._data_channel_flush())
         elif state == self.State.CLOSED:
             self._t1_cancel()
             self._t2_cancel()
             self._t3_cancel()
-            self.__state = 'closed'
+            self.__state = "closed"
 
             # close data channels
             for stream_id in list(self._data_channels.keys()):
@@ -1296,7 +1375,7 @@ class RTCSctpTransport(EventEmitter):
 
     def _t1_cancel(self):
         if self._t1_handle is not None:
-            self.__log_debug('- T1(%s) cancel', chunk_type(self._t1_chunk))
+            self.__log_debug("- T1(%s) cancel", chunk_type(self._t1_chunk))
             self._t1_handle.cancel()
             self._t1_handle = None
             self._t1_chunk = None
@@ -1304,7 +1383,9 @@ class RTCSctpTransport(EventEmitter):
     def _t1_expired(self):
         self._t1_failures += 1
         self._t1_handle = None
-        self.__log_debug('x T1(%s) expired %d', chunk_type(self._t1_chunk), self._t1_failures)
+        self.__log_debug(
+            "x T1(%s) expired %d", chunk_type(self._t1_chunk), self._t1_failures
+        )
         if self._t1_failures > SCTP_MAX_INIT_RETRANS:
             self._set_state(self.State.CLOSED)
         else:
@@ -1315,12 +1396,12 @@ class RTCSctpTransport(EventEmitter):
         assert self._t1_handle is None
         self._t1_chunk = chunk
         self._t1_failures = 0
-        self.__log_debug('- T1(%s) start', chunk_type(self._t1_chunk))
+        self.__log_debug("- T1(%s) start", chunk_type(self._t1_chunk))
         self._t1_handle = self._loop.call_later(self._rto, self._t1_expired)
 
     def _t2_cancel(self):
         if self._t2_handle is not None:
-            self.__log_debug('- T2(%s) cancel', chunk_type(self._t2_chunk))
+            self.__log_debug("- T2(%s) cancel", chunk_type(self._t2_chunk))
             self._t2_handle.cancel()
             self._t2_handle = None
             self._t2_chunk = None
@@ -1328,7 +1409,9 @@ class RTCSctpTransport(EventEmitter):
     def _t2_expired(self):
         self._t2_failures += 1
         self._t2_handle = None
-        self.__log_debug('x T2(%s) expired %d', chunk_type(self._t2_chunk), self._t2_failures)
+        self.__log_debug(
+            "x T2(%s) expired %d", chunk_type(self._t2_chunk), self._t2_failures
+        )
         if self._t2_failures > SCTP_MAX_ASSOCIATION_RETRANS:
             self._set_state(self.State.CLOSED)
         else:
@@ -1339,12 +1422,12 @@ class RTCSctpTransport(EventEmitter):
         assert self._t2_handle is None
         self._t2_chunk = chunk
         self._t2_failures = 0
-        self.__log_debug('- T2(%s) start', chunk_type(self._t2_chunk))
+        self.__log_debug("- T2(%s) start", chunk_type(self._t2_chunk))
         self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
     def _t3_expired(self):
         self._t3_handle = None
-        self.__log_debug('x T3 expired')
+        self.__log_debug("x T3 expired")
 
         # mark retransmit or abandoned chunks
         for chunk in self._sent_queue:
@@ -1363,7 +1446,7 @@ class RTCSctpTransport(EventEmitter):
         asyncio.ensure_future(self._transmit())
 
     def _t3_restart(self):
-        self.__log_debug('- T3 restart')
+        self.__log_debug("- T3 restart")
         if self._t3_handle is not None:
             self._t3_handle.cancel()
             self._t3_handle = None
@@ -1371,12 +1454,12 @@ class RTCSctpTransport(EventEmitter):
 
     def _t3_start(self):
         assert self._t3_handle is None
-        self.__log_debug('- T3 start')
+        self.__log_debug("- T3 start")
         self._t3_handle = self._loop.call_later(self._rto, self._t3_expired)
 
     def _t3_cancel(self):
         if self._t3_handle is not None:
-            self.__log_debug('- T3 cancel')
+            self.__log_debug("- T3 cancel")
             self._t3_handle.cancel()
             self._t3_handle = None
 
@@ -1478,7 +1561,9 @@ class RTCSctpTransport(EventEmitter):
             self._rttvar = R / 2
             self._srtt = R
         else:
-            self._rttvar = (1 - SCTP_RTO_BETA) * self._rttvar + SCTP_RTO_BETA * abs(self._srtt - R)
+            self._rttvar = (1 - SCTP_RTO_BETA) * self._rttvar + SCTP_RTO_BETA * abs(
+                self._srtt - R
+            )
             self._srtt = (1 - SCTP_RTO_ALPHA) * self._srtt + SCTP_RTO_ALPHA * R
         self._rto = max(SCTP_RTO_MIN, min(self._srtt + 4 * self._rttvar, SCTP_RTO_MAX))
 
@@ -1486,15 +1571,15 @@ class RTCSctpTransport(EventEmitter):
         """
         Request closing the datachannel by sending an Outgoing Stream Reset Request.
         """
-        if channel.readyState not in ['closing', 'closed']:
-            channel._setReadyState('closing')
+        if channel.readyState not in ["closing", "closed"]:
+            channel._setReadyState("closing")
             self._reconfig_queue.append(channel.id)
             if len(self._reconfig_queue) == 1:
                 asyncio.ensure_future(self._transmit_reconfig())
 
     def _data_channel_closed(self, stream_id):
         channel = self._data_channels.pop(stream_id)
-        channel._setReadyState('closed')
+        channel._setReadyState("closed")
 
     async def _data_channel_flush(self):
         """
@@ -1528,25 +1613,31 @@ class RTCSctpTransport(EventEmitter):
                     expiry = time.time() + (channel.maxPacketLifeTime / 1000)
                 else:
                     expiry = None
-                await self._send(stream_id, protocol, user_data,
-                                 expiry=expiry,
-                                 max_retransmits=channel.maxRetransmits,
-                                 ordered=channel.ordered)
+                await self._send(
+                    stream_id,
+                    protocol,
+                    user_data,
+                    expiry=expiry,
+                    max_retransmits=channel.maxRetransmits,
+                    ordered=channel.ordered,
+                )
                 channel._addBufferedAmount(-len(user_data))
 
     def _data_channel_add_negotiated(self, channel):
         if channel.id in self._data_channels:
-            raise ValueError('Data channel with ID %d already registered' % channel.id)
+            raise ValueError("Data channel with ID %d already registered" % channel.id)
 
         self._data_channels[channel.id] = channel
 
         if self._association_state == self.State.ESTABLISHED:
-            channel._setReadyState('open')
+            channel._setReadyState("open")
 
     def _data_channel_open(self, channel):
         if channel.id is not None:
             if channel.id in self._data_channels:
-                raise ValueError('Data channel with ID %d already registered' % channel.id)
+                raise ValueError(
+                    "Data channel with ID %d already registered" % channel.id
+                )
             else:
                 self._data_channels[channel.id] = channel
 
@@ -1563,10 +1654,17 @@ class RTCSctpTransport(EventEmitter):
             channel_type |= 2
             reliability = channel.maxPacketLifeTime
 
-        data = pack('!BBHLHH', DATA_CHANNEL_OPEN, channel_type,
-                    priority, reliability, len(channel.label), len(channel.protocol))
-        data += channel.label.encode('utf8')
-        data += channel.protocol.encode('utf8')
+        data = pack(
+            "!BBHLHH",
+            DATA_CHANNEL_OPEN,
+            channel_type,
+            priority,
+            reliability,
+            len(channel.label),
+            len(channel.protocol),
+        )
+        data += channel.label.encode("utf8")
+        data += channel.protocol.encode("utf8")
         self._data_channel_queue.append((channel, WEBRTC_DCEP, data))
         asyncio.ensure_future(self._data_channel_flush())
 
@@ -1577,12 +1675,18 @@ class RTCSctpTransport(EventEmitter):
                 # we should not receive an open for an existing channel
                 assert stream_id not in self._data_channels
 
-                (msg_type, channel_type, priority, reliability,
-                 label_length, protocol_length) = unpack_from('!BBHLHH', data)
+                (
+                    msg_type,
+                    channel_type,
+                    priority,
+                    reliability,
+                    label_length,
+                    protocol_length,
+                ) = unpack_from("!BBHLHH", data)
                 pos = 12
-                label = data[pos:pos + label_length].decode('utf8')
+                label = data[pos : pos + label_length].decode("utf8")
                 pos += label_length
-                protocol = data[pos:pos + protocol_length].decode('utf8')
+                protocol = data[pos : pos + protocol_length].decode("utf8")
 
                 # check channel type
                 maxPacketLifeTime = None
@@ -1599,42 +1703,44 @@ class RTCSctpTransport(EventEmitter):
                     maxPacketLifeTime=maxPacketLifeTime,
                     maxRetransmits=maxRetransmits,
                     protocol=protocol,
-                    id=stream_id)
+                    id=stream_id,
+                )
                 channel = RTCDataChannel(self, parameters, False)
-                channel._setReadyState('open')
+                channel._setReadyState("open")
                 self._data_channels[stream_id] = channel
 
                 # send ack
                 self._data_channel_queue.append(
-                    (channel, WEBRTC_DCEP, pack('!B', DATA_CHANNEL_ACK)))
+                    (channel, WEBRTC_DCEP, pack("!B", DATA_CHANNEL_ACK))
+                )
                 await self._data_channel_flush()
 
                 # emit channel
-                self.emit('datachannel', channel)
+                self.emit("datachannel", channel)
             elif msg_type == DATA_CHANNEL_ACK:
                 assert stream_id in self._data_channels
                 channel = self._data_channels[stream_id]
-                channel._setReadyState('open')
+                channel._setReadyState("open")
         elif pp_id == WEBRTC_STRING and stream_id in self._data_channels:
             # emit message
-            self._data_channels[stream_id].emit('message', data.decode('utf8'))
+            self._data_channels[stream_id].emit("message", data.decode("utf8"))
         elif pp_id == WEBRTC_STRING_EMPTY and stream_id in self._data_channels:
             # emit message
-            self._data_channels[stream_id].emit('message', '')
+            self._data_channels[stream_id].emit("message", "")
         elif pp_id == WEBRTC_BINARY and stream_id in self._data_channels:
             # emit message
-            self._data_channels[stream_id].emit('message', data)
+            self._data_channels[stream_id].emit("message", data)
         elif pp_id == WEBRTC_BINARY_EMPTY and stream_id in self._data_channels:
             # emit message
-            self._data_channels[stream_id].emit('message', b'')
+            self._data_channels[stream_id].emit("message", b"")
 
     def _data_channel_send(self, channel, data):
-        if data == '':
-            pp_id, user_data = WEBRTC_STRING_EMPTY, b'\x00'
+        if data == "":
+            pp_id, user_data = WEBRTC_STRING_EMPTY, b"\x00"
         elif isinstance(data, str):
-            pp_id, user_data = WEBRTC_STRING, data.encode('utf8')
-        elif data == b'':
-            pp_id, user_data = WEBRTC_BINARY_EMPTY, b'\x00'
+            pp_id, user_data = WEBRTC_STRING, data.encode("utf8")
+        elif data == b"":
+            pp_id, user_data = WEBRTC_BINARY_EMPTY, b"\x00"
         else:
             pp_id, user_data = WEBRTC_BINARY, data
 

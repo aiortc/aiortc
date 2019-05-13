@@ -7,8 +7,12 @@ import cv2
 import numpy
 from av import VideoFrame
 
-from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import (
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
+    VideoStreamTrack,
+)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
@@ -17,37 +21,46 @@ class FlagVideoStreamTrack(VideoStreamTrack):
     """
     A video track that returns an animated flag.
     """
+
     def __init__(self):
         super().__init__()  # don't forget this!
         self.counter = 0
         height, width = 480, 640
 
         # generate flag
-        data_bgr = numpy.hstack([
-            self._create_rectangle(width=213, height=480, color=(255, 0, 0)),      # blue
-            self._create_rectangle(width=214, height=480, color=(255, 255, 255)),  # white
-            self._create_rectangle(width=213, height=480, color=(0, 0, 255)),      # red
-        ])
+        data_bgr = numpy.hstack(
+            [
+                self._create_rectangle(
+                    width=213, height=480, color=(255, 0, 0)
+                ),  # blue
+                self._create_rectangle(
+                    width=214, height=480, color=(255, 255, 255)
+                ),  # white
+                self._create_rectangle(width=213, height=480, color=(0, 0, 255)),  # red
+            ]
+        )
 
         # shrink and center it
-        M = numpy.float32([
-            [0.5, 0, width / 4],
-            [0, 0.5, height / 4],
-        ])
+        M = numpy.float32([[0.5, 0, width / 4], [0, 0.5, height / 4]])
         data_bgr = cv2.warpAffine(data_bgr, M, (width, height))
 
         # compute animation
         omega = 2 * math.pi / height
         id_x = numpy.tile(numpy.array(range(width), dtype=numpy.float32), (height, 1))
-        id_y = numpy.tile(numpy.array(range(height), dtype=numpy.float32), (width, 1)).transpose()
+        id_y = numpy.tile(
+            numpy.array(range(height), dtype=numpy.float32), (width, 1)
+        ).transpose()
 
         self.frames = []
         for k in range(30):
             phase = 2 * k * math.pi / 30
             map_x = id_x + 10 * numpy.cos(omega * id_x + phase)
             map_y = id_y + 10 * numpy.sin(omega * id_x + phase)
-            self.frames.append(VideoFrame.from_ndarray(
-                cv2.remap(data_bgr, map_x, map_y, cv2.INTER_LINEAR), format='bgr24'))
+            self.frames.append(
+                VideoFrame.from_ndarray(
+                    cv2.remap(data_bgr, map_x, map_y, cv2.INTER_LINEAR), format="bgr24"
+                )
+            )
 
     async def recv(self):
         pts, time_base = await self.next_timestamp()
@@ -74,15 +87,15 @@ async def run(pc, player, recorder, signaling, role):
         else:
             pc.addTrack(FlagVideoStreamTrack())
 
-    @pc.on('track')
+    @pc.on("track")
     def on_track(track):
-        print('Receiving %s' % track.kind)
+        print("Receiving %s" % track.kind)
         recorder.addTrack(track)
 
     # connect signaling
     await signaling.connect()
 
-    if role == 'offer':
+    if role == "offer":
         # send offer
         add_tracks()
         await pc.setLocalDescription(await pc.createOffer())
@@ -96,7 +109,7 @@ async def run(pc, player, recorder, signaling, role):
             await pc.setRemoteDescription(obj)
             await recorder.start()
 
-            if obj.type == 'offer':
+            if obj.type == "offer":
                 # send answer
                 add_tracks()
                 await pc.setLocalDescription(await pc.createAnswer())
@@ -104,16 +117,16 @@ async def run(pc, player, recorder, signaling, role):
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
         elif obj is None:
-            print('Exiting')
+            print("Exiting")
             break
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Video stream from the command line')
-    parser.add_argument('role', choices=['offer', 'answer'])
-    parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
-    parser.add_argument('--record-to', help='Write received media to a file.'),
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Video stream from the command line")
+    parser.add_argument("role", choices=["offer", "answer"])
+    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--record-to", help="Write received media to a file."),
+    parser.add_argument("--verbose", "-v", action="count")
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
@@ -139,12 +152,15 @@ if __name__ == '__main__':
     # run event loop
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(
-            pc=pc,
-            player=player,
-            recorder=recorder,
-            signaling=signaling,
-            role=args.role))
+        loop.run_until_complete(
+            run(
+                pc=pc,
+                player=player,
+                recorder=recorder,
+                signaling=signaling,
+                role=args.role,
+            )
+        )
     except KeyboardInterrupt:
         pass
     finally:

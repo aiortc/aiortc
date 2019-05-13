@@ -1,8 +1,13 @@
 import asyncio
 from unittest import TestCase
 
-from aiortc import (RTCCertificate, RTCDtlsTransport, RTCIceGatherer,
-                    RTCIceTransport, RTCSctpTransport)
+from aiortc import (
+    RTCCertificate,
+    RTCDtlsTransport,
+    RTCIceGatherer,
+    RTCIceTransport,
+    RTCSctpTransport,
+)
 
 from .utils import run
 
@@ -13,7 +18,8 @@ async def start_dtls_pair(ice_a, ice_b):
 
     await asyncio.gather(
         dtls_a.start(dtls_b.getLocalParameters()),
-        dtls_b.start(dtls_a.getLocalParameters()))
+        dtls_b.start(dtls_a.getLocalParameters()),
+    )
 
     return dtls_a, dtls_b
 
@@ -22,9 +28,7 @@ async def start_ice_pair():
     ice_a = RTCIceTransport(gatherer=RTCIceGatherer())
     ice_b = RTCIceTransport(gatherer=RTCIceGatherer())
 
-    await asyncio.gather(
-        ice_a.iceGatherer.gather(),
-        ice_b.iceGatherer.gather())
+    await asyncio.gather(ice_a.iceGatherer.gather(), ice_b.iceGatherer.gather())
 
     for candidate in ice_b.iceGatherer.getLocalCandidates():
         ice_a.addRemoteCandidate(candidate)
@@ -32,7 +36,8 @@ async def start_ice_pair():
         ice_b.addRemoteCandidate(candidate)
     await asyncio.gather(
         ice_a.start(ice_b.iceGatherer.getLocalParameters()),
-        ice_b.start(ice_a.iceGatherer.getLocalParameters()))
+        ice_b.start(ice_a.iceGatherer.getLocalParameters()),
+    )
 
     return ice_a, ice_b
 
@@ -43,7 +48,8 @@ async def start_sctp_pair(dtls_a, dtls_b):
 
     await asyncio.gather(
         sctp_a.start(sctp_b.getCapabilities(), sctp_b.port),
-        sctp_b.start(sctp_a.getCapabilities(), sctp_a.port))
+        sctp_b.start(sctp_a.getCapabilities(), sctp_a.port),
+    )
 
     return sctp_a, sctp_b
 

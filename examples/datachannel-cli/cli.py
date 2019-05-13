@@ -8,11 +8,11 @@ from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
 
 def channel_log(channel, t, message):
-    print('channel(%s) %s %s' % (channel.label, t, message))
+    print("channel(%s) %s %s" % (channel.label, t, message))
 
 
 def channel_send(channel, message):
-    channel_log(channel, '>', message)
+    channel_log(channel, ">", message)
     channel.send(message)
 
 
@@ -23,14 +23,14 @@ async def consume_signaling(pc, signaling):
         if isinstance(obj, RTCSessionDescription):
             await pc.setRemoteDescription(obj)
 
-            if obj.type == 'offer':
+            if obj.type == "offer":
                 # send answer
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
         elif obj is None:
-            print('Exiting')
+            print("Exiting")
             break
 
 
@@ -50,17 +50,17 @@ def current_stamp():
 async def run_answer(pc, signaling):
     await signaling.connect()
 
-    @pc.on('datachannel')
+    @pc.on("datachannel")
     def on_datachannel(channel):
-        channel_log(channel, '-', 'created by remote party')
+        channel_log(channel, "-", "created by remote party")
 
-        @channel.on('message')
+        @channel.on("message")
         def on_message(message):
-            channel_log(channel, '<', message)
+            channel_log(channel, "<", message)
 
-            if isinstance(message, str) and message.startswith('ping'):
+            if isinstance(message, str) and message.startswith("ping"):
                 # reply
-                channel_send(channel, 'pong' + message[4:])
+                channel_send(channel, "pong" + message[4:])
 
     await consume_signaling(pc, signaling)
 
@@ -68,25 +68,25 @@ async def run_answer(pc, signaling):
 async def run_offer(pc, signaling):
     await signaling.connect()
 
-    channel = pc.createDataChannel('chat')
-    channel_log(channel, '-', 'created by local party')
+    channel = pc.createDataChannel("chat")
+    channel_log(channel, "-", "created by local party")
 
     async def send_pings():
         while True:
-            channel_send(channel, 'ping %d' % current_stamp())
+            channel_send(channel, "ping %d" % current_stamp())
             await asyncio.sleep(1)
 
-    @channel.on('open')
+    @channel.on("open")
     def on_open():
         asyncio.ensure_future(send_pings())
 
-    @channel.on('message')
+    @channel.on("message")
     def on_message(message):
-        channel_log(channel, '<', message)
+        channel_log(channel, "<", message)
 
-        if isinstance(message, str) and message.startswith('pong'):
+        if isinstance(message, str) and message.startswith("pong"):
             elapsed_ms = (current_stamp() - int(message[5:])) / 1000
-            print(' RTT %.2f ms' % elapsed_ms)
+            print(" RTT %.2f ms" % elapsed_ms)
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
@@ -95,10 +95,10 @@ async def run_offer(pc, signaling):
     await consume_signaling(pc, signaling)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Data channels ping/pong')
-    parser.add_argument('role', choices=['offer', 'answer'])
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Data channels ping/pong")
+    parser.add_argument("role", choices=["offer", "answer"])
+    parser.add_argument("--verbose", "-v", action="count")
     add_signaling_arguments(parser)
 
     args = parser.parse_args()
@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
-    if args.role == 'offer':
+    if args.role == "offer":
         coro = run_offer(pc, signaling)
     else:
         coro = run_answer(pc, signaling)

@@ -3,21 +3,38 @@ import datetime
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.rtcdtlstransport import (DtlsError, RTCCertificate,
-                                     RTCDtlsFingerprint, RTCDtlsParameters,
-                                     RTCDtlsTransport, RtpRouter)
-from aiortc.rtcrtpparameters import (RTCRtpCodecParameters,
-                                     RTCRtpDecodingParameters,
-                                     RTCRtpReceiveParameters)
-from aiortc.rtp import (RTCP_PSFB_APP, RTCP_PSFB_PLI, RTCP_RTPFB_NACK,
-                        RtcpByePacket, RtcpPsfbPacket, RtcpReceiverInfo,
-                        RtcpRrPacket, RtcpRtpfbPacket, RtcpSenderInfo,
-                        RtcpSrPacket, RtpPacket, pack_remb_fci)
+from aiortc.rtcdtlstransport import (
+    DtlsError,
+    RTCCertificate,
+    RTCDtlsFingerprint,
+    RTCDtlsParameters,
+    RTCDtlsTransport,
+    RtpRouter,
+)
+from aiortc.rtcrtpparameters import (
+    RTCRtpCodecParameters,
+    RTCRtpDecodingParameters,
+    RTCRtpReceiveParameters,
+)
+from aiortc.rtp import (
+    RTCP_PSFB_APP,
+    RTCP_PSFB_PLI,
+    RTCP_RTPFB_NACK,
+    RtcpByePacket,
+    RtcpPsfbPacket,
+    RtcpReceiverInfo,
+    RtcpRrPacket,
+    RtcpRtpfbPacket,
+    RtcpSenderInfo,
+    RtcpSrPacket,
+    RtpPacket,
+    pack_remb_fci,
+)
 
 from .utils import dummy_ice_transport_pair, load, run
 
-RTP = load('rtp.bin')
-RTCP = load('rtcp_sr.bin')
+RTP = load("rtp.bin")
+RTCP = load("rtcp_sr.bin")
 
 
 class DummyDataReceiver:
@@ -54,7 +71,7 @@ class RTCCertificateTest(TestCase):
 
         fingerprints = certificate.getFingerprints()
         self.assertEqual(len(fingerprints), 1)
-        self.assertEqual(fingerprints[0].algorithm, 'sha-256')
+        self.assertEqual(fingerprints[0].algorithm, "sha-256")
         self.assertEqual(len(fingerprints[0].value), 95)
 
 
@@ -76,7 +93,7 @@ class RTCDtlsTransportTest(TestCase):
         self.assertEqual(stats_a.bytesSent, stats_b.bytesReceived)
         self.assertEqual(stats_b.bytesSent, stats_a.bytesReceived)
 
-    @patch('aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate')
+    @patch("aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate")
     def test_broken_ssl(self, mock_use_certificate):
         mock_use_certificate.return_value = 0
 
@@ -99,24 +116,27 @@ class RTCDtlsTransportTest(TestCase):
         receiver2 = DummyDataReceiver()
         session2._register_data_receiver(receiver2)
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
 
         # send encypted data
-        run(session1._send_data(b'ping'))
+        run(session1._send_data(b"ping"))
         run(asyncio.sleep(0.1))
-        self.assertEqual(receiver2.data, [b'ping'])
+        self.assertEqual(receiver2.data, [b"ping"])
 
-        run(session2._send_data(b'pong'))
+        run(session2._send_data(b"pong"))
         run(asyncio.sleep(0.1))
-        self.assertEqual(receiver1.data, [b'pong'])
+        self.assertEqual(receiver1.data, [b"pong"])
 
         # shutdown
         run(session1.stop())
         run(asyncio.sleep(0.1))
-        self.assertEqual(session1.state, 'closed')
-        self.assertEqual(session2.state, 'closed')
+        self.assertEqual(session1.state, "closed")
+        self.assertEqual(session2.state, "closed")
 
         # try closing again
         run(session1.stop())
@@ -124,7 +144,7 @@ class RTCDtlsTransportTest(TestCase):
 
         # try sending after close
         with self.assertRaises(ConnectionError):
-            run(session1._send_data(b'foo'))
+            run(session1._send_data(b"foo"))
 
     def test_rtp(self):
         transport1, transport2 = dummy_ice_transport_pair()
@@ -132,20 +152,39 @@ class RTCDtlsTransportTest(TestCase):
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
-        session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
-            encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
+        session1._register_rtp_receiver(
+            receiver1,
+            RTCRtpReceiveParameters(
+                codecs=[
+                    RTCRtpCodecParameters(
+                        mimeType="audio/PCMU", clockRate=8000, payloadType=0
+                    )
+                ],
+                encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)],
+            ),
+        )
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
-        session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
-            encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
+        session2._register_rtp_receiver(
+            receiver2,
+            RTCRtpReceiveParameters(
+                codecs=[
+                    RTCRtpCodecParameters(
+                        mimeType="audio/PCMU", clockRate=8000, payloadType=0
+                    )
+                ],
+                encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)],
+            ),
+        )
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
         self.assertCounters(session1, session2, 2, 2)
 
         # send RTP
@@ -166,8 +205,8 @@ class RTCDtlsTransportTest(TestCase):
         run(session1.stop())
         run(asyncio.sleep(0.1))
         self.assertCounters(session1, session2, 4, 3)
-        self.assertEqual(session1.state, 'closed')
-        self.assertEqual(session2.state, 'closed')
+        self.assertEqual(session1.state, "closed")
+        self.assertEqual(session2.state, "closed")
 
         # try closing again
         run(session1.stop())
@@ -195,20 +234,39 @@ class RTCDtlsTransportTest(TestCase):
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
         receiver1 = DummyRtpReceiver()
-        session1._register_rtp_receiver(receiver1, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
-            encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)]))
+        session1._register_rtp_receiver(
+            receiver1,
+            RTCRtpReceiveParameters(
+                codecs=[
+                    RTCRtpCodecParameters(
+                        mimeType="audio/PCMU", clockRate=8000, payloadType=0
+                    )
+                ],
+                encodings=[RTCRtpDecodingParameters(ssrc=1831097322, payloadType=0)],
+            ),
+        )
 
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
         receiver2 = DummyRtpReceiver()
-        session2._register_rtp_receiver(receiver2, RTCRtpReceiveParameters(
-            codecs=[RTCRtpCodecParameters(mimeType='audio/PCMU', clockRate=8000, payloadType=0)],
-            encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)]))
+        session2._register_rtp_receiver(
+            receiver2,
+            RTCRtpReceiveParameters(
+                codecs=[
+                    RTCRtpCodecParameters(
+                        mimeType="audio/PCMU", clockRate=8000, payloadType=0
+                    )
+                ],
+                encodings=[RTCRtpDecodingParameters(ssrc=4028317929, payloadType=0)],
+            ),
+        )
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
 
         # send same RTP twice, to trigger error on the receiver side:
         # "replay check failed (bad index)"
@@ -231,9 +289,12 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
 
         # break connections -> tasks exits
         run(transport1.stop())
@@ -244,8 +305,8 @@ class RTCDtlsTransportTest(TestCase):
         run(session2.stop())
 
         # check outcome
-        self.assertEqual(session1.state, 'closed')
-        self.assertEqual(session2.state, 'closed')
+        self.assertEqual(session1.state, "closed")
+        self.assertEqual(session2.state, "closed")
 
     def test_abrupt_disconnect_2(self):
         transport1, transport2 = dummy_ice_transport_pair()
@@ -256,12 +317,16 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
 
         def fake_write_ssl():
             raise ConnectionError
+
         session1._write_ssl = fake_write_ssl
 
         # close DTLS -> ConnectionError
@@ -269,8 +334,8 @@ class RTCDtlsTransportTest(TestCase):
         run(session2.stop())
 
         # check outcome
-        self.assertEqual(session1.state, 'closed')
-        self.assertEqual(session2.state, 'closed')
+        self.assertEqual(session1.state, "closed")
+        self.assertEqual(session2.state, "closed")
 
     def test_bad_client_fingerprint(self):
         transport1, transport2 = dummy_ice_transport_pair()
@@ -282,20 +347,28 @@ class RTCDtlsTransportTest(TestCase):
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
         bogus_parameters = RTCDtlsParameters(
-            fingerprints=[RTCDtlsFingerprint(algorithm='sha-256', value='bogus_fingerprint')])
-        run(asyncio.gather(
-            session1.start(bogus_parameters),
-            session2.start(session1.getLocalParameters())))
-        self.assertEqual(session1.state, 'failed')
-        self.assertEqual(session2.state, 'connected')
+            fingerprints=[
+                RTCDtlsFingerprint(algorithm="sha-256", value="bogus_fingerprint")
+            ]
+        )
+        run(
+            asyncio.gather(
+                session1.start(bogus_parameters),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
+        self.assertEqual(session1.state, "failed")
+        self.assertEqual(session2.state, "connected")
 
         run(session1.stop())
         run(session2.stop())
 
-    @patch('aiortc.rtcdtlstransport.lib.SSL_do_handshake')
-    @patch('aiortc.rtcdtlstransport.lib.SSL_get_error')
-    @patch('aiortc.rtcdtlstransport.lib.ERR_get_error')
-    def test_handshake_error(self, mock_err_get_error, mock_ssl_get_error, mock_do_handshake):
+    @patch("aiortc.rtcdtlstransport.lib.SSL_do_handshake")
+    @patch("aiortc.rtcdtlstransport.lib.SSL_get_error")
+    @patch("aiortc.rtcdtlstransport.lib.ERR_get_error")
+    def test_handshake_error(
+        self, mock_err_get_error, mock_ssl_get_error, mock_do_handshake
+    ):
         mock_err_get_error.side_effect = [0x2006D080, 0, 0]
         mock_ssl_get_error.return_value = 1
         mock_do_handshake.return_value = -1
@@ -308,11 +381,14 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
-        self.assertEqual(session1.state, 'failed')
-        self.assertEqual(session2.state, 'failed')
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
+        self.assertEqual(session1.state, "failed")
+        self.assertEqual(session2.state, "failed")
 
         run(session1.stop())
         run(session2.stop())
@@ -332,9 +408,12 @@ class RTCDtlsTransportTest(TestCase):
         certificate2 = RTCCertificate.generateCertificate()
         session2 = RTCDtlsTransport(transport2, [certificate2])
 
-        run(asyncio.gather(
-            session1.start(session2.getLocalParameters()),
-            session2.start(session1.getLocalParameters())))
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
 
         run(session1.stop())
         run(session2.stop())
@@ -354,22 +433,40 @@ class RtpRouterTest(TestCase):
         self.assertEqual(router.route_rtcp(packet), set([receiver]))
 
         # RR
-        packet = RtcpRrPacket(ssrc=1234, reports=[RtcpReceiverInfo(
-           ssrc=3456, fraction_lost=0, packets_lost=0, highest_sequence=630,
-           jitter=1906, lsr=0, dlsr=0)])
+        packet = RtcpRrPacket(
+            ssrc=1234,
+            reports=[
+                RtcpReceiverInfo(
+                    ssrc=3456,
+                    fraction_lost=0,
+                    packets_lost=0,
+                    highest_sequence=630,
+                    jitter=1906,
+                    lsr=0,
+                    dlsr=0,
+                )
+            ],
+        )
         self.assertEqual(router.route_rtcp(packet), set([sender]))
 
         # SR
         packet = RtcpSrPacket(
             ssrc=1234,
             sender_info=RtcpSenderInfo(
-                ntp_timestamp=0,
-                rtp_timestamp=0,
-                packet_count=0,
-                octet_count=0),
-            reports=[RtcpReceiverInfo(
-                ssrc=3456, fraction_lost=0, packets_lost=0, highest_sequence=630,
-                jitter=1906, lsr=0, dlsr=0)])
+                ntp_timestamp=0, rtp_timestamp=0, packet_count=0, octet_count=0
+            ),
+            reports=[
+                RtcpReceiverInfo(
+                    ssrc=3456,
+                    fraction_lost=0,
+                    packets_lost=0,
+                    highest_sequence=630,
+                    jitter=1906,
+                    lsr=0,
+                    dlsr=0,
+                )
+            ],
+        )
         self.assertEqual(router.route_rtcp(packet), set([receiver, sender]))
 
         # PSFB - PLI
@@ -377,13 +474,16 @@ class RtpRouterTest(TestCase):
         self.assertEqual(router.route_rtcp(packet), set([sender]))
 
         # PSFB - REMB
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
-                                fci=pack_remb_fci(4160000, [3456]))
+        packet = RtcpPsfbPacket(
+            fmt=RTCP_PSFB_APP,
+            ssrc=1234,
+            media_ssrc=0,
+            fci=pack_remb_fci(4160000, [3456]),
+        )
         self.assertEqual(router.route_rtcp(packet), set([sender]))
 
         # PSFB - JUNK
-        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0,
-                                fci=b'JUNK')
+        packet = RtcpPsfbPacket(fmt=RTCP_PSFB_APP, ssrc=1234, media_ssrc=0, fci=b"JUNK")
         self.assertEqual(router.route_rtcp(packet), set())
 
         # RTPFB
@@ -399,13 +499,23 @@ class RtpRouterTest(TestCase):
         router.register_receiver(receiver2, ssrcs=[3456, 4567], payload_types=[98, 99])
 
         # known SSRC and payload type
-        self.assertEqual(router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), receiver1)
-        self.assertEqual(router.route_rtp(RtpPacket(ssrc=2345, payload_type=97)), receiver1)
-        self.assertEqual(router.route_rtp(RtpPacket(ssrc=3456, payload_type=98)), receiver2)
-        self.assertEqual(router.route_rtp(RtpPacket(ssrc=4567, payload_type=99)), receiver2)
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), receiver1
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=2345, payload_type=97)), receiver1
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=3456, payload_type=98)), receiver2
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=4567, payload_type=99)), receiver2
+        )
 
         # unknown SSRC, known payload type
-        self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1)
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1
+        )
         self.assertEqual(router.ssrc_table[5678], receiver1)
 
         # unknown SSRC and payload type

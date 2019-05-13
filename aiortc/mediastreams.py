@@ -28,6 +28,7 @@ class MediaStreamTrack(EventEmitter):
 
     See :class:`AudioStreamTrack` and :class:`VideoStreamTrack`.
     """
+
     def __init__(self):
         super().__init__()
         self.__ended = False
@@ -42,12 +43,12 @@ class MediaStreamTrack(EventEmitter):
 
     @property
     def readyState(self):
-        return 'ended' if self.__ended else 'live'
+        return "ended" if self.__ended else "live"
 
     def stop(self):
         if not self.__ended:
             self.__ended = True
-            self.emit('ended')
+            self.emit("ended")
 
             # no more events will be emitted, so remove all event listeners
             # to facilitate garbage collection.
@@ -58,7 +59,8 @@ class AudioStreamTrack(MediaStreamTrack):
     """
     An audio track.
     """
-    kind = 'audio'
+
+    kind = "audio"
 
     async def recv(self):
         """
@@ -67,13 +69,13 @@ class AudioStreamTrack(MediaStreamTrack):
         The base implementation just reads silence, subclass
         :class:`AudioStreamTrack` to provide a useful implementation.
         """
-        if self.readyState != 'live':
+        if self.readyState != "live":
             raise MediaStreamError
 
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
 
-        if hasattr(self, '_timestamp'):
+        if hasattr(self, "_timestamp"):
             self._timestamp += samples
             wait = self._start + (self._timestamp / sample_rate) - time.time()
             await asyncio.sleep(wait)
@@ -81,7 +83,7 @@ class AudioStreamTrack(MediaStreamTrack):
             self._start = time.time()
             self._timestamp = 0
 
-        frame = AudioFrame(format='s16', layout='mono', samples=samples)
+        frame = AudioFrame(format="s16", layout="mono", samples=samples)
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
         frame.pts = self._timestamp
@@ -94,13 +96,14 @@ class VideoStreamTrack(MediaStreamTrack):
     """
     A video stream track.
     """
-    kind = 'video'
+
+    kind = "video"
 
     async def next_timestamp(self):
-        if self.readyState != 'live':
+        if self.readyState != "live":
             raise MediaStreamError
 
-        if hasattr(self, '_timestamp'):
+        if hasattr(self, "_timestamp"):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
             wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
             await asyncio.sleep(wait)

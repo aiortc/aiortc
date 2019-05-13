@@ -19,6 +19,9 @@ install: source .travis/install
 language: python
 matrix:
   include:
+  - env: BUILD=lint
+    install: pip install black flake8 isort
+    python: "3.6"
   - language: generic
     os: osx
   - python: "3.5"

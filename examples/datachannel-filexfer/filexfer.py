@@ -20,26 +20,26 @@ async def consume_signaling(pc, signaling):
         if isinstance(obj, RTCSessionDescription):
             await pc.setRemoteDescription(obj)
 
-            if obj.type == 'offer':
+            if obj.type == "offer":
                 # send answer
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
         elif obj is None:
-            print('Exiting')
+            print("Exiting")
             break
 
 
 async def run_answer(pc, signaling, filename):
     await signaling.connect()
 
-    @pc.on('datachannel')
+    @pc.on("datachannel")
     def on_datachannel(channel):
         start = time.time()
         octets = 0
 
-        @channel.on('message')
+        @channel.on("message")
         async def on_message(message):
             nonlocal octets
 
@@ -48,8 +48,10 @@ async def run_answer(pc, signaling, filename):
                 fp.write(message)
             else:
                 elapsed = time.time() - start
-                print('received %d bytes in %.1f s (%.3f Mbps)' % (
-                    octets, elapsed, octets * 8 / elapsed / 1000000))
+                print(
+                    "received %d bytes in %.1f s (%.3f Mbps)"
+                    % (octets, elapsed, octets * 8 / elapsed / 1000000)
+                )
 
                 # say goodbye
                 await signaling.send(None)
@@ -61,19 +63,21 @@ async def run_offer(pc, signaling, fp):
     await signaling.connect()
 
     done_reading = False
-    channel = pc.createDataChannel('filexfer')
+    channel = pc.createDataChannel("filexfer")
 
     def send_data():
         nonlocal done_reading
 
-        while (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) and not done_reading:
+        while (
+            channel.bufferedAmount <= channel.bufferedAmountLowThreshold
+        ) and not done_reading:
             data = fp.read(16384)
             channel.send(data)
             if not data:
                 done_reading = True
 
-    channel.on('bufferedamountlow', send_data)
-    channel.on('open', send_data)
+    channel.on("bufferedamountlow", send_data)
+    channel.on("open", send_data)
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
@@ -82,11 +86,11 @@ async def run_offer(pc, signaling, fp):
     await consume_signaling(pc, signaling)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Data channel file transfer')
-    parser.add_argument('role', choices=['send', 'receive'])
-    parser.add_argument('filename')
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Data channel file transfer")
+    parser.add_argument("role", choices=["send", "receive"])
+    parser.add_argument("filename")
+    parser.add_argument("--verbose", "-v", action="count")
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
@@ -98,11 +102,11 @@ if __name__ == '__main__':
 
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
-    if args.role == 'send':
-        fp = open(args.filename, 'rb')
+    if args.role == "send":
+        fp = open(args.filename, "rb")
         coro = run_offer(pc, signaling, fp)
     else:
-        fp = open(args.filename, 'wb')
+        fp = open(args.filename, "wb")
         coro = run_answer(pc, signaling, fp)
 
     # run event loop

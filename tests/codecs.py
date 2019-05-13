@@ -14,7 +14,7 @@ class CodecTestCase(TestCase):
         timestamp = 0
         samples_per_frame = int(AUDIO_PTIME * sample_rate)
         for i in range(count):
-            frame = AudioFrame(format='s16', layout=layout, samples=samples_per_frame)
+            frame = AudioFrame(format="s16", layout=layout, samples=samples_per_frame)
             for p in frame.planes:
                 p.update(bytes(p.buffer_size))
             frame.pts = timestamp
@@ -24,7 +24,9 @@ class CodecTestCase(TestCase):
             timestamp += samples_per_frame
         return frames
 
-    def create_video_frame(self, width, height, pts, format='yuv420p', time_base=VIDEO_TIME_BASE):
+    def create_video_frame(
+        self, width, height, pts, format="yuv420p", time_base=VIDEO_TIME_BASE
+    ):
         """
         Create a single blank video frame.
         """
@@ -41,11 +43,14 @@ class CodecTestCase(TestCase):
         """
         frames = []
         for i in range(count):
-            frames.append(self.create_video_frame(
-                width=width,
-                height=height,
-                pts=int(i / time_base / 30),
-                time_base=time_base))
+            frames.append(
+                self.create_video_frame(
+                    width=width,
+                    height=height,
+                    pts=int(i / time_base / 30),
+                    time_base=time_base,
+                )
+            )
         return frames
 
     def roundtrip_audio(self, codec, output_layout, output_sample_rate, drop=[]):
@@ -55,7 +60,9 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
-        input_frames = self.create_audio_frames(layout='mono', sample_rate=8000, count=10)
+        input_frames = self.create_audio_frames(
+            layout="mono", sample_rate=8000, count=10
+        )
 
         output_sample_count = int(output_sample_rate * AUDIO_PTIME)
 
@@ -65,19 +72,21 @@ class CodecTestCase(TestCase):
 
             if i not in drop:
                 # depacketize
-                data = b''
+                data = b""
                 for package in packages:
                     data += depayload(codec, package)
 
                 # decode
                 frames = decoder.decode(JitterFrame(data=data, timestamp=timestamp))
                 self.assertEqual(len(frames), 1)
-                self.assertEqual(frames[0].format.name, 's16')
+                self.assertEqual(frames[0].format.name, "s16")
                 self.assertEqual(frames[0].layout.name, output_layout)
                 self.assertEqual(frames[0].samples, output_sample_rate * AUDIO_PTIME)
                 self.assertEqual(frames[0].sample_rate, output_sample_rate)
                 self.assertEqual(frames[0].pts, i * output_sample_count)
-                self.assertEqual(frames[0].time_base, fractions.Fraction(1, output_sample_rate))
+                self.assertEqual(
+                    frames[0].time_base, fractions.Fraction(1, output_sample_rate)
+                )
 
     def roundtrip_video(self, codec, width, height, time_base=VIDEO_TIME_BASE):
         """
@@ -87,13 +96,14 @@ class CodecTestCase(TestCase):
         decoder = get_decoder(codec)
 
         input_frames = self.create_video_frames(
-            width=width, height=height, count=30, time_base=time_base)
+            width=width, height=height, count=30, time_base=time_base
+        )
         for i, frame in enumerate(input_frames):
             # encode
             packages, timestamp = encoder.encode(frame)
 
             # depacketize
-            data = b''
+            data = b""
             for package in packages:
                 data += depayload(codec, package)
 

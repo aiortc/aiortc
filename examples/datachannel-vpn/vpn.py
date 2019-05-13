@@ -7,11 +7,11 @@ import tuntap
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
 
-logger = logging.Logger('vpn')
+logger = logging.Logger("vpn")
 
 
 def channel_log(channel, t, message):
-    logger.info('channel(%s) %s %s' % (channel.label, t, repr(message)))
+    logger.info("channel(%s) %s %s" % (channel.label, t, repr(message)))
 
 
 async def consume_signaling(pc, signaling):
@@ -21,14 +21,14 @@ async def consume_signaling(pc, signaling):
         if isinstance(obj, RTCSessionDescription):
             await pc.setRemoteDescription(obj)
 
-            if obj.type == 'offer':
+            if obj.type == "offer":
                 # send answer
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
         elif obj is None:
-            print('Exiting')
+            print("Exiting")
             break
 
 
@@ -36,7 +36,7 @@ def tun_start(tap, channel):
     tap.open()
 
     # relay channel -> tap
-    channel.on('message')(tap.fd.write)
+    channel.on("message")(tap.fd.write)
 
     # relay tap -> channel
     def tun_reader():
@@ -53,10 +53,10 @@ def tun_start(tap, channel):
 async def run_answer(pc, signaling, tap):
     await signaling.connect()
 
-    @pc.on('datachannel')
+    @pc.on("datachannel")
     def on_datachannel(channel):
-        channel_log(channel, '-', 'created by remote party')
-        if channel.label == 'vpntap':
+        channel_log(channel, "-", "created by remote party")
+        if channel.label == "vpntap":
             tun_start(tap, channel)
 
     await consume_signaling(pc, signaling)
@@ -65,10 +65,10 @@ async def run_answer(pc, signaling, tap):
 async def run_offer(pc, signaling, tap):
     await signaling.connect()
 
-    channel = pc.createDataChannel('vpntap')
-    channel_log(channel, '-', 'created by local party')
+    channel = pc.createDataChannel("vpntap")
+    channel_log(channel, "-", "created by local party")
 
-    @channel.on('open')
+    @channel.on("open")
     def on_open():
         tun_start(tap, channel)
 
@@ -79,10 +79,10 @@ async def run_offer(pc, signaling, tap):
     await consume_signaling(pc, signaling)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='VPN over data channel')
-    parser.add_argument('role', choices=['offer', 'answer'])
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="VPN over data channel")
+    parser.add_argument("role", choices=["offer", "answer"])
+    parser.add_argument("--verbose", "-v", action="count")
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
-    if args.role == 'offer':
+    if args.role == "offer":
         coro = run_offer(pc, signaling, tap)
     else:
         coro = run_answer(pc, signaling, tap)

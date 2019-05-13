@@ -55,7 +55,9 @@ class AimdRateControl:
         self.current_bitrate_initialized = True
         self.last_change_ms = now_ms
 
-    def update(self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int):
+    def update(
+        self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int
+    ):
         if not self.current_bitrate_initialized:
             if self.first_estimated_throughput_time is None:
                 if estimated_throughput is not None:
@@ -65,11 +67,17 @@ class AimdRateControl:
                 self.current_bitrate_initialized = True
 
         # wait for initialisation or overuse
-        if not self.current_bitrate_initialized and bandwidth_usage != BandwidthUsage.OVERUSING:
+        if (
+            not self.current_bitrate_initialized
+            and bandwidth_usage != BandwidthUsage.OVERUSING
+        ):
             return
 
         # update state
-        if bandwidth_usage == BandwidthUsage.NORMAL and self.state == RateControlState.HOLD:
+        if (
+            bandwidth_usage == BandwidthUsage.NORMAL
+            and self.state == RateControlState.HOLD
+        ):
             self.last_change_ms = now_ms
             self.state = RateControlState.INCREASE
         elif bandwidth_usage == BandwidthUsage.OVERUSING:
@@ -90,8 +98,13 @@ class AimdRateControl:
             # if the estimated throughput increases significantly,
             # clear estimated max throughput
             if self.avg_max_bitrate_kbps is not None:
-                sigma_kbps = math.sqrt(self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps)
-                if estimated_throughput_kbps >= self.avg_max_bitrate_kbps + 3 * sigma_kbps:
+                sigma_kbps = math.sqrt(
+                    self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps
+                )
+                if (
+                    estimated_throughput_kbps
+                    >= self.avg_max_bitrate_kbps + 3 * sigma_kbps
+                ):
                     self.near_max = False
                     self.avg_max_bitrate_kbps = None
 
@@ -101,14 +114,20 @@ class AimdRateControl:
                 new_bitrate += self._additive_rate_increase(self.last_change_ms, now_ms)
             else:
                 new_bitrate += self._multiplicative_rate_increase(
-                    new_bitrate, self.last_change_ms, now_ms)
+                    new_bitrate, self.last_change_ms, now_ms
+                )
             self.last_change_ms = now_ms
         elif self.state == RateControlState.DECREASE:
             # if the estimated throughput drops significantly,
             # clear estimated max throughput
             if self.avg_max_bitrate_kbps is not None:
-                sigma_kbps = math.sqrt(self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps)
-                if estimated_throughput_kbps < self.avg_max_bitrate_kbps - 3 * sigma_kbps:
+                sigma_kbps = math.sqrt(
+                    self.var_max_bitrate_kbps * self.avg_max_bitrate_kbps
+                )
+                if (
+                    estimated_throughput_kbps
+                    < self.avg_max_bitrate_kbps - 3 * sigma_kbps
+                ):
                     self.avg_max_bitrate_kbps = None
             self._update_max_throughput_estimate(estimated_throughput_kbps)
 
@@ -148,13 +167,13 @@ class AimdRateControl:
             self.avg_max_bitrate_kbps = estimated_throughput_kbps
         else:
             self.avg_max_bitrate_kbps = (
-                (1 - alpha) * self.avg_max_bitrate_kbps +
-                alpha * estimated_throughput_kbps)
+                1 - alpha
+            ) * self.avg_max_bitrate_kbps + alpha * estimated_throughput_kbps
 
         norm = max(1, self.avg_max_bitrate_kbps)
-        self.var_max_bitrate_kbps = (
-            (1 - alpha) * self.var_max_bitrate_kbps +
-            alpha * ((self.avg_max_bitrate_kbps - estimated_throughput_kbps) ** 2) / norm)
+        self.var_max_bitrate_kbps = (1 - alpha) * self.var_max_bitrate_kbps + alpha * (
+            (self.avg_max_bitrate_kbps - estimated_throughput_kbps) ** 2
+        ) / norm
         self.var_max_bitrate_kbps = max(0.4, min(self.var_max_bitrate_kbps, 2.5))
 
 
@@ -179,6 +198,7 @@ class InterArrival:
 
     Adapted from the webrtc.org codebase.
     """
+
     def __init__(self, group_length, timestamp_to_ms):
         self.group_length = group_length
         self.timestamp_to_ms = timestamp_to_ms
@@ -194,11 +214,16 @@ class InterArrival:
         elif self.new_timestamp_group(timestamp, arrival_time):
             if self.previous_group is not None:
                 deltas = InterArrivalDelta(
-                    timestamp=uint32_add(self.current_group.last_timestamp,
-                                         -self.previous_group.last_timestamp),
-                    arrival_time=(self.current_group.arrival_time -
-                                  self.previous_group.arrival_time),
-                    size=self.current_group.size - self.previous_group.size)
+                    timestamp=uint32_add(
+                        self.current_group.last_timestamp,
+                        -self.previous_group.last_timestamp,
+                    ),
+                    arrival_time=(
+                        self.current_group.arrival_time
+                        - self.previous_group.arrival_time
+                    ),
+                    size=self.current_group.size - self.previous_group.size,
+                )
 
             # shift groups
             self.previous_group = self.current_group
@@ -215,9 +240,10 @@ class InterArrival:
         timestamp_delta = uint32_add(timestamp, -self.current_group.last_timestamp)
         timestamp_delta_ms = round(self.timestamp_to_ms * timestamp_delta)
         arrival_time_delta = arrival_time - self.current_group.arrival_time
-        return (timestamp_delta_ms == 0 or
-                ((arrival_time_delta - timestamp_delta_ms) < 0 and
-                 arrival_time_delta <= BURST_DELTA_THRESHOLD_MS))
+        return timestamp_delta_ms == 0 or (
+            (arrival_time_delta - timestamp_delta_ms) < 0
+            and arrival_time_delta <= BURST_DELTA_THRESHOLD_MS
+        )
 
     def new_timestamp_group(self, timestamp, arrival_time):
         if self.belongs_to_burst(timestamp, arrival_time):
@@ -237,6 +263,7 @@ class OveruseDetector:
 
     Adapted from the webrtc.org codebase.
     """
+
     def __init__(self):
         self.hypothesis = BandwidthUsage.NORMAL
         self.last_update_ms = None
@@ -260,9 +287,11 @@ class OveruseDetector:
                 self.overuse_time += timestamp_delta_ms
             self.overuse_counter += 1
 
-            if (self.overuse_time > self.overuse_time_threshold and
-               self.overuse_counter > 1 and
-               offset >= self.previous_offset):
+            if (
+                self.overuse_time > self.overuse_time_threshold
+                and self.overuse_counter > 1
+                and offset >= self.previous_offset
+            ):
                 self.overuse_counter = 0
                 self.overuse_time = 0
                 self.hypothesis = BandwidthUsage.OVERUSING
@@ -303,11 +332,9 @@ class OveruseEstimator:
 
     Adapted from the webrtc.org codebase.
     """
+
     def __init__(self):
-        self.E = [
-            [100, 0],
-            [0, 0.1],
-        ]
+        self.E = [[100, 0], [0, 0.1]]
         self._num_of_deltas = 0
         self._offset = 0
         self.previous_offset = 0
@@ -316,10 +343,7 @@ class OveruseEstimator:
 
         self.avg_noise = 0
         self.var_noise = 50
-        self.process_noise = [
-            1e-13,
-            1e-3
-        ]
+        self.process_noise = [1e-13, 1e-3]
 
     def num_of_deltas(self):
         return self._num_of_deltas
@@ -327,8 +351,9 @@ class OveruseEstimator:
     def offset(self):
         return self._offset
 
-    def update(self, time_delta_ms, timestamp_delta_ms, size_delta,
-               current_hypothesis, now_ms):
+    def update(
+        self, time_delta_ms, timestamp_delta_ms, size_delta, current_hypothesis, now_ms
+    ):
         min_frame_period = self.update_min_frame_period(timestamp_delta_ms)
         t_ts_delta = time_delta_ms - timestamp_delta_ms
         fs_delta = size_delta
@@ -338,16 +363,19 @@ class OveruseEstimator:
         # update  Kalman filter
         self.E[0][0] += self.process_noise[0]
         self.E[1][1] += self.process_noise[1]
-        if ((current_hypothesis == BandwidthUsage.OVERUSING and
-           self._offset < self.previous_offset) or
-           (current_hypothesis == BandwidthUsage.UNDERUSING and
-           self._offset > self.previous_offset)):
+        if (
+            current_hypothesis == BandwidthUsage.OVERUSING
+            and self._offset < self.previous_offset
+        ) or (
+            current_hypothesis == BandwidthUsage.UNDERUSING
+            and self._offset > self.previous_offset
+        ):
             self.E[1][1] += 10 * self.process_noise[1]
 
         h = [fs_delta, 1.0]
         Eh = [
             self.E[0][0] * h[0] + self.E[0][1] * h[1],
-            self.E[1][0] * h[0] + self.E[1][1] * h[1]
+            self.E[1][0] * h[0] + self.E[1][1] * h[1],
         ]
 
         # update noise estimate
@@ -357,16 +385,14 @@ class OveruseEstimator:
             if abs(residual) < max_residual:
                 self.update_noise_estimate(residual, min_frame_period)
             else:
-                self.update_noise_estimate(-max_residual if residual < 0 else max_residual,
-                                           min_frame_period)
+                self.update_noise_estimate(
+                    -max_residual if residual < 0 else max_residual, min_frame_period
+                )
 
         denom = self.var_noise + h[0] * Eh[0] + h[1] * Eh[1]
         K = [Eh[0] / denom, Eh[1] / denom]
 
-        IKh = [
-            [1.0 - K[0] * h[0], -K[0] * h[1]],
-            [-K[1] * h[0], 1.0 - K[1] * h[1]]
-        ]
+        IKh = [[1.0 - K[0] * h[0], -K[0] * h[1]], [-K[1] * h[0], 1.0 - K[1] * h[1]]]
         e00 = self.E[0][0]
         e01 = self.E[0][1]
 
@@ -398,7 +424,9 @@ class OveruseEstimator:
 
         beta = pow(1 - alpha, ts_delta * 30.0 / 1000.0)
         self.avg_noise = beta * self.avg_noise + (1 - beta) * residual
-        self.var_noise = beta * self.var_noise + (1 - beta) * (self.avg_noise - residual) ** 2
+        self.var_noise = (
+            beta * self.var_noise + (1 - beta) * (self.avg_noise - residual) ** 2
+        )
 
         if self.var_noise < 1:
             self.var_noise = 1
@@ -417,6 +445,7 @@ class RateCounter:
     """
     Rate counter, which stores the amount received in 1ms buckets.
     """
+
     def __init__(self, window_size, scale=8000):
         self._scale = scale
         self._window_size = window_size
@@ -465,8 +494,8 @@ class RemoteBitrateEstimator:
         self.incoming_bitrate = RateCounter(1000, 8000)
         self.incoming_bitrate_initialized = True
         self.inter_arrival = InterArrival(
-            (TIMESTAMP_GROUP_LENGTH_MS << INTER_ARRIVAL_SHIFT) // 1000,
-            TIMESTAMP_TO_MS)
+            (TIMESTAMP_GROUP_LENGTH_MS << INTER_ARRIVAL_SHIFT) // 1000, TIMESTAMP_TO_MS
+        )
         self.estimator = OveruseEstimator()
         self.detector = OveruseDetector()
         self.rate_control = AimdRateControl()
@@ -489,7 +518,9 @@ class RemoteBitrateEstimator:
         self.incoming_bitrate.add(payload_size, arrival_time_ms)
 
         # calculate inter-arrival deltas
-        deltas = self.inter_arrival.compute_deltas(timestamp, arrival_time_ms, payload_size)
+        deltas = self.inter_arrival.compute_deltas(
+            timestamp, arrival_time_ms, payload_size
+        )
         if deltas is not None:
             timestamp_delta_ms = deltas.timestamp * TIMESTAMP_TO_MS
             self.estimator.update(
@@ -497,16 +528,21 @@ class RemoteBitrateEstimator:
                 timestamp_delta_ms,
                 deltas.size,
                 self.detector.state(),
-                arrival_time_ms)
+                arrival_time_ms,
+            )
             self.detector.detect(
                 self.estimator.offset(),
                 timestamp_delta_ms,
                 self.estimator.num_of_deltas(),
-                arrival_time_ms)
+                arrival_time_ms,
+            )
 
         if not update_estimate:
-            if (self.last_update_ms is None or
-               (arrival_time_ms - self.last_update_ms) > self.rate_control.feedback_interval()):
+            if (
+                self.last_update_ms is None
+                or (arrival_time_ms - self.last_update_ms)
+                > self.rate_control.feedback_interval()
+            ):
                 update_estimate = True
             elif self.detector.state() == BandwidthUsage.OVERUSING:
                 update_estimate = True
@@ -515,7 +551,8 @@ class RemoteBitrateEstimator:
             target_bitrate = self.rate_control.update(
                 self.detector.state(),
                 self.incoming_bitrate.rate(arrival_time_ms),
-                arrival_time_ms)
+                arrival_time_ms,
+            )
             if target_bitrate is not None:
                 self.last_update_ms = arrival_time_ms
                 return target_bitrate, self.ssrcs.keys()

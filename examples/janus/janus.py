@@ -12,7 +12,7 @@ from aiortc.contrib.media import MediaPlayer
 
 
 def transaction_id():
-    return ''.join(random.choice(string.ascii_letters) for x in range(12))
+    return "".join(random.choice(string.ascii_letters) for x in range(12))
 
 
 class JanusPlugin:
@@ -22,17 +22,14 @@ class JanusPlugin:
         self._url = url
 
     async def send(self, payload):
-        message = {
-            'janus': 'message',
-            'transaction': transaction_id()
-        }
+        message = {"janus": "message", "transaction": transaction_id()}
         message.update(payload)
         async with self._session._http.post(self._url, json=message) as response:
             data = await response.json()
-            assert data['janus'] == 'ack'
+            assert data["janus"] == "ack"
 
         response = await self._queue.get()
-        assert response['transaction'] == message['transaction']
+        assert response["transaction"] == message["transaction"]
         return response
 
 
@@ -45,30 +42,23 @@ class JanusSession:
         self._session_url = None
 
     async def attach(self, plugin):
-        message = {
-            'janus': 'attach',
-            'plugin': plugin,
-            'transaction': transaction_id(),
-        }
+        message = {"janus": "attach", "plugin": plugin, "transaction": transaction_id()}
         async with self._http.post(self._session_url, json=message) as response:
             data = await response.json()
-            assert data['janus'] == 'success'
-            plugin_id = data['data']['id']
-            plugin = JanusPlugin(self, self._session_url + '/' + str(plugin_id))
+            assert data["janus"] == "success"
+            plugin_id = data["data"]["id"]
+            plugin = JanusPlugin(self, self._session_url + "/" + str(plugin_id))
             self._plugins[plugin_id] = plugin
             return plugin
 
     async def create(self):
         self._http = aiohttp.ClientSession()
-        message = {
-            'janus': 'create',
-            'transaction': transaction_id(),
-        }
+        message = {"janus": "create", "transaction": transaction_id()}
         async with self._http.post(self._root_url, json=message) as response:
             data = await response.json()
-            assert data['janus'] == 'success'
-            session_id = data['data']['id']
-            self._session_url = self._root_url + '/' + str(session_id)
+            assert data["janus"] == "success"
+            session_id = data["data"]["id"]
+            self._session_url = self._root_url + "/" + str(session_id)
 
         self._poll_task = asyncio.ensure_future(self._poll())
 
@@ -78,13 +68,10 @@ class JanusSession:
             self._poll_task = None
 
         if self._session_url:
-            message = {
-                'janus': 'destroy',
-                'transaction': transaction_id(),
-            }
+            message = {"janus": "destroy", "transaction": transaction_id()}
             async with self._http.post(self._session_url, json=message) as response:
                 data = await response.json()
-                assert data['janus'] == 'success'
+                assert data["janus"] == "success"
             self._session_url = None
 
         if self._http:
@@ -93,14 +80,11 @@ class JanusSession:
 
     async def _poll(self):
         while True:
-            params = {
-                'maxev': 1,
-                'rid': int(time.time() * 1000)
-            }
+            params = {"maxev": 1, "rid": int(time.time() * 1000)}
             async with self._http.get(self._session_url, params=params) as response:
                 data = await response.json()
-                if data['janus'] == 'event':
-                    plugin = self._plugins.get(data['sender'], None)
+                if data["janus"] == "event":
+                    plugin = self._plugins.get(data["sender"], None)
                     if plugin:
                         await plugin._queue.put(data)
                     else:
@@ -111,10 +95,10 @@ async def run(pc, player, room, session):
     await session.create()
 
     # configure media
-    media = {'audio': False, 'video': True}
+    media = {"audio": False, "video": True}
     if player and player.audio:
         pc.addTrack(player.audio)
-        media['audio'] = True
+        media["audio"] = True
 
     if player and player.video:
         pc.addTrack(player.video)
@@ -122,47 +106,55 @@ async def run(pc, player, room, session):
         pc.addTrack(VideoStreamTrack())
 
     # join video room
-    plugin = await session.attach('janus.plugin.videoroom')
-    await plugin.send({
-        'body': {
-            'display': 'aiortc',
-            'ptype': 'publisher',
-            'request': 'join',
-            'room': room,
+    plugin = await session.attach("janus.plugin.videoroom")
+    await plugin.send(
+        {
+            "body": {
+                "display": "aiortc",
+                "ptype": "publisher",
+                "request": "join",
+                "room": room,
+            }
         }
-    })
+    )
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
-    request = {'request': 'configure'}
+    request = {"request": "configure"}
     request.update(media)
-    response = await plugin.send({
-        'body': request,
-        'jsep': {
-            'sdp': pc.localDescription.sdp,
-            'trickle': False,
-            'type': pc.localDescription.type
+    response = await plugin.send(
+        {
+            "body": request,
+            "jsep": {
+                "sdp": pc.localDescription.sdp,
+                "trickle": False,
+                "type": pc.localDescription.type,
+            },
         }
-    })
+    )
 
     # apply answer
     answer = RTCSessionDescription(
-        sdp=response['jsep']['sdp'],
-        type=response['jsep']['type'])
+        sdp=response["jsep"]["sdp"], type=response["jsep"]["type"]
+    )
     await pc.setRemoteDescription(answer)
 
     # exchange media for 10 minutes
-    print('Exchanging media')
+    print("Exchanging media")
     await asyncio.sleep(600)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Janus')
-    parser.add_argument('url', help='Janus root URL, e.g. http://localhost:8088/janus')
-    parser.add_argument('--room', type=int, default=1234,
-                        help='The video room ID to join (default: 1234).'),
-    parser.add_argument('--play-from', help='Read the media from a file and sent it.'),
-    parser.add_argument('--verbose', '-v', action='count')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Janus")
+    parser.add_argument("url", help="Janus root URL, e.g. http://localhost:8088/janus")
+    parser.add_argument(
+        "--room",
+        type=int,
+        default=1234,
+        help="The video room ID to join (default: 1234).",
+    ),
+    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
     if args.verbose:
@@ -180,11 +172,9 @@ if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(
-            pc=pc,
-            player=player,
-            room=args.room,
-            session=session))
+        loop.run_until_complete(
+            run(pc=pc, player=player, room=args.room, session=session)
+        )
     except KeyboardInterrupt:
         pass
     finally:

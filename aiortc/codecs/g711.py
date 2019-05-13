@@ -11,7 +11,7 @@ TIME_BASE = fractions.Fraction(1, 8000)
 
 class PcmDecoder:
     def decode(self, encoded_frame):
-        frame = AudioFrame(format='s16', layout='mono', samples=SAMPLES_PER_FRAME)
+        frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
         frame.planes[0].update(self._convert(encoded_frame.data, SAMPLE_WIDTH))
         frame.pts = encoded_frame.timestamp
         frame.sample_rate = SAMPLE_RATE
@@ -24,8 +24,8 @@ class PcmEncoder:
         self.rate_state = None
 
     def encode(self, frame, force_keyframe=False):
-        assert frame.format.name == 's16'
-        assert frame.layout.name in ['mono', 'stereo']
+        assert frame.format.name == "s16"
+        assert frame.layout.name in ["mono", "stereo"]
 
         channels = len(frame.layout.channels)
         data = bytes(frame.planes[0])
@@ -39,7 +39,8 @@ class PcmEncoder:
                 channels,
                 frame.sample_rate,
                 SAMPLE_RATE,
-                self.rate_state)
+                self.rate_state,
+            )
             timestamp = (timestamp * SAMPLE_RATE) // frame.sample_rate
 
         # convert to mono

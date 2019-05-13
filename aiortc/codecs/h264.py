@@ -8,7 +8,7 @@ import av
 
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 
-logger = logging.getLogger('codec.h264')
+logger = logging.getLogger("codec.h264")
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
@@ -33,7 +33,7 @@ class H264PayloadDescriptor:
         self.first_fragment = first_fragment
 
     def __repr__(self):
-        return 'H264PayloadDescriptor(FF={})'.format(self.first_fragment)
+        return "H264PayloadDescriptor(FF={})".format(self.first_fragment)
 
     @classmethod
     def parse(cls, data):
@@ -41,8 +41,8 @@ class H264PayloadDescriptor:
 
         # NAL unit header
         if len(data) < 2:
-            raise ValueError('NAL unit is too short')
-        nal_type = data[0] & 0x1f
+            raise ValueError("NAL unit is too short")
+        nal_type = data[0] & 0x1F
         f_nri = data[0] & (0x80 | 0x60)
         pos = NAL_HEADER_SIZE
 
@@ -52,7 +52,7 @@ class H264PayloadDescriptor:
             obj = cls(first_fragment=True)
         elif nal_type == NAL_TYPE_FU_A:
             # fragmentation unit
-            original_nal_type = data[pos] & 0x1f
+            original_nal_type = data[pos] & 0x1F
             first_fragment = bool(data[pos] & 0x80)
             pos += 1
 
@@ -68,14 +68,14 @@ class H264PayloadDescriptor:
             offsets = []
             while pos < len(data):
                 if len(data) < pos + LENGTH_FIELD_SIZE:
-                    raise ValueError('STAP-A length field is truncated')
-                nulu_size = unpack_from('!H', data, pos)[0]
+                    raise ValueError("STAP-A length field is truncated")
+                nulu_size = unpack_from("!H", data, pos)[0]
                 pos += LENGTH_FIELD_SIZE
                 offsets.append(pos)
 
                 pos += nulu_size
                 if len(data) < pos:
-                    raise ValueError('STAP-A data is truncated')
+                    raise ValueError("STAP-A data is truncated")
 
             offsets.append(len(data) + LENGTH_FIELD_SIZE)
             for start, end in pairwise(offsets):
@@ -85,14 +85,14 @@ class H264PayloadDescriptor:
 
             obj = cls(first_fragment=True)
         else:
-            raise ValueError('NAL unit type %d is not supported' % nal_type)
+            raise ValueError("NAL unit type %d is not supported" % nal_type)
 
         return obj, output
 
 
 class H264Decoder:
     def __init__(self):
-        self.codec = av.CodecContext.create('h264', 'r')
+        self.codec = av.CodecContext.create("h264", "r")
 
     def decode(self, encoded_frame):
         try:
@@ -101,7 +101,7 @@ class H264Decoder:
             packet.time_base = VIDEO_TIME_BASE
             frames = self.codec.decode(packet)
         except av.AVError as e:
-            logger.warning('failed to decode, skipping package: ' + str(e))
+            logger.warning("failed to decode, skipping package: " + str(e))
             return []
 
         return frames
@@ -120,7 +120,7 @@ class H264Encoder:
         package_size = payload_size // num_packets
 
         f_nri = data[0] & (0x80 | 0x60)  # fni of original header
-        nal = data[0] & 0x1f
+        nal = data[0] & 0x1F
 
         fu_indicator = f_nri | NAL_TYPE_FU_A
 
@@ -134,10 +134,10 @@ class H264Encoder:
         while offset < len(data):
             if num_larger_packets > 0:
                 num_larger_packets -= 1
-                payload = data[offset:offset+package_size+1]
-                offset += package_size+1
+                payload = data[offset : offset + package_size + 1]
+                offset += package_size + 1
             else:
-                payload = data[offset:offset+package_size]
+                payload = data[offset : offset + package_size]
                 offset += package_size
 
             if offset == len(data):
@@ -146,7 +146,7 @@ class H264Encoder:
             packages.append(fu_header + payload)
 
             fu_header = fu_header_middle
-        assert offset == len(data), 'incorrect fragment data'
+        assert offset == len(data), "incorrect fragment data"
 
         return packages
 
@@ -155,7 +155,7 @@ class H264Encoder:
         counter = 0
         available_size = PACKET_MAX - STAP_A_HEADER_SIZE
 
-        stap_header = NAL_TYPE_STAP_A | (data[0] & 0xe0)
+        stap_header = NAL_TYPE_STAP_A | (data[0] & 0xE0)
 
         payload = bytes()
         try:
@@ -165,11 +165,11 @@ class H264Encoder:
 
                 nri = nalu[0] & 0x60
                 if stap_header & 0x60 < nri:
-                    stap_header = (stap_header & 0x9f | nri)
+                    stap_header = stap_header & 0x9F | nri
 
                 available_size -= LENGTH_FIELD_SIZE + len(nalu)
                 counter += 1
-                payload += pack('!H', len(nalu)) + nalu
+                payload += pack("!H", len(nalu)) + nalu
                 nalu = next(packages_iterator)
 
             if counter == 0:
@@ -188,21 +188,23 @@ class H264Encoder:
         # translate from: https://github.com/aizvorski/h264bitstream/blob/master/h264_nal.c#L134
         i = 0
         while True:
-            while ((buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0x01)
-                    and (buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0 or buf[i+3] != 0x01)):
+            while (buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01) and (
+                buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0 or buf[i + 3] != 0x01
+            ):
                 i += 1  # skip leading zero
-                if i+4 >= len(buf):
+                if i + 4 >= len(buf):
                     return
-            if buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0x01:
+            if buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01:
                 i += 1
             i += 3
             nal_start = i
-            while ((buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0)
-                    and (buf[i] != 0 or buf[i+1] != 0 or buf[i+2] != 0x01)):
+            while (buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0) and (
+                buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01
+            ):
                 i += 1
                 # FIXME: the next line fails when reading a nal that ends
                 # exactly at the end of the data
-                if i+3 >= len(buf):
+                if i + 3 >= len(buf):
                     nal_end = len(buf)
                     yield buf[nal_start:nal_end]
                     return  # did not find nal end, stream ended first
@@ -226,23 +228,25 @@ class H264Encoder:
         return packetized_packages
 
     def _encode_frame(self, frame, force_keyframe):
-        if self.codec and (frame.width != self.codec.width or frame.height != self.codec.height):
+        if self.codec and (
+            frame.width != self.codec.width or frame.height != self.codec.height
+        ):
             self.codec = None
 
         if self.codec is None:
-            self.codec = av.CodecContext.create('libx264', 'w')
+            self.codec = av.CodecContext.create("libx264", "w")
             self.codec.width = frame.width
             self.codec.height = frame.height
-            self.codec.pix_fmt = 'yuv420p'
+            self.codec.pix_fmt = "yuv420p"
             self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
             self.codec.options = {
-                'profile': 'baseline',
-                'level': '31',
-                'tune': 'zerolatency'
+                "profile": "baseline",
+                "level": "31",
+                "tune": "zerolatency",
             }
 
         packages = self.codec.encode(frame)
-        yield from self._split_bitstream(b''.join(p.to_bytes() for p in packages))
+        yield from self._split_bitstream(b"".join(p.to_bytes() for p in packages))
 
     def encode(self, frame, force_keyframe=False):
         packages = self._encode_frame(frame, force_keyframe)

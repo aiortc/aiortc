@@ -1,22 +1,33 @@
 from unittest import TestCase
 
 from aiortc import rtp
-from aiortc.rtcrtpparameters import (RTCRtpHeaderExtensionParameters,
-                                     RTCRtpParameters)
-from aiortc.rtp import (RtcpByePacket, RtcpPacket, RtcpPsfbPacket,
-                        RtcpRrPacket, RtcpRtpfbPacket, RtcpSdesPacket,
-                        RtcpSrPacket, RtpPacket, clamp_packets_lost,
-                        pack_header_extensions, pack_packets_lost,
-                        pack_remb_fci, unpack_header_extensions,
-                        unpack_packets_lost, unpack_remb_fci, unwrap_rtx,
-                        wrap_rtx)
+from aiortc.rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
+from aiortc.rtp import (
+    RtcpByePacket,
+    RtcpPacket,
+    RtcpPsfbPacket,
+    RtcpRrPacket,
+    RtcpRtpfbPacket,
+    RtcpSdesPacket,
+    RtcpSrPacket,
+    RtpPacket,
+    clamp_packets_lost,
+    pack_header_extensions,
+    pack_packets_lost,
+    pack_remb_fci,
+    unpack_header_extensions,
+    unpack_packets_lost,
+    unpack_remb_fci,
+    unwrap_rtx,
+    wrap_rtx,
+)
 
 from .utils import load
 
 
 class RtcpPacketTest(TestCase):
     def test_bye(self):
-        data = load('rtcp_bye.bin')
+        data = load("rtcp_bye.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -25,17 +36,17 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.sources, [2924645187])
         self.assertEqual(bytes(packet), data)
 
-        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[2924645187])')
+        self.assertEqual(repr(packet), "RtcpByePacket(sources=[2924645187])")
 
     def test_bye_invalid(self):
-        data = load('rtcp_bye_invalid.bin')
+        data = load("rtcp_bye_invalid.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP bye length is invalid')
+        self.assertEqual(str(cm.exception), "RTCP bye length is invalid")
 
     def test_bye_no_sources(self):
-        data = load('rtcp_bye_no_sources.bin')
+        data = load("rtcp_bye_no_sources.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -44,36 +55,38 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.sources, [])
         self.assertEqual(bytes(packet), data)
 
-        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[])')
+        self.assertEqual(repr(packet), "RtcpByePacket(sources=[])")
 
     def test_bye_only_padding(self):
-        data = load('rtcp_bye_padding.bin')
+        data = load("rtcp_bye_padding.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
         self.assertTrue(isinstance(packet, RtcpByePacket))
         self.assertEqual(packet.sources, [])
-        self.assertEqual(bytes(packet), b'\x80\xcb\x00\x00')
+        self.assertEqual(bytes(packet), b"\x80\xcb\x00\x00")
 
-        self.assertEqual(repr(packet), 'RtcpByePacket(sources=[])')
+        self.assertEqual(repr(packet), "RtcpByePacket(sources=[])")
 
     def test_bye_only_padding_zero(self):
-        data = load('rtcp_bye_padding.bin')[0:4] + b'\x00\x00\x00\x00'
+        data = load("rtcp_bye_padding.bin")[0:4] + b"\x00\x00\x00\x00"
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP packet padding length is invalid')
+        self.assertEqual(str(cm.exception), "RTCP packet padding length is invalid")
 
     def test_psfb_invalid(self):
-        data = load('rtcp_psfb_invalid.bin')
+        data = load("rtcp_psfb_invalid.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP payload-specific feedback length is invalid')
+        self.assertEqual(
+            str(cm.exception), "RTCP payload-specific feedback length is invalid"
+        )
 
     def test_psfb_pli(self):
-        data = load('rtcp_psfb_pli.bin')
+        data = load("rtcp_psfb_pli.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -82,11 +95,11 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.fmt, 1)
         self.assertEqual(packet.ssrc, 1414554213)
         self.assertEqual(packet.media_ssrc, 587284409)
-        self.assertEqual(packet.fci, b'')
+        self.assertEqual(packet.fci, b"")
         self.assertEqual(bytes(packet), data)
 
     def test_rr(self):
-        data = load('rtcp_rr.bin')
+        data = load("rtcp_rr.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -103,54 +116,56 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(bytes(packet), data)
 
     def test_rr_invalid(self):
-        data = load('rtcp_rr_invalid.bin')
+        data = load("rtcp_rr_invalid.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP receiver report length is invalid')
+        self.assertEqual(str(cm.exception), "RTCP receiver report length is invalid")
 
     def test_rr_truncated(self):
-        data = load('rtcp_rr.bin')
+        data = load("rtcp_rr.bin")
 
         for length in range(1, 4):
             with self.assertRaises(ValueError) as cm:
                 RtcpPacket.parse(data[0:length])
-            self.assertEqual(str(cm.exception), 'RTCP packet length is less than 4 bytes')
+            self.assertEqual(
+                str(cm.exception), "RTCP packet length is less than 4 bytes"
+            )
 
         for length in range(4, 32):
             with self.assertRaises(ValueError) as cm:
                 RtcpPacket.parse(data[0:length])
-            self.assertEqual(str(cm.exception), 'RTCP packet is truncated')
+            self.assertEqual(str(cm.exception), "RTCP packet is truncated")
 
     def test_sdes(self):
-        data = load('rtcp_sdes.bin')
+        data = load("rtcp_sdes.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
         self.assertTrue(isinstance(packet, RtcpSdesPacket))
         self.assertEqual(packet.chunks[0].ssrc, 1831097322)
-        self.assertEqual(packet.chunks[0].items, [
-            (1, b'{63f459ea-41fe-4474-9d33-9707c9ee79d1}'),
-        ])
+        self.assertEqual(
+            packet.chunks[0].items, [(1, b"{63f459ea-41fe-4474-9d33-9707c9ee79d1}")]
+        )
         self.assertEqual(bytes(packet), data)
 
     def test_sdes_item_truncated(self):
-        data = load('rtcp_sdes_item_truncated.bin')
+        data = load("rtcp_sdes_item_truncated.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP SDES item is truncated')
+        self.assertEqual(str(cm.exception), "RTCP SDES item is truncated")
 
     def test_sdes_source_truncated(self):
-        data = load('rtcp_sdes_source_truncated.bin')
+        data = load("rtcp_sdes_source_truncated.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP SDES source is truncated')
+        self.assertEqual(str(cm.exception), "RTCP SDES source is truncated")
 
     def test_sr(self):
-        data = load('rtcp_sr.bin')
+        data = load("rtcp_sr.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -172,14 +187,14 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(bytes(packet), data)
 
     def test_sr_invalid(self):
-        data = load('rtcp_sr_invalid.bin')
+        data = load("rtcp_sr_invalid.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP sender report length is invalid')
+        self.assertEqual(str(cm.exception), "RTCP sender report length is invalid")
 
     def test_rtpfb(self):
-        data = load('rtcp_rtpfb.bin')
+        data = load("rtcp_rtpfb.bin")
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 1)
 
@@ -188,19 +203,21 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(packet.fmt, 1)
         self.assertEqual(packet.ssrc, 2336520123)
         self.assertEqual(packet.media_ssrc, 4145934052)
-        self.assertEqual(packet.lost,
-                         [12, 32, 39, 54, 76, 110, 123, 142, 183, 187, 223, 236, 271, 292])
+        self.assertEqual(
+            packet.lost,
+            [12, 32, 39, 54, 76, 110, 123, 142, 183, 187, 223, 236, 271, 292],
+        )
         self.assertEqual(bytes(packet), data)
 
     def test_rtpfb_invalid(self):
-        data = load('rtcp_rtpfb_invalid.bin')
+        data = load("rtcp_rtpfb_invalid.bin")
 
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP RTP feedback length is invalid')
+        self.assertEqual(str(cm.exception), "RTCP RTP feedback length is invalid")
 
     def test_compound(self):
-        data = load('rtcp_sr.bin') + load('rtcp_sdes.bin')
+        data = load("rtcp_sr.bin") + load("rtcp_sdes.bin")
 
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 2)
@@ -208,15 +225,15 @@ class RtcpPacketTest(TestCase):
         self.assertTrue(isinstance(packets[1], RtcpSdesPacket))
 
     def test_bad_version(self):
-        data = b'\xc0' + load('rtcp_rr.bin')[1:]
+        data = b"\xc0" + load("rtcp_rr.bin")[1:]
         with self.assertRaises(ValueError) as cm:
             RtcpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTCP packet has invalid version')
+        self.assertEqual(str(cm.exception), "RTCP packet has invalid version")
 
 
 class RtpPacketTest(TestCase):
     def test_dtmf(self):
-        data = load('rtp_dtmf.bin')
+        data = load("rtp_dtmf.bin")
         packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 1)
@@ -229,7 +246,7 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.serialize(), data)
 
     def test_no_ssrc(self):
-        data = load('rtp.bin')
+        data = load("rtp.bin")
         packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 0)
@@ -241,11 +258,13 @@ class RtpPacketTest(TestCase):
         self.assertEqual(len(packet.payload), 160)
         self.assertEqual(packet.serialize(), data)
 
-        self.assertEqual(repr(packet),
-                         'RtpPacket(seq=15743, ts=3937035252, marker=0, payload=0, 160 bytes)')
+        self.assertEqual(
+            repr(packet),
+            "RtpPacket(seq=15743, ts=3937035252, marker=0, payload=0, 160 bytes)",
+        )
 
     def test_padding_only(self):
-        data = load('rtp_only_padding.bin')
+        data = load("rtp_only_padding.bin")
         packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 0)
@@ -264,14 +283,18 @@ class RtpPacketTest(TestCase):
 
     def test_padding_only_with_header_extensions(self):
         extensions_map = rtp.HeaderExtensionsMap()
-        extensions_map.configure(RTCRtpParameters(
-            headerExtensions=[
-                RTCRtpHeaderExtensionParameters(
-                    id=2,
-                    uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
-            ]))
+        extensions_map.configure(
+            RTCRtpParameters(
+                headerExtensions=[
+                    RTCRtpHeaderExtensionParameters(
+                        id=2,
+                        uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                    )
+                ]
+            )
+        )
 
-        data = load('rtp_only_padding_with_header_extensions.bin')
+        data = load("rtp_only_padding_with_header_extensions.bin")
         packet = RtpPacket.parse(data, extensions_map)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 0)
@@ -279,7 +302,9 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 22138)
         self.assertEqual(packet.timestamp, 3171065731)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extensions, rtp.HeaderExtensions(abs_send_time=15846540))
+        self.assertEqual(
+            packet.extensions, rtp.HeaderExtensions(abs_send_time=15846540)
+        )
         self.assertEqual(len(packet.payload), 0)
         self.assertEqual(packet.padding_size, 224)
 
@@ -289,19 +314,19 @@ class RtpPacketTest(TestCase):
         self.assertEqual(serialized[-1], data[-1])
 
     def test_padding_too_long(self):
-        data = load('rtp_only_padding.bin')[0:12] + b'\x02'
+        data = load("rtp_only_padding.bin")[0:12] + b"\x02"
         with self.assertRaises(ValueError) as cm:
             RtpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTP packet padding length is invalid')
+        self.assertEqual(str(cm.exception), "RTP packet padding length is invalid")
 
     def test_padding_zero(self):
-        data = load('rtp_only_padding.bin')[0:12] + b'\x00'
+        data = load("rtp_only_padding.bin")[0:12] + b"\x00"
         with self.assertRaises(ValueError) as cm:
             RtpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTP packet padding length is invalid')
+        self.assertEqual(str(cm.exception), "RTP packet padding length is invalid")
 
     def test_with_csrc(self):
-        data = load('rtp_with_csrc.bin')
+        data = load("rtp_with_csrc.bin")
         packet = RtpPacket.parse(data)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 0)
@@ -314,22 +339,25 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.serialize(), data)
 
     def test_with_csrc_truncated(self):
-        data = load('rtp_with_csrc.bin')
+        data = load("rtp_with_csrc.bin")
         for length in range(12, 20):
             with self.assertRaises(ValueError) as cm:
                 RtpPacket.parse(data[0:length])
-            self.assertEqual(str(cm.exception), 'RTP packet has truncated CSRC')
+            self.assertEqual(str(cm.exception), "RTP packet has truncated CSRC")
 
     def test_with_sdes_mid(self):
         extensions_map = rtp.HeaderExtensionsMap()
-        extensions_map.configure(RTCRtpParameters(
-            headerExtensions=[
-                RTCRtpHeaderExtensionParameters(
-                    id=9,
-                    uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-            ]))
+        extensions_map.configure(
+            RTCRtpParameters(
+                headerExtensions=[
+                    RTCRtpHeaderExtensionParameters(
+                        id=9, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                    )
+                ]
+            )
+        )
 
-        data = load('rtp_with_sdes_mid.bin')
+        data = load("rtp_with_sdes_mid.bin")
         packet = RtpPacket.parse(data, extensions_map)
         self.assertEqual(packet.version, 2)
         self.assertEqual(packet.marker, 1)
@@ -337,35 +365,38 @@ class RtpPacketTest(TestCase):
         self.assertEqual(packet.sequence_number, 14156)
         self.assertEqual(packet.timestamp, 1327210925)
         self.assertEqual(packet.csrc, [])
-        self.assertEqual(packet.extensions, rtp.HeaderExtensions(mid='0'))
+        self.assertEqual(packet.extensions, rtp.HeaderExtensions(mid="0"))
         self.assertEqual(len(packet.payload), 54)
         self.assertEqual(packet.serialize(extensions_map), data)
 
     def test_with_sdes_mid_truncated(self):
-        data = load('rtp_with_sdes_mid.bin')
+        data = load("rtp_with_sdes_mid.bin")
 
         for length in range(12, 16):
             with self.assertRaises(ValueError) as cm:
                 RtpPacket.parse(data[0:length])
-            self.assertEqual(str(cm.exception),
-                             'RTP packet has truncated extension profile / length')
+            self.assertEqual(
+                str(cm.exception), "RTP packet has truncated extension profile / length"
+            )
 
         for length in range(16, 20):
             with self.assertRaises(ValueError) as cm:
                 RtpPacket.parse(data[0:length])
-            self.assertEqual(str(cm.exception), 'RTP packet has truncated extension value')
+            self.assertEqual(
+                str(cm.exception), "RTP packet has truncated extension value"
+            )
 
     def test_truncated(self):
-        data = load('rtp.bin')[0:11]
+        data = load("rtp.bin")[0:11]
         with self.assertRaises(ValueError) as cm:
             RtpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTP packet length is less than 12 bytes')
+        self.assertEqual(str(cm.exception), "RTP packet length is less than 12 bytes")
 
     def test_bad_version(self):
-        data = b'\xc0' + load('rtp.bin')[1:]
+        data = b"\xc0" + load("rtp.bin")[1:]
         with self.assertRaises(ValueError) as cm:
             RtpPacket.parse(data)
-        self.assertEqual(str(cm.exception), 'RTP packet has invalid version')
+        self.assertEqual(str(cm.exception), "RTP packet has invalid version")
 
 
 class RtpUtilTest(TestCase):
@@ -377,67 +408,67 @@ class RtpUtilTest(TestCase):
         self.assertEqual(clamp_packets_lost(8388608), 8388607)
 
     def test_pack_packets_lost(self):
-        self.assertEqual(pack_packets_lost(-8388608), b'\x80\x00\x00')
-        self.assertEqual(pack_packets_lost(-1), b'\xff\xff\xff')
-        self.assertEqual(pack_packets_lost(0), b'\x00\x00\x00')
-        self.assertEqual(pack_packets_lost(1), b'\x00\x00\x01')
-        self.assertEqual(pack_packets_lost(8388607), b'\x7f\xff\xff')
+        self.assertEqual(pack_packets_lost(-8388608), b"\x80\x00\x00")
+        self.assertEqual(pack_packets_lost(-1), b"\xff\xff\xff")
+        self.assertEqual(pack_packets_lost(0), b"\x00\x00\x00")
+        self.assertEqual(pack_packets_lost(1), b"\x00\x00\x01")
+        self.assertEqual(pack_packets_lost(8388607), b"\x7f\xff\xff")
 
     def test_pack_remb_fci(self):
         # exponent = 0, mantissa = 0
         data = pack_remb_fci(0, [2529072847])
-        self.assertEqual(data, b'REMB\x01\x00\x00\x00\x96\xbe\x96\xcf')
+        self.assertEqual(data, b"REMB\x01\x00\x00\x00\x96\xbe\x96\xcf")
 
         # exponent = 0, mantissa = 0x3ffff
-        data = pack_remb_fci(0x3ffff, [2529072847])
-        self.assertEqual(data, b'REMB\x01\x03\xff\xff\x96\xbe\x96\xcf')
+        data = pack_remb_fci(0x3FFFF, [2529072847])
+        self.assertEqual(data, b"REMB\x01\x03\xff\xff\x96\xbe\x96\xcf")
 
         # exponent = 1, mantissa = 0
         data = pack_remb_fci(0x40000, [2529072847])
-        self.assertEqual(data, b'REMB\x01\x06\x00\x00\x96\xbe\x96\xcf')
+        self.assertEqual(data, b"REMB\x01\x06\x00\x00\x96\xbe\x96\xcf")
 
         data = pack_remb_fci(4160000, [2529072847])
-        self.assertEqual(data, b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
+        self.assertEqual(data, b"REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf")
 
         # exponent = 63, mantissa = 0x3ffff
-        data = pack_remb_fci(0x3ffff << 63, [2529072847])
-        self.assertEqual(data, b'REMB\x01\xff\xff\xff\x96\xbe\x96\xcf')
+        data = pack_remb_fci(0x3FFFF << 63, [2529072847])
+        self.assertEqual(data, b"REMB\x01\xff\xff\xff\x96\xbe\x96\xcf")
 
     def test_unpack_packets_lost(self):
-        self.assertEqual(unpack_packets_lost(b'\x80\x00\x00'), -8388608)
-        self.assertEqual(unpack_packets_lost(b'\xff\xff\xff'), -1)
-        self.assertEqual(unpack_packets_lost(b'\x00\x00\x00'), 0)
-        self.assertEqual(unpack_packets_lost(b'\x00\x00\x01'), 1)
-        self.assertEqual(unpack_packets_lost(b'\x7f\xff\xff'), 8388607)
+        self.assertEqual(unpack_packets_lost(b"\x80\x00\x00"), -8388608)
+        self.assertEqual(unpack_packets_lost(b"\xff\xff\xff"), -1)
+        self.assertEqual(unpack_packets_lost(b"\x00\x00\x00"), 0)
+        self.assertEqual(unpack_packets_lost(b"\x00\x00\x01"), 1)
+        self.assertEqual(unpack_packets_lost(b"\x7f\xff\xff"), 8388607)
 
     def test_unpack_remb_fci(self):
         # junk
         with self.assertRaises(ValueError):
-            unpack_remb_fci(b'JUNK')
+            unpack_remb_fci(b"JUNK")
 
         # exponent = 0, mantissa = 0
-        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x00\x00\x00\x96\xbe\x96\xcf')
+        bitrate, ssrcs = unpack_remb_fci(b"REMB\x01\x00\x00\x00\x96\xbe\x96\xcf")
         self.assertEqual(bitrate, 0)
         self.assertEqual(ssrcs, [2529072847])
 
         # exponent = 0, mantissa = 0x3ffff
-        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x03\xff\xff\x96\xbe\x96\xcf')
-        self.assertEqual(bitrate, 0x3ffff)
+        bitrate, ssrcs = unpack_remb_fci(b"REMB\x01\x03\xff\xff\x96\xbe\x96\xcf")
+        self.assertEqual(bitrate, 0x3FFFF)
         self.assertEqual(ssrcs, [2529072847])
 
         # exponent = 1, mantissa = 0
-        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x06\x00\x00\x96\xbe\x96\xcf')
+        bitrate, ssrcs = unpack_remb_fci(b"REMB\x01\x06\x00\x00\x96\xbe\x96\xcf")
         self.assertEqual(bitrate, 0x40000)
         self.assertEqual(ssrcs, [2529072847])
 
         # 4160000 bps
-        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf')
+        bitrate, ssrcs = unpack_remb_fci(b"REMB\x01\x13\xf7\xa0\x96\xbe\x96\xcf")
         self.assertEqual(bitrate, 4160000)
         self.assertEqual(ssrcs, [2529072847])
 
         # exponent = 63, mantissa = 0x3ffff
-        bitrate, ssrcs = unpack_remb_fci(b'REMB\x01\xff\xff\xff\x96\xbe\x96\xcf')
-        self.assertEqual(bitrate, 0x3ffff << 63)
+        bitrate, ssrcs = unpack_remb_fci(b"REMB\x01\xff\xff\xff\x96\xbe\x96\xcf")
+        self.assertEqual(bitrate, 0x3FFFF << 63)
         self.assertEqual(ssrcs, [2529072847])
 
     def test_unpack_header_extensions(self):
@@ -445,107 +476,152 @@ class RtpUtilTest(TestCase):
         self.assertEqual(unpack_header_extensions(0, None), [])
 
         # one-byte, value
-        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900'), [
-            (9, b'0'),
-        ])
+        self.assertEqual(unpack_header_extensions(0xBEDE, b"\x900"), [(9, b"0")])
 
         # one-byte, value, padding, value
-        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x900\x00\x00\x301'), [
-            (9, b'0'),
-            (3, b'1'),
-        ])
+        self.assertEqual(
+            unpack_header_extensions(0xBEDE, b"\x900\x00\x00\x301"),
+            [(9, b"0"), (3, b"1")],
+        )
 
         # one-byte, value, value
-        self.assertEqual(unpack_header_extensions(0xBEDE, b'\x10\xc18sdparta_0'), [
-            (1, b'\xc1'),
-            (3, b'sdparta_0'),
-        ])
+        self.assertEqual(
+            unpack_header_extensions(0xBEDE, b"\x10\xc18sdparta_0"),
+            [(1, b"\xc1"), (3, b"sdparta_0")],
+        )
 
         # two-byte, value
-        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010'), [
-            (255, b'0'),
-        ])
+        self.assertEqual(unpack_header_extensions(0x1000, b"\xff\x010"), [(255, b"0")])
 
         # two-byte, value (1 byte), padding, value (2 bytes)
-        self.assertEqual(unpack_header_extensions(0x1000, b'\xff\x010\x00\xf0\x0212'), [
-            (255, b'0'),
-            (240, b'12'),
-        ])
+        self.assertEqual(
+            unpack_header_extensions(0x1000, b"\xff\x010\x00\xf0\x0212"),
+            [(255, b"0"), (240, b"12")],
+        )
 
     def test_unpack_header_extensions_bad(self):
         # one-byte, value (truncated)
         with self.assertRaises(ValueError) as cm:
-            unpack_header_extensions(0xBEDE, b'\x90')
-        self.assertEqual(str(cm.exception), 'RTP one-byte header extension value is truncated')
+            unpack_header_extensions(0xBEDE, b"\x90")
+        self.assertEqual(
+            str(cm.exception), "RTP one-byte header extension value is truncated"
+        )
 
         # two-byte (truncated)
         with self.assertRaises(ValueError) as cm:
-            unpack_header_extensions(0x1000, b'\xff')
-        self.assertEqual(str(cm.exception), 'RTP two-byte header extension is truncated')
+            unpack_header_extensions(0x1000, b"\xff")
+        self.assertEqual(
+            str(cm.exception), "RTP two-byte header extension is truncated"
+        )
 
         # two-byte, value (truncated)
         with self.assertRaises(ValueError) as cm:
-            unpack_header_extensions(0x1000, b'\xff\x020')
-        self.assertEqual(str(cm.exception), 'RTP two-byte header extension value is truncated')
+            unpack_header_extensions(0x1000, b"\xff\x020")
+        self.assertEqual(
+            str(cm.exception), "RTP two-byte header extension value is truncated"
+        )
 
     def test_pack_header_extensions(self):
         # none
-        self.assertEqual(pack_header_extensions([]), (0, b''))
+        self.assertEqual(pack_header_extensions([]), (0, b""))
 
         # one-byte, single value
-        self.assertEqual(pack_header_extensions([
-            (9, b'0'),
-        ]), (0xBEDE, b'\x900\x00\x00'))
+        self.assertEqual(
+            pack_header_extensions([(9, b"0")]), (0xBEDE, b"\x900\x00\x00")
+        )
 
         # one-byte, two values
-        self.assertEqual(pack_header_extensions([
-            (1, b'\xc1'),
-            (3, b'sdparta_0'),
-        ]), (0xBEDE, b'\x10\xc18sdparta_0'))
+        self.assertEqual(
+            pack_header_extensions([(1, b"\xc1"), (3, b"sdparta_0")]),
+            (0xBEDE, b"\x10\xc18sdparta_0"),
+        )
 
         # two-byte, single value
-        self.assertEqual(pack_header_extensions([
-            (255, b'0'),
-        ]), (0x1000, b'\xff\x010\x00'))
+        self.assertEqual(
+            pack_header_extensions([(255, b"0")]), (0x1000, b"\xff\x010\x00")
+        )
 
     def test_map_header_extensions(self):
-        data = bytearray([
-            0x90, 0x64, 0x00, 0x58,
-            0x65, 0x43, 0x12, 0x78,
-            0x12, 0x34, 0x56, 0x78,  # SSRC
-            0xbe, 0xde, 0x00, 0x08,  # Extension of size 8x32bit words.
-            0x40, 0xda,              # AudioLevel.
-            0x22, 0x01, 0x56, 0xce,  # TransmissionOffset.
-            0x62, 0x12, 0x34, 0x56,  # AbsoluteSendTime.
-            0x81, 0xce, 0xab,        # TransportSequenceNumber.
-            0xa0, 0x03,              # VideoRotation.
-            0xb2, 0x12, 0x48, 0x76,  # PlayoutDelayLimits.
-            0xc2, 0x72, 0x74, 0x78,  # RtpStreamId
-            0xd5, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d,  # RepairedRtpStreamId
-            0x00, 0x00,              # Padding to 32bit boundary.
-        ])
+        data = bytearray(
+            [
+                0x90,
+                0x64,
+                0x00,
+                0x58,
+                0x65,
+                0x43,
+                0x12,
+                0x78,
+                0x12,
+                0x34,
+                0x56,
+                0x78,  # SSRC
+                0xBE,
+                0xDE,
+                0x00,
+                0x08,  # Extension of size 8x32bit words.
+                0x40,
+                0xDA,  # AudioLevel.
+                0x22,
+                0x01,
+                0x56,
+                0xCE,  # TransmissionOffset.
+                0x62,
+                0x12,
+                0x34,
+                0x56,  # AbsoluteSendTime.
+                0x81,
+                0xCE,
+                0xAB,  # TransportSequenceNumber.
+                0xA0,
+                0x03,  # VideoRotation.
+                0xB2,
+                0x12,
+                0x48,
+                0x76,  # PlayoutDelayLimits.
+                0xC2,
+                0x72,
+                0x74,
+                0x78,  # RtpStreamId
+                0xD5,
+                0x73,
+                0x74,
+                0x72,
+                0x65,
+                0x61,
+                0x6D,  # RepairedRtpStreamId
+                0x00,
+                0x00,  # Padding to 32bit boundary.
+            ]
+        )
         extensions_map = rtp.HeaderExtensionsMap()
-        extensions_map.configure(RTCRtpParameters(
-            headerExtensions=[
-                RTCRtpHeaderExtensionParameters(
-                    id=2,
-                    uri='urn:ietf:params:rtp-hdrext:toffset'),
-                RTCRtpHeaderExtensionParameters(
-                    id=4,
-                    uri='urn:ietf:params:rtp-hdrext:ssrc-audio-level'),
-                RTCRtpHeaderExtensionParameters(
-                    id=6,
-                    uri='http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'),
-                RTCRtpHeaderExtensionParameters(
-                    id=8,
-                    uri='http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01'),  # noqa
-                RTCRtpHeaderExtensionParameters(
-                    id=12,
-                    uri='urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'),
-                RTCRtpHeaderExtensionParameters(
-                    id=13,
-                    uri='urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id'),
-            ]))
+        extensions_map.configure(
+            RTCRtpParameters(
+                headerExtensions=[
+                    RTCRtpHeaderExtensionParameters(
+                        id=2, uri="urn:ietf:params:rtp-hdrext:toffset"
+                    ),
+                    RTCRtpHeaderExtensionParameters(
+                        id=4, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                    ),
+                    RTCRtpHeaderExtensionParameters(
+                        id=6,
+                        uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                    ),
+                    RTCRtpHeaderExtensionParameters(
+                        id=8,
+                        uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+                    ),
+                    RTCRtpHeaderExtensionParameters(
+                        id=12, uri="urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id"
+                    ),
+                    RTCRtpHeaderExtensionParameters(
+                        id=13,
+                        uri="urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id",
+                    ),
+                ]
+            )
+        )
 
         packet = RtpPacket.parse(data, extensions_map)
 
@@ -553,24 +629,27 @@ class RtpUtilTest(TestCase):
         self.assertEqual(packet.extensions.abs_send_time, 0x123456)
         self.assertEqual(packet.extensions.audio_level, (True, 90))
         self.assertEqual(packet.extensions.mid, None)
-        self.assertEqual(packet.extensions.repaired_rtp_stream_id, 'stream')
-        self.assertEqual(packet.extensions.rtp_stream_id, 'rtx')
-        self.assertEqual(packet.extensions.transmission_offset, 0x156ce)
-        self.assertEqual(packet.extensions.transport_sequence_number, 0xceab)
+        self.assertEqual(packet.extensions.repaired_rtp_stream_id, "stream")
+        self.assertEqual(packet.extensions.rtp_stream_id, "rtx")
+        self.assertEqual(packet.extensions.transmission_offset, 0x156CE)
+        self.assertEqual(packet.extensions.transport_sequence_number, 0xCEAB)
 
         # TODO: check
         packet.serialize(extensions_map)
 
     def test_rtx(self):
         extensions_map = rtp.HeaderExtensionsMap()
-        extensions_map.configure(RTCRtpParameters(
-            headerExtensions=[
-                RTCRtpHeaderExtensionParameters(
-                    id=9,
-                    uri='urn:ietf:params:rtp-hdrext:sdes:mid'),
-            ]))
+        extensions_map.configure(
+            RTCRtpParameters(
+                headerExtensions=[
+                    RTCRtpHeaderExtensionParameters(
+                        id=9, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                    )
+                ]
+            )
+        )
 
-        data = load('rtp_with_sdes_mid.bin')
+        data = load("rtp_with_sdes_mid.bin")
         packet = RtpPacket.parse(data, extensions_map)
 
         # wrap / unwrap RTX

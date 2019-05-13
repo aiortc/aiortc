@@ -3,7 +3,7 @@ import logging
 from aiortc.codecs import get_capabilities
 from aiortc.sdp import DIRECTIONS
 
-logger = logging.getLogger('rtp')
+logger = logging.getLogger("rtp")
 
 
 class RTCRtpTransceiver:
@@ -13,7 +13,7 @@ class RTCRtpTransceiver:
     shared state.
     """
 
-    def __init__(self, kind, receiver, sender, direction='sendrecv'):
+    def __init__(self, kind, receiver, sender, direction="sendrecv"):
         self.__direction = direction
         self.__kind = kind
         self.__mid = None
@@ -95,7 +95,7 @@ class RTCRtpTransceiver:
         unique = []
         for codec in reversed(codecs):
             if codec not in capabilities:
-                raise ValueError('Codec is not in capabilities')
+                raise ValueError("Codec is not in capabilities")
             if codec not in unique:
                 unique.insert(0, codec)
         self._preferred_codecs = unique

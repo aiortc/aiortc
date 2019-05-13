@@ -3,9 +3,12 @@ import asyncio
 from unittest import TestCase
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
-from aiortc.contrib.signaling import (add_signaling_arguments,
-                                      create_signaling, object_from_string,
-                                      object_to_string)
+from aiortc.contrib.signaling import (
+    add_signaling_arguments,
+    create_signaling,
+    object_from_string,
+    object_to_string,
+)
 
 from .utils import run
 
@@ -15,37 +18,37 @@ async def delay(coro):
     return await coro()
 
 
-offer = RTCSessionDescription(sdp='some-offer', type='offer')
-answer = RTCSessionDescription(sdp='some-answer', type='answer')
+offer = RTCSessionDescription(sdp="some-offer", type="offer")
+answer = RTCSessionDescription(sdp="some-answer", type="answer")
 
 
 class SignalingTest(TestCase):
     def setUp(self):
-        def mock_print(v=''):
+        def mock_print(v=""):
             pass
 
         # hijack print()
-        self.original_print = __builtins__['print']
-        __builtins__['print'] = mock_print
+        self.original_print = __builtins__["print"]
+        __builtins__["print"] = mock_print
 
     def tearDown(self):
         # restore print()
-        __builtins__['print'] = self.original_print
+        __builtins__["print"] = self.original_print
 
     def test_apprtc(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'apprtc'])
+        args = parser.parse_args(["-s", "apprtc"])
 
         # connect
         sig_server = create_signaling(args)
         server_params = run(sig_server.connect())
-        self.assertTrue(server_params['is_initiator'])
+        self.assertTrue(server_params["is_initiator"])
 
-        args.signaling_room = server_params['room_id']
+        args.signaling_room = server_params["room_id"]
         sig_client = create_signaling(args)
         client_params = run(sig_client.connect())
-        self.assertTrue(client_params['is_initiator'])
+        self.assertTrue(client_params["is_initiator"])
 
         # exchange signaling
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
@@ -60,20 +63,20 @@ class SignalingTest(TestCase):
     def test_apprtc_with_buffered_message(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'apprtc'])
+        args = parser.parse_args(["-s", "apprtc"])
 
         # connect first party and send offer
         sig_server = create_signaling(args)
         server_params = run(sig_server.connect())
-        self.assertTrue(server_params['is_initiator'])
+        self.assertTrue(server_params["is_initiator"])
 
         res = run(sig_server.send(offer))
 
         # connect second party and receive offer
-        args.signaling_room = server_params['room_id']
+        args.signaling_room = server_params["room_id"]
         sig_client = create_signaling(args)
         client_params = run(sig_client.connect())
-        self.assertTrue(client_params['is_initiator'])
+        self.assertTrue(client_params["is_initiator"])
 
         received = run(sig_client.receive())
         self.assertEqual(received, offer)
@@ -88,7 +91,7 @@ class SignalingTest(TestCase):
     def test_copy_and_paste(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'copy-and-paste'])
+        args = parser.parse_args(["-s", "copy-and-paste"])
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
@@ -117,8 +120,12 @@ class SignalingTest(TestCase):
         run(sig_client.connect())
 
         # mock out reader / write pipe
-        sig_server._reader, sig_client._write_pipe = dummy_stdio(sig_server._read_pipe.encoding)
-        sig_client._reader, sig_server._write_pipe = dummy_stdio(sig_client._read_pipe.encoding)
+        sig_server._reader, sig_client._write_pipe = dummy_stdio(
+            sig_server._read_pipe.encoding
+        )
+        sig_client._reader, sig_server._write_pipe = dummy_stdio(
+            sig_client._read_pipe.encoding
+        )
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
@@ -131,7 +138,7 @@ class SignalingTest(TestCase):
     def test_tcp_socket(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'tcp-socket'])
+        args = parser.parse_args(["-s", "tcp-socket"])
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
@@ -151,7 +158,7 @@ class SignalingTest(TestCase):
     def test_tcp_socket_abrupt_disconnect(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'tcp-socket'])
+        args = parser.parse_args(["-s", "tcp-socket"])
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
@@ -178,7 +185,7 @@ class SignalingTest(TestCase):
     def test_unix_socket(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'unix-socket'])
+        args = parser.parse_args(["-s", "unix-socket"])
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
@@ -198,7 +205,7 @@ class SignalingTest(TestCase):
     def test_unix_socket_abrupt_disconnect(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
-        args = parser.parse_args(['-s', 'unix-socket'])
+        args = parser.parse_args(["-s", "unix-socket"])
 
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
@@ -232,28 +239,31 @@ class SignalingUtilsTest(TestCase):
 
     def test_candidate_from_string(self):
         candidate = object_from_string(
-            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}')  # noqa
+            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}'
+        )
         self.assertEqual(candidate.component, 1)
-        self.assertEqual(candidate.foundation, '0')
-        self.assertEqual(candidate.ip, '192.168.99.7')
+        self.assertEqual(candidate.foundation, "0")
+        self.assertEqual(candidate.ip, "192.168.99.7")
         self.assertEqual(candidate.port, 33543)
         self.assertEqual(candidate.priority, 2122252543)
-        self.assertEqual(candidate.protocol, 'UDP')
-        self.assertEqual(candidate.sdpMid, 'audio')
+        self.assertEqual(candidate.protocol, "UDP")
+        self.assertEqual(candidate.sdpMid, "audio")
         self.assertEqual(candidate.sdpMLineIndex, 0)
-        self.assertEqual(candidate.type, 'host')
+        self.assertEqual(candidate.type, "host")
 
     def test_candidate_to_string(self):
         candidate = RTCIceCandidate(
             component=1,
-            foundation='0',
-            ip='192.168.99.7',
+            foundation="0",
+            ip="192.168.99.7",
             port=33543,
             priority=2122252543,
-            protocol='UDP',
-            type='host')
-        candidate.sdpMid = 'audio'
+            protocol="UDP",
+            type="host",
+        )
+        candidate.sdpMid = "audio"
         candidate.sdpMLineIndex = 0
         self.assertEqual(
             object_to_string(candidate),
-            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}')  # noqa
+            '{"candidate": "candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host", "id": "audio", "label": 0, "type": "candidate"}',
+        )

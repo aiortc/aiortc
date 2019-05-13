@@ -3,11 +3,11 @@ from struct import unpack
 
 
 def random16() -> int:
-    return unpack('!H', os.urandom(2))[0]
+    return unpack("!H", os.urandom(2))[0]
 
 
 def random32() -> int:
-    return unpack('!L', os.urandom(4))[0]
+    return unpack("!L", os.urandom(4))[0]
 
 
 def uint16_add(a: int, b: int) -> int:
@@ -22,8 +22,7 @@ def uint16_gt(a: int, b: int) -> bool:
     Return a > b.
     """
     half_mod = 0x8000
-    return (((a < b) and ((b - a) > half_mod)) or
-            ((a > b) and ((a - b) < half_mod)))
+    return ((a < b) and ((b - a) > half_mod)) or ((a > b) and ((a - b) < half_mod))
 
 
 def uint16_gte(a: int, b: int) -> bool:
@@ -45,8 +44,7 @@ def uint32_gt(a: int, b: int) -> bool:
     Return a > b.
     """
     half_mod = 0x80000000
-    return (((a < b) and ((b - a) > half_mod)) or
-            ((a > b) and ((a - b) < half_mod)))
+    return ((a < b) and ((b - a) > half_mod)) or ((a > b) and ((a - b) < half_mod))
 
 
 def uint32_gte(a: int, b: int) -> bool:
