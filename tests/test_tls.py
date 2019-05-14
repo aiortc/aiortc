@@ -188,7 +188,7 @@ class ContextTest(TestCase):
 
         server = self.create_server()
 
-        with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+        with self.assertRaises(tls.AlertProtocolVersion) as cm:
             self._server_fail_hello(client, server)
         self.assertEqual(str(cm.exception), "No supported protocol version")
 

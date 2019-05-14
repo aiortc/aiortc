@@ -45,16 +45,50 @@ TLS_VERSION_1_3_DRAFT_26 = 0x7F1A
 T = TypeVar("T")
 
 
+class AlertDescription(IntEnum):
+    close_notify = 0
+    unexpected_message = 10
+    bad_record_mac = 20
+    record_overflow = 22
+    handshake_failure = 40
+    bad_certificate = 42
+    unsupported_certificate = 43
+    certificate_revoked = 44
+    certificate_expired = 45
+    certificate_unknown = 46
+    illegal_parameter = 47
+    unknown_ca = 48
+    access_denied = 49
+    decode_error = 50
+    decrypt_error = 51
+    protocol_version = 70
+    insufficient_security = 71
+    internal_error = 80
+    inappropriate_fallback = 86
+    user_canceled = 90
+    missing_extension = 109
+    unsupported_extension = 110
+    unrecognized_name = 112
+    bad_certificate_status_response = 113
+    unknown_psk_identity = 115
+    certificate_required = 116
+    no_application_protocol = 120
+
+
 class Alert(Exception):
-    pass
+    description: AlertDescription
 
 
 class AlertHandshakeFailure(Alert):
-    pass
+    description = AlertDescription.handshake_failure
+
+
+class AlertProtocolVersion(Alert):
+    description = AlertDescription.protocol_version
 
 
 class AlertUnexpectedMessage(Alert):
-    pass
+    description = AlertDescription.unexpected_message
 
 
 class Direction(Enum):
@@ -752,12 +786,12 @@ def encode_public_key(public_key: ec.EllipticCurvePublicKey) -> KeyShareEntry:
     )
 
 
-def negotiate(supported: List[T], offered: List[T], error_message: str) -> T:
+def negotiate(supported: List[T], offered: List[T], exc: Alert) -> T:
     for c in supported:
         if c in offered:
             return c
 
-    raise AlertHandshakeFailure(error_message)
+    raise exc
 
 
 def signature_algorithm_params(
@@ -1036,27 +1070,29 @@ class Context:
 
         # negotiate parameters
         cipher_suite = negotiate(
-            self._cipher_suites, peer_hello.cipher_suites, "No supported cipher suite"
+            self._cipher_suites,
+            peer_hello.cipher_suites,
+            AlertHandshakeFailure("No supported cipher suite"),
         )
         compression_method = negotiate(
             self._compression_methods,
             peer_hello.compression_methods,
-            "No supported compression method",
+            AlertHandshakeFailure("No supported compression method"),
         )
         negotiate(
             self._key_exchange_modes,
             peer_hello.key_exchange_modes,
-            "No supported key exchange mode",
+            AlertHandshakeFailure("No supported key exchange mode"),
         )
         signature_algorithm = negotiate(
             self._signature_algorithms,
             peer_hello.signature_algorithms,
-            "No supported signature algorithm",
+            AlertHandshakeFailure("No supported signature algorithm"),
         )
         supported_version = negotiate(
             self._supported_versions,
             peer_hello.supported_versions,
-            "No supported protocol version",
+            AlertProtocolVersion("No supported protocol version"),
         )
 
         self.client_random = peer_hello.random
