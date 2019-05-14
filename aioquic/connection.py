@@ -61,7 +61,7 @@ def get_epoch(packet_type: int) -> tls.Epoch:
 
 def push_close(
     buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: bytes
-):
+) -> None:
     if frame_type is None:
         push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
         packet.push_application_close_frame(buf, error_code, reason_phrase)
@@ -254,7 +254,10 @@ class QuicConnection:
                 self.peer_cid_set = True
 
             # handle payload
-            is_ack_only = self._payload_received(epoch, plain_payload)
+            try:
+                is_ack_only = self._payload_received(epoch, plain_payload)
+            except tls.Alert:
+                return
 
             # record packet as received
             space.ack_queue.add(packet_number)
@@ -353,7 +356,9 @@ class QuicConnection:
                             frame_type,
                             str(exc).encode("ascii"),
                         )
-                        return
+                        raise
+
+                    # update current epoch
                     if self.tls.state in [
                         tls.State.CLIENT_POST_HANDSHAKE,
                         tls.State.SERVER_POST_HANDSHAKE,
@@ -462,61 +467,63 @@ class QuicConnection:
     def _write_application(self) -> Iterator[bytes]:
         epoch = tls.Epoch.ONE_RTT
         space = self.spaces[epoch]
-        send_ack = space.ack_queue if self.send_ack[epoch] else None
         if not space.crypto.send.is_valid():
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
 
-        # write header
-        push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
-        push_bytes(buf, self.peer_cid)
-        push_uint16(buf, self.packet_number)
-        header_size = buf.tell()
+        while True:
+            # write header
+            push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
+            push_bytes(buf, self.peer_cid)
+            push_uint16(buf, self.packet_number)
+            header_size = buf.tell()
 
-        # ACK
-        if send_ack:
-            push_uint_var(buf, QuicFrameType.ACK)
-            packet.push_ack_frame(buf, send_ack, 0)
-            self.send_ack[epoch] = False
+            # ACK
+            if self.send_ack[epoch] and space.ack_queue:
+                push_uint_var(buf, QuicFrameType.ACK)
+                packet.push_ack_frame(buf, space.ack_queue, 0)
+                self.send_ack[epoch] = False
 
-        # CLOSE
-        if self.__close and self.__epoch == epoch:
-            push_close(buf, **self.__close)
-            self.__close = None
+            # CLOSE
+            if self.__close and self.__epoch == epoch:
+                push_close(buf, **self.__close)
+                self.__close = None
 
-        # STREAM
-        for stream_id, stream in self.streams.items():
-            if isinstance(stream_id, int) and stream.has_data_to_send():
-                frame = stream.get_frame(
-                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
+            # STREAM
+            for stream_id, stream in self.streams.items():
+                if isinstance(stream_id, int) and stream.has_data_to_send():
+                    frame = stream.get_frame(
+                        PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
+                    )
+                    flags = QuicStreamFlag.OFF | QuicStreamFlag.LEN
+                    if frame.fin:
+                        flags |= QuicStreamFlag.FIN
+                    push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
+                    with push_stream_frame(buf, 0, frame.offset):
+                        push_bytes(buf, frame.data)
+
+            packet_size = buf.tell()
+            if packet_size > header_size:
+                # encrypt
+                data = buf.data
+                yield space.crypto.encrypt_packet(
+                    data[0:header_size], data[header_size:packet_size]
                 )
-                flags = QuicStreamFlag.OFF | QuicStreamFlag.LEN
-                if frame.fin:
-                    flags |= QuicStreamFlag.FIN
-                push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
-                with push_stream_frame(buf, 0, frame.offset):
-                    push_bytes(buf, frame.data)
 
-        # encrypt
-        packet_size = buf.tell()
-        if packet_size > header_size:
-            data = buf.data
-            yield space.crypto.encrypt_packet(
-                data[0:header_size], data[header_size:packet_size]
-            )
-
-            self.packet_number += 1
+                self.packet_number += 1
+                buf.seek(0)
+            else:
+                break
 
     def _write_handshake(self, epoch: tls.Epoch) -> Iterator[bytes]:
         space = self.spaces[epoch]
-        stream = self.streams[epoch]
-        send_ack = space.ack_queue if self.send_ack[epoch] else None
-        self.send_ack[epoch] = False
+        if not space.crypto.send.is_valid():
+            return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
 
-        while space.crypto.send.is_valid() and (send_ack or stream.has_data_to_send()):
+        while True:
             if epoch == tls.Epoch.INITIAL:
                 packet_type = PACKET_TYPE_INITIAL
             else:
@@ -536,16 +543,17 @@ class QuicConnection:
             header_size = buf.tell()
 
             # ACK
-            if send_ack is not None:
+            if self.send_ack[epoch] and space.ack_queue:
                 push_uint_var(buf, QuicFrameType.ACK)
-                packet.push_ack_frame(buf, send_ack, 0)
-                send_ack = None
+                packet.push_ack_frame(buf, space.ack_queue, 0)
+                self.send_ack[epoch] = False
 
             # CLOSE
             if self.__close and self.__epoch == epoch:
                 push_close(buf, **self.__close)
                 self.__close = None
 
+            stream = self.streams[epoch]
             if stream.has_data_to_send():
                 # CRYPTO
                 frame = stream.get_frame(
@@ -564,19 +572,22 @@ class QuicConnection:
                         ),
                     )
 
-            # finalize length
             packet_size = buf.tell()
-            buf.seek(header_size - SEND_PN_SIZE - 2)
-            length = packet_size - header_size + 2 + space.crypto.aead_tag_size
-            push_uint16(buf, length | 0x4000)
-            push_uint16(buf, self.packet_number)
-            buf.seek(packet_size)
+            if packet_size > header_size:
+                # finalize length
+                buf.seek(header_size - SEND_PN_SIZE - 2)
+                length = packet_size - header_size + 2 + space.crypto.aead_tag_size
+                push_uint16(buf, length | 0x4000)
+                push_uint16(buf, self.packet_number)
+                buf.seek(packet_size)
 
-            # encrypt
-            data = buf.data
-            yield space.crypto.encrypt_packet(
-                data[0:header_size], data[header_size:packet_size]
-            )
+                # encrypt
+                data = buf.data
+                yield space.crypto.encrypt_packet(
+                    data[0:header_size], data[header_size:packet_size]
+                )
 
-            self.packet_number += 1
-            buf.seek(0)
+                self.packet_number += 1
+                buf.seek(0)
+            else:
+                break
