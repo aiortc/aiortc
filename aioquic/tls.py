@@ -714,9 +714,13 @@ CIPHER_SUITES = {
 }
 
 SIGNATURE_ALGORITHMS = {
-    SignatureAlgorithm.RSA_PSS_RSAE_SHA256: hashes.SHA256,
-    SignatureAlgorithm.RSA_PSS_RSAE_SHA384: hashes.SHA384,
-    SignatureAlgorithm.RSA_PSS_RSAE_SHA512: hashes.SHA512,
+    SignatureAlgorithm.RSA_PKCS1_SHA1: (padding.PKCS1v15, hashes.SHA1),
+    SignatureAlgorithm.RSA_PKCS1_SHA256: (padding.PKCS1v15, hashes.SHA256),
+    SignatureAlgorithm.RSA_PKCS1_SHA384: (padding.PKCS1v15, hashes.SHA384),
+    SignatureAlgorithm.RSA_PKCS1_SHA512: (padding.PKCS1v15, hashes.SHA512),
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA256: (padding.PSS, hashes.SHA256),
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA384: (padding.PSS, hashes.SHA384),
+    SignatureAlgorithm.RSA_PSS_RSAE_SHA512: (padding.PSS, hashes.SHA512),
 }
 
 GROUP_TO_CURVE = {
@@ -756,6 +760,20 @@ def negotiate(supported: List[T], offered: List[T], error_message: str) -> T:
     raise AlertHandshakeFailure(error_message)
 
 
+def signature_algorithm_params(
+    signature_algorithm: SignatureAlgorithm
+) -> Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]:
+    padding_cls, algorithm_cls = SIGNATURE_ALGORITHMS[signature_algorithm]
+    algorithm = algorithm_cls()
+    if padding_cls == padding.PSS:
+        padding_obj = padding_cls(
+            mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size
+        )
+    else:
+        padding_obj = padding_cls()
+    return padding_obj, algorithm
+
+
 @contextmanager
 def push_message(
     key_schedule: Union[KeySchedule, KeyScheduleProxy], buf: Buffer
@@ -787,7 +805,11 @@ class Context:
         ]
         self._compression_methods = [CompressionMethod.NULL]
         self._key_exchange_modes = [KeyExchangeMode.PSK_DHE_KE]
-        self._signature_algorithms = [SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
+        self._signature_algorithms = [
+            SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            SignatureAlgorithm.RSA_PKCS1_SHA256,
+            SignatureAlgorithm.RSA_PKCS1_SHA1,
+        ]
         self._supported_versions = [TLS_VERSION_1_3]
 
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
@@ -961,15 +983,15 @@ class Context:
     def _client_handle_certificate_verify(self, input_buf: Buffer) -> None:
         verify = pull_certificate_verify(input_buf)
 
+        assert verify.algorithm in self._signature_algorithms
+
         # check signature
-        algorithm = SIGNATURE_ALGORITHMS[verify.algorithm]()
         self._peer_certificate.public_key().verify(
             verify.signature,
             self.key_schedule.certificate_verify_data(
                 b"TLS 1.3, server CertificateVerify"
             ),
-            padding.PSS(mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size),
-            algorithm,
+            *signature_algorithm_params(verify.algorithm),
         )
 
         self.key_schedule.update_hash(input_buf.data)
@@ -1087,13 +1109,11 @@ class Context:
             )
 
         # send certificate verify
-        algorithm = SIGNATURE_ALGORITHMS[signature_algorithm]()
         signature = self.certificate_private_key.sign(
             self.key_schedule.certificate_verify_data(
                 b"TLS 1.3, server CertificateVerify"
             ),
-            padding.PSS(mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size),
-            algorithm,
+            *signature_algorithm_params(signature_algorithm),
         )
         with push_message(self.key_schedule, output_buf):
             push_certificate_verify(

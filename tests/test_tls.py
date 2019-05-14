@@ -201,6 +201,55 @@ class ContextTest(TestCase):
         client.handle_message(b"", client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
         server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 250)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 2227)
+        reset_buffers(server_buf)
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # send finished
+        client.handle_message(client_input, client_buf)
+        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 52)
+        reset_buffers(client_buf)
+
+        # handle finished
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 0)
+
+        # check keys match
+        self.assertEqual(client._dec_key, server._enc_key)
+        self.assertEqual(client._enc_key, server._dec_key)
+
+        # handle new session ticket
+        new_session_ticket = binascii.unhexlify(
+            "04000035000151809468b842000020441fc19f9eb6ea425b48989c800258495"
+            "a2bc30cac3a55032a7c0822feb842eb0008002a0004ffffffff"
+        )
+        client.handle_message(new_session_ticket, client_buf)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 0)
+
+    def test_handshake_with_rsa_pkcs1_sha256_signature(self):
+        client = self.create_client()
+        client._signature_algorithms = [tls.SignatureAlgorithm.RSA_PKCS1_SHA256]
+        server = self.create_server()
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
         self.assertEqual(len(server_input), 246)
         reset_buffers(client_buf)
 
