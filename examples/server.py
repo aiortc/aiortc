@@ -38,7 +38,7 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             connection = QuicConnection(is_client=False, **self._kwargs)
             connection.connection_made(QuicConnectionTransport(self, addr))
             self._connections[connection.host_cid] = connection
-        connection.datagram_received(datagram)
+        connection.datagram_received(datagram, addr)
 
 
 async def run(host, port, **kwargs):

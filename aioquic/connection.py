@@ -147,6 +147,23 @@ class QuicConnection:
         """
         await self.__connected.wait()
 
+    def create_stream(
+        self, is_unidirectional: bool = False
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        """
+        Create a QUIC stream and return a pair of (reader, writer) objects.
+
+        The returned reader and writer objects are instances of :class:`asyncio.StreamReader`
+        and :class:`asyncio.StreamWriter` classes.
+        """
+        stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
+        while stream_id in self.streams:
+            stream_id += 4
+        stream = self._get_or_create_stream(stream_id)
+        return stream.reader, stream.writer
+
+    # asyncio.DatagramProtocol
+
     def connection_lost(self, exc: Exception) -> None:
         for stream in self.streams.values():
             if stream.reader:
@@ -167,22 +184,7 @@ class QuicConnection:
             self._push_crypto_data()
             self._send_pending()
 
-    def create_stream(
-        self, is_unidirectional: bool = False
-    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        """
-        Create a QUIC stream and return a pair of (reader, writer) objects.
-
-        The returned reader and writer objects are instances of :class:`asyncio.StreamReader`
-        and :class:`asyncio.StreamWriter` classes.
-        """
-        stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
-        while stream_id in self.streams:
-            stream_id += 4
-        stream = self._get_or_create_stream(stream_id)
-        return stream.reader, stream.writer
-
-    def datagram_received(self, data: bytes, *args: Any) -> None:
+    def datagram_received(self, data: bytes, addr: Any) -> None:
         """
         Handle an incoming datagram.
         """
@@ -247,6 +249,11 @@ class QuicConnection:
                 self.send_ack[epoch] = True
 
         self._send_pending()
+
+    def error_received(self, exc: OSError) -> None:
+        self.__logger.warning(exc)
+
+    # Private
 
     def _get_or_create_stream(self, stream_id: int) -> QuicStream:
         if stream_id not in self.streams:

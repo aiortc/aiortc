@@ -27,7 +27,7 @@ class FakeTransport:
     def sendto(self, data):
         self.sent += 1
         if self.target is not None:
-            self.target.datagram_received(data)
+            self.target.datagram_received(data, None)
 
 
 def create_transport(client, server):
@@ -210,6 +210,10 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 5)
 
+    def test_error_received(self):
+        client = QuicConnection(is_client=True)
+        client.error_received(OSError('foo'))
+
     def test_retry(self):
         client = QuicConnection(is_client=True)
         client.host_cid = binascii.unhexlify("c98343fe8f5f0ff4")
@@ -219,7 +223,7 @@ class QuicConnectionTest(TestCase):
         client.connection_made(client_transport)
         self.assertEqual(client_transport.sent, 1)
 
-        client.datagram_received(load("retry.bin"))
+        client.datagram_received(load("retry.bin"), None)
         self.assertEqual(client_transport.sent, 2)
 
     def test_application_close(self):
@@ -271,7 +275,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         # no common version, no retry
-        client.datagram_received(load("version_negotiation.bin"))
+        client.datagram_received(load("version_negotiation.bin"), None)
         self.assertEqual(client_transport.sent, 1)
 
     def test_version_negotiation_ok(self):
@@ -282,5 +286,5 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         # found a common version, retry
-        client.datagram_received(load("version_negotiation.bin"))
+        client.datagram_received(load("version_negotiation.bin"), None)
         self.assertEqual(client_transport.sent, 2)
