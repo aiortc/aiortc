@@ -755,6 +755,15 @@ def negotiate(supported: List[T], offered: List[T], error_message: str) -> T:
     raise AlertHandshakeFailure(error_message)
 
 
+@contextmanager
+def push_message(
+    key_schedule: Union[KeySchedule, KeyScheduleProxy], buf: Buffer
+) -> Generator:
+    hash_start = buf.tell()
+    yield
+    key_schedule.update_hash(buf.data_slice(hash_start, buf.tell()))
+
+
 class Context:
     def __init__(self, is_client: bool, logger: logging.Logger = None):
         self.alpn_protocols: Optional[List[str]] = None
@@ -764,9 +773,11 @@ class Context:
         ] = None
         self.handshake_extensions: List[Extension] = []
         self.is_client = is_client
-        self.key_schedule: KeySchedule
+        self.key_schedule: Optional[KeySchedule] = None
         self.server_name: Optional[str] = None
-        self.update_traffic_key_cb = lambda d, e, s: None
+        self.update_traffic_key_cb: Callable[
+            [Direction, Epoch, bytes], None
+        ] = lambda d, e, s: None
 
         self._cipher_suites = [
             CipherSuite.AES_256_GCM_SHA384,
@@ -777,6 +788,7 @@ class Context:
         self._signature_algorithms = [SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
         self._supported_versions = [TLS_VERSION_1_3]
 
+        self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._peer_certificate: Optional[x509.Certificate] = None
         self._receive_buffer = b""
         self._enc_key: Optional[bytes] = None
@@ -892,10 +904,10 @@ class Context:
             other_extensions=self.handshake_extensions,
         )
 
-        self.key_schedule = KeyScheduleProxy(hello.cipher_suites)
-        self.key_schedule.extract(None)
+        self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
+        self._key_schedule_proxy.extract(None)
 
-        with self._push_message(output_buf):
+        with push_message(self._key_schedule_proxy, output_buf):
             push_client_hello(output_buf, hello)
 
         self._set_state(State.CLIENT_EXPECT_SERVER_HELLO)
@@ -910,7 +922,7 @@ class Context:
         peer_public_key = decode_public_key(peer_hello.key_share)
         shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
-        self.key_schedule = self.key_schedule.select(peer_hello.cipher_suite)
+        self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
         self.key_schedule.update_hash(input_buf.data)
         self.key_schedule.extract(shared_key)
 
@@ -1033,7 +1045,7 @@ class Context:
             key_share=encode_public_key(self.private_key.public_key()),
             supported_version=supported_version,
         )
-        with self._push_message(output_buf):
+        with push_message(self.key_schedule, output_buf):
             push_server_hello(output_buf, hello)
         self.key_schedule.extract(shared_key)
 
@@ -1045,14 +1057,14 @@ class Context:
         )
 
         # send encrypted extensions
-        with self._push_message(output_buf):
+        with push_message(self.key_schedule, output_buf):
             push_encrypted_extensions(
                 output_buf,
                 EncryptedExtensions(other_extensions=self.handshake_extensions),
             )
 
         # send certificate
-        with self._push_message(output_buf):
+        with push_message(self.key_schedule, output_buf):
             push_certificate(
                 output_buf,
                 Certificate(
@@ -1070,14 +1082,14 @@ class Context:
             padding.PSS(mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size),
             algorithm,
         )
-        with self._push_message(output_buf):
+        with push_message(self.key_schedule, output_buf):
             push_certificate_verify(
                 output_buf,
                 CertificateVerify(algorithm=signature_algorithm, signature=signature),
             )
 
         # send finished
-        with self._push_message(output_buf):
+        with push_message(self.key_schedule, output_buf):
             push_finished(
                 output_buf,
                 Finished(
@@ -1110,12 +1122,6 @@ class Context:
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.SERVER_POST_HANDSHAKE)
-
-    @contextmanager
-    def _push_message(self, buf: Buffer) -> Generator:
-        hash_start = buf.tell()
-        yield
-        self.key_schedule.update_hash(buf.data_slice(hash_start, buf.tell()))
 
     def _setup_traffic_protection(
         self, direction: Direction, epoch: Epoch, label: bytes

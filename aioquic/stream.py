@@ -22,7 +22,7 @@ class QuicStream:
         self._recv_buffer = bytearray()
         self._recv_start = 0
         self._recv_ranges = RangeSet()
-        self._recv_waiter: Optional[asyncio.Future[Any]] = None
+        self._recv_waiter: Optional[asyncio.Future] = None
 
         self._send_buffer = bytearray()
         self._send_start = 0
