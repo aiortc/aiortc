@@ -168,6 +168,7 @@ class HandshakeType(IntEnum):
 
 
 class KeyExchangeMode(IntEnum):
+    PSK_KE = 0
     PSK_DHE_KE = 1
 
 
@@ -785,6 +786,7 @@ class Context:
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
         self._compression_methods = [CompressionMethod.NULL]
+        self._key_exchange_modes = [KeyExchangeMode.PSK_DHE_KE]
         self._signature_algorithms = [SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
         self._supported_versions = [TLS_VERSION_1_3]
 
@@ -895,7 +897,7 @@ class Context:
             cipher_suites=self._cipher_suites,
             compression_methods=self._compression_methods,
             alpn_protocols=self.alpn_protocols,
-            key_exchange_modes=[KeyExchangeMode.PSK_DHE_KE],
+            key_exchange_modes=self._key_exchange_modes,
             key_share=[encode_public_key(self.private_key.public_key())],
             server_name=self.server_name,
             signature_algorithms=self._signature_algorithms,
@@ -1012,6 +1014,11 @@ class Context:
             self._compression_methods,
             peer_hello.compression_methods,
             "No supported compression method",
+        )
+        negotiate(
+            self._key_exchange_modes,
+            peer_hello.key_exchange_modes,
+            "No supported key exchange mode",
         )
         signature_algorithm = negotiate(
             self._signature_algorithms,
