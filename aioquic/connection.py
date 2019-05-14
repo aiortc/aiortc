@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Iterator, List, Optional, TextIO, Union
+from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple, Union
 
 from . import packet, tls
 from .buffer import pull_bytes, pull_uint32, push_bytes, push_uint8, push_uint16
@@ -151,7 +151,8 @@ class QuicConnection:
 
     def connection_lost(self, exc: Exception) -> None:
         for stream in self.streams.values():
-            stream.feed_eof()
+            if stream.reader:
+                stream.reader.feed_eof()
 
     def connection_made(self, transport: asyncio.DatagramTransport) -> None:
         """
@@ -168,14 +169,20 @@ class QuicConnection:
             self._push_crypto_data()
             self._send_pending()
 
-    def create_stream(self, is_unidirectional: bool = False) -> QuicStream:
+    def create_stream(
+        self, is_unidirectional: bool = False
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """
-        Create a :class:`QuicStream` and return it.
+        Create a QUIC stream and return a pair of (reader, writer) objects.
+
+        The returned reader and writer objects are instances of :class:`asyncio.StreamReader`
+        and :class:`asyncio.StreamWriter` classes.
         """
         stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
         while stream_id in self.streams:
             stream_id += 4
-        return self._get_or_create_stream(stream_id)
+        stream = self._get_or_create_stream(stream_id)
+        return stream.reader, stream.writer
 
     def datagram_received(self, data: bytes, *args: Any) -> None:
         """

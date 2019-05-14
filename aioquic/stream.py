@@ -6,23 +6,21 @@ from .rangeset import RangeSet
 
 
 class QuicStream:
-    """
-    A QUIC stream.
-
-    Do not instanciate this class yourself, instead use :meth:`QuicConnection.create_stream`.
-    """
-
     def __init__(
         self, stream_id: Optional[int] = None, connection: Optional[Any] = None
     ) -> None:
         self._connection = connection
-        self._eof = False
-        self._loop = asyncio.get_event_loop()
+
+        if stream_id is not None:
+            self.reader = asyncio.StreamReader()
+            self.writer = asyncio.StreamWriter(self, None, self.reader, None)
+        else:
+            self.reader = None
+            self.writer = None
 
         self._recv_buffer = bytearray()
         self._recv_start = 0
         self._recv_ranges = RangeSet()
-        self._recv_waiter: Optional[asyncio.Future] = None
 
         self._send_buffer = bytearray()
         self._send_start = 0
@@ -60,12 +58,8 @@ class QuicStream:
             self._recv_buffer += bytearray(gap)
         self._recv_buffer[pos : pos + count] = frame.data
 
-        if not pos:
-            self._wakeup_waiter()
-
-    def feed_eof(self) -> None:
-        self._eof = True
-        self._wakeup_waiter()
+        if self.reader and self.has_data_to_read():
+            self.reader.feed_data(self.pull_data())
 
     def get_frame(self, size: int) -> QuicStreamFrame:
         """
@@ -77,6 +71,11 @@ class QuicStream:
         self._send_start += size
         return frame
 
+    def has_data_to_read(self) -> bool:
+        return (
+            bool(self._recv_ranges) and self._recv_ranges[0].start == self._recv_start
+        )
+
     def has_data_to_send(self) -> bool:
         return bool(self._send_buffer)
 
@@ -84,8 +83,7 @@ class QuicStream:
         """
         Pull received data.
         """
-        # no data, or gap at start
-        if not self._recv_ranges or self._recv_ranges[0].start != self._recv_start:
+        if not self.has_data_to_read():
             return b""
 
         r = self._recv_ranges.shift()
@@ -95,41 +93,16 @@ class QuicStream:
         self._recv_start = r.stop
         return data
 
-    async def read(self) -> bytes:
-        """
-        Read data from the stream.
-        """
-        if (
-            not self._recv_ranges
-            or self._recv_ranges[0].start != self._recv_start
-            and not self._eof
-        ):
-            assert self._recv_waiter is None
-            self._recv_waiter = self._loop.create_future()
-            try:
-                await self._recv_waiter
-            finally:
-                self._recv_waiter = None
+    # asyncio.Transport
 
-        return self.pull_data()
+    def get_extra_info(self, name: str, default: Any = None) -> Any:
+        """
+        Returns information about the underlying QUIC stream.
+        """
+        if name == "stream_id":
+            return self.stream_id
 
-    def _wakeup_waiter(self) -> None:
-        """
-        Wakeup read() function.
-        """
-        waiter = self._recv_waiter
-        if waiter is not None:
-            self._recv_waiter = None
-            if not waiter.cancelled():
-                waiter.set_result(None)
-
-    def write(self, data: bytes) -> None:
-        """
-        Write some `data` bytes to the stream.
-
-        This method does not block; it buffers the data and arranges for it to
-        be sent out asynchronously.
-        """
+    def write(self, data: bytes):
         if data:
             self._send_buffer += data
             if self._connection is not None:

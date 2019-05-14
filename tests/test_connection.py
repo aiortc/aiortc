@@ -64,16 +64,20 @@ class QuicConnectionTest(TestCase):
         run(client.connect())
 
         # send data over stream
-        client_stream = client.create_stream()
-        client_stream.write(b"ping")
+        client_reader, client_writer = client.create_stream()
+        client_writer.write(b"ping")
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 4)
 
-        server_stream = server.streams[0]
-        self.assertEqual(run(server_stream.read()), b"ping")
-        server_stream.write(b"pong")
+        # FIXME: needs an API
+        server_reader, server_writer = (
+            server.streams[0].reader,
+            server.streams[0].writer,
+        )
+        self.assertEqual(run(server_reader.read(1024)), b"ping")
+        server_writer.write(b"pong")
 
-        self.assertEqual(run(client_stream.read()), b"pong")
+        self.assertEqual(run(client_reader.read(1024)), b"pong")
 
         return client, server
 
@@ -146,30 +150,30 @@ class QuicConnectionTest(TestCase):
         server._initialize(b"")
 
         # client
-        stream = client.create_stream()
-        self.assertEqual(stream.stream_id, 0)
+        reader, writer = client.create_stream()
+        self.assertEqual(writer.get_extra_info("stream_id"), 0)
 
-        stream = client.create_stream()
-        self.assertEqual(stream.stream_id, 4)
+        reader, writer = client.create_stream()
+        self.assertEqual(writer.get_extra_info("stream_id"), 4)
 
-        stream = client.create_stream(is_unidirectional=True)
-        self.assertEqual(stream.stream_id, 2)
+        reader, writer = client.create_stream(is_unidirectional=True)
+        self.assertEqual(writer.get_extra_info("stream_id"), 2)
 
-        stream = client.create_stream(is_unidirectional=True)
-        self.assertEqual(stream.stream_id, 6)
+        reader, writer = client.create_stream(is_unidirectional=True)
+        self.assertEqual(writer.get_extra_info("stream_id"), 6)
 
         # server
-        stream = server.create_stream()
-        self.assertEqual(stream.stream_id, 1)
+        reader, writer = server.create_stream()
+        self.assertEqual(writer.get_extra_info("stream_id"), 1)
 
-        stream = server.create_stream()
-        self.assertEqual(stream.stream_id, 5)
+        reader, writer = server.create_stream()
+        self.assertEqual(writer.get_extra_info("stream_id"), 5)
 
-        stream = server.create_stream(is_unidirectional=True)
-        self.assertEqual(stream.stream_id, 3)
+        reader, writer = server.create_stream(is_unidirectional=True)
+        self.assertEqual(writer.get_extra_info("stream_id"), 3)
 
-        stream = server.create_stream(is_unidirectional=True)
-        self.assertEqual(stream.stream_id, 7)
+        reader, writer = server.create_stream(is_unidirectional=True)
+        self.assertEqual(writer.get_extra_info("stream_id"), 7)
 
     def test_decryption_error(self):
         client = QuicConnection(is_client=True)

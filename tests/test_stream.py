@@ -74,12 +74,12 @@ class QuicStreamTest(TestCase):
         self.assertEqual(stream._recv_start, 16)
 
     def test_recv_ordered_3(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
         async def add_frame():
             stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
 
-        data, _ = run(asyncio.gather(stream.read(), delay(add_frame)))
+        data, _ = run(asyncio.gather(stream.reader.read(1024), delay(add_frame)))
         self.assertEqual(data, b"01234567")
 
     def test_recv_unordered(self):

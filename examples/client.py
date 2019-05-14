@@ -19,9 +19,9 @@ async def run(host, port, **kwargs):
     await protocol.connect()
 
     # perform HTTP/0.9 request
-    stream = protocol.create_stream()
-    stream.write(b"GET /\r\n")
-    print(await stream.read())
+    reader, writer = protocol.create_stream()
+    writer.write(b"GET /\r\n")
+    print(await reader.read(1024))
 
 
 if __name__ == "__main__":

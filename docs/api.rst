@@ -5,6 +5,3 @@ API Reference
 
    .. autoclass:: QuicConnection
       :members:
-
-   .. autoclass:: QuicStream()
-      :members: read, write
