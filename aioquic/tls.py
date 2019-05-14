@@ -872,7 +872,11 @@ class Context:
 
             elif self.state == State.SERVER_EXPECT_CLIENT_HELLO:
                 if message_type == HandshakeType.CLIENT_HELLO:
-                    self._server_handle_hello(input_buf, output_buf[Epoch.INITIAL])
+                    self._server_handle_hello(
+                        input_buf,
+                        output_buf[Epoch.INITIAL],
+                        output_buf[Epoch.HANDSHAKE],
+                    )
                 else:
                     raise AlertUnexpectedMessage
             elif self.state == State.SERVER_EXPECT_FINISHED:
@@ -1003,7 +1007,9 @@ class Context:
     def _client_handle_new_session_ticket(self, input_buf: Buffer) -> None:
         pull_new_session_ticket(input_buf)
 
-    def _server_handle_hello(self, input_buf: Buffer, output_buf: Buffer) -> None:
+    def _server_handle_hello(
+        self, input_buf: Buffer, initial_buf: Buffer, output_buf: Buffer
+    ) -> None:
         peer_hello = pull_client_hello(input_buf)
 
         # negotiate parameters
@@ -1052,8 +1058,8 @@ class Context:
             key_share=encode_public_key(self.private_key.public_key()),
             supported_version=supported_version,
         )
-        with push_message(self.key_schedule, output_buf):
-            push_server_hello(output_buf, hello)
+        with push_message(self.key_schedule, initial_buf):
+            push_server_hello(initial_buf, hello)
         self.key_schedule.extract(shared_key)
 
         self._setup_traffic_protection(

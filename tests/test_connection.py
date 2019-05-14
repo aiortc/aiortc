@@ -60,14 +60,14 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+        self.assertEqual(server_transport.sent, 4)
         run(client.connect())
 
         # send data over stream
         client_reader, client_writer = client.create_stream()
         client_writer.write(b"ping")
         self.assertEqual(client_transport.sent, 5)
-        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 5)
 
         # FIXME: needs an API
         server_reader, server_writer = (
@@ -77,7 +77,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(run(server_reader.read(1024)), b"ping")
         server_writer.write(b"pong")
         self.assertEqual(client_transport.sent, 6)
-        self.assertEqual(server_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 6)
 
         # client receives pong
         self.assertEqual(run(client_reader.read(1024)), b"pong")
@@ -85,7 +85,7 @@ class QuicConnectionTest(TestCase):
         # client writes EOF
         client_writer.write_eof()
         self.assertEqual(client_transport.sent, 7)
-        self.assertEqual(server_transport.sent, 6)
+        self.assertEqual(server_transport.sent, 7)
 
         # server receives EOF
         self.assertEqual(run(server_reader.read()), b"")
@@ -130,7 +130,7 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+        self.assertEqual(server_transport.sent, 4)
 
         # check secrets were logged
         client_log = client_log_file.getvalue()
@@ -198,7 +198,7 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+        self.assertEqual(server_transport.sent, 4)
 
         # mess with encryption key
         server.spaces[tls.Epoch.ONE_RTT].crypto.send.setup(
@@ -208,7 +208,7 @@ class QuicConnectionTest(TestCase):
         # close
         server.close(error_code=QuicErrorCode.NO_ERROR)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 5)
 
     def test_retry(self):
         client = QuicConnection(is_client=True)
@@ -234,12 +234,12 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+        self.assertEqual(server_transport.sent, 4)
 
         # close
         server.close(error_code=QuicErrorCode.NO_ERROR)
         self.assertEqual(client_transport.sent, 5)
-        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 5)
 
     def test_transport_close(self):
         client = QuicConnection(is_client=True)
@@ -253,14 +253,14 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+        self.assertEqual(server_transport.sent, 4)
 
         # close
         server.close(
             error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
         )
         self.assertEqual(client_transport.sent, 5)
-        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 5)
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)
