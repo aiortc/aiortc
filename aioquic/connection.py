@@ -11,6 +11,7 @@ from .packet import (
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
+    QuicErrorCode,
     QuicFrameType,
     QuicHeader,
     QuicProtocolVersion,
@@ -56,6 +57,17 @@ def get_epoch(packet_type: int) -> tls.Epoch:
         return tls.Epoch.HANDSHAKE
     else:
         return tls.Epoch.ONE_RTT
+
+
+def push_close(
+    buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: bytes
+):
+    if frame_type is None:
+        push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
+        packet.push_application_close_frame(buf, error_code, reason_phrase)
+    else:
+        push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
+        packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
 
 
 class PacketSpace:
@@ -121,6 +133,7 @@ class QuicConnection:
 
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
+        self.__epoch = tls.Epoch.INITIAL
         self.__initialized = False
         self.__logger = logger
         self.__transport: Optional[asyncio.DatagramTransport] = None
@@ -331,12 +344,25 @@ class QuicConnection:
                 stream.add_frame(packet.pull_crypto_frame(buf))
                 data = stream.pull_data()
                 if data:
-                    self.tls.handle_message(data, self.send_buffer)
-                    if not self.__connected.is_set() and self.tls.state in [
+                    try:
+                        self.tls.handle_message(data, self.send_buffer)
+                    except tls.Alert as exc:
+                        self.__logger.warning("TLS error: %s" % exc)
+                        self.close(
+                            QuicErrorCode.CRYPTO_ERROR + int(exc.description),
+                            frame_type,
+                            str(exc).encode("ascii"),
+                        )
+                        return
+                    if self.tls.state in [
                         tls.State.CLIENT_POST_HANDSHAKE,
                         tls.State.SERVER_POST_HANDSHAKE,
                     ]:
-                        self.__connected.set()
+                        if not self.__connected.is_set():
+                            self.__connected.set()
+                        self.__epoch = tls.Epoch.ONE_RTT
+                    else:
+                        self.__epoch = tls.Epoch.HANDSHAKE
 
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 packet.pull_new_token_frame(buf)
@@ -396,11 +422,6 @@ class QuicConnection:
 
         yield from self._write_application()
 
-        if self.__close is not None:
-            close = self.__close
-            self.__close = None
-            yield from self._write_close(tls.Epoch.ONE_RTT, **close)
-
     def _push_crypto_data(self) -> None:
         for epoch, buf in self.send_buffer.items():
             self.streams[epoch].write(buf.data)
@@ -459,6 +480,11 @@ class QuicConnection:
             packet.push_ack_frame(buf, send_ack, 0)
             self.send_ack[epoch] = False
 
+        # CLOSE
+        if self.__close and self.__epoch == epoch:
+            push_close(buf, **self.__close)
+            self.__close = None
+
         # STREAM
         for stream_id, stream in self.streams.items():
             if isinstance(stream_id, int) and stream.has_data_to_send():
@@ -481,45 +507,6 @@ class QuicConnection:
             )
 
             self.packet_number += 1
-
-    def _write_close(
-        self, epoch: tls.Epoch, error_code: int, frame_type: int, reason_phrase: bytes
-    ) -> Iterator[bytes]:
-        assert epoch == tls.Epoch.ONE_RTT
-        space = self.spaces[epoch]
-
-        buf = Buffer(capacity=PACKET_MAX_SIZE)
-
-        # write header
-        push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
-        push_bytes(buf, self.peer_cid)
-        push_uint16(buf, self.packet_number)
-        header_size = buf.tell()
-
-        # write frame
-        if frame_type is None:
-            push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
-            packet.push_application_close_frame(buf, error_code, reason_phrase)
-        else:
-            push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
-            packet.push_transport_close_frame(
-                buf, error_code, frame_type, reason_phrase
-            )
-
-        # finalize length
-        packet_size = buf.tell()
-        buf.seek(header_size - SEND_PN_SIZE - 2)
-        length = packet_size - header_size + 2 + space.crypto.aead_tag_size
-        push_uint16(buf, length | 0x4000)
-        push_uint16(buf, self.packet_number)
-        buf.seek(packet_size)
-
-        # encrypt
-        data = buf.data
-        yield space.crypto.encrypt_packet(
-            data[0:header_size], data[header_size:packet_size]
-        )
-        self.packet_number += 1
 
     def _write_handshake(self, epoch: tls.Epoch) -> Iterator[bytes]:
         space = self.spaces[epoch]
@@ -553,6 +540,11 @@ class QuicConnection:
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, send_ack, 0)
                 send_ack = None
+
+            # CLOSE
+            if self.__close and self.__epoch == epoch:
+                push_close(buf, **self.__close)
+                self.__close = None
 
             if stream.has_data_to_send():
                 # CRYPTO

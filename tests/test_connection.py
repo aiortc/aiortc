@@ -210,9 +210,30 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 5)
 
+    def test_tls_error(self):
+        client = QuicConnection(is_client=True)
+        real_initialize = client._initialize
+
+        def patched_initialize(peer_cid: bytes):
+            real_initialize(peer_cid)
+            client.tls._supported_versions = [tls.TLS_VERSION_1_3_DRAFT_28]
+
+        client._initialize = patched_initialize
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # fail handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 2)
+        self.assertEqual(server_transport.sent, 1)
+
     def test_error_received(self):
         client = QuicConnection(is_client=True)
-        client.error_received(OSError('foo'))
+        client.error_received(OSError("foo"))
 
     def test_retry(self):
         client = QuicConnection(is_client=True)

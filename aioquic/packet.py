@@ -50,6 +50,7 @@ class QuicErrorCode(IntEnum):
     PROTOCOL_VIOLATION = 0xA
     INVALID_MIGRATION = 0xC
     CRYPTO_BUFFER_EXCEEDED = 0xD
+    CRYPTO_ERROR = 0x100
 
 
 class QuicProtocolVersion(IntEnum):
