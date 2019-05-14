@@ -21,6 +21,7 @@ async def run(host, port, **kwargs):
     # perform HTTP/0.9 request
     reader, writer = protocol.create_stream()
     writer.write(b"GET /\r\n")
+    writer.write_eof()
     print(await reader.read(1024))
 
 

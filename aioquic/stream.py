@@ -23,6 +23,7 @@ class QuicStream:
         self._recv_ranges = RangeSet()
 
         self._send_buffer = bytearray()
+        self._send_fin = False
         self._send_start = 0
 
         self.__stream_id = stream_id
@@ -38,28 +39,28 @@ class QuicStream:
         pos = frame.offset - self._recv_start
         count = len(frame.data)
 
-        # frame has been entirely consumed
-        if pos + count <= 0:
-            return
+        if pos + count > 0:
+            # frame has been partially consumed
+            if pos < 0:
+                count += pos
+                frame.data = frame.data[-pos:]
+                frame.offset -= pos
+                pos = 0
 
-        # frame has been partially consumed
-        if pos < 0:
-            count += pos
-            frame.data = frame.data[-pos:]
-            frame.offset -= pos
-            pos = 0
+            # marked received
+            self._recv_ranges.add(frame.offset, frame.offset + count)
 
-        # marked received
-        self._recv_ranges.add(frame.offset, frame.offset + count)
+            # add data
+            gap = pos - len(self._recv_buffer)
+            if gap > 0:
+                self._recv_buffer += bytearray(gap)
+            self._recv_buffer[pos : pos + count] = frame.data
 
-        # add data
-        gap = pos - len(self._recv_buffer)
-        if gap > 0:
-            self._recv_buffer += bytearray(gap)
-        self._recv_buffer[pos : pos + count] = frame.data
-
-        if self.reader and self.has_data_to_read():
-            self.reader.feed_data(self.pull_data())
+        if self.reader:
+            if self.has_data_to_read():
+                self.reader.feed_data(self.pull_data())
+            if frame.fin:
+                self.reader.feed_eof()
 
     def get_frame(self, size: int) -> QuicStreamFrame:
         """
@@ -67,7 +68,9 @@ class QuicStream:
         """
         size = min(size, len(self._send_buffer))
         frame = QuicStreamFrame(data=self._send_buffer[:size], offset=self._send_start)
+        frame.fin = self._send_fin
         self._send_buffer = self._send_buffer[size:]
+        self._send_fin = False
         self._send_start += size
         return frame
 
@@ -77,7 +80,7 @@ class QuicStream:
         )
 
     def has_data_to_send(self) -> bool:
-        return bool(self._send_buffer)
+        return bool(self._send_buffer) or self._send_fin
 
     def pull_data(self) -> bytes:
         """
@@ -107,3 +110,7 @@ class QuicStream:
             self._send_buffer += data
             if self._connection is not None:
                 self._connection._send_pending()
+
+    def write_eof(self):
+        self._send_fin = True
+        self._connection._send_pending()

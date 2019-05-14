@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 from typing import Generator, List, Optional, Tuple
 
 from .buffer import (
@@ -353,9 +353,16 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
         start = r.start
 
 
+class QuicStreamFlag(IntFlag):
+    FIN = 0x01
+    LEN = 0x02
+    OFF = 0x04
+
+
 @dataclass
 class QuicStreamFrame:
     data: bytes = b""
+    fin: bool = False
     offset: int = 0
 
 

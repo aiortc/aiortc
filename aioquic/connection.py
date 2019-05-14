@@ -14,6 +14,7 @@ from .packet import (
     QuicFrameType,
     QuicHeader,
     QuicProtocolVersion,
+    QuicStreamFlag,
     QuicStreamFrame,
     QuicTransportParameters,
     pull_quic_header,
@@ -46,9 +47,6 @@ SECRETS_LABELS = [
 ]
 SEND_PN_SIZE = 2
 STREAM_FLAGS = 0x07
-STREAM_FLAG_FIN = 1
-STREAM_FLAG_LEN = 2
-STREAM_FLAG_OFF = 4
 
 
 def get_epoch(packet_type: int) -> tls.Epoch:
@@ -338,15 +336,19 @@ class QuicConnection:
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
                 flags = frame_type & STREAM_FLAGS
                 stream_id = pull_uint_var(buf)
-                if flags & STREAM_FLAG_OFF:
+                if flags & QuicStreamFlag.OFF:
                     offset = pull_uint_var(buf)
                 else:
                     offset = 0
-                if flags & STREAM_FLAG_LEN:
+                if flags & QuicStreamFlag.LEN:
                     length = pull_uint_var(buf)
                 else:
                     length = buf.capacity - buf.tell()
-                frame = QuicStreamFrame(offset=offset, data=pull_bytes(buf, length))
+                frame = QuicStreamFrame(
+                    offset=offset,
+                    data=pull_bytes(buf, length),
+                    fin=bool(flags & QuicStreamFlag.FIN),
+                )
                 stream = self._get_or_create_stream(stream_id)
                 stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
@@ -456,7 +458,10 @@ class QuicConnection:
                 frame = stream.get_frame(
                     PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
                 )
-                push_uint_var(buf, QuicFrameType.STREAM_BASE + 0x07)
+                flags = QuicStreamFlag.OFF | QuicStreamFlag.LEN
+                if frame.fin:
+                    flags |= QuicStreamFlag.FIN
+                push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
                 with push_stream_frame(buf, 0, frame.offset):
                     push_bytes(buf, frame.data)
 

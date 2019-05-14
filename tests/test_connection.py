@@ -76,8 +76,19 @@ class QuicConnectionTest(TestCase):
         )
         self.assertEqual(run(server_reader.read(1024)), b"ping")
         server_writer.write(b"pong")
+        self.assertEqual(client_transport.sent, 6)
+        self.assertEqual(server_transport.sent, 5)
 
+        # client receives pong
         self.assertEqual(run(client_reader.read(1024)), b"pong")
+
+        # client writes EOF
+        client_writer.write_eof()
+        self.assertEqual(client_transport.sent, 7)
+        self.assertEqual(server_transport.sent, 6)
+
+        # server receives EOF
+        self.assertEqual(run(server_reader.read()), b"")
 
         return client, server
 
