@@ -1,3 +1,4 @@
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
@@ -63,7 +64,7 @@ class QuicProtocolVersion(IntEnum):
 
 @dataclass
 class QuicHeader:
-    version: int
+    version: Optional[int]
     packet_type: int
     destination_cid: bytes
     source_cid: bytes
@@ -123,7 +124,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
     token = b""
     if is_long_header(first_byte):
         # long header packet
-        version = pull_protocol_version(buf)
+        version = pull_uint32(buf)
         cid_lengths = pull_uint8(buf)
 
         destination_cid_length = decode_cid_length(cid_lengths // 16)
@@ -196,6 +197,26 @@ def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
         push_bytes(buf, header.token)
     push_uint16(buf, 0)  # length
     push_uint16(buf, 0)  # pn
+
+
+def encode_quic_version_negotiation(
+    source_cid: bytes,
+    destination_cid: bytes,
+    supported_versions: List[QuicProtocolVersion],
+) -> bytes:
+    buf = Buffer(capacity=100)
+    push_uint8(buf, os.urandom(1)[0] | PACKET_LONG_HEADER)
+    push_protocol_version(buf, QuicProtocolVersion.NEGOTIATION)
+    push_uint8(
+        buf,
+        (encode_cid_length(len(destination_cid)) << 4)
+        | encode_cid_length(len(source_cid)),
+    )
+    push_bytes(buf, destination_cid)
+    push_bytes(buf, source_cid)
+    for version in supported_versions:
+        push_protocol_version(buf, version)
+    return buf.data
 
 
 # TLS EXTENSION

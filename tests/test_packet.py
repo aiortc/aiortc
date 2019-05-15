@@ -9,6 +9,7 @@ from aioquic.packet import (
     QuicHeader,
     QuicProtocolVersion,
     QuicTransportParameters,
+    encode_quic_version_negotiation,
     pull_quic_header,
     pull_quic_transport_parameters,
     pull_uint_var,
@@ -155,6 +156,14 @@ class PacketTest(TestCase):
         with self.assertRaises(ValueError) as cm:
             pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(str(cm.exception), "Packet fixed bit is zero")
+
+    def test_encode_quic_version_negotiation(self):
+        data = encode_quic_version_negotiation(
+            destination_cid=binascii.unhexlify("dae1889b81a91c26"),
+            source_cid=binascii.unhexlify("f49243784f9bf3be"),
+            supported_versions=[QuicProtocolVersion.DRAFT_18, 0x1A2A3A4A],
+        )
+        self.assertEqual(data[1:], load("version_negotiation.bin")[1:])
 
     def test_push_initial(self):
         buf = Buffer(capacity=32)
