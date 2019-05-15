@@ -101,6 +101,13 @@ class QuicConnection:
             See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
     """
 
+    supported_versions = [
+        QuicProtocolVersion.DRAFT_17,
+        QuicProtocolVersion.DRAFT_18,
+        QuicProtocolVersion.DRAFT_19,
+        QuicProtocolVersion.DRAFT_20,
+    ]
+
     def __init__(
         self,
         is_client: bool = True,
@@ -127,13 +134,7 @@ class QuicConnection:
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
 
         # protocol versions
-        self.supported_versions = [
-            QuicProtocolVersion.DRAFT_17,
-            QuicProtocolVersion.DRAFT_18,
-            QuicProtocolVersion.DRAFT_19,
-            QuicProtocolVersion.DRAFT_20,
-        ]
-        self.version = QuicProtocolVersion.DRAFT_20
+        self.version = max(self.supported_versions)
 
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()

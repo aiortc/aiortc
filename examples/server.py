@@ -8,7 +8,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic.connection import QuicConnection
-from aioquic.packet import pull_quic_header
+from aioquic.packet import encode_quic_version_negotiation, pull_quic_header
 from aioquic.tls import Buffer
 
 
@@ -33,6 +33,22 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, datagram, addr):
         buf = Buffer(data=datagram)
         header = pull_quic_header(buf, host_cid_length=8)
+
+        # version negotiation
+        if (
+            header.version is not None
+            and header.version not in QuicConnection.supported_versions
+        ):
+            self._transport.sendto(
+                encode_quic_version_negotiation(
+                    source_cid=header.destination_cid,
+                    destination_cid=header.source_cid,
+                    supported_versions=QuicConnection.supported_versions,
+                ),
+                addr,
+            )
+            return
+
         connection = self._connections.get(header.destination_cid, None)
         if connection is None:
             connection = QuicConnection(is_client=False, **self._kwargs)
