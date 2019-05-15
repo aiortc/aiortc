@@ -348,33 +348,6 @@ class QuicConnection:
         self.__initialized = True
         self.packet_number = 0
 
-    def _crypto_data_received(self, data: bytes) -> None:
-        # pass data to TLS layer
-        try:
-            self.tls.handle_message(data, self.send_buffer)
-        except tls.Alert as exc:
-            raise QuicConnectionError(
-                error_code=QuicErrorCode.CRYPTO_ERROR + int(exc.description),
-                frame_type=QuicFrameType.CRYPTO,
-                reason_phrase=str(exc),
-            )
-
-        # update current epoch
-        if self.tls.state in [
-            tls.State.CLIENT_POST_HANDSHAKE,
-            tls.State.SERVER_POST_HANDSHAKE,
-        ]:
-            if not self.__connected.is_set():
-                # parse transport parameters
-                for ext_type, ext_data in self.tls.received_extensions:
-                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
-                        self._parse_transport_parameters(ext_data)
-                        break
-                self.__connected.set()
-            self.__epoch = tls.Epoch.ONE_RTT
-        else:
-            self.__epoch = tls.Epoch.HANDSHAKE
-
     def _handle_ack_frame(self, frame_type: int, buf: Buffer) -> None:
         """
         Handle an ACK frame.
@@ -393,6 +366,42 @@ class QuicConnection:
             "Connection close code 0x%X, reason %s" % (error_code, reason_phrase)
         )
         self.connection_lost(None)
+
+    def _handle_crypto_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a CRYPTO frame.
+        """
+        stream = self.streams[epoch]
+        stream.add_frame(packet.pull_crypto_frame(buf))
+        data = stream.pull_data()
+        if data:
+            # pass data to TLS layer
+            try:
+                self.tls.handle_message(data, self.send_buffer)
+            except tls.Alert as exc:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.CRYPTO_ERROR + int(exc.description),
+                    frame_type=QuicFrameType.CRYPTO,
+                    reason_phrase=str(exc),
+                )
+
+            # update current epoch
+            if self.tls.state in [
+                tls.State.CLIENT_POST_HANDSHAKE,
+                tls.State.SERVER_POST_HANDSHAKE,
+            ]:
+                if not self.__connected.is_set():
+                    # parse transport parameters
+                    for ext_type, ext_data in self.tls.received_extensions:
+                        if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                            self._parse_transport_parameters(ext_data)
+                            break
+                    self.__connected.set()
+                self.__epoch = tls.Epoch.ONE_RTT
+            else:
+                self.__epoch = tls.Epoch.HANDSHAKE
 
     def _handle_data_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
         """
@@ -530,11 +539,7 @@ class QuicConnection:
             elif frame_type == QuicFrameType.STOP_SENDING:
                 self._handle_stop_sending_frame(frame_type, buf)
             elif frame_type == QuicFrameType.CRYPTO:
-                stream = self.streams[epoch]
-                stream.add_frame(packet.pull_crypto_frame(buf))
-                data = stream.pull_data()
-                if data:
-                    self._crypto_data_received(data)
+                self._handle_crypto_frame(epoch, frame_type, buf)
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 self._handle_new_token_frame(frame_type, buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
@@ -566,8 +571,11 @@ class QuicConnection:
             ]:
                 self._handle_connection_close_frame(frame_type, buf)
             else:
-                self.__logger.warning("unhandled frame type %d", frame_type)
-                break
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                    frame_type=frame_type,
+                    reason_phrase="Unexpected frame type",
+                )
 
         self._push_crypto_data()
 

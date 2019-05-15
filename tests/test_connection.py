@@ -522,6 +522,25 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(b"\x17\x00")
         server._send_pending()
 
+    def test_handle_unknown_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # server sends unknown frame
+        server._pending_flow_control.append(b"\x1e")
+        server._send_pending()
+
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)
         client.supported_versions = [QuicProtocolVersion.DRAFT_19]
