@@ -368,6 +368,86 @@ class QuicConnection:
         else:
             self.__epoch = tls.Epoch.HANDSHAKE
 
+    def _handle_ack_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle an ACK frame.
+        """
+        packet.pull_ack_frame(buf)
+
+    def _handle_connection_close_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a CONNECTION_CLOSE frame.
+        """
+        if frame_type == QuicFrameType.TRANSPORT_CLOSE:
+            error_code, _, reason_phrase = packet.pull_transport_close_frame(buf)
+        else:
+            error_code, reason_phrase = packet.pull_application_close_frame(buf)
+        self.__logger.info(
+            "Connection close code 0x%X, reason %s" % (error_code, reason_phrase)
+        )
+        self.connection_lost(None)
+
+    def _handle_max_data_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a MAX_DATA frame.
+
+        This adjusts the total amount of we can send to the peer.
+        """
+        pull_uint_var(buf)
+
+    def _handle_max_stream_data_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a MAX_STREAM_DATA frame.
+
+        This adjusts the amount of data we can send on a specific stream.
+        """
+        pull_uint_var(buf)
+        pull_uint_var(buf)
+
+    def _handle_max_streams_bidi_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a MAX_STREAMS_BIDI frame.
+
+        This raises number of bidirectional streams we can initiate to the peer.
+        """
+        max_streams = pull_uint_var(buf)
+        if max_streams > self._remote_max_streams_bidi:
+            self.__logger.info("Remote max_streams_bidi raised to %d" % max_streams)
+            self._remote_max_streams_bidi = max_streams
+
+    def _handle_max_streams_uni_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a MAX_STREAMS_UNI frame.
+
+        This raises number of unidirectional streams we can initiate to the peer.
+        """
+        max_streams = pull_uint_var(buf)
+        if max_streams > self._remote_max_streams_uni:
+            self.__logger.info("Remote max_streams_uni raised to %d" % max_streams)
+            self._remote_max_streams_uni = max_streams
+
+    def _handle_stream_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a STREAM frame.
+        """
+        flags = frame_type & STREAM_FLAGS
+        stream_id = pull_uint_var(buf)
+        if flags & QuicStreamFlag.OFF:
+            offset = pull_uint_var(buf)
+        else:
+            offset = 0
+        if flags & QuicStreamFlag.LEN:
+            length = pull_uint_var(buf)
+        else:
+            length = buf.capacity - buf.tell()
+        frame = QuicStreamFrame(
+            offset=offset,
+            data=pull_bytes(buf, length),
+            fin=bool(flags & QuicStreamFlag.FIN),
+        )
+        stream = self._get_or_create_stream(stream_id)
+        stream.add_frame(frame)
+
     def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> bool:
         buf = Buffer(data=plain)
 
@@ -384,7 +464,7 @@ class QuicConnection:
             if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
                 pass
             elif frame_type == QuicFrameType.ACK:
-                packet.pull_ack_frame(buf)
+                self._handle_ack_frame(frame_type, buf)
             elif frame_type == QuicFrameType.CRYPTO:
                 stream = self.streams[epoch]
                 stream.add_frame(packet.pull_crypto_frame(buf))
@@ -394,49 +474,22 @@ class QuicConnection:
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 packet.pull_new_token_frame(buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
-                flags = frame_type & STREAM_FLAGS
-                stream_id = pull_uint_var(buf)
-                if flags & QuicStreamFlag.OFF:
-                    offset = pull_uint_var(buf)
-                else:
-                    offset = 0
-                if flags & QuicStreamFlag.LEN:
-                    length = pull_uint_var(buf)
-                else:
-                    length = buf.capacity - buf.tell()
-                frame = QuicStreamFrame(
-                    offset=offset,
-                    data=pull_bytes(buf, length),
-                    fin=bool(flags & QuicStreamFlag.FIN),
-                )
-                stream = self._get_or_create_stream(stream_id)
-                stream.add_frame(frame)
+                self._handle_stream_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_DATA:
-                pull_uint_var(buf)
+                self._handle_max_data_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_STREAM_DATA:
-                pull_uint_var(buf)
-                pull_uint_var(buf)
+                self._handle_max_stream_data_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_STREAMS_BIDI:
-                self._remote_max_streams_bidi = pull_uint_var(buf)
+                self._handle_max_streams_bidi_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
-                self._remote_max_streams_uni = pull_uint_var(buf)
+                self._handle_max_streams_uni_frame(frame_type, buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 packet.pull_new_connection_id_frame(buf)
-            elif frame_type == QuicFrameType.TRANSPORT_CLOSE:
-                error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(
-                    buf
-                )
-                self.__logger.info(
-                    "Transport close code 0x%X, reason %s" % (error_code, reason_phrase)
-                )
-                self.connection_lost(None)
-            elif frame_type == QuicFrameType.APPLICATION_CLOSE:
-                error_code, reason_phrase = packet.pull_application_close_frame(buf)
-                self.__logger.info(
-                    "Application close code 0x%X, reason %s"
-                    % (error_code, reason_phrase)
-                )
-                self.connection_lost(None)
+            elif frame_type in [
+                QuicFrameType.TRANSPORT_CLOSE,
+                QuicFrameType.APPLICATION_CLOSE,
+            ]:
+                self._handle_connection_close_frame(frame_type, buf)
             else:
                 self.__logger.warning("unhandled frame type %d", frame_type)
                 break

@@ -265,7 +265,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
 
-    def test_max_data(self):
+    def test_handle_max_data_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -283,7 +283,7 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(b"\x10\x70\x39")
         server._send_pending()
 
-    def test_max_stream_data(self):
+    def test_handle_max_stream_data_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -302,7 +302,7 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(b"\x11\x00\x01")
         server._send_pending()
 
-    def test_max_streams(self):
+    def test_handle_max_streams_bidi_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -316,18 +316,40 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
         self.assertEqual(client._remote_max_streams_bidi, 100)
-        self.assertEqual(client._remote_max_streams_uni, 0)
 
         # server sends MAX_STREAMS_BIDI: 101
         server._pending_flow_control.append(b"\x12\x40\x65")
         server._send_pending()
         self.assertEqual(client._remote_max_streams_bidi, 101)
+
+        # server sends MAX_STREAMS_BIDI: 99 -> discarded
+        server._pending_flow_control.append(b"\x12\x40\x63")
+        server._send_pending()
+        self.assertEqual(client._remote_max_streams_bidi, 101)
+
+    def test_handle_max_streams_uni_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
         self.assertEqual(client._remote_max_streams_uni, 0)
 
         # server sends MAX_STREAMS_UNI: 1
         server._pending_flow_control.append(b"\x13\x01")
         server._send_pending()
-        self.assertEqual(client._remote_max_streams_bidi, 101)
+        self.assertEqual(client._remote_max_streams_uni, 1)
+
+        # server sends MAX_STREAMS_UNI: 0 -> discarded
+        server._pending_flow_control.append(b"\x13\x00")
+        server._send_pending()
         self.assertEqual(client._remote_max_streams_uni, 1)
 
     def test_transport_close(self):
