@@ -121,20 +121,12 @@ class QuicConnection:
         ]
         self.version = QuicProtocolVersion.DRAFT_20
 
-        self.quic_transport_parameters = QuicTransportParameters(
-            idle_timeout=600,
-            initial_max_data=16777216,
-            initial_max_stream_data_bidi_local=1048576,
-            initial_max_stream_data_bidi_remote=1048576,
-            initial_max_stream_data_uni=1048576,
-            initial_max_streams_bidi=100,
-            ack_delay_exponent=10,
-        )
-
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
         self.__initialized = False
+        self.__local_max_streams_bidi = 100
+        self.__local_max_streams_uni = 0
         self.__logger = logger
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
@@ -277,19 +269,26 @@ class QuicConnection:
         return self.streams[stream_id]
 
     def _initialize(self, peer_cid: bytes) -> None:
-        # transport parameters
+        # build transport parameters
+        quic_transport_parameters = QuicTransportParameters(
+            initial_max_data=16777216,
+            initial_max_stream_data_bidi_local=1048576,
+            initial_max_stream_data_bidi_remote=1048576,
+            initial_max_stream_data_uni=1048576,
+            initial_max_streams_bidi=self.__local_max_streams_bidi,
+            initial_max_streams_uni=self.__local_max_streams_uni,
+            ack_delay_exponent=10,
+        )
         if self.version >= QuicProtocolVersion.DRAFT_19:
-            self.quic_transport_parameters.idle_timeout = 600000
+            quic_transport_parameters.idle_timeout = 600000
         else:
-            self.quic_transport_parameters.idle_timeout = 600
+            quic_transport_parameters.idle_timeout = 600
             if self.is_client:
-                self.quic_transport_parameters.initial_version = self.version
+                quic_transport_parameters.initial_version = self.version
             else:
-                self.quic_transport_parameters.negotiated_version = self.version
-                self.quic_transport_parameters.supported_versions = (
-                    self.supported_versions
-                )
-                self.quic_transport_parameters.stateless_reset_token = bytes(16)
+                quic_transport_parameters.negotiated_version = self.version
+                quic_transport_parameters.supported_versions = self.supported_versions
+                quic_transport_parameters.stateless_reset_token = bytes(16)
 
         # TLS
         self.tls = tls.Context(is_client=self.is_client, logger=self.__logger)
@@ -297,7 +296,10 @@ class QuicConnection:
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
         self.tls.handshake_extensions = [
-            (tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS, self._serialize_parameters())
+            (
+                tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
+                self._serialize_parameters(quic_transport_parameters),
+            )
         ]
         self.tls.server_name = self.server_name
         self.tls.update_traffic_key_cb = self._update_traffic_key
@@ -436,14 +438,16 @@ class QuicConnection:
         for datagram in self._pending_datagrams():
             self.__transport.sendto(datagram)
 
-    def _serialize_parameters(self) -> bytes:
+    def _serialize_parameters(
+        self, quic_transport_parameters: QuicTransportParameters
+    ) -> bytes:
         buf = Buffer(capacity=512)
         if self.version >= QuicProtocolVersion.DRAFT_19:
             is_client = None
         else:
             is_client = self.is_client
         push_quic_transport_parameters(
-            buf, self.quic_transport_parameters, is_client=is_client
+            buf, quic_transport_parameters, is_client=is_client
         )
         return buf.data
 
