@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Tuple, Union
 
 from . import packet, tls
 from .buffer import pull_bytes, pull_uint32, push_bytes, push_uint8, push_uint16
@@ -132,6 +132,11 @@ class QuicConnection:
         self.secrets_log_file = secrets_log_file
         self.server_name = server_name
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
+
+        # callbacks
+        self.stream_created_cb: Callable[
+            [asyncio.StreamReader, asyncio.StreamWriter], None
+        ] = lambda r, w: None
 
         # protocol versions
         self.version = max(self.supported_versions)
@@ -289,6 +294,9 @@ class QuicConnection:
     def _get_or_create_stream(self, stream_id: int) -> QuicStream:
         if stream_id not in self.streams:
             self.streams[stream_id] = QuicStream(connection=self, stream_id=stream_id)
+            self.stream_created_cb(
+                self.streams[stream_id].reader, self.streams[stream_id].writer
+            )
         return self.streams[stream_id]
 
     def _initialize(self, peer_cid: bytes) -> None:

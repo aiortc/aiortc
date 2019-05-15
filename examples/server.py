@@ -12,6 +12,20 @@ from aioquic.packet import encode_quic_version_negotiation, pull_quic_header
 from aioquic.tls import Buffer
 
 
+async def serve_http_request(reader, writer):
+    """
+    Serve an HTTP/0.9 request.
+    """
+    request = await reader.read()
+
+    if request == b"GET /\r\n":
+        writer.write(b"It works!\r\n")
+    else:
+        writer.write(b"Not found\r\n")
+
+    writer.write_eof()
+
+
 class QuicConnectionTransport:
     def __init__(self, protocol, addr):
         self.__addr = addr
@@ -54,10 +68,16 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             # create new connection
             connection = QuicConnection(is_client=False, **self._kwargs)
             connection.connection_made(QuicConnectionTransport(self, addr))
+            connection.stream_created_cb = self.stream_created
             self._connections[connection.host_cid] = connection
 
         if connection is not None:
             connection.datagram_received(datagram, addr)
+
+    def stream_created(self, reader, writer):
+        stream_id = writer.get_extra_info("stream_id")
+        if stream_id == 0:
+            asyncio.ensure_future(serve_http_request(reader, writer))
 
 
 async def run(host, port, **kwargs):
