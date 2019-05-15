@@ -430,6 +430,43 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(binascii.unhexlify("07080102030405060708"))
         server._send_pending()
 
+    def test_handle_path_challenge_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # server sends PATH_CHALLENGE
+        server._send_path_challenge()
+
+    def test_handle_path_response_frame_bad(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # client sends unsollicited PATH_RESPONSE
+        client._pending_flow_control.append(binascii.unhexlify("1b1122334455667788"))
+        client._send_pending()
+
     def test_handle_reset_stream_frame(self):
         client = QuicConnection(is_client=True)
 

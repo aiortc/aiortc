@@ -156,11 +156,46 @@ class QuicConnection:
         self.__local_max_streams_bidi = 100
         self.__local_max_streams_uni = 0
         self.__logger = logger
+        self.__path_challenge = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0.0
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
         self.__transport: Optional[asyncio.DatagramTransport] = None
+
+        # frame handlers
+        self.__frame_handlers = [
+            self._handle_padding_frame,
+            self._handle_padding_frame,
+            self._handle_ack_frame,
+            self._handle_ack_frame,
+            self._handle_reset_stream_frame,
+            self._handle_stop_sending_frame,
+            self._handle_crypto_frame,
+            self._handle_new_token_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_stream_frame,
+            self._handle_max_data_frame,
+            self._handle_max_stream_data_frame,
+            self._handle_max_streams_bidi_frame,
+            self._handle_max_streams_uni_frame,
+            self._handle_data_blocked_frame,
+            self._handle_stream_data_blocked_frame,
+            self._handle_streams_blocked_frame,
+            self._handle_streams_blocked_frame,
+            self._handle_new_connection_id_frame,
+            self._handle_retire_connection_id_frame,
+            self._handle_path_challenge_frame,
+            self._handle_path_response_frame,
+            self._handle_connection_close_frame,
+            self._handle_connection_close_frame,
+        ]
 
     def close(
         self, error_code: int, frame_type: Optional[int] = None, reason_phrase: str = ""
@@ -348,13 +383,19 @@ class QuicConnection:
         self.__initialized = True
         self.packet_number = 0
 
-    def _handle_ack_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_ack_frame(self, epoch: tls.Epoch, frame_type: int, buf: Buffer) -> None:
         """
         Handle an ACK frame.
         """
         packet.pull_ack_frame(buf)
+        if frame_type == QuicFrameType.ACK_ECN:
+            pull_uint_var(buf)
+            pull_uint_var(buf)
+            pull_uint_var(buf)
 
-    def _handle_connection_close_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_connection_close_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a CONNECTION_CLOSE frame.
         """
@@ -403,13 +444,17 @@ class QuicConnection:
             else:
                 self.__epoch = tls.Epoch.HANDSHAKE
 
-    def _handle_data_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_data_blocked_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a DATA_BLOCKED frame.
         """
         pull_uint_var(buf)  # limit
 
-    def _handle_max_data_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_max_data_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a MAX_DATA frame.
 
@@ -417,7 +462,9 @@ class QuicConnection:
         """
         pull_uint_var(buf)  # limit
 
-    def _handle_max_stream_data_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_max_stream_data_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a MAX_STREAM_DATA frame.
 
@@ -426,7 +473,9 @@ class QuicConnection:
         pull_uint_var(buf)  # stream id
         pull_uint_var(buf)  # limit
 
-    def _handle_max_streams_bidi_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_max_streams_bidi_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a MAX_STREAMS_BIDI frame.
 
@@ -437,7 +486,9 @@ class QuicConnection:
             self.__logger.info("Remote max_streams_bidi raised to %d" % max_streams)
             self._remote_max_streams_bidi = max_streams
 
-    def _handle_max_streams_uni_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_max_streams_uni_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a MAX_STREAMS_UNI frame.
 
@@ -448,19 +499,56 @@ class QuicConnection:
             self.__logger.info("Remote max_streams_uni raised to %d" % max_streams)
             self._remote_max_streams_uni = max_streams
 
-    def _handle_new_connection_id_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_new_connection_id_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a NEW_CONNECTION_ID frame.
         """
         packet.pull_new_connection_id_frame(buf)
 
-    def _handle_new_token_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_new_token_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a NEW_TOKEN frame.
         """
         packet.pull_new_token_frame(buf)
 
-    def _handle_reset_stream_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_padding_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a PADDING or PING frame.
+        """
+        pass
+
+    def _handle_path_challenge_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a PATH_CHALLENGE frame.
+        """
+        data = pull_bytes(buf, 8)
+        self._pending_flow_control.append(bytes([QuicFrameType.PATH_RESPONSE]) + data)
+
+    def _handle_path_response_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a PATH_RESPONSE frame.
+        """
+        data = pull_bytes(buf, 8)
+        if data != self.__path_challenge:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=frame_type,
+                reason_phrase="Response does not match challenge",
+            )
+
+    def _handle_reset_stream_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a RESET_STREAM frame.
         """
@@ -469,20 +557,26 @@ class QuicConnection:
         pull_uint16(buf)  # unused
         pull_uint_var(buf)  # final size
 
-    def _handle_retire_connection_id_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_retire_connection_id_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a RETIRE_CONNECTION_ID frame.
         """
         pull_uint_var(buf)  # sequence number
 
-    def _handle_stop_sending_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_stop_sending_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a STOP_SENDING frame.
         """
         pull_uint_var(buf)  # stream id
         pull_uint16(buf)  # application error code
 
-    def _handle_stream_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_stream_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a STREAM frame.
         """
@@ -504,14 +598,18 @@ class QuicConnection:
         stream = self._get_or_create_stream(stream_id)
         stream.add_frame(frame)
 
-    def _handle_stream_data_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_stream_data_blocked_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a STREAM_DATA_BLOCKED frame.
         """
         pull_uint_var(buf)  # stream id
         pull_uint_var(buf)  # limit
 
-    def _handle_streams_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+    def _handle_streams_blocked_frame(
+        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle a STREAMS_BLOCKED frame.
         """
@@ -530,46 +628,8 @@ class QuicConnection:
             ]:
                 is_ack_only = False
 
-            if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
-                pass
-            elif frame_type == QuicFrameType.ACK:
-                self._handle_ack_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.RESET_STREAM:
-                self._handle_reset_stream_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.STOP_SENDING:
-                self._handle_stop_sending_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.CRYPTO:
-                self._handle_crypto_frame(epoch, frame_type, buf)
-            elif frame_type == QuicFrameType.NEW_TOKEN:
-                self._handle_new_token_frame(frame_type, buf)
-            elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
-                self._handle_stream_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.MAX_DATA:
-                self._handle_max_data_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.MAX_STREAM_DATA:
-                self._handle_max_stream_data_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.MAX_STREAMS_BIDI:
-                self._handle_max_streams_bidi_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
-                self._handle_max_streams_uni_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.DATA_BLOCKED:
-                self._handle_data_blocked_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.STREAM_DATA_BLOCKED:
-                self._handle_stream_data_blocked_frame(frame_type, buf)
-            elif frame_type in [
-                QuicFrameType.STREAMS_BLOCKED_BIDI,
-                QuicFrameType.STREAMS_BLOCKED_UNI,
-            ]:
-                self._handle_streams_blocked_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
-                self._handle_new_connection_id_frame(frame_type, buf)
-            elif frame_type == QuicFrameType.RETIRE_CONNECTION_ID:
-                self._handle_retire_connection_id_frame(frame_type, buf)
-            elif frame_type in [
-                QuicFrameType.TRANSPORT_CLOSE,
-                QuicFrameType.APPLICATION_CLOSE,
-            ]:
-                self._handle_connection_close_frame(frame_type, buf)
+            if frame_type < len(self.__frame_handlers):
+                self.__frame_handlers[frame_type](epoch, frame_type, buf)
             else:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.PROTOCOL_VIOLATION,
@@ -591,6 +651,13 @@ class QuicConnection:
         for epoch, buf in self.send_buffer.items():
             self.streams[epoch].write(buf.data)
             buf.seek(0)
+
+    def _send_path_challenge(self) -> None:
+        self.__path_challenge = os.urandom(8)
+        self._pending_flow_control.append(
+            bytes([QuicFrameType.PATH_CHALLENGE]) + self.__path_challenge
+        )
+        self._send_pending()
 
     def _send_pending(self) -> None:
         for datagram in self._pending_datagrams():
