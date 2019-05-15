@@ -173,7 +173,7 @@ class PacketTest(TestCase):
 class ParamsTest(TestCase):
     maxDiff = None
 
-    def test_client_params(self):
+    def test_legacy_client_params(self):
         data = binascii.unhexlify(
             "ff0000110031000500048010000000060004801000000007000480100000000"
             "4000481000000000100024258000800024064000a00010a"
@@ -201,7 +201,7 @@ class ParamsTest(TestCase):
         push_quic_transport_parameters(buf, params, is_client=True)
         self.assertEqual(len(buf.data), len(data))
 
-    def test_server_params(self):
+    def test_legacy_server_params(self):
         data = binascii.unhexlify(
             "ff00001104ff000011004500050004801000000006000480100000000700048"
             "010000000040004810000000001000242580002001000000000000000000000"
@@ -276,6 +276,34 @@ class ParamsTest(TestCase):
         buf = Buffer(capacity=len(data))
         push_quic_transport_parameters(buf, params)
         self.assertEqual(buf.data, data)
+
+    def test_params_unknown(self):
+        # fb.mvfst.net sends a proprietary parameter 65280
+        data = binascii.unhexlify(
+            "006400050004800104000006000480010400000700048001040000040004801"
+            "0000000080008c0000000ffffffff00090008c0000000ffffffff0001000480"
+            "00ea60000a00010300030002500000020010616161616262626263636363646"
+            "46464ff00000100"
+        )
+
+        # parse
+        buf = Buffer(data=data)
+        params = pull_quic_transport_parameters(buf)
+        self.assertEqual(
+            params,
+            QuicTransportParameters(
+                idle_timeout=60000,
+                stateless_reset_token=b"aaaabbbbccccdddd",
+                max_packet_size=4096,
+                initial_max_data=1048576,
+                initial_max_stream_data_bidi_local=66560,
+                initial_max_stream_data_bidi_remote=66560,
+                initial_max_stream_data_uni=66560,
+                initial_max_streams_bidi=4294967295,
+                initial_max_streams_uni=4294967295,
+                ack_delay_exponent=3,
+            ),
+        )
 
 
 class FrameTest(TestCase):

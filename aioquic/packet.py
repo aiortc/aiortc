@@ -246,7 +246,7 @@ def pull_quic_transport_parameters(
 ) -> QuicTransportParameters:
     params = QuicTransportParameters()
 
-    # version < DRAFT_17
+    # version < DRAFT_19
     if is_client:
         params.initial_version = pull_protocol_version(buf)
     elif is_client is False:
@@ -259,13 +259,18 @@ def pull_quic_transport_parameters(
             param_id = pull_uint16(buf)
             param_len = pull_uint16(buf)
             param_start = buf.tell()
-            param_name, param_type = PARAMS[param_id]
-            if param_type == int:
-                setattr(params, param_name, pull_uint_var(buf))
-            elif param_type == bytes:
-                setattr(params, param_name, pull_bytes(buf, param_len))
+            if param_id < len(PARAMS):
+                # parse known parameter
+                param_name, param_type = PARAMS[param_id]
+                if param_type == int:
+                    setattr(params, param_name, pull_uint_var(buf))
+                elif param_type == bytes:
+                    setattr(params, param_name, pull_bytes(buf, param_len))
+                else:
+                    setattr(params, param_name, True)
             else:
-                setattr(params, param_name, True)
+                # skip unknown parameter
+                pull_bytes(buf, param_len)
             assert buf.tell() == param_start + param_len
 
     return params
@@ -274,7 +279,7 @@ def pull_quic_transport_parameters(
 def push_quic_transport_parameters(
     buf: Buffer, params: QuicTransportParameters, is_client: Optional[bool] = None
 ) -> None:
-    # version < DRAFT_17
+    # version < DRAFT_19
     if is_client:
         push_protocol_version(buf, params.initial_version)
     elif is_client is False:

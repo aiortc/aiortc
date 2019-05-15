@@ -827,6 +827,7 @@ class Context:
         self.handshake_extensions: List[Extension] = []
         self.is_client = is_client
         self.key_schedule: Optional[KeySchedule] = None
+        self.received_extensions: List[Extension] = []
         self.server_name: Optional[str] = None
         self.update_traffic_key_cb: Callable[
             [Direction, Epoch, bytes], None
@@ -995,7 +996,8 @@ class Context:
         self._set_state(State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS)
 
     def _client_handle_encrypted_extensions(self, input_buf: Buffer) -> None:
-        pull_encrypted_extensions(input_buf)
+        encrypted_extensions = pull_encrypted_extensions(input_buf)
+        self.received_extensions = encrypted_extensions.other_extensions
 
         self._setup_traffic_protection(
             Direction.ENCRYPT, Epoch.HANDSHAKE, b"c hs traffic"
@@ -1099,6 +1101,7 @@ class Context:
         self.server_random = os.urandom(32)
         self.session_id = peer_hello.session_id
         self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+        self.received_extensions = peer_hello.other_extensions
 
         self.key_schedule = KeySchedule(cipher_suite)
         self.key_schedule.extract(None)

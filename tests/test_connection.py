@@ -264,6 +264,52 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
 
+    def test_max_data(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends MAX_DATA: 12345
+        server._pending_flow_control.append(b"\x10\x70\x39")
+        server._send_pending()
+
+    def test_max_streams(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+        self.assertEqual(client._remote_max_streams_uni, 0)
+
+        # server sends MAX_STREAMS_BIDI: 101
+        server._pending_flow_control.append(b"\x12\x40\x65")
+        server._send_pending()
+        self.assertEqual(client._remote_max_streams_bidi, 101)
+        self.assertEqual(client._remote_max_streams_uni, 0)
+
+        # server sends MAX_STREAMS_UNI: 1
+        server._pending_flow_control.append(b"\x13\x01")
+        server._send_pending()
+        self.assertEqual(client._remote_max_streams_bidi, 101)
+        self.assertEqual(client._remote_max_streams_uni, 1)
+
     def test_transport_close(self):
         client = QuicConnection(is_client=True)
 

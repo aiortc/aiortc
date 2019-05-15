@@ -19,6 +19,7 @@ from .packet import (
     QuicStreamFrame,
     QuicTransportParameters,
     pull_quic_header,
+    pull_quic_transport_parameters,
     pull_uint_var,
     push_quic_header,
     push_quic_transport_parameters,
@@ -142,6 +143,10 @@ class QuicConnection:
         self.__local_max_streams_bidi = 100
         self.__local_max_streams_uni = 0
         self.__logger = logger
+        self._pending_flow_control: List[bytes] = []
+        self._remote_idle_timeout = 0.0
+        self._remote_max_streams_bidi = 0
+        self._remote_max_streams_uni = 0
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
     def close(
@@ -294,7 +299,7 @@ class QuicConnection:
         self.tls.handshake_extensions = [
             (
                 tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
-                self._serialize_parameters(),
+                self._serialize_transport_parameters(),
             )
         ]
         self.tls.server_name = self.server_name
@@ -327,6 +332,33 @@ class QuicConnection:
         self.__initialized = True
         self.packet_number = 0
 
+    def _crypto_data_received(self, data: bytes) -> None:
+        # pass data to TLS layer
+        try:
+            self.tls.handle_message(data, self.send_buffer)
+        except tls.Alert as exc:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.CRYPTO_ERROR + int(exc.description),
+                frame_type=QuicFrameType.CRYPTO,
+                reason_phrase=str(exc),
+            )
+
+        # update current epoch
+        if self.tls.state in [
+            tls.State.CLIENT_POST_HANDSHAKE,
+            tls.State.SERVER_POST_HANDSHAKE,
+        ]:
+            if not self.__connected.is_set():
+                # parse transport parameters
+                for ext_type, ext_data in self.tls.received_extensions:
+                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                        self._parse_transport_parameters(ext_data)
+                        break
+                self.__connected.set()
+            self.__epoch = tls.Epoch.ONE_RTT
+        else:
+            self.__epoch = tls.Epoch.HANDSHAKE
+
     def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> bool:
         buf = Buffer(data=plain)
 
@@ -345,27 +377,7 @@ class QuicConnection:
                 stream.add_frame(packet.pull_crypto_frame(buf))
                 data = stream.pull_data()
                 if data:
-                    # pass data to TLS layer
-                    try:
-                        self.tls.handle_message(data, self.send_buffer)
-                    except tls.Alert as exc:
-                        raise QuicConnectionError(
-                            error_code=QuicErrorCode.CRYPTO_ERROR
-                            + int(exc.description),
-                            frame_type=frame_type,
-                            reason_phrase=str(exc),
-                        )
-
-                    # update current epoch
-                    if self.tls.state in [
-                        tls.State.CLIENT_POST_HANDSHAKE,
-                        tls.State.SERVER_POST_HANDSHAKE,
-                    ]:
-                        if not self.__connected.is_set():
-                            self.__connected.set()
-                        self.__epoch = tls.Epoch.ONE_RTT
-                    else:
-                        self.__epoch = tls.Epoch.HANDSHAKE
+                    self._crypto_data_received(data)
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 packet.pull_new_token_frame(buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
@@ -388,11 +400,10 @@ class QuicConnection:
                 stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
                 pull_uint_var(buf)
-            elif frame_type in [
-                QuicFrameType.MAX_STREAMS_BIDI,
-                QuicFrameType.MAX_STREAMS_UNI,
-            ]:
-                pull_uint_var(buf)
+            elif frame_type == QuicFrameType.MAX_STREAMS_BIDI:
+                self._remote_max_streams_bidi = pull_uint_var(buf)
+            elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
+                self._remote_max_streams_uni = pull_uint_var(buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 packet.pull_new_connection_id_frame(buf)
             elif frame_type == QuicFrameType.TRANSPORT_CLOSE:
@@ -433,7 +444,31 @@ class QuicConnection:
         for datagram in self._pending_datagrams():
             self.__transport.sendto(datagram)
 
-    def _serialize_parameters(self) -> bytes:
+    def _parse_transport_parameters(self, data: bytes) -> None:
+        if self.version >= QuicProtocolVersion.DRAFT_19:
+            is_client = None
+        else:
+            is_client = not self.is_client
+        quic_transport_parameters = pull_quic_transport_parameters(
+            Buffer(data=data), is_client=is_client
+        )
+        if quic_transport_parameters.idle_timeout is not None:
+            if self.version >= QuicProtocolVersion.DRAFT_19:
+                self._remote_idle_timeout = (
+                    quic_transport_parameters.idle_timeout / 1000
+                )
+            else:
+                self._remote_idle_timeout = quic_transport_parameters.idle_timeout
+        if quic_transport_parameters.initial_max_streams_bidi is not None:
+            self._remote_max_streams_bidi = (
+                quic_transport_parameters.initial_max_streams_bidi
+            )
+        if quic_transport_parameters.initial_max_streams_uni is not None:
+            self._remote_max_streams_uni = (
+                quic_transport_parameters.initial_max_streams_uni
+            )
+
+    def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
             initial_max_data=16777216,
             initial_max_stream_data_bidi_local=1048576,
@@ -501,6 +536,11 @@ class QuicConnection:
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
                 self.send_ack[epoch] = False
+
+            # FLOW CONTROL
+            for control_frame in self._pending_flow_control:
+                push_bytes(buf, control_frame)
+            self._pending_flow_control = []
 
             # CLOSE
             if self.__close and self.__epoch == epoch:
