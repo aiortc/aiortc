@@ -50,11 +50,14 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             return
 
         connection = self._connections.get(header.destination_cid, None)
-        if connection is None:
+        if connection is None and header.is_long_header:
+            # create new connection
             connection = QuicConnection(is_client=False, **self._kwargs)
             connection.connection_made(QuicConnectionTransport(self, addr))
             self._connections[connection.host_cid] = connection
-        connection.datagram_received(datagram, addr)
+
+        if connection is not None:
+            connection.datagram_received(datagram, addr)
 
 
 async def run(host, port, **kwargs):

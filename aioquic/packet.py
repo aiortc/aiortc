@@ -72,6 +72,10 @@ class QuicHeader:
     token: bytes = b""
     rest_length: int = 0
 
+    @property
+    def is_long_header(self) -> bool:
+        return self.packet_type is None or is_long_header(self.packet_type)
+
 
 def decode_cid_length(length: int) -> int:
     return length + 3 if length else 0
