@@ -388,7 +388,8 @@ def push_crypto_frame(buf: Buffer, offset: int = 0) -> Generator:
 @contextmanager
 def push_stream_frame(buf: Buffer, stream_id: int, offset: int) -> Generator:
     push_uint_var(buf, stream_id)
-    push_uint_var(buf, offset)
+    if offset:
+        push_uint_var(buf, offset)
     push_uint16(buf, 0)
     start = buf.tell()
     yield

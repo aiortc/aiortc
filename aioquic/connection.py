@@ -496,7 +496,9 @@ class QuicConnection:
                     frame = stream.get_frame(
                         PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
                     )
-                    flags = QuicStreamFlag.OFF | QuicStreamFlag.LEN
+                    flags = QuicStreamFlag.LEN
+                    if frame.offset:
+                        flags |= QuicStreamFlag.OFF
                     if frame.fin:
                         flags |= QuicStreamFlag.FIN
                     push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
