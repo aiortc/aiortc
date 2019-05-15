@@ -426,6 +426,18 @@ class QuicConnection:
             self.__logger.info("Remote max_streams_uni raised to %d" % max_streams)
             self._remote_max_streams_uni = max_streams
 
+    def _handle_new_connection_id_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a NEW_CONNECTION_ID frame.
+        """
+        packet.pull_new_connection_id_frame(buf)
+
+    def _handle_new_token_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a NEW_TOKEN frame.
+        """
+        packet.pull_new_token_frame(buf)
+
     def _handle_stream_frame(self, frame_type: int, buf: Buffer) -> None:
         """
         Handle a STREAM frame.
@@ -472,7 +484,7 @@ class QuicConnection:
                 if data:
                     self._crypto_data_received(data)
             elif frame_type == QuicFrameType.NEW_TOKEN:
-                packet.pull_new_token_frame(buf)
+                self._handle_new_token_frame(frame_type, buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
                 self._handle_stream_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_DATA:
@@ -484,7 +496,7 @@ class QuicConnection:
             elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
                 self._handle_max_streams_uni_frame(frame_type, buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
-                packet.pull_new_connection_id_frame(buf)
+                self._handle_new_connection_id_frame(frame_type, buf)
             elif frame_type in [
                 QuicFrameType.TRANSPORT_CLOSE,
                 QuicFrameType.APPLICATION_CLOSE,

@@ -352,6 +352,46 @@ class QuicConnectionTest(TestCase):
         server._send_pending()
         self.assertEqual(client._remote_max_streams_uni, 1)
 
+    def test_handle_new_connection_id_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends NEW_CONNECTION_ID
+        server._pending_flow_control.append(
+            binascii.unhexlify(
+                "1802117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
+            )
+        )
+        server._send_pending()
+
+    def test_handle_new_token_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends NEW_TOKEN
+        server._pending_flow_control.append(binascii.unhexlify("07080102030405060708"))
+        server._send_pending()
+
     def test_transport_close(self):
         client = QuicConnection(is_client=True)
 
