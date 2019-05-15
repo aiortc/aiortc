@@ -283,6 +283,25 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(b"\x10\x70\x39")
         server._send_pending()
 
+    def test_max_stream_data(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends MAX_DATA: 12345
+        # server sends MAX_STREAM_DATA: 0, 1
+        server._pending_flow_control.append(b"\x11\x00\x01")
+        server._send_pending()
+
     def test_max_streams(self):
         client = QuicConnection(is_client=True)
 

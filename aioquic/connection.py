@@ -413,6 +413,9 @@ class QuicConnection:
                 stream.add_frame(frame)
             elif frame_type == QuicFrameType.MAX_DATA:
                 pull_uint_var(buf)
+            elif frame_type == QuicFrameType.MAX_STREAM_DATA:
+                pull_uint_var(buf)
+                pull_uint_var(buf)
             elif frame_type == QuicFrameType.MAX_STREAMS_BIDI:
                 self._remote_max_streams_bidi = pull_uint_var(buf)
             elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
