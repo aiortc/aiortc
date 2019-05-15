@@ -374,7 +374,11 @@ class QuicConnection:
         is_ack_only = True
         while not buf.eof():
             frame_type = pull_uint_var(buf)
-            if frame_type != QuicFrameType.ACK:
+            if frame_type not in [
+                QuicFrameType.ACK,
+                QuicFrameType.ACK_ECN,
+                QuicFrameType.PADDING,
+            ]:
                 is_ack_only = False
 
             if frame_type in [QuicFrameType.PADDING, QuicFrameType.PING]:
