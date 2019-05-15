@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import binascii
 import ipaddress
 import logging
 
@@ -10,6 +11,12 @@ from cryptography.hazmat.primitives import serialization
 from aioquic.connection import QuicConnection
 from aioquic.packet import encode_quic_version_negotiation, pull_quic_header
 from aioquic.tls import Buffer
+
+logger = logging.getLogger("server")
+
+
+def connection_id(connection):
+    return "Connection %s" % binascii.hexlify(connection.host_cid).decode("ascii")
 
 
 async def serve_http_request(reader, writer):
@@ -70,12 +77,18 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             connection.connection_made(QuicConnectionTransport(self, addr))
             connection.stream_created_cb = self.stream_created
             self._connections[connection.host_cid] = connection
+            logger.info("%s New connection from %s" % (connection_id(connection), addr))
 
         if connection is not None:
             connection.datagram_received(datagram, addr)
 
     def stream_created(self, reader, writer):
+        connection = writer.get_extra_info("connection")
         stream_id = writer.get_extra_info("stream_id")
+        logger.info(
+            "%s Stream %d created by remote party"
+            % (connection_id(connection), stream_id)
+        )
         if stream_id == 0:
             asyncio.ensure_future(serve_http_request(reader, writer))
 
@@ -102,7 +115,9 @@ if __name__ == "__main__":
     parser.add_argument("--secrets-log-file", type=str)
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
+    )
 
     with open(args.certificate, "rb") as fp:
         certificate = x509.load_pem_x509_certificate(

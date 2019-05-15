@@ -161,6 +161,7 @@ class QuicConnectionTest(TestCase):
         # client
         reader, writer = client.create_stream()
         self.assertEqual(writer.get_extra_info("stream_id"), 0)
+        self.assertIsNotNone(writer.get_extra_info("connection"))
 
         reader, writer = client.create_stream()
         self.assertEqual(writer.get_extra_info("stream_id"), 4)

@@ -102,7 +102,9 @@ class QuicStream:
         """
         Returns information about the underlying QUIC stream.
         """
-        if name == "stream_id":
+        if name == "connection":
+            return self._connection
+        elif name == "stream_id":
             return self.stream_id
 
     def write(self, data: bytes) -> None:
