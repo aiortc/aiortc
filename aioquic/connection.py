@@ -60,20 +60,33 @@ def get_epoch(packet_type: int) -> tls.Epoch:
 
 
 def push_close(
-    buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: bytes
+    buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: str
 ) -> None:
+    reason_phrase_bytes = reason_phrase.encode("utf8")
     if frame_type is None:
         push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
-        packet.push_application_close_frame(buf, error_code, reason_phrase)
+        packet.push_application_close_frame(buf, error_code, reason_phrase_bytes)
     else:
         push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
-        packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
+        packet.push_transport_close_frame(
+            buf, error_code, frame_type, reason_phrase_bytes
+        )
 
 
 class PacketSpace:
     def __init__(self) -> None:
         self.ack_queue = RangeSet()
         self.crypto = CryptoPair()
+
+
+class QuicConnectionError(Exception):
+    def __init__(self, error_code: int, frame_type: int, reason_phrase: str):
+        self.error_code = error_code
+        self.frame_type = frame_type
+        self.reason_phrase = reason_phrase
+
+    def __str__(self):
+        return "Error: %d, reason: %s" % (self.error_code, self.reason_phrase)
 
 
 class QuicConnection:
@@ -131,10 +144,7 @@ class QuicConnection:
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
     def close(
-        self,
-        error_code: int,
-        frame_type: Optional[int] = None,
-        reason_phrase: bytes = b"",
+        self, error_code: int, frame_type: Optional[int] = None, reason_phrase: str = ""
     ) -> None:
         """
         Close the connection.
@@ -248,7 +258,13 @@ class QuicConnection:
             # handle payload
             try:
                 is_ack_only = self._payload_received(epoch, plain_payload)
-            except tls.Alert:
+            except QuicConnectionError as exc:
+                self.__logger.warning(exc)
+                self.close(
+                    error_code=exc.error_code,
+                    frame_type=exc.frame_type,
+                    reason_phrase=exc.reason_phrase,
+                )
                 return
 
             # record packet as received
@@ -349,16 +365,16 @@ class QuicConnection:
                 stream.add_frame(packet.pull_crypto_frame(buf))
                 data = stream.pull_data()
                 if data:
+                    # pass data to TLS layer
                     try:
                         self.tls.handle_message(data, self.send_buffer)
                     except tls.Alert as exc:
-                        self.__logger.warning("TLS error: %s" % exc)
-                        self.close(
-                            QuicErrorCode.CRYPTO_ERROR + int(exc.description),
-                            frame_type,
-                            str(exc).encode("ascii"),
+                        raise QuicConnectionError(
+                            error_code=QuicErrorCode.CRYPTO_ERROR
+                            + int(exc.description),
+                            frame_type=frame_type,
+                            reason_phrase=str(exc),
                         )
-                        raise
 
                     # update current epoch
                     if self.tls.state in [
@@ -370,7 +386,6 @@ class QuicConnection:
                         self.__epoch = tls.Epoch.ONE_RTT
                     else:
                         self.__epoch = tls.Epoch.HANDSHAKE
-
             elif frame_type == QuicFrameType.NEW_TOKEN:
                 packet.pull_new_token_frame(buf)
             elif (frame_type & ~STREAM_FLAGS) == QuicFrameType.STREAM_BASE:
