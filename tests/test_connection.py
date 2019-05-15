@@ -246,7 +246,28 @@ class QuicConnectionTest(TestCase):
         client.datagram_received(load("retry.bin"), None)
         self.assertEqual(client_transport.sent, 2)
 
-    def test_application_close(self):
+    def test_handle_connection_close(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # close
+        server.close(
+            error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
+        )
+        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 5)
+
+    def test_handle_connection_close_app(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -264,6 +285,24 @@ class QuicConnectionTest(TestCase):
         server.close(error_code=QuicErrorCode.NO_ERROR)
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
+
+    def test_handle_data_blocked_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends DATA_BLOCKED: 12345
+        server._pending_flow_control.append(b"\x14\x70\x39")
+        server._send_pending()
 
     def test_handle_max_data_frame(self):
         client = QuicConnection(is_client=True)
@@ -297,7 +336,6 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
 
-        # server sends MAX_DATA: 12345
         # server sends MAX_STREAM_DATA: 0, 1
         server._pending_flow_control.append(b"\x11\x00\x01")
         server._send_pending()
@@ -392,7 +430,7 @@ class QuicConnectionTest(TestCase):
         server._pending_flow_control.append(binascii.unhexlify("07080102030405060708"))
         server._send_pending()
 
-    def test_transport_close(self):
+    def test_handle_reset_stream_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -406,12 +444,83 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
 
-        # close
-        server.close(
-            error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
+        # server sends RESET_STREAM
+        server._pending_flow_control.append(binascii.unhexlify("04001122000001"))
+        server._send_pending()
+
+    def test_handle_retire_connection_id_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
         )
-        self.assertEqual(client_transport.sent, 5)
-        self.assertEqual(server_transport.sent, 5)
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends RETIRE_CONNECTION_ID
+        server._pending_flow_control.append(b"\x19\x02")
+        server._send_pending()
+
+    def test_handle_stop_sending_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # server sends STOP_SENDING
+        server._pending_flow_control.append(binascii.unhexlify("05001122"))
+        server._send_pending()
+
+    def test_handle_stream_data_blocked_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # server sends STREAM_DATA_BLOCKED: 0, 1
+        server._pending_flow_control.append(b"\x15\x00\x01")
+        server._send_pending()
+
+    def test_handle_streams_blocked_uni_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # server sends STREAM_DATA_BLOCKED: 0, 1
+        server._pending_flow_control.append(b"\x17\x00")
+        server._send_pending()
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)

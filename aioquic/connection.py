@@ -4,7 +4,14 @@ import os
 from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Tuple, Union
 
 from . import packet, tls
-from .buffer import pull_bytes, pull_uint32, push_bytes, push_uint8, push_uint16
+from .buffer import (
+    pull_bytes,
+    pull_uint16,
+    pull_uint32,
+    push_bytes,
+    push_uint8,
+    push_uint16,
+)
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     PACKET_FIXED_BIT,
@@ -387,13 +394,19 @@ class QuicConnection:
         )
         self.connection_lost(None)
 
+    def _handle_data_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a DATA_BLOCKED frame.
+        """
+        pull_uint_var(buf)  # limit
+
     def _handle_max_data_frame(self, frame_type: int, buf: Buffer) -> None:
         """
         Handle a MAX_DATA frame.
 
         This adjusts the total amount of we can send to the peer.
         """
-        pull_uint_var(buf)
+        pull_uint_var(buf)  # limit
 
     def _handle_max_stream_data_frame(self, frame_type: int, buf: Buffer) -> None:
         """
@@ -401,8 +414,8 @@ class QuicConnection:
 
         This adjusts the amount of data we can send on a specific stream.
         """
-        pull_uint_var(buf)
-        pull_uint_var(buf)
+        pull_uint_var(buf)  # stream id
+        pull_uint_var(buf)  # limit
 
     def _handle_max_streams_bidi_frame(self, frame_type: int, buf: Buffer) -> None:
         """
@@ -438,6 +451,28 @@ class QuicConnection:
         """
         packet.pull_new_token_frame(buf)
 
+    def _handle_reset_stream_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a RESET_STREAM frame.
+        """
+        pull_uint_var(buf)  # stream id
+        pull_uint16(buf)  # application error code
+        pull_uint16(buf)  # unused
+        pull_uint_var(buf)  # final size
+
+    def _handle_retire_connection_id_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a RETIRE_CONNECTION_ID frame.
+        """
+        pull_uint_var(buf)  # sequence number
+
+    def _handle_stop_sending_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a STOP_SENDING frame.
+        """
+        pull_uint_var(buf)  # stream id
+        pull_uint16(buf)  # application error code
+
     def _handle_stream_frame(self, frame_type: int, buf: Buffer) -> None:
         """
         Handle a STREAM frame.
@@ -460,6 +495,19 @@ class QuicConnection:
         stream = self._get_or_create_stream(stream_id)
         stream.add_frame(frame)
 
+    def _handle_stream_data_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a STREAM_DATA_BLOCKED frame.
+        """
+        pull_uint_var(buf)  # stream id
+        pull_uint_var(buf)  # limit
+
+    def _handle_streams_blocked_frame(self, frame_type: int, buf: Buffer) -> None:
+        """
+        Handle a STREAMS_BLOCKED frame.
+        """
+        pull_uint_var(buf)  # limit
+
     def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> bool:
         buf = Buffer(data=plain)
 
@@ -477,6 +525,10 @@ class QuicConnection:
                 pass
             elif frame_type == QuicFrameType.ACK:
                 self._handle_ack_frame(frame_type, buf)
+            elif frame_type == QuicFrameType.RESET_STREAM:
+                self._handle_reset_stream_frame(frame_type, buf)
+            elif frame_type == QuicFrameType.STOP_SENDING:
+                self._handle_stop_sending_frame(frame_type, buf)
             elif frame_type == QuicFrameType.CRYPTO:
                 stream = self.streams[epoch]
                 stream.add_frame(packet.pull_crypto_frame(buf))
@@ -495,8 +547,19 @@ class QuicConnection:
                 self._handle_max_streams_bidi_frame(frame_type, buf)
             elif frame_type == QuicFrameType.MAX_STREAMS_UNI:
                 self._handle_max_streams_uni_frame(frame_type, buf)
+            elif frame_type == QuicFrameType.DATA_BLOCKED:
+                self._handle_data_blocked_frame(frame_type, buf)
+            elif frame_type == QuicFrameType.STREAM_DATA_BLOCKED:
+                self._handle_stream_data_blocked_frame(frame_type, buf)
+            elif frame_type in [
+                QuicFrameType.STREAMS_BLOCKED_BIDI,
+                QuicFrameType.STREAMS_BLOCKED_UNI,
+            ]:
+                self._handle_streams_blocked_frame(frame_type, buf)
             elif frame_type == QuicFrameType.NEW_CONNECTION_ID:
                 self._handle_new_connection_id_frame(frame_type, buf)
+            elif frame_type == QuicFrameType.RETIRE_CONNECTION_ID:
+                self._handle_retire_connection_id_frame(frame_type, buf)
             elif frame_type in [
                 QuicFrameType.TRANSPORT_CLOSE,
                 QuicFrameType.APPLICATION_CLOSE,
