@@ -161,9 +161,9 @@ class QuicConnection:
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
         self.__initialized = False
-        self.__local_idle_timeout = 60.0  # seconds
-        self.__local_max_streams_bidi = 100
-        self.__local_max_streams_uni = 0
+        self._local_idle_timeout = 60.0  # seconds
+        self._local_max_streams_bidi = 128
+        self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
         self._pending_flow_control: List[bytes] = []
@@ -398,9 +398,9 @@ class QuicConnection:
 
             # check max streams
             if stream_is_unidirectional(stream_id):
-                max_streams = self.__local_max_streams_uni
+                max_streams = self._local_max_streams_uni
             else:
-                max_streams = self.__local_max_streams_bidi
+                max_streams = self._local_max_streams_bidi
             if stream_id // 4 >= max_streams:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.STREAM_LIMIT_ERROR,
@@ -791,18 +791,18 @@ class QuicConnection:
             initial_max_stream_data_bidi_local=1048576,
             initial_max_stream_data_bidi_remote=1048576,
             initial_max_stream_data_uni=1048576,
-            initial_max_streams_bidi=self.__local_max_streams_bidi,
-            initial_max_streams_uni=self.__local_max_streams_uni,
+            initial_max_streams_bidi=self._local_max_streams_bidi,
+            initial_max_streams_uni=self._local_max_streams_uni,
             ack_delay_exponent=10,
         )
         if self.version >= QuicProtocolVersion.DRAFT_19:
             is_client = None
             quic_transport_parameters.idle_timeout = int(
-                self.__local_idle_timeout * 1000
+                self._local_idle_timeout * 1000
             )
         else:
             is_client = self.is_client
-            quic_transport_parameters.idle_timeout = int(self.__local_idle_timeout)
+            quic_transport_parameters.idle_timeout = int(self._local_idle_timeout)
             if self.is_client:
                 quic_transport_parameters.initial_version = self.version
             else:
