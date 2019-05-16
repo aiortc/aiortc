@@ -314,7 +314,7 @@ def push_quic_transport_parameters(
     with push_block(buf, 2):
         for param_id, (param_name, param_type) in enumerate(PARAMS):
             param_value = getattr(params, param_name)
-            if param_value not in [None, False]:
+            if param_value is not None and param_value is not False:
                 push_uint16(buf, param_id)
                 with push_block(buf, 2):
                     if param_type == int:
