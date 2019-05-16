@@ -7,9 +7,15 @@ from .rangeset import RangeSet
 
 class QuicStream:
     def __init__(
-        self, stream_id: Optional[int] = None, connection: Optional[Any] = None
+        self,
+        stream_id: Optional[int] = None,
+        connection: Optional[Any] = None,
+        max_stream_data_local: int = 0,
+        max_stream_data_remote: int = 0,
     ) -> None:
         self._connection = connection
+        self.max_stream_data_local = max_stream_data_local
+        self.max_stream_data_remote = max_stream_data_remote
 
         if stream_id is not None:
             self.reader = asyncio.StreamReader()

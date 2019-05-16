@@ -162,12 +162,20 @@ class QuicConnection:
         self.__epoch = tls.Epoch.INITIAL
         self.__initialized = False
         self._local_idle_timeout = 60.0  # seconds
+        self._local_max_data = 1048576
+        self._local_max_stream_data_bidi_local = 1048576
+        self._local_max_stream_data_bidi_remote = 1048576
+        self._local_max_stream_data_uni = 1048576
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0.0
+        self._remote_max_data = 0
+        self._remote_max_stream_data_bidi_local = 0
+        self._remote_max_stream_data_bidi_remote = 0
+        self._remote_max_stream_data_uni = 0
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
         self.__transport: Optional[asyncio.DatagramTransport] = None
@@ -243,9 +251,19 @@ class QuicConnection:
         while stream_id in self.streams:
             stream_id += 4
 
+        if is_unidirectional:
+            max_stream_data_local = 0
+            max_stream_data_remote = self._remote_max_stream_data_uni
+        else:
+            max_stream_data_local = self._local_max_stream_data_bidi_local
+            max_stream_data_remote = self._remote_max_stream_data_bidi_remote
+
         # create stream
         stream = self.streams[stream_id] = QuicStream(
-            connection=self, stream_id=stream_id
+            connection=self,
+            stream_id=stream_id,
+            max_stream_data_local=max_stream_data_local,
+            max_stream_data_remote=max_stream_data_remote,
         )
         self.stream_created_cb(stream.reader, stream.writer)
 
@@ -293,7 +311,7 @@ class QuicConnection:
                     self.__logger.error("Could not find a common protocol version")
                     return
                 self.version = QuicProtocolVersion(max(common))
-                self.__logger.info("Retrying with %s" % self.version)
+                self.__logger.info("Retrying with %s", self.version)
                 self.connection_made(self.__transport)
                 return
             elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
@@ -396,11 +414,17 @@ class QuicConnection:
                     reason_phrase="Wrong stream initiator",
                 )
 
-            # check max streams
+            # determine limits
             if stream_is_unidirectional(stream_id):
+                max_stream_data_local = self._local_max_stream_data_uni
+                max_stream_data_remote = 0
                 max_streams = self._local_max_streams_uni
             else:
+                max_stream_data_local = self._local_max_stream_data_bidi_remote
+                max_stream_data_remote = self._remote_max_stream_data_bidi_local
                 max_streams = self._local_max_streams_bidi
+
+            # check max streams
             if stream_id // 4 >= max_streams:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.STREAM_LIMIT_ERROR,
@@ -410,7 +434,10 @@ class QuicConnection:
 
             # create stream
             stream = self.streams[stream_id] = QuicStream(
-                connection=self, stream_id=stream_id
+                connection=self,
+                stream_id=stream_id,
+                max_stream_data_local=max_stream_data_local,
+                max_stream_data_remote=max_stream_data_remote,
             )
             self.stream_created_cb(stream.reader, stream.writer)
         return stream
@@ -478,7 +505,7 @@ class QuicConnection:
         else:
             error_code, reason_phrase = packet.pull_application_close_frame(buf)
         self.__logger.info(
-            "Connection close code 0x%X, reason %s" % (error_code, reason_phrase)
+            "Connection close code 0x%X, reason %s", error_code, reason_phrase
         )
         self.connection_lost(None)
 
@@ -534,7 +561,10 @@ class QuicConnection:
 
         This adjusts the total amount of we can send to the peer.
         """
-        pull_uint_var(buf)  # limit
+        max_data = pull_uint_var(buf)
+        if max_data > self._remote_max_data:
+            self.__logger.info("Remote max_data raised to %d", max_data)
+            self._remote_max_data = max_data
 
     def _handle_max_stream_data_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -545,12 +575,19 @@ class QuicConnection:
         This adjusts the amount of data we can send on a specific stream.
         """
         stream_id = pull_uint_var(buf)
-        pull_uint_var(buf)  # limit
+        max_stream_data = pull_uint_var(buf)
 
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
 
-        self._get_or_create_stream(frame_type, stream_id)
+        stream = self._get_or_create_stream(frame_type, stream_id)
+        if max_stream_data > stream.max_stream_data_remote:
+            self.__logger.info(
+                "Stream %d remote max_stream_data raised to %d",
+                stream_id,
+                max_stream_data,
+            )
+            stream.max_stream_data_remote = max_stream_data
 
     def _handle_max_streams_bidi_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -562,7 +599,7 @@ class QuicConnection:
         """
         max_streams = pull_uint_var(buf)
         if max_streams > self._remote_max_streams_bidi:
-            self.__logger.info("Remote max_streams_bidi raised to %d" % max_streams)
+            self.__logger.info("Remote max_streams_bidi raised to %d", max_streams)
             self._remote_max_streams_bidi = max_streams
 
     def _handle_max_streams_uni_frame(
@@ -575,7 +612,7 @@ class QuicConnection:
         """
         max_streams = pull_uint_var(buf)
         if max_streams > self._remote_max_streams_uni:
-            self.__logger.info("Remote max_streams_uni raised to %d" % max_streams)
+            self.__logger.info("Remote max_streams_uni raised to %d", max_streams)
             self._remote_max_streams_uni = max_streams
 
     def _handle_new_connection_id_frame(
@@ -688,7 +725,14 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
+        # check limits
         stream = self._get_or_create_stream(frame_type, stream_id)
+        if offset + length > stream.max_stream_data_local:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.FLOW_CONTROL_ERROR,
+                frame_type=frame_type,
+                reason_phrase="Over stream data limit",
+            )
         stream.add_frame(frame)
 
     def _handle_stream_data_blocked_frame(
@@ -769,6 +813,8 @@ class QuicConnection:
         quic_transport_parameters = pull_quic_transport_parameters(
             Buffer(data=data), is_client=is_client
         )
+
+        # store remote parameters
         if quic_transport_parameters.idle_timeout is not None:
             if self.version >= QuicProtocolVersion.DRAFT_19:
                 self._remote_idle_timeout = (
@@ -776,21 +822,24 @@ class QuicConnection:
                 )
             else:
                 self._remote_idle_timeout = quic_transport_parameters.idle_timeout
-        if quic_transport_parameters.initial_max_streams_bidi is not None:
-            self._remote_max_streams_bidi = (
-                quic_transport_parameters.initial_max_streams_bidi
-            )
-        if quic_transport_parameters.initial_max_streams_uni is not None:
-            self._remote_max_streams_uni = (
-                quic_transport_parameters.initial_max_streams_uni
-            )
+        for param in [
+            "max_data",
+            "max_stream_data_bidi_local",
+            "max_stream_data_bidi_remote",
+            "max_stream_data_uni",
+            "max_streams_bidi",
+            "max_streams_uni",
+        ]:
+            value = getattr(quic_transport_parameters, "initial_" + param)
+            if value is not None:
+                setattr(self, "_remote_" + param, value)
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
-            initial_max_data=16777216,
-            initial_max_stream_data_bidi_local=1048576,
-            initial_max_stream_data_bidi_remote=1048576,
-            initial_max_stream_data_uni=1048576,
+            initial_max_data=self._local_max_data,
+            initial_max_stream_data_bidi_local=self._local_max_stream_data_bidi_local,
+            initial_max_stream_data_bidi_remote=self._local_max_stream_data_bidi_remote,
+            initial_max_stream_data_uni=self._local_max_stream_data_uni,
             initial_max_streams_bidi=self._local_max_streams_bidi,
             initial_max_streams_uni=self._local_max_streams_uni,
             ack_delay_exponent=10,

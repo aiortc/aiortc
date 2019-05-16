@@ -9,7 +9,13 @@ from cryptography.hazmat.primitives import serialization
 from aioquic import tls
 from aioquic.buffer import Buffer
 from aioquic.connection import QuicConnection, QuicConnectionError
-from aioquic.packet import QuicErrorCode, QuicFrameType, QuicProtocolVersion
+from aioquic.packet import (
+    QuicErrorCode,
+    QuicFrameType,
+    QuicProtocolVersion,
+    QuicStreamFlag,
+    push_uint_var,
+)
 
 from .utils import load, run
 
@@ -19,6 +25,12 @@ SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
 SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
     load("ssl_key.pem"), password=None, backend=default_backend()
 )
+
+
+def encode_uint_var(v):
+    buf = Buffer(capacity=8)
+    push_uint_var(buf, v)
+    return buf.data
 
 
 class FakeTransport:
@@ -342,10 +354,15 @@ class QuicConnectionTest(TestCase):
 
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client._remote_max_data, 1048576)
 
-        # server sends MAX_DATA: 12345
-        server._pending_flow_control.append(b"\x10\x70\x39")
-        server._send_pending()
+        # client receives MAX_DATA raising limit
+        client._handle_max_data_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_DATA,
+            Buffer(data=encode_uint_var(1048577)),
+        )
+        self.assertEqual(client._remote_max_data, 1048577)
 
     def test_handle_max_stream_data_frame(self):
         client = QuicConnection(is_client=True)
@@ -359,12 +376,24 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates bidirectional stream 0
-        client.create_stream()
+        stream = client.create_stream()[1].transport
+        self.assertEqual(stream.max_stream_data_remote, 1048576)
 
-        # client receives MAX_STREAM_DATA: 0, 1
+        # client receives MAX_STREAM_DATA raising limit
         client._handle_max_stream_data_frame(
-            tls.Epoch.ONE_RTT, QuicFrameType.MAX_STREAM_DATA, Buffer(data=b"\x00\x01")
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAM_DATA,
+            Buffer(data=b"\x00" + encode_uint_var(1048577)),
         )
+        self.assertEqual(stream.max_stream_data_remote, 1048577)
+
+        # client receives MAX_STREAM_DATA lowering limit
+        client._handle_max_stream_data_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAM_DATA,
+            Buffer(data=b"\x00" + encode_uint_var(1048575)),
+        )
+        self.assertEqual(stream.max_stream_data_remote, 1048577)
 
     def test_handle_max_stream_data_frame_receive_only(self):
         client = QuicConnection(is_client=True)
@@ -403,14 +432,20 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client._remote_max_streams_bidi, 128)
 
-        # server sends MAX_STREAMS_BIDI: 129
-        server._pending_flow_control.append(b"\x12\x40\x81")
-        server._send_pending()
+        # client receives MAX_STREAMS_BIDI raising limit
+        client._handle_max_streams_bidi_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAMS_BIDI,
+            Buffer(data=encode_uint_var(129)),
+        )
         self.assertEqual(client._remote_max_streams_bidi, 129)
 
-        # server sends MAX_STREAMS_BIDI: 127 -> discarded
-        server._pending_flow_control.append(b"\x12\x40\x7f")
-        server._send_pending()
+        # client receives MAX_STREAMS_BIDI lowering limit
+        client._handle_max_streams_bidi_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAMS_BIDI,
+            Buffer(data=encode_uint_var(127)),
+        )
         self.assertEqual(client._remote_max_streams_bidi, 129)
 
     def test_handle_max_streams_uni_frame(self):
@@ -425,14 +460,20 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client._remote_max_streams_uni, 128)
 
-        # server sends MAX_STREAMS_UNI: 129
-        server._pending_flow_control.append(b"\x13\x40\x81")
-        server._send_pending()
+        # client receives MAX_STREAMS_UNI raising limit
+        client._handle_max_streams_uni_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAMS_UNI,
+            Buffer(data=encode_uint_var(129)),
+        )
         self.assertEqual(client._remote_max_streams_uni, 129)
 
-        # server sends MAX_STREAMS_UNI: 129 -> discarded
-        server._pending_flow_control.append(b"\x13\x40\x7f")
-        server._send_pending()
+        # client receives MAX_STREAMS_UNI raising limit
+        client._handle_max_streams_uni_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.MAX_STREAMS_UNI,
+            Buffer(data=encode_uint_var(127)),
+        )
         self.assertEqual(client._remote_max_streams_uni, 129)
 
     def test_handle_new_connection_id_frame(self):
@@ -609,7 +650,34 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STOP_SENDING)
         self.assertEqual(cm.exception.reason_phrase, "Stream is receive-only")
 
-    def test_handle_stream_frame_over_limit(self):
+    def test_handle_stream_frame_over_max_stream_data(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives STREAM frame
+        frame_type = QuicFrameType.STREAM_BASE | QuicStreamFlag.OFF
+        stream_id = 1
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_stream_frame(
+                tls.Epoch.ONE_RTT,
+                frame_type,
+                Buffer(
+                    data=encode_uint_var(stream_id)
+                    + encode_uint_var(client._local_max_stream_data_bidi_remote + 1)
+                ),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.FLOW_CONTROL_ERROR)
+        self.assertEqual(cm.exception.frame_type, frame_type)
+        self.assertEqual(cm.exception.reason_phrase, "Over stream data limit")
+
+    def test_handle_stream_frame_over_max_streams(self):
         client = QuicConnection(is_client=True)
         server = QuicConnection(
             is_client=False,
@@ -623,7 +691,9 @@ class QuicConnectionTest(TestCase):
         # client receives STREAM frame
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x42\x03")
+                tls.Epoch.ONE_RTT,
+                QuicFrameType.STREAM_BASE,
+                Buffer(data=encode_uint_var(client._local_max_stream_data_uni * 4 + 3)),
             )
         self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_LIMIT_ERROR)
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
