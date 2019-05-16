@@ -148,6 +148,30 @@ class QuicConnectionTest(TestCase):
             ],
         )
 
+    def test_connection_lost(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        run(client.connect())
+
+        # send data over stream
+        client_reader, client_writer = client.create_stream()
+        client_writer.write(b"ping")
+        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(server_transport.sent, 5)
+
+        # break connection
+        client.connection_lost(None)
+        self.assertEqual(run(client_reader.read()), b"")
+
     def test_create_stream(self):
         client = QuicConnection(is_client=True)
         client._initialize(b"")
