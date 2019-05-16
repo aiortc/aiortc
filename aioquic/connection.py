@@ -140,11 +140,6 @@ class QuicConnection:
         self.server_name = server_name
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
 
-        # callbacks
-        self.stream_created_cb: Callable[
-            [asyncio.StreamReader, asyncio.StreamWriter], None
-        ] = lambda r, w: None
-
         # protocol versions
         self.version = max(self.supported_versions)
 
@@ -162,6 +157,11 @@ class QuicConnection:
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
         self.__transport: Optional[asyncio.DatagramTransport] = None
+
+        # callbacks
+        self.stream_created_cb: Callable[
+            [asyncio.StreamReader, asyncio.StreamWriter], None
+        ] = lambda r, w: None
 
         # frame handlers
         self.__frame_handlers = [
@@ -595,6 +595,15 @@ class QuicConnection:
             data=pull_bytes(buf, length),
             fin=bool(flags & QuicStreamFlag.FIN),
         )
+
+        # check stream is allowed to receive data
+        if not self._stream_can_receive(stream_id):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.STREAM_STATE_ERROR,
+                frame_type=frame_type,
+                reason_phrase="Cannot receive data on unidirectional stream",
+            )
+
         stream = self._get_or_create_stream(stream_id)
         stream.add_frame(frame)
 
@@ -717,6 +726,16 @@ class QuicConnection:
             buf, quic_transport_parameters, is_client=is_client
         )
         return buf.data
+
+    def _stream_can_receive(self, stream_id):
+        is_local = bool(stream_id & 1) == (not self.is_client)
+        is_unidirectional = bool(stream_id & 2)
+        return not is_local or not is_unidirectional
+
+    def _stream_can_send(self, stream_id):
+        is_local = bool(stream_id & 1) == (not self.is_client)
+        is_unidirectional = bool(stream_id & 2)
+        return is_local or not is_unidirectional
 
     def _update_traffic_key(
         self, direction: tls.Direction, epoch: tls.Epoch, secret: bytes

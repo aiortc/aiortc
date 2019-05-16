@@ -7,7 +7,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic import tls
-from aioquic.connection import QuicConnection
+from aioquic.buffer import Buffer
+from aioquic.connection import QuicConnection, QuicConnectionError
 from aioquic.packet import QuicErrorCode, QuicFrameType, QuicProtocolVersion
 
 from .utils import load, run
@@ -463,9 +464,15 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 4)
         self.assertEqual(client._remote_max_streams_bidi, 100)
 
-        # client sends unsollicited PATH_RESPONSE
-        client._pending_flow_control.append(binascii.unhexlify("1b1122334455667788"))
-        client._send_pending()
+        # server receives unsollicited PATH_RESPONSE
+        with self.assertRaises(QuicConnectionError) as cm:
+            server._handle_path_response_frame(
+                tls.Epoch.ONE_RTT,
+                QuicFrameType.PATH_RESPONSE,
+                Buffer(data=b"\x11\x22\x33\x44\x55\x66\x77\x88"),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.PATH_RESPONSE)
 
     def test_handle_reset_stream_frame(self):
         client = QuicConnection(is_client=True)
@@ -520,6 +527,32 @@ class QuicConnectionTest(TestCase):
         # server sends STOP_SENDING
         server._pending_flow_control.append(binascii.unhexlify("05001122"))
         server._send_pending()
+
+    def test_handle_stream_frame_bad(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+        self.assertEqual(client._remote_max_streams_bidi, 100)
+
+        # client creates unidirectional stream 2
+        client.create_stream(is_unidirectional=True)
+
+        # client receives data on stream
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_stream_frame(
+                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x02")
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
 
     def test_handle_stream_data_blocked_frame(self):
         client = QuicConnection(is_client=True)
@@ -577,6 +610,39 @@ class QuicConnectionTest(TestCase):
         # server sends unknown frame
         server._pending_flow_control.append(b"\x1e")
         server._send_pending()
+
+    def test_stream_direction(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        for off in [0, 4, 8]:
+            # Client-Initiated, Bidirectional
+            self.assertTrue(client._stream_can_receive(off))
+            self.assertTrue(client._stream_can_send(off))
+            self.assertTrue(server._stream_can_receive(off))
+            self.assertTrue(server._stream_can_send(off))
+
+            # Server-Initiated, Bidirectional
+            self.assertTrue(client._stream_can_receive(off + 1))
+            self.assertTrue(client._stream_can_send(off + 1))
+            self.assertTrue(server._stream_can_receive(off + 1))
+            self.assertTrue(server._stream_can_send(off + 1))
+
+            # Client-Initiated, Unidirectional
+            self.assertFalse(client._stream_can_receive(off + 2))
+            self.assertTrue(client._stream_can_send(off + 2))
+            self.assertTrue(server._stream_can_receive(off + 2))
+            self.assertFalse(server._stream_can_send(off + 2))
+
+            # Server-Initiated, Unidirectional
+            self.assertTrue(client._stream_can_receive(off + 3))
+            self.assertFalse(client._stream_can_send(off + 3))
+            self.assertFalse(server._stream_can_receive(off + 3))
+            self.assertTrue(server._stream_can_send(off + 3))
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)
