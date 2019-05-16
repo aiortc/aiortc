@@ -1,7 +1,9 @@
 import binascii
 from unittest import TestCase
 
+from aioquic.buffer import Buffer, push_bytes, push_uint8, push_uint16
 from aioquic.crypto import INITIAL_CIPHER_SUITE, CryptoPair, derive_key_iv_hp
+from aioquic.packet import PACKET_FIXED_BIT
 from aioquic.tls import CipherSuite
 
 CHACHA20_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
@@ -235,3 +237,51 @@ class CryptoTest(TestCase):
             SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD
         )
         self.assertEqual(packet, SHORT_SERVER_ENCRYPTED_PACKET)
+
+    def test_key_update(self):
+        pair1 = self.create_crypto(is_client=True)
+        pair2 = self.create_crypto(is_client=False)
+
+        def create_packet(key_phase, packet_number=0):
+            buf = Buffer(capacity=100)
+            push_uint8(buf, PACKET_FIXED_BIT | key_phase << 2 | 1)
+            push_bytes(buf, binascii.unhexlify("8394c8f03e515708"))
+            push_uint16(buf, packet_number)
+            return buf.data, b"\x00\x01\x02\x03"
+
+        def send(sender, receiver):
+            plain_header, plain_payload = create_packet(key_phase=sender.key_phase)
+            encrypted = sender.encrypt_packet(plain_header, plain_payload)
+            recov_header, recov_payload, _ = receiver.decrypt_packet(
+                encrypted, len(plain_header) - 2
+            )
+            self.assertEqual(recov_header, plain_header)
+            self.assertEqual(recov_payload, plain_payload)
+
+        # roundtrip
+        send(pair1, pair2)
+        send(pair2, pair1)
+        self.assertEqual(pair1.key_phase, 0)
+        self.assertEqual(pair2.key_phase, 0)
+
+        # pair 1 key update
+        pair1.update_key()
+        self.assertEqual(pair1.key_phase, 1)
+        self.assertEqual(pair2.key_phase, 0)
+
+        # roundtrip
+        send(pair1, pair2)
+        send(pair2, pair1)
+        self.assertEqual(pair1.key_phase, 1)
+        self.assertEqual(pair2.key_phase, 1)
+
+        # pair 2 key update
+        pair2.update_key()
+        self.assertEqual(pair1.key_phase, 1)
+        self.assertEqual(pair2.key_phase, 0)
+
+        # roundtrip
+        send(pair2, pair1)
+        send(pair1, pair2)
+        self.assertEqual(pair1.key_phase, 0)
+        self.assertEqual(pair2.key_phase, 0)

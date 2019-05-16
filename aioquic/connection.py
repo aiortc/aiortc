@@ -846,7 +846,10 @@ class QuicConnection:
 
         while True:
             # write header
-            push_uint8(buf, PACKET_FIXED_BIT | (SEND_PN_SIZE - 1))
+            push_uint8(
+                buf,
+                PACKET_FIXED_BIT | (space.crypto.key_phase << 2) | (SEND_PN_SIZE - 1),
+            )
             push_bytes(buf, self.peer_cid)
             push_uint16(buf, self.packet_number)
             header_size = buf.tell()

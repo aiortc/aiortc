@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import binascii
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
@@ -39,16 +41,25 @@ def derive_key_iv_hp(
 
 
 class CryptoContext:
-    def __init__(self) -> None:
+    def __init__(self, key_phase: int = 0) -> None:
+        self.aead: Optional[Any]
         self.cipher_suite: Optional[CipherSuite]
         self.hp: Optional[bytes]
         self.iv: Optional[bytes]
+        self.key_phase = key_phase
+        self.secret: Optional[bytes]
 
         self.teardown()
 
+    def apply_key_phase(self, crypto: CryptoContext) -> None:
+        self.aead = crypto.aead
+        self.iv = crypto.iv
+        self.key_phase = crypto.key_phase
+        self.secret = crypto.secret
+
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int
-    ) -> Tuple[bytes, bytes, int]:
+    ) -> Tuple[bytes, bytes, int, bool]:
         packet = bytearray(packet)
 
         # header protection
@@ -69,12 +80,19 @@ class CryptoContext:
         pn = packet[encrypted_offset : encrypted_offset + pn_length]
         plain_header = bytes(packet[: encrypted_offset + pn_length])
 
+        # detect key phase change
+        crypto = self
+        if not is_long_header(packet[0]):
+            key_phase = (packet[0] & 4) >> 2
+            if key_phase != self.key_phase:
+                crypto = self.next_key_phase()
+
         # payload protection
-        nonce = bytearray(len(self.iv) - pn_length) + bytearray(pn)
-        for i in range(len(self.iv)):
-            nonce[i] ^= self.iv[i]
+        nonce = bytearray(len(crypto.iv) - pn_length) + bytearray(pn)
+        for i in range(len(crypto.iv)):
+            nonce[i] ^= crypto.iv[i]
         try:
-            payload = self.aead.decrypt(
+            payload = crypto.aead.decrypt(
                 nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
             )
         except InvalidTag:
@@ -85,7 +103,7 @@ class CryptoContext:
         for i in range(pn_length):
             packet_number = (packet_number << 8) | pn[i]
 
-        return plain_header, payload, packet_number
+        return plain_header, payload, packet_number, crypto != self
 
     def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
         pn_length = (plain_header[0] & 0x03) + 1
@@ -137,6 +155,18 @@ class CryptoContext:
     def is_valid(self) -> bool:
         return self.aead is not None
 
+    def next_key_phase(self) -> CryptoContext:
+        algorithm = cipher_suite_hash(self.cipher_suite)
+
+        crypto = CryptoContext(key_phase=int(not self.key_phase))
+        crypto.setup(
+            self.cipher_suite,
+            hkdf_expand_label(
+                algorithm, self.secret, b"traffic upd", b"", algorithm.digest_size
+            ),
+        )
+        return crypto
+
     def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
         assert cipher_suite in [
             CipherSuite.AES_128_GCM_SHA256,
@@ -146,12 +176,14 @@ class CryptoContext:
         key, self.iv, self.hp = derive_key_iv_hp(cipher_suite, secret)
         self.aead = cipher_suite_aead(cipher_suite, key)
         self.cipher_suite = cipher_suite
+        self.secret = secret
 
     def teardown(self) -> None:
         self.aead = None
         self.cipher_suite = None
         self.hp = None
         self.iv = None
+        self.secret = None
 
 
 class CryptoError(Exception):
@@ -167,7 +199,12 @@ class CryptoPair:
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int
     ) -> Tuple[bytes, bytes, int]:
-        return self.recv.decrypt_packet(packet, encrypted_offset)
+        plain_header, payload, packet_number, update_key = self.recv.decrypt_packet(
+            packet, encrypted_offset
+        )
+        if update_key:
+            self.update_key()
+        return plain_header, payload, packet_number
 
     def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
         return self.send.encrypt_packet(plain_header, plain_payload)
@@ -192,3 +229,11 @@ class CryptoPair:
                 algorithm, initial_secret, send_label, b"", algorithm.digest_size
             ),
         )
+
+    def update_key(self) -> None:
+        self.recv.apply_key_phase(self.recv.next_key_phase())
+        self.send.apply_key_phase(self.send.next_key_phase())
+
+    @property
+    def key_phase(self) -> int:
+        return self.recv.key_phase
