@@ -308,15 +308,22 @@ class QuicConnection:
                     self.connection_made(self.__transport)
                 return
 
+            # server initialization
+            if not self.is_client and not self.__initialized:
+                assert (
+                    header.packet_type == PACKET_TYPE_INITIAL
+                ), "first packet must be INITIAL"
+                self._initialize(header.destination_cid)
+
+            # decrypt packet
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
             pull_bytes(buf, header.rest_length)
 
-            if not self.is_client and not self.__initialized:
-                self._initialize(header.destination_cid)
-
             epoch = get_epoch(header.packet_type)
             space = self.spaces[epoch]
+            if not space.crypto.recv.is_valid():
+                return
             try:
                 plain_header, plain_payload, packet_number = space.crypto.decrypt_packet(
                     data[start_off:end_off], encrypted_off

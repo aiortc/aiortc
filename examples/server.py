@@ -9,7 +9,11 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic.connection import QuicConnection
-from aioquic.packet import encode_quic_version_negotiation, pull_quic_header
+from aioquic.packet import (
+    PACKET_TYPE_INITIAL,
+    encode_quic_version_negotiation,
+    pull_quic_header,
+)
 from aioquic.tls import Buffer
 
 logger = logging.getLogger("server")
@@ -71,7 +75,7 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             return
 
         connection = self._connections.get(header.destination_cid, None)
-        if connection is None and header.is_long_header:
+        if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
             # create new connection
             connection = QuicConnection(is_client=False, **self._kwargs)
             connection.connection_made(QuicConnectionTransport(self, addr))

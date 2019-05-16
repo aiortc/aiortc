@@ -60,7 +60,7 @@ class CryptoContext:
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int
     ) -> Tuple[bytes, bytes, int, bool]:
-        assert self.is_valid(), 'Decryption key is not available'
+        assert self.is_valid(), "Decryption key is not available"
 
         # header protection
         packet = bytearray(packet)
@@ -107,7 +107,7 @@ class CryptoContext:
         return plain_header, payload, packet_number, crypto != self
 
     def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
-        assert self.is_valid(), 'Encryption key is not available'
+        assert self.is_valid(), "Encryption key is not available"
 
         pn_length = (plain_header[0] & 0x03) + 1
         pn_offset = len(plain_header) - pn_length
