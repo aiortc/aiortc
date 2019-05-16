@@ -247,7 +247,15 @@ class QuicConnectionTest(TestCase):
         client.datagram_received(load("retry.bin"), None)
         self.assertEqual(client_transport.sent, 2)
 
-    def test_handle_connection_close(self):
+    def test_handle_ack_frame_ecn(self):
+        client = QuicConnection(is_client=True)
+        client._handle_ack_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.ACK_ECN,
+            Buffer(data=b"\x00\x02\x00\x00\x00\x00\x00"),
+        )
+
+    def test_handle_connection_close_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -268,7 +276,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
 
-    def test_handle_connection_close_app(self):
+    def test_handle_connection_close_frame_app(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
