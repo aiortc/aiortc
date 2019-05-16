@@ -48,7 +48,8 @@ class QuicStream:
                 pos = 0
 
             # marked received
-            self._recv_ranges.add(frame.offset, frame.offset + count)
+            if count:
+                self._recv_ranges.add(frame.offset, frame.offset + count)
 
             # add data
             gap = pos - len(self._recv_buffer)

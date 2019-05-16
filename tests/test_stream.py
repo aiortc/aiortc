@@ -105,6 +105,23 @@ class QuicStreamTest(TestCase):
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_start, 16)
 
+    def test_recv_offset_only(self):
+        stream = QuicStream()
+
+        # add data at offset 0
+        stream.add_frame(QuicStreamFrame(offset=0, data=b""))
+        self.assertEqual(bytes(stream._recv_buffer), b"")
+        self.assertEqual(list(stream._recv_ranges), [])
+        self.assertEqual(stream._recv_start, 0)
+
+        # add data at offset 8
+        stream.add_frame(QuicStreamFrame(offset=8, data=b""))
+        self.assertEqual(
+            bytes(stream._recv_buffer), b"\x00\x00\x00\x00\x00\x00\x00\x00"
+        )
+        self.assertEqual(list(stream._recv_ranges), [])
+        self.assertEqual(stream._recv_start, 0)
+
     def test_recv_already_fully_consumed(self):
         stream = QuicStream()
 
