@@ -44,7 +44,7 @@ if __name__ == "__main__":
         run(
             host=args.host,
             port=args.port,
-            alpn_protocols=["http/0.9"],
+            alpn_protocols=["hq-20"],
             secrets_log_file=secrets_log_file,
         )
     )
