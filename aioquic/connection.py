@@ -81,6 +81,20 @@ def push_close(
         )
 
 
+def stream_is_client_initiated(stream_id: int) -> bool:
+    """
+    Returns True if the stream is client initiated.
+    """
+    return not (stream_id & 1)
+
+
+def stream_is_unidirectional(stream_id: int) -> bool:
+    """
+    Returns True if the stream is unidirectional.
+    """
+    return bool(stream_id & 2)
+
+
 class PacketSpace:
     def __init__(self) -> None:
         self.ack_queue = RangeSet()
@@ -151,7 +165,7 @@ class QuicConnection:
         self.__local_max_streams_bidi = 100
         self.__local_max_streams_uni = 0
         self.__logger = logger
-        self.__path_challenge = None
+        self.__path_challenge: Optional[bytes] = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0.0
         self._remote_max_streams_bidi = 0
@@ -333,6 +347,28 @@ class QuicConnection:
 
     # Private
 
+    def _assert_stream_can_receive(self, frame_type: int, stream_id: int) -> None:
+        """
+        Check the specified stream can receive data or raises a QuicConnectionError.
+        """
+        if not self._stream_can_receive(stream_id):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.STREAM_STATE_ERROR,
+                frame_type=frame_type,
+                reason_phrase="Stream is send-only",
+            )
+
+    def _assert_stream_can_send(self, frame_type: int, stream_id: int) -> None:
+        """
+        Check the specified stream can send data or raises a QuicConnectionError.
+        """
+        if not self._stream_can_send(stream_id):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.STREAM_STATE_ERROR,
+                frame_type=frame_type,
+                reason_phrase="Stream is receive-only",
+            )
+
     def _get_or_create_stream(self, stream_id: int) -> QuicStream:
         if stream_id not in self.streams:
             self.streams[stream_id] = QuicStream(connection=self, stream_id=stream_id)
@@ -470,8 +506,13 @@ class QuicConnection:
 
         This adjusts the amount of data we can send on a specific stream.
         """
-        pull_uint_var(buf)  # stream id
+        stream_id = pull_uint_var(buf)
         pull_uint_var(buf)  # limit
+
+        # check stream direction
+        self._assert_stream_can_send(frame_type, stream_id)
+
+        self._get_or_create_stream(stream_id)
 
     def _handle_max_streams_bidi_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -552,10 +593,15 @@ class QuicConnection:
         """
         Handle a RESET_STREAM frame.
         """
-        pull_uint_var(buf)  # stream id
+        stream_id = pull_uint_var(buf)
         pull_uint16(buf)  # application error code
         pull_uint16(buf)  # unused
         pull_uint_var(buf)  # final size
+
+        # check stream direction
+        self._assert_stream_can_receive(frame_type, stream_id)
+
+        self._get_or_create_stream(stream_id)
 
     def _handle_retire_connection_id_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -571,8 +617,13 @@ class QuicConnection:
         """
         Handle a STOP_SENDING frame.
         """
-        pull_uint_var(buf)  # stream id
+        stream_id = pull_uint_var(buf)
         pull_uint16(buf)  # application error code
+
+        # check stream direction
+        self._assert_stream_can_send(frame_type, stream_id)
+
+        self._get_or_create_stream(stream_id)
 
     def _handle_stream_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -596,13 +647,8 @@ class QuicConnection:
             fin=bool(flags & QuicStreamFlag.FIN),
         )
 
-        # check stream is allowed to receive data
-        if not self._stream_can_receive(stream_id):
-            raise QuicConnectionError(
-                error_code=QuicErrorCode.STREAM_STATE_ERROR,
-                frame_type=frame_type,
-                reason_phrase="Cannot receive data on unidirectional stream",
-            )
+        # check stream direction
+        self._assert_stream_can_receive(frame_type, stream_id)
 
         stream = self._get_or_create_stream(stream_id)
         stream.add_frame(frame)
@@ -613,8 +659,13 @@ class QuicConnection:
         """
         Handle a STREAM_DATA_BLOCKED frame.
         """
-        pull_uint_var(buf)  # stream id
+        stream_id = pull_uint_var(buf)
         pull_uint_var(buf)  # limit
+
+        # check stream direction
+        self._assert_stream_can_receive(frame_type, stream_id)
+
+        self._get_or_create_stream(stream_id)
 
     def _handle_streams_blocked_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -727,15 +778,15 @@ class QuicConnection:
         )
         return buf.data
 
-    def _stream_can_receive(self, stream_id):
-        is_local = bool(stream_id & 1) == (not self.is_client)
-        is_unidirectional = bool(stream_id & 2)
-        return not is_local or not is_unidirectional
+    def _stream_can_receive(self, stream_id: int) -> bool:
+        return stream_is_client_initiated(
+            stream_id
+        ) != self.is_client or not stream_is_unidirectional(stream_id)
 
-    def _stream_can_send(self, stream_id):
-        is_local = bool(stream_id & 1) == (not self.is_client)
-        is_unidirectional = bool(stream_id & 2)
-        return is_local or not is_unidirectional
+    def _stream_can_send(self, stream_id: int) -> bool:
+        return stream_is_client_initiated(
+            stream_id
+        ) == self.is_client or not stream_is_unidirectional(stream_id)
 
     def _update_traffic_key(
         self, direction: tls.Direction, epoch: tls.Epoch, secret: bytes
