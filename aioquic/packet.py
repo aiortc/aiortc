@@ -142,7 +142,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
             packet_type = None
             rest_length = buf.capacity - buf.tell()
         else:
-            if version and not (first_byte & PACKET_FIXED_BIT):
+            if not (first_byte & PACKET_FIXED_BIT):
                 raise ValueError("Packet fixed bit is zero")
 
             packet_type = first_byte & PACKET_TYPE_MASK
