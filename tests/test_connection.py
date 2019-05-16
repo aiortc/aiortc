@@ -585,6 +585,26 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STOP_SENDING)
         self.assertEqual(cm.exception.reason_phrase, "Stream is receive-only")
 
+    def test_handle_stream_frame_over_limit(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives STREAM frame
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_stream_frame(
+                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x03")
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_LIMIT_ERROR)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
+        self.assertEqual(cm.exception.reason_phrase, "Too many streams open")
+
     def test_handle_stream_frame_send_only(self):
         client = QuicConnection(is_client=True)
         server = QuicConnection(
@@ -607,6 +627,26 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
         self.assertEqual(cm.exception.reason_phrase, "Stream is send-only")
+
+    def test_handle_stream_frame_wrong_initiator(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives STREAM frame
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_stream_frame(
+                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x00")
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
+        self.assertEqual(cm.exception.reason_phrase, "Wrong stream initiator")
 
     def test_handle_stream_data_blocked_frame(self):
         client = QuicConnection(is_client=True)

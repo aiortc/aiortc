@@ -242,7 +242,13 @@ class QuicConnection:
         stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
         while stream_id in self.streams:
             stream_id += 4
-        stream = self._get_or_create_stream(stream_id)
+
+        # create stream
+        stream = self.streams[stream_id] = QuicStream(
+            connection=self, stream_id=stream_id
+        )
+        self.stream_created_cb(stream.reader, stream.writer)
+
         return stream.reader, stream.writer
 
     # asyncio.DatagramProtocol
@@ -369,13 +375,38 @@ class QuicConnection:
                 reason_phrase="Stream is receive-only",
             )
 
-    def _get_or_create_stream(self, stream_id: int) -> QuicStream:
-        if stream_id not in self.streams:
-            self.streams[stream_id] = QuicStream(connection=self, stream_id=stream_id)
-            self.stream_created_cb(
-                self.streams[stream_id].reader, self.streams[stream_id].writer
+    def _get_or_create_stream(self, frame_type: int, stream_id: int) -> QuicStream:
+        """
+        Get or create a stream in response to a received frame.
+        """
+        stream = self.streams.get(stream_id, None)
+        if stream is None:
+            # check initiator
+            if stream_is_client_initiated(stream_id) == self.is_client:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.STREAM_STATE_ERROR,
+                    frame_type=frame_type,
+                    reason_phrase="Wrong stream initiator",
+                )
+
+            # check max streams
+            if stream_is_unidirectional(stream_id):
+                max_streams = self.__local_max_streams_uni
+            else:
+                max_streams = self.__local_max_streams_bidi
+            if stream_id // 4 >= max_streams:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.STREAM_LIMIT_ERROR,
+                    frame_type=frame_type,
+                    reason_phrase="Too many streams open",
+                )
+
+            # create stream
+            stream = self.streams[stream_id] = QuicStream(
+                connection=self, stream_id=stream_id
             )
-        return self.streams[stream_id]
+            self.stream_created_cb(stream.reader, stream.writer)
+        return stream
 
     def _initialize(self, peer_cid: bytes) -> None:
         # TLS
@@ -512,7 +543,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
 
-        self._get_or_create_stream(stream_id)
+        self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_max_streams_bidi_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -601,7 +632,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        self._get_or_create_stream(stream_id)
+        self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_retire_connection_id_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -623,7 +654,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
 
-        self._get_or_create_stream(stream_id)
+        self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_stream_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
@@ -650,7 +681,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        stream = self._get_or_create_stream(stream_id)
+        stream = self._get_or_create_stream(frame_type, stream_id)
         stream.add_frame(frame)
 
     def _handle_stream_data_blocked_frame(
@@ -665,7 +696,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        self._get_or_create_stream(stream_id)
+        self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_streams_blocked_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
