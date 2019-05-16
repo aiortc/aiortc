@@ -35,6 +35,28 @@ Status
 
 ``aioquic`` is still a work in progress, and the API is not finalized.
 
+Running the examples
+--------------------
+
+``aioquic`` requires Python 3.7 or better. After checking out the code using
+git you can run:
+
+.. code-block:: console
+
+   $ pip install -e .
+
+You can now run the example server:
+
+.. code-block:: console
+
+   $ python examples/server.py --certificate tests/ssl_cert.pem --private-key tests/ssl_key.pem
+
+You can also run the example client, which will perform an HTTP/0.9 request:
+
+.. code-block:: console
+
+  $ python examples/client.py localhost 4433
+
 License
 -------
 

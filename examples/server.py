@@ -103,6 +103,7 @@ async def run(host, port, **kwargs):
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServerProtocol(**kwargs), local_addr=(host, port)
     )
+    logger.info("Listening on %s port %s" % (host, port))
     return protocol
 
 
