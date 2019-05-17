@@ -23,6 +23,7 @@ from .tls import pull_block, pull_list, push_block, push_list
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40
+PACKET_SPIN_BIT = 0x20
 
 PACKET_TYPE_INITIAL = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x00
 PACKET_TYPE_0RTT = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x10
@@ -83,6 +84,10 @@ def decode_cid_length(length: int) -> int:
 
 def encode_cid_length(length: int) -> int:
     return length - 3 if length else 0
+
+
+def get_spin_bit(first_byte: int) -> bool:
+    return bool(first_byte & PACKET_SPIN_BIT)
 
 
 def is_long_header(first_byte: int) -> bool:

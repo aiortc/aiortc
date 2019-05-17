@@ -25,6 +25,8 @@ from .packet import (
     QuicStreamFlag,
     QuicStreamFrame,
     QuicTransportParameters,
+    get_spin_bit,
+    is_long_header,
     pull_quic_header,
     pull_quic_transport_parameters,
     pull_uint_var,
@@ -178,6 +180,8 @@ class QuicConnection:
         self._remote_max_stream_data_uni = 0
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
+        self._spin_bit = False
+        self._spin_highest_pn = 0
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
         # callbacks
@@ -353,6 +357,17 @@ class QuicConnection:
             if not self.peer_cid_set:
                 self.peer_cid = header.source_cid
                 self.peer_cid_set = True
+
+            # update spin bit
+            if (
+                not is_long_header(plain_header[0])
+                and packet_number > self._spin_highest_pn
+            ):
+                if self.is_client:
+                    self._spin_bit = not get_spin_bit(plain_header[0])
+                else:
+                    self._spin_bit = get_spin_bit(plain_header[0])
+                self._spin_highest_pn = packet_number
 
             # handle payload
             try:
@@ -904,7 +919,10 @@ class QuicConnection:
             # write header
             push_uint8(
                 buf,
-                PACKET_FIXED_BIT | (space.crypto.key_phase << 2) | (SEND_PN_SIZE - 1),
+                PACKET_FIXED_BIT
+                | (self._spin_bit << 5)
+                | (space.crypto.key_phase << 2)
+                | (SEND_PN_SIZE - 1),
             )
             push_bytes(buf, self.peer_cid)
             push_uint16(buf, self.packet_number)
