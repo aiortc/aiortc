@@ -11,11 +11,15 @@ from aioquic import tls
 from aioquic.buffer import Buffer
 from aioquic.connection import QuicConnection, QuicConnectionError
 from aioquic.packet import (
+    PACKET_NUMBER_SEND_SIZE,
+    PACKET_TYPE_INITIAL,
     QuicErrorCode,
     QuicFrameType,
+    QuicHeader,
     QuicProtocolVersion,
     QuicStreamFlag,
     encode_quic_version_negotiation,
+    push_quic_header,
     push_uint_var,
 )
 
@@ -62,7 +66,6 @@ class QuicConnectionTest(TestCase):
     def _test_connect_with_version(self, client_versions, server_versions):
         client = QuicConnection(is_client=True)
         client.supported_versions = client_versions
-        client.version = max(client_versions)
 
         server = QuicConnection(
             is_client=False,
@@ -70,7 +73,6 @@ class QuicConnectionTest(TestCase):
             private_key=SERVER_PRIVATE_KEY,
         )
         server.supported_versions = server_versions
-        server.version = max(server_versions)
 
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
@@ -180,14 +182,14 @@ class QuicConnectionTest(TestCase):
 
     def test_create_stream(self):
         client = QuicConnection(is_client=True)
-        client._initialize(b"")
-
         server = QuicConnection(
             is_client=False,
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY,
         )
-        server._initialize(b"")
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
 
         # client
         reader, writer = client.create_stream()
@@ -268,6 +270,26 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         client.datagram_received(load("retry.bin"), None)
+        self.assertEqual(client_transport.sent, 1)
+
+    def test_datagram_received_wrong_version(self):
+        client = QuicConnection(is_client=True)
+        client_transport = FakeTransport()
+        client.connection_made(client_transport)
+        self.assertEqual(client_transport.sent, 1)
+
+        buf = Buffer(capacity=1300)
+        push_quic_header(
+            buf,
+            QuicHeader(
+                version=0xFF000011,  # DRAFT_16
+                packet_type=PACKET_TYPE_INITIAL | (PACKET_NUMBER_SEND_SIZE - 1),
+                destination_cid=client.host_cid,
+                source_cid=client.peer_cid,
+            ),
+        )
+        buf.seek(1300)
+        client.datagram_received(buf.data, None)
         self.assertEqual(client_transport.sent, 1)
 
     def test_datagram_received_retry(self):
@@ -871,7 +893,6 @@ class QuicConnectionTest(TestCase):
 
     def test_version_negotiation_fail(self):
         client = QuicConnection(is_client=True)
-        client.supported_versions = [QuicProtocolVersion.DRAFT_19]
 
         client_transport = FakeTransport()
         client.connection_made(client_transport)

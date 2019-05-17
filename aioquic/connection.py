@@ -16,6 +16,7 @@ from .buffer import (
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     PACKET_FIXED_BIT,
+    PACKET_NUMBER_SEND_SIZE,
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
@@ -57,7 +58,6 @@ SECRETS_LABELS = [
         "QUIC_SERVER_TRAFFIC_SECRET_0",
     ],
 ]
-SEND_PN_SIZE = 2
 STREAM_FLAGS = 0x07
 
 
@@ -159,13 +159,9 @@ class QuicConnection:
         self.server_name = server_name
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
 
-        # protocol versions
-        self.version = max(self.supported_versions)
-
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
-        self.__initialized = False
         self._local_idle_timeout = 60000  # milliseconds
         self._local_max_data = 1048576
         self._local_max_stream_data_bidi_local = 1048576
@@ -188,6 +184,7 @@ class QuicConnection:
         self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__state = QuicConnectionState.FIRSTFLIGHT
         self.__transport: Optional[asyncio.DatagramTransport] = None
+        self.__version: Optional[int] = None
 
         # callbacks
         self.stream_created_cb: Callable[
@@ -303,11 +300,8 @@ class QuicConnection:
         """
         self.__transport = transport
         if self.is_client:
-            self._initialize(self.peer_cid)
-
-            self.tls.handle_message(b"", self.send_buffer)
-            self._push_crypto_data()
-            self._send_pending()
+            self.__version = max(self.supported_versions)
+            self._connect()
 
     def datagram_received(self, data: bytes, addr: Any) -> None:
         """
@@ -327,6 +321,7 @@ class QuicConnection:
             if self.is_client and header.destination_cid != self.host_cid:
                 return
 
+            # check protocol version
             if self.is_client and header.version == QuicProtocolVersion.NEGOTIATION:
                 # version negotiation
                 versions = []
@@ -336,11 +331,18 @@ class QuicConnection:
                 if not common:
                     self.__logger.error("Could not find a common protocol version")
                     return
-                self.version = QuicProtocolVersion(max(common))
-                self.__logger.info("Retrying with %s", self.version)
-                self.connection_made(self.__transport)
+                self.__version = QuicProtocolVersion(max(common))
+                self.__logger.info("Retrying with %s", self.__version)
+                self._connect()
                 return
-            elif self.is_client and header.packet_type == PACKET_TYPE_RETRY:
+            elif (
+                header.version is not None
+                and header.version not in self.supported_versions
+            ):
+                # unsupported version
+                return
+
+            if self.is_client and header.packet_type == PACKET_TYPE_RETRY:
                 # stateless retry
                 if (
                     header.destination_cid == self.host_cid
@@ -349,14 +351,15 @@ class QuicConnection:
                     self.__logger.info("Performing stateless retry")
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
-                    self.connection_made(self.__transport)
+                    self._connect()
                 return
 
             # server initialization
-            if not self.is_client and not self.__initialized:
+            if not self.is_client and self.__state == QuicConnectionState.FIRSTFLIGHT:
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
+                self.__version = QuicProtocolVersion(header.version)
                 self._initialize(header.destination_cid)
 
             # decrypt packet
@@ -441,6 +444,18 @@ class QuicConnection:
                 reason_phrase="Stream is receive-only",
             )
 
+    def _connect(self):
+        """
+        Start the client handshake.
+        """
+        assert self.is_client
+
+        self._initialize(self.peer_cid)
+
+        self.tls.handle_message(b"", self.send_buffer)
+        self._push_crypto_data()
+        self._send_pending()
+
     def _get_or_create_stream(self, frame_type: int, stream_id: int) -> QuicStream:
         """
         Get or create a stream in response to a received frame.
@@ -522,7 +537,6 @@ class QuicConnection:
             cid=peer_cid, is_client=self.is_client
         )
 
-        self.__initialized = True
         self.packet_number = 0
 
     def _handle_ack_frame(self, epoch: tls.Epoch, frame_type: int, buf: Buffer) -> None:
@@ -933,7 +947,7 @@ class QuicConnection:
                 PACKET_FIXED_BIT
                 | (self._spin_bit << 5)
                 | (space.crypto.key_phase << 2)
-                | (SEND_PN_SIZE - 1),
+                | (PACKET_NUMBER_SEND_SIZE - 1),
             )
             push_bytes(buf, self.peer_cid)
             push_uint16(buf, self.packet_number)
@@ -1000,8 +1014,8 @@ class QuicConnection:
             push_quic_header(
                 buf,
                 QuicHeader(
-                    version=self.version,
-                    packet_type=packet_type | (SEND_PN_SIZE - 1),
+                    version=self.__version,
+                    packet_type=packet_type | (PACKET_NUMBER_SEND_SIZE - 1),
                     destination_cid=self.peer_cid,
                     source_cid=self.host_cid,
                     token=self.peer_token,
@@ -1042,7 +1056,7 @@ class QuicConnection:
             packet_size = buf.tell()
             if packet_size > header_size:
                 # finalize length
-                buf.seek(header_size - SEND_PN_SIZE - 2)
+                buf.seek(header_size - PACKET_NUMBER_SEND_SIZE - 2)
                 length = packet_size - header_size + 2 + space.crypto.aead_tag_size
                 push_uint16(buf, length | 0x4000)
                 push_uint16(buf, self.packet_number)
