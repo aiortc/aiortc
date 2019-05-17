@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from enum import Enum
 from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Tuple, Union
 
 from . import packet, tls
@@ -113,6 +114,13 @@ class QuicConnectionError(Exception):
         return "Error: %d, reason: %s" % (self.error_code, self.reason_phrase)
 
 
+class QuicConnectionState(Enum):
+    FIRSTFLIGHT = 0
+    CONNECTED = 1
+    CLOSING = 2
+    DRAINING = 3
+
+
 class QuicConnection:
     """
     A QUIC connection.
@@ -183,6 +191,7 @@ class QuicConnection:
         self._spin_bit = False
         self._spin_highest_pn = 0
         self.__send_pending_task: Optional[asyncio.Handle] = None
+        self.__state = QuicConnectionState.FIRSTFLIGHT
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
         # callbacks
@@ -225,7 +234,10 @@ class QuicConnection:
         ]
 
     def close(
-        self, error_code: int, frame_type: Optional[int] = None, reason_phrase: str = ""
+        self,
+        error_code: int = QuicErrorCode.NO_ERROR,
+        frame_type: Optional[int] = None,
+        reason_phrase: str = "",
     ) -> None:
         """
         Close the connection.
@@ -235,6 +247,12 @@ class QuicConnection:
             "frame_type": frame_type,
             "reason_phrase": reason_phrase,
         }
+        if self.__state not in [
+            QuicConnectionState.CLOSING,
+            QuicConnectionState.DRAINING,
+        ]:
+            self._set_state(QuicConnectionState.CLOSING)
+            self.connection_lost(None)
         self._send_pending()
 
     async def connect(self) -> None:
@@ -302,6 +320,10 @@ class QuicConnection:
         """
         buf = Buffer(data=data)
 
+        # stop handling packets when closing
+        if self.__state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
+            return
+
         while not buf.eof():
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
@@ -358,6 +380,10 @@ class QuicConnection:
             if not self.peer_cid_set:
                 self.peer_cid = header.source_cid
                 self.peer_cid_set = True
+
+            # update state
+            if self.__state == QuicConnectionState.FIRSTFLIGHT:
+                self._set_state(QuicConnectionState.CONNECTED)
 
             # update spin bit
             if (
@@ -523,6 +549,7 @@ class QuicConnection:
         self.__logger.info(
             "Connection close code 0x%X, reason %s", error_code, reason_phrase
         )
+        self._set_state(QuicConnectionState.DRAINING)
         self.connection_lost(None)
 
     def _handle_crypto_frame(
@@ -886,6 +913,10 @@ class QuicConnection:
             buf, quic_transport_parameters, is_client=is_client
         )
         return buf.data
+
+    def _set_state(self, state: QuicConnectionState) -> None:
+        self.__logger.info("%s -> %s", self.__state, state)
+        self.__state = state
 
     def _stream_can_receive(self, stream_id: int) -> bool:
         return stream_is_client_initiated(

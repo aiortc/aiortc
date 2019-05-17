@@ -26,6 +26,9 @@ async def run(host, port, **kwargs):
     response = await reader.read()
     print(response.decode("utf8"))
 
+    # close connection
+    protocol.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC client")
