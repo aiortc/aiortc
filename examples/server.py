@@ -93,7 +93,9 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
             "%s Stream %d created by remote party"
             % (connection_id(connection), stream_id)
         )
-        if stream_id == 0:
+
+        # we serve HTTP/0.9 on Client-Initiated Bidirectional streams
+        if not stream_id % 4:
             asyncio.ensure_future(serve_http_request(reader, writer))
 
 
