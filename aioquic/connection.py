@@ -182,6 +182,7 @@ class QuicConnection:
         self._remote_max_streams_uni = 0
         self._spin_bit = False
         self._spin_highest_pn = 0
+        self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__transport: Optional[asyncio.DatagramTransport] = None
 
         # callbacks
@@ -819,6 +820,12 @@ class QuicConnection:
     def _send_pending(self) -> None:
         for datagram in self._pending_datagrams():
             self.__transport.sendto(datagram)
+        self.__send_pending_task = None
+
+    def _send_soon(self) -> None:
+        if self.__send_pending_task is None:
+            loop = asyncio.get_event_loop()
+            self.__send_pending_task = loop.call_soon(self._send_pending)
 
     def _parse_transport_parameters(self, data: bytes) -> None:
         if self.version >= QuicProtocolVersion.DRAFT_19:

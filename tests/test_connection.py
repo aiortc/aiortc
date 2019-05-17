@@ -1,3 +1,4 @@
+import asyncio
 import binascii
 import io
 from unittest import TestCase
@@ -79,6 +80,7 @@ class QuicConnectionTest(TestCase):
         # send data over stream
         client_reader, client_writer = client.create_stream()
         client_writer.write(b"ping")
+        run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
 
@@ -89,6 +91,7 @@ class QuicConnectionTest(TestCase):
         )
         self.assertEqual(run(server_reader.read(1024)), b"ping")
         server_writer.write(b"pong")
+        run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 6)
         self.assertEqual(server_transport.sent, 6)
 
@@ -97,6 +100,7 @@ class QuicConnectionTest(TestCase):
 
         # client writes EOF
         client_writer.write_eof()
+        run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 7)
         self.assertEqual(server_transport.sent, 7)
 
@@ -177,6 +181,7 @@ class QuicConnectionTest(TestCase):
         # send data over stream
         client_reader, client_writer = client.create_stream()
         client_writer.write(b"ping")
+        run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 5)
         self.assertEqual(server_transport.sent, 5)
 

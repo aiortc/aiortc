@@ -118,8 +118,8 @@ class QuicStream:
         if data:
             self._send_buffer += data
             if self._connection is not None:
-                self._connection._send_pending()
+                self._connection._send_soon()
 
     def write_eof(self) -> None:
         self._send_fin = True
-        self._connection._send_pending()
+        self._connection._send_soon()
