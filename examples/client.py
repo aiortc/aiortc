@@ -22,7 +22,9 @@ async def run(host, port, **kwargs):
     reader, writer = protocol.create_stream()
     writer.write(b"GET /\r\n")
     writer.write_eof()
-    print(await reader.read(1024))
+
+    response = await reader.read()
+    print(response.decode("utf8"))
 
 
 if __name__ == "__main__":
