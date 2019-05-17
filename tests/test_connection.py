@@ -340,9 +340,12 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends DATA_BLOCKED: 12345
-        server._pending_flow_control.append(b"\x14\x70\x39")
-        server._send_pending()
+        # client receives DATA_BLOCKED: 12345
+        client._handle_data_blocked_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.DATA_BLOCKED,
+            Buffer(data=encode_uint_var(12345)),
+        )
 
     def test_handle_max_data_frame(self):
         client = QuicConnection(is_client=True)
@@ -487,13 +490,16 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends NEW_CONNECTION_ID
-        server._pending_flow_control.append(
-            binascii.unhexlify(
-                "1802117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
-            )
+        # client receives NEW_CONNECTION_ID
+        client._handle_new_connection_id_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.NEW_CONNECTION_ID,
+            Buffer(
+                data=binascii.unhexlify(
+                    "02117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
+                )
+            ),
         )
-        server._send_pending()
 
     def test_handle_new_token_frame(self):
         client = QuicConnection(is_client=True)
@@ -506,9 +512,12 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends NEW_TOKEN
-        server._pending_flow_control.append(binascii.unhexlify("07080102030405060708"))
-        server._send_pending()
+        # client receives NEW_TOKEN
+        client._handle_new_token_frame(
+            tls.Epoch.ONE_RTT,
+            QuicFrameType.NEW_TOKEN,
+            Buffer(data=binascii.unhexlify("080102030405060708")),
+        )
 
     def test_handle_path_challenge_frame(self):
         client = QuicConnection(is_client=True)
@@ -602,9 +611,10 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends RETIRE_CONNECTION_ID
-        server._pending_flow_control.append(b"\x19\x02")
-        server._send_pending()
+        # client receives RETIRE_CONNECTION_ID
+        client._handle_retire_connection_id_frame(
+            tls.Epoch.ONE_RTT, QuicFrameType.RETIRE_CONNECTION_ID, Buffer(data=b"\x02")
+        )
 
     def test_handle_stop_sending_frame(self):
         client = QuicConnection(is_client=True)
@@ -799,9 +809,10 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends STREAM_BLOCKED_UNI: 0
-        server._pending_flow_control.append(b"\x17\x00")
-        server._send_pending()
+        # client receives STREAMS_BLOCKED_UNI: 0
+        client._handle_streams_blocked_frame(
+            tls.Epoch.ONE_RTT, QuicFrameType.STREAMS_BLOCKED_UNI, Buffer(data=b"\x00")
+        )
 
     def test_handle_unknown_frame(self):
         client = QuicConnection(is_client=True)
@@ -815,9 +826,12 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends unknown frame
-        server._pending_flow_control.append(b"\x1e")
-        server._send_pending()
+        # client receives unknown frame
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._payload_received(tls.Epoch.ONE_RTT, b"\x1e")
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, 0x1E)
+        self.assertEqual(cm.exception.reason_phrase, "Unexpected frame type")
 
     def test_stream_direction(self):
         client = QuicConnection(is_client=True)
