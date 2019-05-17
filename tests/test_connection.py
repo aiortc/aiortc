@@ -108,18 +108,6 @@ class QuicConnectionTest(TestCase):
         # server receives EOF
         self.assertEqual(run(server_reader.read()), b"")
 
-    def test_connect_draft_17(self):
-        self._test_connect_with_version(
-            client_versions=[QuicProtocolVersion.DRAFT_17],
-            server_versions=[QuicProtocolVersion.DRAFT_17],
-        )
-
-    def test_connect_draft_18(self):
-        self._test_connect_with_version(
-            client_versions=[QuicProtocolVersion.DRAFT_18],
-            server_versions=[QuicProtocolVersion.DRAFT_18],
-        )
-
     def test_connect_draft_19(self):
         self._test_connect_with_version(
             client_versions=[QuicProtocolVersion.DRAFT_19],

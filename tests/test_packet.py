@@ -187,65 +187,6 @@ class PacketTest(TestCase):
 class ParamsTest(TestCase):
     maxDiff = None
 
-    def test_legacy_client_params(self):
-        data = binascii.unhexlify(
-            "ff0000110031000500048010000000060004801000000007000480100000000"
-            "4000481000000000100024258000800024064000a00010a"
-        )
-
-        # parse
-        buf = Buffer(data=data)
-        params = pull_quic_transport_parameters(buf, is_client=True)
-        self.assertEqual(
-            params,
-            QuicTransportParameters(
-                initial_version=QuicProtocolVersion.DRAFT_17,
-                idle_timeout=600,
-                initial_max_data=16777216,
-                initial_max_stream_data_bidi_local=1048576,
-                initial_max_stream_data_bidi_remote=1048576,
-                initial_max_stream_data_uni=1048576,
-                initial_max_streams_bidi=100,
-                ack_delay_exponent=10,
-            ),
-        )
-
-        # serialize
-        buf = Buffer(capacity=len(data))
-        push_quic_transport_parameters(buf, params, is_client=True)
-        self.assertEqual(len(buf.data), len(data))
-
-    def test_legacy_server_params(self):
-        data = binascii.unhexlify(
-            "ff00001104ff000011004500050004801000000006000480100000000700048"
-            "010000000040004810000000001000242580002001000000000000000000000"
-            "000000000000000800024064000a00010a"
-        )
-
-        # parse
-        buf = Buffer(data=data)
-        params = pull_quic_transport_parameters(buf, is_client=False)
-        self.assertEqual(
-            params,
-            QuicTransportParameters(
-                negotiated_version=QuicProtocolVersion.DRAFT_17,
-                supported_versions=[QuicProtocolVersion.DRAFT_17],
-                idle_timeout=600,
-                stateless_reset_token=bytes(16),
-                initial_max_data=16777216,
-                initial_max_stream_data_bidi_local=1048576,
-                initial_max_stream_data_bidi_remote=1048576,
-                initial_max_stream_data_uni=1048576,
-                initial_max_streams_bidi=100,
-                ack_delay_exponent=10,
-            ),
-        )
-
-        # serialize
-        buf = Buffer(capacity=len(data))
-        push_quic_transport_parameters(buf, params, is_client=False)
-        self.assertEqual(len(buf.data), len(data))
-
     def test_params(self):
         data = binascii.unhexlify(
             "004700020010cc2fd6e7d97a53ab5be85b28d75c80080008000106000100026"

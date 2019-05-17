@@ -132,12 +132,7 @@ class QuicConnection:
             See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
     """
 
-    supported_versions = [
-        QuicProtocolVersion.DRAFT_17,
-        QuicProtocolVersion.DRAFT_18,
-        QuicProtocolVersion.DRAFT_19,
-        QuicProtocolVersion.DRAFT_20,
-    ]
+    supported_versions = [QuicProtocolVersion.DRAFT_19, QuicProtocolVersion.DRAFT_20]
 
     def __init__(
         self,
@@ -171,7 +166,7 @@ class QuicConnection:
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
         self.__initialized = False
-        self._local_idle_timeout = 60.0  # seconds
+        self._local_idle_timeout = 60000  # milliseconds
         self._local_max_data = 1048576
         self._local_max_stream_data_bidi_local = 1048576
         self._local_max_stream_data_bidi_remote = 1048576
@@ -181,7 +176,7 @@ class QuicConnection:
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
         self._pending_flow_control: List[bytes] = []
-        self._remote_idle_timeout = 0.0
+        self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_stream_data_bidi_local = 0
         self._remote_max_stream_data_bidi_remote = 0
@@ -855,22 +850,11 @@ class QuicConnection:
             self.__send_pending_task = loop.call_soon(self._send_pending)
 
     def _parse_transport_parameters(self, data: bytes) -> None:
-        if self.version >= QuicProtocolVersion.DRAFT_19:
-            is_client = None
-        else:
-            is_client = not self.is_client
-        quic_transport_parameters = pull_quic_transport_parameters(
-            Buffer(data=data), is_client=is_client
-        )
+        quic_transport_parameters = pull_quic_transport_parameters(Buffer(data=data))
 
         # store remote parameters
         if quic_transport_parameters.idle_timeout is not None:
-            if self.version >= QuicProtocolVersion.DRAFT_19:
-                self._remote_idle_timeout = (
-                    quic_transport_parameters.idle_timeout / 1000
-                )
-            else:
-                self._remote_idle_timeout = quic_transport_parameters.idle_timeout
+            self._remote_idle_timeout = quic_transport_parameters.idle_timeout
         for param in [
             "max_data",
             "max_stream_data_bidi_local",
@@ -885,6 +869,7 @@ class QuicConnection:
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
+            idle_timeout=self._local_idle_timeout,
             initial_max_data=self._local_max_data,
             initial_max_stream_data_bidi_local=self._local_max_stream_data_bidi_local,
             initial_max_stream_data_bidi_remote=self._local_max_stream_data_bidi_remote,
@@ -893,25 +878,9 @@ class QuicConnection:
             initial_max_streams_uni=self._local_max_streams_uni,
             ack_delay_exponent=10,
         )
-        if self.version >= QuicProtocolVersion.DRAFT_19:
-            is_client = None
-            quic_transport_parameters.idle_timeout = int(
-                self._local_idle_timeout * 1000
-            )
-        else:
-            is_client = self.is_client
-            quic_transport_parameters.idle_timeout = int(self._local_idle_timeout)
-            if self.is_client:
-                quic_transport_parameters.initial_version = self.version
-            else:
-                quic_transport_parameters.negotiated_version = self.version
-                quic_transport_parameters.supported_versions = self.supported_versions
-                quic_transport_parameters.stateless_reset_token = bytes(16)
 
         buf = Buffer(capacity=512)
-        push_quic_transport_parameters(
-            buf, quic_transport_parameters, is_client=is_client
-        )
+        push_quic_transport_parameters(buf, quic_transport_parameters)
         return buf.data
 
     def _set_state(self, state: QuicConnectionState) -> None:

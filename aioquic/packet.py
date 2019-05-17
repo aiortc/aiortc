@@ -19,7 +19,7 @@ from .buffer import (
     push_uint64,
 )
 from .rangeset import RangeSet
-from .tls import pull_block, pull_list, push_block, push_list
+from .tls import pull_block, push_block
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40
@@ -94,10 +94,6 @@ def is_long_header(first_byte: int) -> bool:
     return bool(first_byte & PACKET_LONG_HEADER)
 
 
-def pull_protocol_version(buf: Buffer) -> QuicProtocolVersion:
-    return QuicProtocolVersion(pull_uint32(buf))
-
-
 def pull_uint_var(buf: Buffer) -> int:
     """
     Pull a QUIC variable-length unsigned integer.
@@ -108,9 +104,6 @@ def pull_uint_var(buf: Buffer) -> int:
         raise BufferReadError
     pull, push, mask = UINT_VAR_FORMATS[kind]
     return pull(buf) & mask
-
-
-push_protocol_version = push_uint32
 
 
 def push_uint_var(buf: Buffer, value: int) -> None:
@@ -193,7 +186,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
 
 def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
     push_uint8(buf, header.packet_type)
-    push_protocol_version(buf, header.version)
+    push_uint32(buf, header.version)
     push_uint8(
         buf,
         (encode_cid_length(len(header.destination_cid)) << 4)
@@ -215,7 +208,7 @@ def encode_quic_version_negotiation(
 ) -> bytes:
     buf = Buffer(capacity=100)
     push_uint8(buf, os.urandom(1)[0] | PACKET_LONG_HEADER)
-    push_protocol_version(buf, QuicProtocolVersion.NEGOTIATION)
+    push_uint32(buf, QuicProtocolVersion.NEGOTIATION)
     push_uint8(
         buf,
         (encode_cid_length(len(destination_cid)) << 4)
@@ -224,7 +217,7 @@ def encode_quic_version_negotiation(
     push_bytes(buf, destination_cid)
     push_bytes(buf, source_cid)
     for version in supported_versions:
-        push_protocol_version(buf, version)
+        push_uint32(buf, version)
     return buf.data
 
 
@@ -271,17 +264,8 @@ PARAMS = [
 ]
 
 
-def pull_quic_transport_parameters(
-    buf: Buffer, is_client: Optional[bool] = None
-) -> QuicTransportParameters:
+def pull_quic_transport_parameters(buf: Buffer) -> QuicTransportParameters:
     params = QuicTransportParameters()
-
-    # version < DRAFT_19
-    if is_client:
-        params.initial_version = pull_protocol_version(buf)
-    elif is_client is False:
-        params.negotiated_version = pull_protocol_version(buf)
-        params.supported_versions = pull_list(buf, 1, pull_protocol_version)
 
     with pull_block(buf, 2) as length:
         end = buf.tell() + length
@@ -307,15 +291,8 @@ def pull_quic_transport_parameters(
 
 
 def push_quic_transport_parameters(
-    buf: Buffer, params: QuicTransportParameters, is_client: Optional[bool] = None
+    buf: Buffer, params: QuicTransportParameters
 ) -> None:
-    # version < DRAFT_19
-    if is_client:
-        push_protocol_version(buf, params.initial_version)
-    elif is_client is False:
-        push_protocol_version(buf, params.negotiated_version)
-        push_list(buf, 1, push_protocol_version, params.supported_versions)
-
     with push_block(buf, 2):
         for param_id, (param_name, param_type) in enumerate(PARAMS):
             param_value = getattr(params, param_name)
