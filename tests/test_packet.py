@@ -335,13 +335,55 @@ class FrameTest(TestCase):
         packet.push_ack_frame(buf, rangeset, delay)
         self.assertEqual(buf.data, data)
 
-    def test_ack_frame_with_ranges(self):
-        data = b"\x05\x02\x01\x00\x02\x03"
+    def test_ack_frame_with_one_range(self):
+        data = b"\x02\x02\x01\x00\x00\x00"
+
+        # parse
+        buf = Buffer(data=data)
+        rangeset, delay = packet.pull_ack_frame(buf)
+        self.assertEqual(list(rangeset), [range(0, 1), range(2, 3)])
+        self.assertEqual(delay, 2)
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_ack_frame(buf, rangeset, delay)
+        self.assertEqual(buf.data, data)
+
+    def test_ack_frame_with_one_range_2(self):
+        data = b"\x05\x02\x01\x00\x00\x03"
 
         # parse
         buf = Buffer(data=data)
         rangeset, delay = packet.pull_ack_frame(buf)
         self.assertEqual(list(rangeset), [range(0, 4), range(5, 6)])
+        self.assertEqual(delay, 2)
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_ack_frame(buf, rangeset, delay)
+        self.assertEqual(buf.data, data)
+
+    def test_ack_frame_with_one_range_3(self):
+        data = b"\x05\x02\x01\x00\x01\x02"
+
+        # parse
+        buf = Buffer(data=data)
+        rangeset, delay = packet.pull_ack_frame(buf)
+        self.assertEqual(list(rangeset), [range(0, 3), range(5, 6)])
+        self.assertEqual(delay, 2)
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        packet.push_ack_frame(buf, rangeset, delay)
+        self.assertEqual(buf.data, data)
+
+    def test_ack_frame_with_two_ranges(self):
+        data = b"\x04\x02\x02\x00\x00\x00\x00\x00"
+
+        # parse
+        buf = Buffer(data=data)
+        rangeset, delay = packet.pull_ack_frame(buf)
+        self.assertEqual(list(rangeset), [range(0, 1), range(2, 3), range(4, 5)])
         self.assertEqual(delay, 2)
 
         # serialize

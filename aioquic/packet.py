@@ -366,7 +366,7 @@ def pull_ack_frame(buf: Buffer) -> Tuple[RangeSet, int]:
     rangeset.add(end - ack_count, end + 1)
     end -= ack_count
     for _ in range(ack_range_count):
-        end -= pull_uint_var(buf)
+        end -= pull_uint_var(buf) + 2
         ack_count = pull_uint_var(buf)
         rangeset.add(end - ack_count, end + 1)
         end -= ack_count
@@ -384,7 +384,7 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
     while index > 0:
         index -= 1
         r = rangeset[index]
-        push_uint_var(buf, start - r.stop + 1)
+        push_uint_var(buf, start - r.stop - 1)
         push_uint_var(buf, r.stop - r.start - 1)
         start = r.start
 
