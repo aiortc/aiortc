@@ -323,6 +323,10 @@ class QuicConnection:
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
 
+            # check destination CID matches
+            if self.is_client and header.destination_cid != self.host_cid:
+                return
+
             if self.is_client and header.version == QuicProtocolVersion.NEGOTIATION:
                 # version negotiation
                 versions = []

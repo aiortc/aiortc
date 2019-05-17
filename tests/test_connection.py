@@ -261,11 +261,16 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 2)
         self.assertEqual(server_transport.sent, 1)
 
-    def test_error_received(self):
+    def test_datagram_received_wrong_destination_cid(self):
         client = QuicConnection(is_client=True)
-        client.error_received(OSError("foo"))
+        client_transport = FakeTransport()
+        client.connection_made(client_transport)
+        self.assertEqual(client_transport.sent, 1)
 
-    def test_retry(self):
+        client.datagram_received(load("retry.bin"), None)
+        self.assertEqual(client_transport.sent, 1)
+
+    def test_datagram_received_retry(self):
         client = QuicConnection(is_client=True)
         client.host_cid = binascii.unhexlify("c98343fe8f5f0ff4")
         client.peer_cid = binascii.unhexlify("85abb547bf28be97")
@@ -276,6 +281,10 @@ class QuicConnectionTest(TestCase):
 
         client.datagram_received(load("retry.bin"), None)
         self.assertEqual(client_transport.sent, 2)
+
+    def test_error_received(self):
+        client = QuicConnection(is_client=True)
+        client.error_received(OSError("foo"))
 
     def test_handle_ack_frame_ecn(self):
         client = QuicConnection(is_client=True)
