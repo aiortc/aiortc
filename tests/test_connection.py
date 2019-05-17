@@ -15,6 +15,7 @@ from aioquic.packet import (
     QuicFrameType,
     QuicProtocolVersion,
     QuicStreamFlag,
+    encode_quic_version_negotiation,
     push_uint_var,
 )
 
@@ -880,7 +881,14 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         # no common version, no retry
-        client.datagram_received(load("version_negotiation.bin"), None)
+        client.datagram_received(
+            encode_quic_version_negotiation(
+                source_cid=client.peer_cid,
+                destination_cid=client.host_cid,
+                supported_versions=[0xFF000011],  # DRAFT_16
+            ),
+            None,
+        )
         self.assertEqual(client_transport.sent, 1)
 
     def test_version_negotiation_ok(self):
@@ -891,5 +899,12 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         # found a common version, retry
-        client.datagram_received(load("version_negotiation.bin"), None)
+        client.datagram_received(
+            encode_quic_version_negotiation(
+                source_cid=client.peer_cid,
+                destination_cid=client.host_cid,
+                supported_versions=[QuicProtocolVersion.DRAFT_19],
+            ),
+            None,
+        )
         self.assertEqual(client_transport.sent, 2)
