@@ -31,7 +31,8 @@ class QuicStream:
         self._recv_ranges = RangeSet()
 
         self._send_buffer = bytearray()
-        self._send_fin = False
+        self._send_complete = False
+        self._send_eof = False
         self._send_start = 0
 
         self.__stream_id = stream_id
@@ -92,12 +93,18 @@ class QuicStream:
         """
         Get a frame of data to send.
         """
+        assert not self._send_complete, "cannot call get_frame() after completion"
+
         size = min(size, len(self._send_buffer))
         frame = QuicStreamFrame(data=self._send_buffer[:size], offset=self._send_start)
-        frame.fin = self._send_fin
         self._send_buffer = self._send_buffer[size:]
-        self._send_fin = False
         self._send_start += size
+
+        # if the buffer is empty and EOF was written, set the FIN bit
+        if self._send_eof and not self._send_buffer:
+            frame.fin = True
+            self._send_complete = True
+
         return frame
 
     def has_data_to_read(self) -> bool:
@@ -106,7 +113,7 @@ class QuicStream:
         )
 
     def has_data_to_send(self) -> bool:
-        return bool(self._send_buffer) or self._send_fin
+        return not self._send_complete and (self._send_eof or bool(self._send_buffer))
 
     def pull_data(self) -> bytes:
         """
@@ -134,11 +141,16 @@ class QuicStream:
             return self.stream_id
 
     def write(self, data: bytes) -> None:
+        assert not self._send_complete, "cannot call write() after completion"
+
         if data:
             self._send_buffer += data
             if self._connection is not None:
                 self._connection._send_soon()
 
     def write_eof(self) -> None:
-        self._send_fin = True
-        self._connection._send_soon()
+        assert not self._send_complete, "cannot call write_eof() after completion"
+
+        self._send_eof = True
+        if self._connection is not None:
+            self._connection._send_soon()

@@ -184,3 +184,51 @@ class QuicStreamTest(TestCase):
         stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True))
 
         self.assertEqual(run(stream.reader.read()), b"")
+
+    def test_send_data(self):
+        stream = QuicStream()
+
+        self.assertFalse(stream.has_data_to_send())
+        stream.write(b"0123456789012345")
+
+        self.assertTrue(stream.has_data_to_send())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"01234567")
+        self.assertEqual(frame.offset, 0)
+
+        self.assertTrue(stream.has_data_to_send())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"89012345")
+        self.assertEqual(frame.offset, 8)
+
+        self.assertFalse(stream.has_data_to_send())
+
+    def test_send_data_and_fin(self):
+        stream = QuicStream()
+        stream.write(b"0123456789012345")
+        stream.write_eof()
+
+        self.assertTrue(stream.has_data_to_send())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"01234567")
+        self.assertEqual(frame.offset, 0)
+        self.assertFalse(frame.fin)
+
+        self.assertTrue(stream.has_data_to_send())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"89012345")
+        self.assertEqual(frame.offset, 8)
+        self.assertTrue(frame.fin)
+
+        self.assertFalse(stream.has_data_to_send())
+
+    def test_send_fin_only(self):
+        stream = QuicStream()
+        self.assertFalse(stream.has_data_to_send())
+
+        stream.write_eof()
+        self.assertTrue(stream.has_data_to_send())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"")
+        self.assertEqual(frame.offset, 0)
+        self.assertTrue(frame.fin)
