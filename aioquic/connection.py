@@ -73,15 +73,12 @@ def get_epoch(packet_type: int) -> tls.Epoch:
 def push_close(
     buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: str
 ) -> None:
-    reason_phrase_bytes = reason_phrase.encode("utf8")
     if frame_type is None:
         push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
-        packet.push_application_close_frame(buf, error_code, reason_phrase_bytes)
+        packet.push_application_close_frame(buf, error_code, reason_phrase)
     else:
         push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
-        packet.push_transport_close_frame(
-            buf, error_code, frame_type, reason_phrase_bytes
-        )
+        packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
 
 
 def stream_is_client_initiated(stream_id: int) -> bool:
@@ -128,6 +125,8 @@ def maybe_connection_error(
         return QuicConnectionError(
             error_code=error_code, frame_type=frame_type, reason_phrase=reason_phrase
         )
+    else:
+        return None
 
 
 class QuicConnection:
@@ -458,7 +457,7 @@ class QuicConnection:
                 reason_phrase="Stream is receive-only",
             )
 
-    def _connect(self):
+    def _connect(self) -> None:
         """
         Start the client handshake.
         """

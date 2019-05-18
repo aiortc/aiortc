@@ -373,7 +373,7 @@ class FrameTest(TestCase):
         # parse
         buf = Buffer(data=data)
         frame = packet.pull_transport_close_frame(buf)
-        self.assertEqual(frame, (10, 2, b"illegal ACK frame\x00"))
+        self.assertEqual(frame, (10, 2, "illegal ACK frame\x00"))
 
         # serialize
         buf = Buffer(capacity=len(data))
@@ -386,9 +386,17 @@ class FrameTest(TestCase):
         # parse
         buf = Buffer(data=data)
         frame = packet.pull_application_close_frame(buf)
-        self.assertEqual(frame, (0, b"goodbye\x00"))
+        self.assertEqual(frame, (0, "goodbye\x00"))
 
         # serialize
         buf = Buffer(capacity=len(data))
         packet.push_application_close_frame(buf, *frame)
         self.assertEqual(buf.data, data)
+
+    def test_application_close_not_utf8(self):
+        data = binascii.unhexlify("000008676f6f6462798200")
+
+        # parse
+        buf = Buffer(data=data)
+        frame = packet.pull_application_close_frame(buf)
+        self.assertEqual(frame, (0, ""))
