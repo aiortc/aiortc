@@ -4,4 +4,4 @@ API Reference
 .. automodule:: aioquic
 
    .. autoclass:: QuicConnection
-      :members:
+      :members: close, connect, create_stream

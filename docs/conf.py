@@ -30,9 +30,15 @@ sys.path.insert(0, os.path.abspath('..'))
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinxcontrib.asyncio']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+    'sphinx_autodoc_typehints',
+    'sphinxcontrib.asyncio',
+]
 intersphinx_mapping = {
-    'cryptography': ('https://cryptography.io/en/latest', None)
+    'cryptography': ('https://cryptography.io/en/latest', None),
+    'python': ('https://docs.python.org/3', None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
