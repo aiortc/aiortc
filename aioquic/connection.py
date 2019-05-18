@@ -121,6 +121,15 @@ class QuicConnectionState(Enum):
     DRAINING = 3
 
 
+def maybe_connection_error(
+    error_code: int, frame_type: Optional[int], reason_phrase: str
+) -> Optional[QuicConnectionError]:
+    if error_code != QuicErrorCode.NO_ERROR:
+        return QuicConnectionError(
+            error_code=error_code, frame_type=frame_type, reason_phrase=reason_phrase
+        )
+
+
 class QuicConnection:
     """
     A QUIC connection.
@@ -244,7 +253,13 @@ class QuicConnection:
             QuicConnectionState.DRAINING,
         ]:
             self._set_state(QuicConnectionState.CLOSING)
-            self.connection_lost(None)
+            self.connection_lost(
+                maybe_connection_error(
+                    error_code=error_code,
+                    frame_type=frame_type,
+                    reason_phrase=reason_phrase,
+                )
+            )
         self._send_pending()
 
     async def connect(self) -> None:
@@ -288,8 +303,7 @@ class QuicConnection:
 
     def connection_lost(self, exc: Exception) -> None:
         for stream in self.streams.values():
-            if stream.reader:
-                stream.reader.feed_eof()
+            stream.connection_lost(exc)
 
     def connection_made(self, transport: asyncio.DatagramTransport) -> None:
         """
@@ -556,14 +570,23 @@ class QuicConnection:
         Handle a CONNECTION_CLOSE frame.
         """
         if frame_type == QuicFrameType.TRANSPORT_CLOSE:
-            error_code, _, reason_phrase = packet.pull_transport_close_frame(buf)
+            error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(
+                buf
+            )
         else:
             error_code, reason_phrase = packet.pull_application_close_frame(buf)
+            frame_type = None
         self.__logger.info(
             "Connection close code 0x%X, reason %s", error_code, reason_phrase
         )
         self._set_state(QuicConnectionState.DRAINING)
-        self.connection_lost(None)
+        self.connection_lost(
+            maybe_connection_error(
+                error_code=error_code,
+                frame_type=frame_type,
+                reason_phrase=reason_phrase,
+            )
+        )
 
     def _handle_crypto_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer

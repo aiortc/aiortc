@@ -69,6 +69,13 @@ class QuicStream:
             if frame.fin:
                 self.reader.feed_eof()
 
+    def connection_lost(self, exc: Exception) -> None:
+        if self.reader is not None:
+            if exc is None:
+                self.reader.feed_eof()
+            else:
+                self.reader.set_exception(exc)
+
     def get_frame(self, size: int) -> QuicStreamFrame:
         """
         Get a frame of data to send.
