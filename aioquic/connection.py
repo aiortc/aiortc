@@ -180,6 +180,7 @@ class QuicConnection:
         self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
+        self.__peer_addr: Optional[Any] = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
@@ -373,6 +374,7 @@ class QuicConnection:
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
+                self.__peer_addr = addr
                 self.__version = QuicProtocolVersion(header.version)
                 self._initialize(header.destination_cid)
 
@@ -891,7 +893,7 @@ class QuicConnection:
 
     def _send_pending(self) -> None:
         for datagram in self._pending_datagrams():
-            self.__transport.sendto(datagram)
+            self.__transport.sendto(datagram, self.__peer_addr)
         self.__send_pending_task = None
 
     def _send_soon(self) -> None:

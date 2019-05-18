@@ -37,15 +37,6 @@ async def serve_http_request(reader, writer):
     writer.write_eof()
 
 
-class QuicConnectionTransport:
-    def __init__(self, protocol, addr):
-        self.__addr = addr
-        self.__protocol = protocol
-
-    def sendto(self, datagram):
-        self.__protocol._transport.sendto(datagram, self.__addr)
-
-
 class QuicServerProtocol(asyncio.DatagramProtocol):
     def __init__(self, **kwargs):
         self._connections = {}
@@ -78,7 +69,7 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
         if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
             # create new connection
             connection = QuicConnection(is_client=False, **self._kwargs)
-            connection.connection_made(QuicConnectionTransport(self, addr))
+            connection.connection_made(self._transport)
             connection.stream_created_cb = self.stream_created
             self._connections[connection.host_cid] = connection
             logger.info("%s New connection from %s" % (connection_id(connection), addr))

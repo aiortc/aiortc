@@ -43,7 +43,7 @@ class FakeTransport:
     sent = 0
     target = None
 
-    def sendto(self, data):
+    def sendto(self, data, addr):
         self.sent += 1
         if self.target is not None:
             self.target.datagram_received(data, None)
