@@ -25,7 +25,9 @@ class QuicStream:
             self.writer = None
 
         self._recv_buffer = bytearray()
-        self._recv_start = 0
+        self._recv_fin = False
+        self._recv_highest = 0  # the highest offset ever seen
+        self._recv_start = 0  # the offset for the start of the buffer
         self._recv_ranges = RangeSet()
 
         self._send_buffer = bytearray()
@@ -44,6 +46,11 @@ class QuicStream:
         """
         pos = frame.offset - self._recv_start
         count = len(frame.data)
+        frame_end = frame.offset + count
+
+        # we should receive no more data beyond FIN!
+        if self._recv_fin and frame_end > self._recv_highest:
+            raise Exception("Data received beyond FIN")
 
         if pos + count > 0:
             # frame has been partially consumed
@@ -55,7 +62,9 @@ class QuicStream:
 
             # marked received
             if count:
-                self._recv_ranges.add(frame.offset, frame.offset + count)
+                self._recv_ranges.add(frame.offset, frame_end)
+            if frame_end > self._recv_highest:
+                self._recv_highest = frame_end
 
             # add data
             gap = pos - len(self._recv_buffer)
@@ -63,10 +72,13 @@ class QuicStream:
                 self._recv_buffer += bytearray(gap)
             self._recv_buffer[pos : pos + count] = frame.data
 
+        if frame.fin:
+            self._recv_fin = True
+
         if self.reader:
             if self.has_data_to_read():
                 self.reader.feed_data(self.pull_data())
-            if frame.fin:
+            if self._recv_fin and not self._recv_ranges:
                 self.reader.feed_eof()
 
     def connection_lost(self, exc: Exception) -> None:

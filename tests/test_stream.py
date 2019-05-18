@@ -149,3 +149,38 @@ class QuicStreamTest(TestCase):
 
         self.assertEqual(stream.pull_data(), b"89012345")
         self.assertEqual(stream._recv_start, 16)
+
+    def test_recv_fin(self):
+        stream = QuicStream(stream_id=0)
+        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
+
+        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+
+    def test_recv_fin_out_of_order(self):
+        stream = QuicStream(stream_id=0)
+        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
+        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+
+        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+
+    def test_recv_fin_then_data(self):
+        stream = QuicStream(stream_id=0)
+        stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True))
+        with self.assertRaises(Exception) as cm:
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+        self.assertEqual(str(cm.exception), "Data received beyond FIN")
+
+    def test_recv_fin_twice(self):
+        stream = QuicStream(stream_id=0)
+        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
+        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
+
+        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+
+    def test_recv_fin_without_data(self):
+        stream = QuicStream(stream_id=0)
+        stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True))
+
+        self.assertEqual(run(stream.reader.read()), b"")
