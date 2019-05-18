@@ -713,6 +713,33 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STOP_SENDING)
         self.assertEqual(cm.exception.reason_phrase, "Stream is receive-only")
 
+    def test_handle_stream_frame_over_max_data(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # artificially raise received data counter
+        client._local_max_data_used = client._local_max_data
+
+        # client receives STREAM frame
+        frame_type = QuicFrameType.STREAM_BASE | QuicStreamFlag.OFF
+        stream_id = 1
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_stream_frame(
+                tls.Epoch.ONE_RTT,
+                frame_type,
+                Buffer(data=encode_uint_var(stream_id) + encode_uint_var(1)),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.FLOW_CONTROL_ERROR)
+        self.assertEqual(cm.exception.frame_type, frame_type)
+        self.assertEqual(cm.exception.reason_phrase, "Over connection data limit")
+
     def test_handle_stream_frame_over_max_stream_data(self):
         client = QuicConnection(is_client=True)
         server = QuicConnection(

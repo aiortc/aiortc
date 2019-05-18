@@ -172,6 +172,7 @@ class QuicConnection:
         self.__epoch = tls.Epoch.INITIAL
         self._local_idle_timeout = 60000  # milliseconds
         self._local_max_data = 1048576
+        self._local_max_data_used = 0
         self._local_max_stream_data_bidi_local = 1048576
         self._local_max_stream_data_bidi_remote = 1048576
         self._local_max_stream_data_uni = 1048576
@@ -803,7 +804,7 @@ class QuicConnection:
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        # check limits
+        # check flow-control limits
         stream = self._get_or_create_stream(frame_type, stream_id)
         if offset + length > stream.max_stream_data_local:
             raise QuicConnectionError(
@@ -811,7 +812,16 @@ class QuicConnection:
                 frame_type=frame_type,
                 reason_phrase="Over stream data limit",
             )
+        newly_received = max(0, offset + length - stream._recv_highest)
+        if self._local_max_data_used + newly_received > self._local_max_data:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.FLOW_CONTROL_ERROR,
+                frame_type=frame_type,
+                reason_phrase="Over connection data limit",
+            )
+
         stream.add_frame(frame)
+        self._local_max_data_used += newly_received
 
     def _handle_stream_data_blocked_frame(
         self, epoch: tls.Epoch, frame_type: int, buf: Buffer
