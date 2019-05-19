@@ -1,33 +1,19 @@
 import argparse
 import asyncio
-import ipaddress
 import logging
 
-from aioquic.connection import QuicConnection
+import aioquic
 
 
 async def run(host, port, **kwargs):
-    # if host is not an IP address, pass it to enable SNI
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        kwargs["server_name"] = host
+    async with aioquic.connect(host, port, **kwargs) as connection:
+        # perform HTTP/0.9 request
+        reader, writer = connection.create_stream()
+        writer.write(b"GET /\r\n")
+        writer.write_eof()
 
-    _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicConnection(is_client=True, **kwargs), remote_addr=(host, port)
-    )
-    await protocol.connect(None)
-
-    # perform HTTP/0.9 request
-    reader, writer = protocol.create_stream()
-    writer.write(b"GET /\r\n")
-    writer.write_eof()
-
-    response = await reader.read()
-    print(response.decode("utf8"))
-
-    # close connection
-    protocol.close()
+        response = await reader.read()
+        print(response.decode("utf8"))
 
 
 if __name__ == "__main__":
