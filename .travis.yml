@@ -4,7 +4,7 @@ language: python
 matrix:
   include:
   - env: BUILD=lint
-    install: pip install black flake8 isort
+    install: pip install black flake8 isort mypy
   - env: BUILD=test
   - env: BUILD=sdist
     install: pip install twine
