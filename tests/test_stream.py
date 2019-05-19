@@ -186,44 +186,73 @@ class QuicStreamTest(TestCase):
         self.assertEqual(run(stream.reader.read()), b"")
 
     def test_send_data(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0, max_stream_data_remote=512)
 
         self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         stream.write(b"0123456789012345")
 
         self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
         self.assertEqual(frame.offset, 0)
 
         self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"89012345")
         self.assertEqual(frame.offset, 8)
 
         self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
 
     def test_send_data_and_fin(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0, max_stream_data_remote=512)
         stream.write(b"0123456789012345")
         stream.write_eof()
 
         self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
         self.assertEqual(frame.offset, 0)
         self.assertFalse(frame.fin)
 
         self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"89012345")
         self.assertEqual(frame.offset, 8)
         self.assertTrue(frame.fin)
 
         self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+
+    def test_send_blocked(self):
+        stream = QuicStream(stream_id=0, max_stream_data_remote=12)
+
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        stream.write(b"0123456789012345")
+
+        self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"01234567")
+        self.assertEqual(frame.offset, 0)
+
+        self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"8901")
+        self.assertEqual(frame.offset, 8)
+
+        self.assertTrue(stream.has_data_to_send())
+        self.assertTrue(stream.is_blocked())
 
     def test_send_fin_only(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0, max_stream_data_remote=512)
         self.assertFalse(stream.has_data_to_send())
 
         stream.write_eof()

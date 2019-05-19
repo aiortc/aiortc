@@ -1034,7 +1034,11 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # STREAM
             for stream_id, stream in self.streams.items():
-                if isinstance(stream_id, int) and stream.has_data_to_send():
+                if (
+                    isinstance(stream_id, int)
+                    and stream.has_data_to_send()
+                    and not stream.is_blocked()
+                ):
                     frame = stream.get_frame(
                         PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
                     )

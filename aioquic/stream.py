@@ -96,6 +96,11 @@ class QuicStream:
         assert not self._send_complete, "cannot call get_frame() after completion"
 
         size = min(size, len(self._send_buffer))
+
+        # flow control
+        if self.stream_id is not None:
+            size = min(size, self.max_stream_data_remote - self._send_start)
+
         frame = QuicStreamFrame(data=self._send_buffer[:size], offset=self._send_start)
         self._send_buffer = self._send_buffer[size:]
         self._send_start += size
@@ -114,6 +119,13 @@ class QuicStream:
 
     def has_data_to_send(self) -> bool:
         return not self._send_complete and (self._send_eof or bool(self._send_buffer))
+
+    def is_blocked(self):
+        """
+        Returns True if there is data to send but the peer's MAX_STREAM_DATA
+        prevents us from sending it.
+        """
+        return self._send_buffer and self._send_start >= self.max_stream_data_remote
 
     def pull_data(self) -> bytes:
         """
