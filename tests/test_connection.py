@@ -18,6 +18,7 @@ from aioquic.packet import (
     QuicHeader,
     QuicProtocolVersion,
     QuicStreamFlag,
+    encode_quic_retry,
     encode_quic_version_negotiation,
     push_quic_header,
     push_uint_var,
@@ -25,6 +26,9 @@ from aioquic.packet import (
 
 from .utils import load, run
 
+CLIENT_ADDR = None
+
+SERVER_ADDR = None
 SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
     load("ssl_cert.pem"), backend=default_backend()
 )
@@ -43,24 +47,27 @@ class FakeTransport:
     sent = 0
     target = None
 
+    def __init__(self, local_addr):
+        self.local_addr = local_addr
+
     def sendto(self, data, addr):
         self.sent += 1
         if self.target is not None:
-            self.target.datagram_received(data, None)
+            self.target.datagram_received(data, self.local_addr)
 
 
 def create_standalone_client():
     client = QuicConnection(is_client=True)
-    client_transport = FakeTransport()
+    client_transport = FakeTransport(CLIENT_ADDR)
     client.connection_made(client_transport)
     return client, client_transport
 
 
 def create_transport(client, server):
-    client_transport = FakeTransport()
+    client_transport = FakeTransport(CLIENT_ADDR)
     client_transport.target = server
 
-    server_transport = FakeTransport()
+    server_transport = FakeTransport(SERVER_ADDR)
     server_transport.target = client
 
     server.connection_made(server_transport)
@@ -298,13 +305,6 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 2)
         self.assertEqual(server_transport.sent, 1)
 
-    def test_datagram_received_wrong_destination_cid(self):
-        client, client_transport = create_standalone_client()
-        self.assertEqual(client_transport.sent, 1)
-
-        client.datagram_received(load("retry.bin"), None)
-        self.assertEqual(client_transport.sent, 1)
-
     def test_datagram_received_wrong_version(self):
         client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
@@ -320,20 +320,40 @@ class QuicConnectionTest(TestCase):
             ),
         )
         buf.seek(1300)
-        client.datagram_received(buf.data, None)
+        client.datagram_received(buf.data, SERVER_ADDR)
         self.assertEqual(client_transport.sent, 1)
 
     def test_datagram_received_retry(self):
-        client = QuicConnection(is_client=True)
-        client.host_cid = binascii.unhexlify("c98343fe8f5f0ff4")
-        client.peer_cid = binascii.unhexlify("85abb547bf28be97")
-
-        client_transport = FakeTransport()
-        client.connection_made(client_transport)
+        client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
-        client.datagram_received(load("retry.bin"), None)
+        client.datagram_received(
+            encode_quic_retry(
+                version=QuicProtocolVersion.DRAFT_20,
+                source_cid=binascii.unhexlify("85abb547bf28be97"),
+                destination_cid=client.host_cid,
+                original_destination_cid=client.peer_cid,
+                retry_token=bytes(16),
+            ),
+            SERVER_ADDR,
+        )
         self.assertEqual(client_transport.sent, 2)
+
+    def test_datagram_received_retry_wrong_destination_cid(self):
+        client, client_transport = create_standalone_client()
+        self.assertEqual(client_transport.sent, 1)
+
+        client.datagram_received(
+            encode_quic_retry(
+                version=QuicProtocolVersion.DRAFT_20,
+                source_cid=binascii.unhexlify("85abb547bf28be97"),
+                destination_cid=binascii.unhexlify("c98343fe8f5f0ff4"),
+                original_destination_cid=client.peer_cid,
+                retry_token=bytes(16),
+            ),
+            SERVER_ADDR,
+        )
+        self.assertEqual(client_transport.sent, 1)
 
     def test_error_received(self):
         client = QuicConnection(is_client=True)
@@ -960,7 +980,7 @@ class QuicConnectionTest(TestCase):
                 destination_cid=client.host_cid,
                 supported_versions=[0xFF000011],  # DRAFT_16
             ),
-            None,
+            SERVER_ADDR,
         )
         self.assertEqual(client_transport.sent, 1)
 
@@ -975,6 +995,6 @@ class QuicConnectionTest(TestCase):
                 destination_cid=client.host_cid,
                 supported_versions=[QuicProtocolVersion.DRAFT_19],
             ),
-            None,
+            SERVER_ADDR,
         )
         self.assertEqual(client_transport.sent, 2)

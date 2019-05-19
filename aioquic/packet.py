@@ -203,6 +203,30 @@ def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
     push_uint16(buf, 0)  # pn
 
 
+def encode_quic_retry(
+    version: QuicProtocolVersion,
+    source_cid: bytes,
+    destination_cid: bytes,
+    original_destination_cid: bytes,
+    retry_token: bytes,
+) -> bytes:
+    buf = Buffer(capacity=100)
+    push_uint8(
+        buf, PACKET_TYPE_RETRY | encode_cid_length(len(original_destination_cid))
+    )
+    push_uint32(buf, version)
+    push_uint8(
+        buf,
+        (encode_cid_length(len(destination_cid)) << 4)
+        | encode_cid_length(len(source_cid)),
+    )
+    push_bytes(buf, destination_cid)
+    push_bytes(buf, source_cid)
+    push_bytes(buf, original_destination_cid)
+    push_bytes(buf, retry_token)
+    return buf.data
+
+
 def encode_quic_version_negotiation(
     source_cid: bytes,
     destination_cid: bytes,
