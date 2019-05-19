@@ -7,7 +7,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .packet import is_long_header
+from .packet import PACKET_NUMBER_MAX_SIZE, is_long_header
 from .tls import (
     CipherSuite,
     cipher_suite_aead,
@@ -18,7 +18,6 @@ from .tls import (
 
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
 INITIAL_SALT = binascii.unhexlify("ef4fb0abb47470c41befcf8031334fae485e09a0")
-MAX_PN_SIZE = 4
 SAMPLE_SIZE = 16
 
 
@@ -64,7 +63,7 @@ class CryptoContext:
 
         # header protection
         packet = bytearray(packet)
-        sample_offset = encrypted_offset + MAX_PN_SIZE
+        sample_offset = encrypted_offset + PACKET_NUMBER_MAX_SIZE
         sample = packet[sample_offset : sample_offset + SAMPLE_SIZE]
         mask = self.header_protection_mask(sample)
 
@@ -120,7 +119,7 @@ class CryptoContext:
         protected_payload = self.aead.encrypt(nonce, plain_payload, plain_header)
 
         # header protection
-        sample_offset = MAX_PN_SIZE - pn_length
+        sample_offset = PACKET_NUMBER_MAX_SIZE - pn_length
         sample = protected_payload[sample_offset : sample_offset + SAMPLE_SIZE]
         mask = self.header_protection_mask(sample)
 
