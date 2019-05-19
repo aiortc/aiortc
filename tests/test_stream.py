@@ -188,76 +188,147 @@ class QuicStreamTest(TestCase):
     def test_send_data(self):
         stream = QuicStream(stream_id=0, max_stream_data_remote=512)
 
+        # nothing to send yet
         self.assertFalse(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
-        stream.write(b"0123456789012345")
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
 
+        # write data, send a chunk
+        stream.write(b"0123456789012345")
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
+        self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 0)
 
+        # send another chunk
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"89012345")
+        self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 8)
 
+        # nothing more to send
         self.assertFalse(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
 
     def test_send_data_and_fin(self):
         stream = QuicStream(stream_id=0, max_stream_data_remote=512)
+
+        # nothing to send yet
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write data and EOF, send a chunk
         stream.write(b"0123456789012345")
         stream.write_eof()
-
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
-        self.assertEqual(frame.offset, 0)
         self.assertFalse(frame.fin)
+        self.assertEqual(frame.offset, 0)
 
+        # send another chunk
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"89012345")
-        self.assertEqual(frame.offset, 8)
         self.assertTrue(frame.fin)
+        self.assertEqual(frame.offset, 8)
 
+        # nothing more to send
         self.assertFalse(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
 
     def test_send_blocked(self):
         stream = QuicStream(stream_id=0, max_stream_data_remote=12)
 
+        # nothing to send yet
         self.assertFalse(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
-        stream.write(b"0123456789012345")
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
 
+        # write data, send a chunk
+        stream.write(b"0123456789012345")
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
+        self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 0)
 
+        # send is limited by peer
         self.assertTrue(stream.has_data_to_send())
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"8901")
+        self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 8)
 
+        # unable to send, blocked
         self.assertTrue(stream.has_data_to_send())
         self.assertTrue(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write more data, still blocked
+        stream.write(b"abcdefgh")
+        self.assertTrue(stream.has_data_to_send())
+        self.assertTrue(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # peer raises limit, send some data
+        stream.max_stream_data_remote += 8
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"2345abcd")
+        self.assertFalse(frame.fin)
+        self.assertEqual(frame.offset, 12)
+
+        # peer raises limit again, send remaining data
+        stream.max_stream_data_remote += 8
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"efgh")
+        self.assertFalse(frame.fin)
+        self.assertEqual(frame.offset, 20)
+
+        # nothing more to send
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
 
     def test_send_fin_only(self):
         stream = QuicStream(stream_id=0, max_stream_data_remote=512)
-        self.assertFalse(stream.has_data_to_send())
 
+        # nothing to send yet
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write EOF
         stream.write_eof()
         self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"")
-        self.assertEqual(frame.offset, 0)
         self.assertTrue(frame.fin)
+        self.assertEqual(frame.offset, 0)
+
+        # nothing more to send
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)

@@ -5,7 +5,7 @@ from .packet import QuicStreamFrame
 from .rangeset import RangeSet
 
 
-class QuicStream:
+class QuicStream(asyncio.BaseTransport):
     def __init__(
         self,
         stream_id: Optional[int] = None,
@@ -89,18 +89,22 @@ class QuicStream:
             else:
                 self.reader.set_exception(exc)
 
-    def get_frame(self, size: int) -> QuicStreamFrame:
+    def get_frame(self, size: int) -> Optional[QuicStreamFrame]:
         """
         Get a frame of data to send.
         """
-        assert not self._send_complete, "cannot call get_frame() after completion"
+        # check there is something to send
+        if self._send_complete or not self.has_data_to_send():
+            return None
 
-        size = min(size, len(self._send_buffer))
-
-        # flow control
+        # apply flow control
         if self.stream_id is not None:
             size = min(size, self.max_stream_data_remote - self._send_start)
+        if size < 0 or (size == 0 and self._send_buffer and not self._send_eof):
+            return None
 
+        # create frame
+        size = min(size, len(self._send_buffer))
         frame = QuicStreamFrame(data=self._send_buffer[:size], offset=self._send_start)
         self._send_buffer = self._send_buffer[size:]
         self._send_start += size
@@ -120,12 +124,14 @@ class QuicStream:
     def has_data_to_send(self) -> bool:
         return not self._send_complete and (self._send_eof or bool(self._send_buffer))
 
-    def is_blocked(self):
+    def is_blocked(self) -> bool:
         """
         Returns True if there is data to send but the peer's MAX_STREAM_DATA
         prevents us from sending it.
         """
-        return self._send_buffer and self._send_start >= self.max_stream_data_remote
+        return (
+            bool(self._send_buffer) and self._send_start >= self.max_stream_data_remote
+        )
 
     def pull_data(self) -> bytes:
         """

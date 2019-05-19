@@ -16,6 +16,7 @@ from aioquic.packet import (
     push_quic_header,
     push_quic_transport_parameters,
     push_uint_var,
+    quic_uint_length,
 )
 
 from .utils import load
@@ -49,6 +50,18 @@ class UintTest(TestCase):
         # 8 bytes
         self.roundtrip(b"\xc2\x19\x7c\x5e\xff\x14\xe8\x8c", 151288809941952652)
         self.roundtrip(b"\xff\xff\xff\xff\xff\xff\xff\xff", 4611686018427387903)
+
+    def test_uint_var_length(self):
+        self.assertEqual(quic_uint_length(63), 1)
+        self.assertEqual(quic_uint_length(16383), 2)
+        self.assertEqual(quic_uint_length(1073741823), 4)
+        self.assertEqual(quic_uint_length(4611686018427387903), 8)
+
+        with self.assertRaises(ValueError) as cm:
+            quic_uint_length(4611686018427387904)
+        self.assertEqual(
+            str(cm.exception), "Integer is too big for a variable-length integer"
+        )
 
     def test_pull_uint_var_truncated(self):
         buf = Buffer(capacity=0)

@@ -97,6 +97,17 @@ def is_long_header(first_byte: int) -> bool:
     return bool(first_byte & PACKET_LONG_HEADER)
 
 
+def quic_uint_length(value: int) -> int:
+    """
+    Returns the number of bytes required to encode the given value
+    as a QUIC variable-length unsigned integer.
+    """
+    for i, (_, _, mask) in enumerate(UINT_VAR_FORMATS):
+        if value <= mask:
+            return 2 ** i
+    raise ValueError("Integer is too big for a variable-length integer")
+
+
 def pull_uint_var(buf: Buffer) -> int:
     """
     Pull a QUIC variable-length unsigned integer.
@@ -415,7 +426,7 @@ def pull_crypto_frame(buf: Buffer) -> QuicStreamFrame:
 @contextmanager
 def push_crypto_frame(buf: Buffer, offset: int = 0) -> Generator:
     push_uint_var(buf, offset)
-    push_uint16(buf, 0)
+    push_uint16(buf, 0)  # we always write the size as 2 bytes
     start = buf.tell()
     yield
     end = buf.tell()
@@ -429,7 +440,7 @@ def push_stream_frame(buf: Buffer, stream_id: int, offset: int) -> Generator:
     push_uint_var(buf, stream_id)
     if offset:
         push_uint_var(buf, offset)
-    push_uint16(buf, 0)
+    push_uint16(buf, 0)  # we always write the size as 2 bytes
     start = buf.tell()
     yield
     end = buf.tell()

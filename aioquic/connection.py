@@ -48,6 +48,7 @@ from .packet import (
     push_quic_transport_parameters,
     push_stream_frame,
     push_uint_var,
+    quic_uint_length,
 )
 from .rangeset import RangeSet
 from .stream import QuicStream
@@ -206,6 +207,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
+        self._remote_max_data_used = 0
         self._remote_max_stream_data_bidi_local = 0
         self._remote_max_stream_data_bidi_remote = 0
         self._remote_max_stream_data_uni = 0
@@ -1002,6 +1004,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
+        capacity = buf.capacity - space.crypto.aead_tag_size
 
         while True:
             # write header
@@ -1034,22 +1037,35 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # STREAM
             for stream_id, stream in self.streams.items():
-                if (
-                    isinstance(stream_id, int)
-                    and stream.has_data_to_send()
-                    and not stream.is_blocked()
-                ):
-                    frame = stream.get_frame(
-                        PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 6
+                if isinstance(stream_id, int):
+                    # the frame data size is constrained by our peer's MAX_DATA and
+                    # the space available in the current packet
+                    frame_overhead = (
+                        3
+                        + quic_uint_length(stream_id)
+                        + (
+                            quic_uint_length(stream._send_start)
+                            if stream._send_start
+                            else 0
+                        )
                     )
-                    flags = QuicStreamFlag.LEN
-                    if frame.offset:
-                        flags |= QuicStreamFlag.OFF
-                    if frame.fin:
-                        flags |= QuicStreamFlag.FIN
-                    push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
-                    with push_stream_frame(buf, 0, frame.offset):
-                        push_bytes(buf, frame.data)
+                    frame = stream.get_frame(
+                        min(
+                            capacity - buf.tell() - frame_overhead,
+                            self._remote_max_data - self._remote_max_data_used,
+                        )
+                    )
+
+                    if frame is not None:
+                        flags = QuicStreamFlag.LEN
+                        if frame.offset:
+                            flags |= QuicStreamFlag.OFF
+                        if frame.fin:
+                            flags |= QuicStreamFlag.FIN
+                        push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
+                        with push_stream_frame(buf, 0, frame.offset):
+                            push_bytes(buf, frame.data)
+                        self._remote_max_data_used += len(frame.data)
 
             packet_size = buf.tell()
             if packet_size > header_size:
@@ -1070,6 +1086,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
+        capacity = buf.capacity - space.crypto.aead_tag_size
 
         while True:
             if epoch == tls.Epoch.INITIAL:
@@ -1101,24 +1118,18 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_close(buf, **self.__close)
                 self.__close = None
 
+            # CRYPTO
             stream = self.streams[epoch]
-            if stream.has_data_to_send():
-                # CRYPTO
-                frame = stream.get_frame(
-                    PACKET_MAX_SIZE - buf.tell() - space.crypto.aead_tag_size - 4
-                )
+            frame_overhead = 3 + quic_uint_length(stream._send_start)
+            frame = stream.get_frame(capacity - buf.tell() - frame_overhead)
+            if frame is not None:
                 push_uint_var(buf, QuicFrameType.CRYPTO)
                 with packet.push_crypto_frame(buf, frame.offset):
                     push_bytes(buf, frame.data)
 
                 # PADDING
                 if epoch == tls.Epoch.INITIAL and self.is_client:
-                    push_bytes(
-                        buf,
-                        bytes(
-                            PACKET_MAX_SIZE - space.crypto.aead_tag_size - buf.tell()
-                        ),
-                    )
+                    push_bytes(buf, bytes(capacity - buf.tell()))
 
             packet_size = buf.tell()
             if packet_size > header_size:
