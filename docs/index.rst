@@ -12,6 +12,10 @@ aioquic
 ``aioquic`` is a library for the QUIC network protocol in Python. It is built
 on top of :mod:`asyncio`, Python's standard asynchronous I/O framework.
 
+Here is a client which performs an HTTP/0.9 request:
+
+.. literalinclude:: http_client.py
+
 .. toctree::
    :maxdepth: 2
 
