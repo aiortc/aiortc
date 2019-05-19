@@ -49,6 +49,13 @@ class FakeTransport:
             self.target.datagram_received(data, None)
 
 
+def create_standalone_client():
+    client = QuicConnection(is_client=True)
+    client_transport = FakeTransport()
+    client.connection_made(client_transport)
+    return client, client_transport
+
+
 def create_transport(client, server):
     client_transport = FakeTransport()
     client_transport.target = server
@@ -292,18 +299,14 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 1)
 
     def test_datagram_received_wrong_destination_cid(self):
-        client = QuicConnection(is_client=True)
-        client_transport = FakeTransport()
-        client.connection_made(client_transport)
+        client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
         client.datagram_received(load("retry.bin"), None)
         self.assertEqual(client_transport.sent, 1)
 
     def test_datagram_received_wrong_version(self):
-        client = QuicConnection(is_client=True)
-        client_transport = FakeTransport()
-        client.connection_made(client_transport)
+        client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
         buf = Buffer(capacity=1300)
@@ -947,10 +950,7 @@ class QuicConnectionTest(TestCase):
             self.assertTrue(server._stream_can_send(off + 3))
 
     def test_version_negotiation_fail(self):
-        client = QuicConnection(is_client=True)
-
-        client_transport = FakeTransport()
-        client.connection_made(client_transport)
+        client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
         # no common version, no retry
@@ -965,10 +965,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
     def test_version_negotiation_ok(self):
-        client = QuicConnection(is_client=True)
-
-        client_transport = FakeTransport()
-        client.connection_made(client_transport)
+        client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
         # found a common version, retry
