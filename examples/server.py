@@ -18,6 +18,19 @@ from aioquic.tls import Buffer
 
 logger = logging.getLogger("server")
 
+TEMPLATE = """<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <title>aioquic</title>
+    </head>
+    <body>
+        <h1>Welcome to aioquic</h1>
+        <p>{content}/p>
+    </body>
+</html>
+"""
+
 
 def connection_id(connection):
     return "Connection %s" % binascii.hexlify(connection.host_cid).decode("ascii")
@@ -30,9 +43,11 @@ async def serve_http_request(reader, writer):
     request = await reader.read()
 
     if request == b"GET /\r\n":
-        writer.write(b"It works!\r\n")
+        writer.write(TEMPLATE.format(content="It works!").encode("utf8"))
     else:
-        writer.write(b"Not found\r\n")
+        writer.write(
+            TEMPLATE.format(content="The document could not be found.").encode("utf8")
+        )
 
     writer.write_eof()
 
