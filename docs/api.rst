@@ -12,4 +12,4 @@ Common
 ------
 
    .. autoclass:: QuicConnection
-      :members: close, connect, create_stream
+      :members: close, create_stream

@@ -8,7 +8,7 @@ import aioquic
 async def run(host, port, **kwargs):
     async with aioquic.connect(host, port, **kwargs) as connection:
         # perform HTTP/0.9 request
-        reader, writer = connection.create_stream()
+        reader, writer = await connection.create_stream()
         writer.write(b"GET /\r\n")
         writer.write_eof()
 

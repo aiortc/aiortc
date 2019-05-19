@@ -103,7 +103,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 4)
 
         # send data over stream
-        client_reader, client_writer = client.create_stream()
+        client_reader, client_writer = run(client.create_stream())
         client_writer.write(b"ping")
         run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 5)
@@ -191,7 +191,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 4)
 
         # send data over stream
-        client_reader, client_writer = client.create_stream()
+        client_reader, client_writer = run(client.create_stream())
         client_writer.write(b"ping")
         run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 5)
@@ -215,7 +215,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 4)
 
         # send data over stream
-        client_reader, client_writer = client.create_stream()
+        client_reader, client_writer = run(client.create_stream())
         client_writer.write(b"ping")
         run(asyncio.sleep(0))
         self.assertEqual(client_transport.sent, 5)
@@ -240,30 +240,30 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client
-        reader, writer = client.create_stream()
+        reader, writer = run(client.create_stream())
         self.assertEqual(writer.get_extra_info("stream_id"), 0)
         self.assertIsNotNone(writer.get_extra_info("connection"))
 
-        reader, writer = client.create_stream()
+        reader, writer = run(client.create_stream())
         self.assertEqual(writer.get_extra_info("stream_id"), 4)
 
-        reader, writer = client.create_stream(is_unidirectional=True)
+        reader, writer = run(client.create_stream(is_unidirectional=True))
         self.assertEqual(writer.get_extra_info("stream_id"), 2)
 
-        reader, writer = client.create_stream(is_unidirectional=True)
+        reader, writer = run(client.create_stream(is_unidirectional=True))
         self.assertEqual(writer.get_extra_info("stream_id"), 6)
 
         # server
-        reader, writer = server.create_stream()
+        reader, writer = run(server.create_stream())
         self.assertEqual(writer.get_extra_info("stream_id"), 1)
 
-        reader, writer = server.create_stream()
+        reader, writer = run(server.create_stream())
         self.assertEqual(writer.get_extra_info("stream_id"), 5)
 
-        reader, writer = server.create_stream(is_unidirectional=True)
+        reader, writer = run(server.create_stream(is_unidirectional=True))
         self.assertEqual(writer.get_extra_info("stream_id"), 3)
 
-        reader, writer = server.create_stream(is_unidirectional=True)
+        reader, writer = run(server.create_stream(is_unidirectional=True))
         self.assertEqual(writer.get_extra_info("stream_id"), 7)
 
     def test_decryption_error(self):
@@ -461,7 +461,8 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates bidirectional stream 0
-        stream = client.create_stream()[1].transport
+        reader, writer = run(client.create_stream())
+        stream = writer.transport
         self.assertEqual(stream.max_stream_data_remote, 1048576)
 
         # client receives MAX_STREAM_DATA raising limit
@@ -492,7 +493,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # server creates unidirectional stream 3
-        server.create_stream(is_unidirectional=True)
+        run(server.create_stream(is_unidirectional=True))
 
         # client receives MAX_STREAM_DATA: 3, 1
         with self.assertRaises(QuicConnectionError) as cm:
@@ -648,7 +649,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates bidirectional stream 0
-        client.create_stream()
+        run(client.create_stream())
 
         # client receives RESET_STREAM
         client._handle_reset_stream_frame(
@@ -669,7 +670,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates unidirectional stream 2
-        client.create_stream(is_unidirectional=True)
+        run(client.create_stream(is_unidirectional=True))
 
         # client receives RESET_STREAM
         with self.assertRaises(QuicConnectionError) as cm:
@@ -710,7 +711,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates bidirectional stream 0
-        client.create_stream()
+        run(client.create_stream())
 
         # client receives STOP_SENDING
         client._handle_stop_sending_frame(
@@ -729,7 +730,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # server creates unidirectional stream 3
-        server.create_stream(is_unidirectional=True)
+        run(server.create_stream(is_unidirectional=True))
 
         # client receives STOP_SENDING
         with self.assertRaises(QuicConnectionError) as cm:
@@ -830,7 +831,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates unidirectional stream 2
-        client.create_stream(is_unidirectional=True)
+        run(client.create_stream(is_unidirectional=True))
 
         # client receives STREAM frame
         with self.assertRaises(QuicConnectionError) as cm:
@@ -873,7 +874,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates bidirectional stream 0
-        client.create_stream()
+        run(client.create_stream())
 
         # client receives STREAM_DATA_BLOCKED
         client._handle_stream_data_blocked_frame(
@@ -894,7 +895,7 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client creates unidirectional stream 2
-        client.create_stream(is_unidirectional=True)
+        run(client.create_stream(is_unidirectional=True))
 
         # client receives STREAM_DATA_BLOCKED
         with self.assertRaises(QuicConnectionError) as cm:

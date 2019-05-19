@@ -284,7 +284,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._connect()
         await self.__connected.wait()
 
-    def create_stream(
+    async def create_stream(
         self, is_unidirectional: bool = False
     ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """

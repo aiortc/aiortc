@@ -9,7 +9,8 @@ aioquic
 .. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aioquic.svg
     :target: https://codecov.io/gh/aiortc/aioquic
 
-``aioquic`` is a library for the QUIC network protocol in Python.
+``aioquic`` is a library for the QUIC network protocol in Python. It is built
+on top of :mod:`asyncio`, Python's standard asynchronous I/O framework.
 
 .. toctree::
    :maxdepth: 2
