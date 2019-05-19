@@ -2,7 +2,19 @@ import asyncio
 import logging
 import os
 from enum import Enum
-from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Text,
+    TextIO,
+    Tuple,
+    Union,
+    cast,
+)
 
 from . import packet, tls
 from .buffer import (
@@ -129,7 +141,7 @@ def maybe_connection_error(
         return None
 
 
-class QuicConnection:
+class QuicConnection(asyncio.DatagramProtocol):
     """
     A QUIC connection.
 
@@ -263,10 +275,13 @@ class QuicConnection:
             )
         self._send_pending()
 
-    async def connect(self) -> None:
+    async def connect(self, addr: Any) -> None:
         """
-        Wait for the TLS handshake to complete.
+        Initiate the TLS handshake and wait for it to complete.
         """
+        self._peer_addr = addr
+        self._version = max(self.supported_versions)
+        self._connect()
         await self.__connected.wait()
 
     def create_stream(
@@ -306,28 +321,19 @@ class QuicConnection:
         for stream in self.streams.values():
             stream.connection_lost(exc)
 
-    def connection_made(self, transport: asyncio.DatagramTransport) -> None:
-        """
-        Inform the connection of the transport used to send data. This object
-        must have a ``sendto`` method which accepts a datagram to send.
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self.__transport = cast(asyncio.DatagramTransport, transport)
 
-        Calling :meth:`connection_made` on a client starts the TLS handshake.
-        """
-        self.__transport = transport
-        if self.is_client:
-            self._version = max(self.supported_versions)
-            self._connect()
-
-    def datagram_received(self, data: bytes, addr: Any) -> None:
+    def datagram_received(self, data: Union[bytes, Text], addr: Any) -> None:
         """
         Handle an incoming datagram.
         """
-        buf = Buffer(data=data)
-
         # stop handling packets when closing
         if self.__state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
             return
 
+        data = cast(bytes, data)
+        buf = Buffer(data=data)
         while not buf.eof():
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
@@ -433,7 +439,7 @@ class QuicConnection:
 
         self._send_pending()
 
-    def error_received(self, exc: OSError) -> None:
+    def error_received(self, exc: Exception) -> None:
         self.__logger.warning(exc)
 
     # Private

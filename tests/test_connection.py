@@ -60,6 +60,11 @@ def create_standalone_client():
     client = QuicConnection(is_client=True)
     client_transport = FakeTransport(CLIENT_ADDR)
     client.connection_made(client_transport)
+
+    client._peer_addr = SERVER_ADDR
+    client._version = max(client.supported_versions)
+    client._connect()
+
     return client, client_transport
 
 
@@ -72,6 +77,10 @@ def create_transport(client, server):
 
     server.connection_made(server_transport)
     client.connection_made(client_transport)
+
+    client._peer_addr = SERVER_ADDR
+    client._version = max(client.supported_versions)
+    client._connect()
 
     return client_transport, server_transport
 
@@ -92,7 +101,6 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
-        run(client.connect())
 
         # send data over stream
         client_reader, client_writer = client.create_stream()
@@ -181,7 +189,6 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
-        run(client.connect())
 
         # send data over stream
         client_reader, client_writer = client.create_stream()
@@ -206,7 +213,6 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
-        run(client.connect())
 
         # send data over stream
         client_reader, client_writer = client.create_stream()

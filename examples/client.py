@@ -16,7 +16,7 @@ async def run(host, port, **kwargs):
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicConnection(is_client=True, **kwargs), remote_addr=(host, port)
     )
-    await protocol.connect()
+    await protocol.connect(None)
 
     # perform HTTP/0.9 request
     reader, writer = protocol.create_stream()
