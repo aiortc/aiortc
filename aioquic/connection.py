@@ -180,7 +180,7 @@ class QuicConnection:
         self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
-        self.__peer_addr: Optional[Any] = None
+        self._peer_addr: Optional[Any] = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
@@ -194,7 +194,7 @@ class QuicConnection:
         self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__state = QuicConnectionState.FIRSTFLIGHT
         self.__transport: Optional[asyncio.DatagramTransport] = None
-        self.__version: Optional[int] = None
+        self._version: Optional[int] = None
 
         # callbacks
         self.stream_created_cb: Callable[
@@ -315,7 +315,7 @@ class QuicConnection:
         """
         self.__transport = transport
         if self.is_client:
-            self.__version = max(self.supported_versions)
+            self._version = max(self.supported_versions)
             self._connect()
 
     def datagram_received(self, data: bytes, addr: Any) -> None:
@@ -346,8 +346,8 @@ class QuicConnection:
                 if not common:
                     self.__logger.error("Could not find a common protocol version")
                     return
-                self.__version = QuicProtocolVersion(max(common))
-                self.__logger.info("Retrying with %s", self.__version)
+                self._version = QuicProtocolVersion(max(common))
+                self.__logger.info("Retrying with %s", self._version)
                 self._connect()
                 return
             elif (
@@ -374,8 +374,8 @@ class QuicConnection:
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
-                self.__peer_addr = addr
-                self.__version = QuicProtocolVersion(header.version)
+                self._peer_addr = addr
+                self._version = QuicProtocolVersion(header.version)
                 self._initialize(header.destination_cid)
 
             # decrypt packet
@@ -893,7 +893,7 @@ class QuicConnection:
 
     def _send_pending(self) -> None:
         for datagram in self._pending_datagrams():
-            self.__transport.sendto(datagram, self.__peer_addr)
+            self.__transport.sendto(datagram, self._peer_addr)
         self.__send_pending_task = None
 
     def _send_soon(self) -> None:
@@ -1048,7 +1048,7 @@ class QuicConnection:
             push_quic_header(
                 buf,
                 QuicHeader(
-                    version=self.__version,
+                    version=self._version,
                     packet_type=packet_type | (PACKET_NUMBER_SEND_SIZE - 1),
                     destination_cid=self.peer_cid,
                     source_cid=self.host_cid,
