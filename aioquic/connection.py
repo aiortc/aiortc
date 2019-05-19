@@ -130,6 +130,16 @@ class QuicConnectionState(Enum):
     DRAINING = 3
 
 
+class QuicNetworkPath:
+    addr: Any
+    bytes_received = 0
+    bytes_sent = 0
+    is_validated = False
+
+    def __init__(self, addr: Any) -> None:
+        self.addr = addr
+
+
 def maybe_connection_error(
     error_code: int, frame_type: Optional[int], reason_phrase: str
 ) -> Optional[QuicConnectionError]:
@@ -192,7 +202,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
-        self._peer_addr: Optional[Any] = None
+        self._path: Optional[QuicNetworkPath] = None
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
@@ -279,7 +289,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Initiate the TLS handshake and wait for it to complete.
         """
-        self._peer_addr = addr
+        self._path = QuicNetworkPath(addr)
         self._version = max(self.supported_versions)
         self._connect()
         await self.__connected.wait()
@@ -380,7 +390,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
-                self._peer_addr = addr
+                self._path = QuicNetworkPath(addr)
                 self._version = QuicProtocolVersion(header.version)
                 self._initialize(header.destination_cid)
 
@@ -422,7 +432,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # handle payload
             try:
-                is_ack_only = self._payload_received(epoch, plain_payload)
+                is_ack_only, is_probing = self._payload_received(epoch, plain_payload)
             except QuicConnectionError as exc:
                 self.__logger.warning(exc)
                 self.close(
@@ -433,6 +443,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 return
 
             # record packet as received
+            self._path.bytes_received += buf.tell() - start_off
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 self.send_ack[epoch] = True
@@ -853,10 +864,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         pull_uint_var(buf)  # limit
 
-    def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> bool:
+    def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> Tuple[bool, bool]:
         buf = Buffer(data=plain)
 
         is_ack_only = True
+        is_probing = None
         while not buf.eof():
             frame_type = pull_uint_var(buf)
             if frame_type not in [
@@ -865,6 +877,16 @@ class QuicConnection(asyncio.DatagramProtocol):
                 QuicFrameType.PADDING,
             ]:
                 is_ack_only = False
+
+            if frame_type not in [
+                QuicFrameType.PATH_CHALLENGE,
+                QuicFrameType.PATH_RESPONSE,
+                QuicFrameType.PADDING,
+                QuicFrameType.NEW_CONNECTION_ID,
+            ]:
+                is_probing = False
+            elif is_probing is None:
+                is_probing = True
 
             if frame_type < len(self.__frame_handlers):
                 self.__frame_handlers[frame_type](epoch, frame_type, buf)
@@ -877,7 +899,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         self._push_crypto_data()
 
-        return is_ack_only
+        return is_ack_only, bool(is_probing)
 
     def _pending_datagrams(self) -> Iterator[bytes]:
         for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
@@ -899,7 +921,8 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _send_pending(self) -> None:
         for datagram in self._pending_datagrams():
-            self.__transport.sendto(datagram, self._peer_addr)
+            self.__transport.sendto(datagram, self._path.addr)
+            self._path.bytes_sent += len(datagram)
         self.__send_pending_task = None
 
     def _send_soon(self) -> None:

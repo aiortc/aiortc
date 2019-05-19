@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization
 
 from aioquic import tls
 from aioquic.buffer import Buffer
-from aioquic.connection import QuicConnection, QuicConnectionError
+from aioquic.connection import QuicConnection, QuicConnectionError, QuicNetworkPath
 from aioquic.packet import (
     PACKET_NUMBER_SEND_SIZE,
     PACKET_TYPE_INITIAL,
@@ -61,7 +61,8 @@ def create_standalone_client():
     client_transport = FakeTransport(CLIENT_ADDR)
     client.connection_made(client_transport)
 
-    client._peer_addr = SERVER_ADDR
+    # like connect() but without waiting
+    client._path = QuicNetworkPath(SERVER_ADDR)
     client._version = max(client.supported_versions)
     client._connect()
 
@@ -78,7 +79,8 @@ def create_transport(client, server):
     server.connection_made(server_transport)
     client.connection_made(client_transport)
 
-    client._peer_addr = SERVER_ADDR
+    # like connect() but without waiting
+    client._path = QuicNetworkPath(SERVER_ADDR)
     client._version = max(client.supported_versions)
     client._connect()
 
