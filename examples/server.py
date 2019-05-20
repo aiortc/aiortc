@@ -6,12 +6,15 @@ import logging
 import os
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from aioquic.connection import QuicConnection
 from aioquic.packet import (
     PACKET_TYPE_INITIAL,
+    encode_quic_retry,
     encode_quic_version_negotiation,
     pull_quic_header,
 )
@@ -58,10 +61,16 @@ async def serve_http_request(reader, writer):
 
 
 class QuicServerProtocol(asyncio.DatagramProtocol):
-    def __init__(self, **kwargs):
+    def __init__(self, retry=False, **kwargs):
         self._connections = {}
         self._kwargs = kwargs
+        self._retry_key = None
         self._transport = None
+
+        if retry:
+            self._retry_key = rsa.generate_private_key(
+                public_exponent=65537, key_size=512, backend=default_backend()
+            )
 
     def connection_made(self, transport):
         self._transport = transport
@@ -87,6 +96,44 @@ class QuicServerProtocol(asyncio.DatagramProtocol):
 
         connection = self._connections.get(header.destination_cid, None)
         if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
+            # stateless retry
+            if self._retry_key is not None:
+                retry_message = str(addr).encode("ascii")
+                if not header.token:
+                    logger.info("Sending retry to %s" % (addr,))
+                    retry_token = self._retry_key.sign(
+                        retry_message,
+                        padding.PSS(
+                            mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH,
+                        ),
+                        hashes.SHA256(),
+                    )
+                    self._transport.sendto(
+                        encode_quic_retry(
+                            version=header.version,
+                            source_cid=os.urandom(8),
+                            destination_cid=header.source_cid,
+                            original_destination_cid=header.destination_cid,
+                            retry_token=retry_token,
+                        ),
+                        addr,
+                    )
+                    return
+                else:
+                    try:
+                        self._retry_key.public_key().verify(
+                            header.token,
+                            retry_message,
+                            padding.PSS(
+                                mgf=padding.MGF1(hashes.SHA256()),
+                                salt_length=padding.PSS.MAX_LENGTH,
+                            ),
+                            hashes.SHA256(),
+                        )
+                    except InvalidSignature:
+                        return
+
             # create new connection
             connection = QuicConnection(is_client=False, **self._kwargs)
             connection.connection_made(self._transport)
@@ -131,8 +178,8 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=4433)
     parser.add_argument("--private-key", type=str, required=True)
     parser.add_argument("--secrets-log-file", type=str)
+    parser.add_argument("--retry", action="store_true", help="Use stateless retry.")
     args = parser.parse_args()
-
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
     )
@@ -160,6 +207,7 @@ if __name__ == "__main__":
             certificate=certificate,
             private_key=private_key,
             secrets_log_file=secrets_log_file,
+            retry=args.retry,
         )
     )
     loop.run_forever()

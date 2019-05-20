@@ -82,5 +82,5 @@ class RSAPrivateKeyWithSerialization(RSAPrivateKey):
     def private_bytes(self, encoding: Encoding, format: PrivateFormat, encryption_algorithm: KeySerializationEncryption) -> bytes: ...
 
 
-def generate_private_key(key_size: int, backend: RSABackend) -> RSAPrivateKey:
+def generate_private_key(public_exponent: int, key_size: int, backend: RSABackend) -> RSAPrivateKey:
     ...
