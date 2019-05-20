@@ -458,8 +458,17 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
                 return
 
-            # record packet as received
+            # update network path
+            if not network_path.is_validated and epoch == tls.Epoch.HANDSHAKE:
+                self.__logger.info(
+                    "Network path %s validated by handshake", network_path.addr
+                )
+                network_path.is_validated = True
             network_path.bytes_received += buf.tell() - start_off
+            if network_path not in self._network_paths:
+                self._network_paths.append(network_path)
+
+            # record packet as received
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 self.send_ack[epoch] = True
@@ -788,7 +797,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 frame_type=frame_type,
                 reason_phrase="Response does not match challenge",
             )
-        self.__logger.info("Network path %s validated", context.network_path.addr)
+        self.__logger.info(
+            "Network path %s validated by challenge", context.network_path.addr
+        )
         context.network_path.is_validated = True
 
     def _handle_reset_stream_frame(
