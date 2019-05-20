@@ -9,7 +9,12 @@ from cryptography.hazmat.primitives import serialization
 
 from aioquic import tls
 from aioquic.buffer import Buffer
-from aioquic.connection import QuicConnection, QuicConnectionError, QuicNetworkPath
+from aioquic.connection import (
+    QuicConnection,
+    QuicConnectionError,
+    QuicNetworkPath,
+    QuicReceiveContext,
+)
 from aioquic.packet import (
     PACKET_NUMBER_SEND_SIZE,
     PACKET_TYPE_INITIAL,
@@ -56,13 +61,19 @@ class FakeTransport:
             self.target.datagram_received(data, self.local_addr)
 
 
+def client_receive_context(client):
+    return QuicReceiveContext(
+        epoch=tls.Epoch.ONE_RTT, network_path=client._network_paths[0]
+    )
+
+
 def create_standalone_client():
     client = QuicConnection(is_client=True)
     client_transport = FakeTransport(CLIENT_ADDR)
     client.connection_made(client_transport)
 
     # like connect() but without waiting
-    client._path = QuicNetworkPath(SERVER_ADDR)
+    client._network_paths = [QuicNetworkPath(SERVER_ADDR, is_validated=True)]
     client._version = max(client.supported_versions)
     client._connect()
 
@@ -80,7 +91,7 @@ def create_transport(client, server):
     client.connection_made(client_transport)
 
     # like connect() but without waiting
-    client._path = QuicNetworkPath(SERVER_ADDR)
+    client._network_paths = [QuicNetworkPath(SERVER_ADDR, is_validated=True)]
     client._version = max(client.supported_versions)
     client._connect()
 
@@ -368,9 +379,10 @@ class QuicConnectionTest(TestCase):
         client.error_received(OSError("foo"))
 
     def test_handle_ack_frame_ecn(self):
-        client = QuicConnection(is_client=True)
+        client, client_transport = create_standalone_client()
+
         client._handle_ack_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.ACK_ECN,
             Buffer(data=b"\x00\x02\x00\x00\x00\x00\x00"),
         )
@@ -426,7 +438,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives DATA_BLOCKED: 12345
         client._handle_data_blocked_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.DATA_BLOCKED,
             Buffer(data=encode_uint_var(12345)),
         )
@@ -445,7 +457,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_DATA raising limit
         client._handle_max_data_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_DATA,
             Buffer(data=encode_uint_var(1048577)),
         )
@@ -469,7 +481,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAM_DATA raising limit
         client._handle_max_stream_data_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAM_DATA,
             Buffer(data=b"\x00" + encode_uint_var(1048577)),
         )
@@ -477,7 +489,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAM_DATA lowering limit
         client._handle_max_stream_data_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAM_DATA,
             Buffer(data=b"\x00" + encode_uint_var(1048575)),
         )
@@ -500,7 +512,7 @@ class QuicConnectionTest(TestCase):
         # client receives MAX_STREAM_DATA: 3, 1
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_max_stream_data_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.MAX_STREAM_DATA,
                 Buffer(data=b"\x03\x01"),
             )
@@ -522,7 +534,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAMS_BIDI raising limit
         client._handle_max_streams_bidi_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAMS_BIDI,
             Buffer(data=encode_uint_var(129)),
         )
@@ -530,7 +542,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAMS_BIDI lowering limit
         client._handle_max_streams_bidi_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAMS_BIDI,
             Buffer(data=encode_uint_var(127)),
         )
@@ -550,7 +562,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAMS_UNI raising limit
         client._handle_max_streams_uni_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAMS_UNI,
             Buffer(data=encode_uint_var(129)),
         )
@@ -558,7 +570,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives MAX_STREAMS_UNI raising limit
         client._handle_max_streams_uni_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.MAX_STREAMS_UNI,
             Buffer(data=encode_uint_var(127)),
         )
@@ -577,7 +589,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives NEW_CONNECTION_ID
         client._handle_new_connection_id_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.NEW_CONNECTION_ID,
             Buffer(
                 data=binascii.unhexlify(
@@ -599,7 +611,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives NEW_TOKEN
         client._handle_new_token_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.NEW_TOKEN,
             Buffer(data=binascii.unhexlify("080102030405060708")),
         )
@@ -616,7 +628,11 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # server sends PATH_CHALLENGE
-        server._send_path_challenge()
+        network_path = server._network_paths[0]
+        network_path.is_validated = False
+        server._send_path_challenge(network_path)
+        run(asyncio.sleep(0))
+        self.assertTrue(network_path.is_validated)
 
     def test_handle_path_response_frame_bad(self):
         client = QuicConnection(is_client=True)
@@ -632,7 +648,7 @@ class QuicConnectionTest(TestCase):
         # server receives unsollicited PATH_RESPONSE
         with self.assertRaises(QuicConnectionError) as cm:
             server._handle_path_response_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.PATH_RESPONSE,
                 Buffer(data=b"\x11\x22\x33\x44\x55\x66\x77\x88"),
             )
@@ -655,7 +671,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives RESET_STREAM
         client._handle_reset_stream_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.RESET_STREAM,
             Buffer(data=binascii.unhexlify("001122000001")),
         )
@@ -677,7 +693,7 @@ class QuicConnectionTest(TestCase):
         # client receives RESET_STREAM
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_reset_stream_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.RESET_STREAM,
                 Buffer(data=binascii.unhexlify("021122000001")),
             )
@@ -698,7 +714,9 @@ class QuicConnectionTest(TestCase):
 
         # client receives RETIRE_CONNECTION_ID
         client._handle_retire_connection_id_frame(
-            tls.Epoch.ONE_RTT, QuicFrameType.RETIRE_CONNECTION_ID, Buffer(data=b"\x02")
+            client_receive_context(client),
+            QuicFrameType.RETIRE_CONNECTION_ID,
+            Buffer(data=b"\x02"),
         )
 
     def test_handle_stop_sending_frame(self):
@@ -717,7 +735,9 @@ class QuicConnectionTest(TestCase):
 
         # client receives STOP_SENDING
         client._handle_stop_sending_frame(
-            tls.Epoch.ONE_RTT, QuicFrameType.STOP_SENDING, Buffer(data=b"\x00\x11\x22")
+            client_receive_context(client),
+            QuicFrameType.STOP_SENDING,
+            Buffer(data=b"\x00\x11\x22"),
         )
 
     def test_handle_stop_sending_frame_receive_only(self):
@@ -737,7 +757,7 @@ class QuicConnectionTest(TestCase):
         # client receives STOP_SENDING
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stop_sending_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.STOP_SENDING,
                 Buffer(data=b"\x03\x11\x22"),
             )
@@ -764,7 +784,7 @@ class QuicConnectionTest(TestCase):
         stream_id = 1
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 frame_type,
                 Buffer(data=encode_uint_var(stream_id) + encode_uint_var(1)),
             )
@@ -788,7 +808,7 @@ class QuicConnectionTest(TestCase):
         stream_id = 1
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 frame_type,
                 Buffer(
                     data=encode_uint_var(stream_id)
@@ -813,7 +833,7 @@ class QuicConnectionTest(TestCase):
         # client receives STREAM frame
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.STREAM_BASE,
                 Buffer(data=encode_uint_var(client._local_max_stream_data_uni * 4 + 3)),
             )
@@ -838,7 +858,9 @@ class QuicConnectionTest(TestCase):
         # client receives STREAM frame
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x02")
+                client_receive_context(client),
+                QuicFrameType.STREAM_BASE,
+                Buffer(data=b"\x02"),
             )
         self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
@@ -858,7 +880,9 @@ class QuicConnectionTest(TestCase):
         # client receives STREAM frame
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_frame(
-                tls.Epoch.ONE_RTT, QuicFrameType.STREAM_BASE, Buffer(data=b"\x00")
+                client_receive_context(client),
+                QuicFrameType.STREAM_BASE,
+                Buffer(data=b"\x00"),
             )
         self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
         self.assertEqual(cm.exception.frame_type, QuicFrameType.STREAM_BASE)
@@ -880,7 +904,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives STREAM_DATA_BLOCKED
         client._handle_stream_data_blocked_frame(
-            tls.Epoch.ONE_RTT,
+            client_receive_context(client),
             QuicFrameType.STREAM_DATA_BLOCKED,
             Buffer(data=b"\x00\x01"),
         )
@@ -902,7 +926,7 @@ class QuicConnectionTest(TestCase):
         # client receives STREAM_DATA_BLOCKED
         with self.assertRaises(QuicConnectionError) as cm:
             client._handle_stream_data_blocked_frame(
-                tls.Epoch.ONE_RTT,
+                client_receive_context(client),
                 QuicFrameType.STREAM_DATA_BLOCKED,
                 Buffer(data=b"\x02\x01"),
             )
@@ -923,7 +947,9 @@ class QuicConnectionTest(TestCase):
 
         # client receives STREAMS_BLOCKED_UNI: 0
         client._handle_streams_blocked_frame(
-            tls.Epoch.ONE_RTT, QuicFrameType.STREAMS_BLOCKED_UNI, Buffer(data=b"\x00")
+            client_receive_context(client),
+            QuicFrameType.STREAMS_BLOCKED_UNI,
+            Buffer(data=b"\x00"),
         )
 
     def test_handle_unknown_frame(self):
@@ -940,7 +966,7 @@ class QuicConnectionTest(TestCase):
 
         # client receives unknown frame
         with self.assertRaises(QuicConnectionError) as cm:
-            client._payload_received(tls.Epoch.ONE_RTT, b"\x1e")
+            client._payload_received(client_receive_context(client), b"\x1e")
         self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
         self.assertEqual(cm.exception.frame_type, 0x1E)
         self.assertEqual(cm.exception.reason_phrase, "Unexpected frame type")

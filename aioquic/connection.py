@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from enum import Enum
 from typing import (
     Any,
@@ -73,6 +74,8 @@ SECRETS_LABELS = [
 ]
 STREAM_FLAGS = 0x07
 
+NetworkAddress = Any
+
 
 def get_epoch(packet_type: int) -> tls.Epoch:
     if packet_type == PACKET_TYPE_INITIAL:
@@ -131,14 +134,22 @@ class QuicConnectionState(Enum):
     DRAINING = 3
 
 
+@dataclass
 class QuicNetworkPath:
-    addr: Any
-    bytes_received = 0
-    bytes_sent = 0
-    is_validated = False
+    addr: NetworkAddress
+    bytes_received: int = 0
+    bytes_sent: int = 0
+    challenge: Optional[bytes] = None
+    is_validated: bool = False
 
-    def __init__(self, addr: Any) -> None:
-        self.addr = addr
+    def can_send(self, size: int) -> bool:
+        return self.is_validated or (self.bytes_sent + size) <= 3 * self.bytes_received
+
+
+@dataclass
+class QuicReceiveContext:
+    epoch: tls.Epoch
+    network_path: QuicNetworkPath
 
 
 def maybe_connection_error(
@@ -203,7 +214,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_streams_uni = 128
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
-        self._path: Optional[QuicNetworkPath] = None
+        self._network_paths: List[QuicNetworkPath] = []
         self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
@@ -287,11 +298,11 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
         self._send_pending()
 
-    async def connect(self, addr: Any) -> None:
+    async def connect(self, addr: NetworkAddress) -> None:
         """
         Initiate the TLS handshake and wait for it to complete.
         """
-        self._path = QuicNetworkPath(addr)
+        self._network_paths = [QuicNetworkPath(addr, is_validated=True)]
         self._version = max(self.supported_versions)
         self._connect()
         await self.__connected.wait()
@@ -336,7 +347,7 @@ class QuicConnection(asyncio.DatagramProtocol):
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self.__transport = cast(asyncio.DatagramTransport, transport)
 
-    def datagram_received(self, data: Union[bytes, Text], addr: Any) -> None:
+    def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
         """
         Handle an incoming datagram.
         """
@@ -387,12 +398,14 @@ class QuicConnection(asyncio.DatagramProtocol):
                     self._connect()
                 return
 
+            network_path = self._find_network_path(addr)
+
             # server initialization
             if not self.is_client and self.__state == QuicConnectionState.FIRSTFLIGHT:
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
-                self._path = QuicNetworkPath(addr)
+                self._network_paths = [network_path]
                 self._version = QuicProtocolVersion(header.version)
                 self._initialize(header.destination_cid)
 
@@ -433,8 +446,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._spin_highest_pn = packet_number
 
             # handle payload
+            context = QuicReceiveContext(epoch=epoch, network_path=network_path)
             try:
-                is_ack_only, is_probing = self._payload_received(epoch, plain_payload)
+                is_ack_only, is_probing = self._payload_received(context, plain_payload)
             except QuicConnectionError as exc:
                 self.__logger.warning(exc)
                 self.close(
@@ -445,7 +459,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 return
 
             # record packet as received
-            self._path.bytes_received += buf.tell() - start_off
+            network_path.bytes_received += buf.tell() - start_off
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 self.send_ack[epoch] = True
@@ -490,6 +504,17 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.tls.handle_message(b"", self.send_buffer)
         self._push_crypto_data()
         self._send_pending()
+
+    def _find_network_path(self, addr: NetworkAddress) -> QuicNetworkPath:
+        # check existing network paths
+        for idx, network_path in enumerate(self._network_paths):
+            if network_path.addr == addr:
+                return network_path
+
+        # new network path
+        network_path = QuicNetworkPath(addr)
+        self.__logger.info("Network path %s discovered", network_path.addr)
+        return network_path
 
     def _get_or_create_stream(self, frame_type: int, stream_id: int) -> QuicStream:
         """
@@ -574,7 +599,9 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         self.packet_number = 0
 
-    def _handle_ack_frame(self, epoch: tls.Epoch, frame_type: int, buf: Buffer) -> None:
+    def _handle_ack_frame(
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
+    ) -> None:
         """
         Handle an ACK frame.
         """
@@ -585,7 +612,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             pull_uint_var(buf)
 
     def _handle_connection_close_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a CONNECTION_CLOSE frame.
@@ -610,12 +637,12 @@ class QuicConnection(asyncio.DatagramProtocol):
         )
 
     def _handle_crypto_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a CRYPTO frame.
         """
-        stream = self.streams[epoch]
+        stream = self.streams[context.epoch]
         stream.add_frame(packet.pull_crypto_frame(buf))
         data = stream.pull_data()
         if data:
@@ -646,7 +673,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self.__epoch = tls.Epoch.HANDSHAKE
 
     def _handle_data_blocked_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a DATA_BLOCKED frame.
@@ -654,7 +681,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         pull_uint_var(buf)  # limit
 
     def _handle_max_data_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a MAX_DATA frame.
@@ -667,7 +694,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._remote_max_data = max_data
 
     def _handle_max_stream_data_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a MAX_STREAM_DATA frame.
@@ -690,7 +717,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             stream.max_stream_data_remote = max_stream_data
 
     def _handle_max_streams_bidi_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a MAX_STREAMS_BIDI frame.
@@ -703,7 +730,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._remote_max_streams_bidi = max_streams
 
     def _handle_max_streams_uni_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a MAX_STREAMS_UNI frame.
@@ -716,7 +743,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._remote_max_streams_uni = max_streams
 
     def _handle_new_connection_id_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a NEW_CONNECTION_ID frame.
@@ -724,7 +751,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         packet.pull_new_connection_id_frame(buf)
 
     def _handle_new_token_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a NEW_TOKEN frame.
@@ -732,7 +759,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         packet.pull_new_token_frame(buf)
 
     def _handle_padding_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a PADDING or PING frame.
@@ -740,7 +767,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         pass
 
     def _handle_path_challenge_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a PATH_CHALLENGE frame.
@@ -749,21 +776,23 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._pending_flow_control.append(bytes([QuicFrameType.PATH_RESPONSE]) + data)
 
     def _handle_path_response_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a PATH_RESPONSE frame.
         """
         data = pull_bytes(buf, 8)
-        if data != self.__path_challenge:
+        if data != context.network_path.challenge:
             raise QuicConnectionError(
                 error_code=QuicErrorCode.PROTOCOL_VIOLATION,
                 frame_type=frame_type,
                 reason_phrase="Response does not match challenge",
             )
+        self.__logger.info("Network path %s validated", context.network_path.addr)
+        context.network_path.is_validated = True
 
     def _handle_reset_stream_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a RESET_STREAM frame.
@@ -779,7 +808,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_retire_connection_id_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a RETIRE_CONNECTION_ID frame.
@@ -787,7 +816,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         pull_uint_var(buf)  # sequence number
 
     def _handle_stop_sending_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a STOP_SENDING frame.
@@ -801,7 +830,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_stream_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a STREAM frame.
@@ -845,7 +874,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_data_used += newly_received
 
     def _handle_stream_data_blocked_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a STREAM_DATA_BLOCKED frame.
@@ -859,14 +888,16 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._get_or_create_stream(frame_type, stream_id)
 
     def _handle_streams_blocked_frame(
-        self, epoch: tls.Epoch, frame_type: int, buf: Buffer
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
         Handle a STREAMS_BLOCKED frame.
         """
         pull_uint_var(buf)  # limit
 
-    def _payload_received(self, epoch: tls.Epoch, plain: bytes) -> Tuple[bool, bool]:
+    def _payload_received(
+        self, context: QuicReceiveContext, plain: bytes
+    ) -> Tuple[bool, bool]:
         buf = Buffer(data=plain)
 
         is_ack_only = True
@@ -891,7 +922,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 is_probing = True
 
             if frame_type < len(self.__frame_handlers):
-                self.__frame_handlers[frame_type](epoch, frame_type, buf)
+                self.__frame_handlers[frame_type](context, frame_type, buf)
             else:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.PROTOCOL_VIOLATION,
@@ -914,17 +945,19 @@ class QuicConnection(asyncio.DatagramProtocol):
             self.streams[epoch].write(buf.data)
             buf.seek(0)
 
-    def _send_path_challenge(self) -> None:
-        self.__path_challenge = os.urandom(8)
+    def _send_path_challenge(self, network_path: QuicNetworkPath) -> None:
+        if network_path.challenge is None:
+            network_path.challenge = os.urandom(8)
         self._pending_flow_control.append(
-            bytes([QuicFrameType.PATH_CHALLENGE]) + self.__path_challenge
+            bytes([QuicFrameType.PATH_CHALLENGE]) + network_path.challenge
         )
         self._send_pending()
 
     def _send_pending(self) -> None:
+        network_path = self._network_paths[0]
         for datagram in self._pending_datagrams():
-            self.__transport.sendto(datagram, self._path.addr)
-            self._path.bytes_sent += len(datagram)
+            self.__transport.sendto(datagram, network_path.addr)
+            network_path.bytes_sent += len(datagram)
         self.__send_pending_task = None
 
     def _send_soon(self) -> None:
