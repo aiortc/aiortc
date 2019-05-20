@@ -31,9 +31,9 @@ from aioquic.packet import (
 
 from .utils import load, run
 
-CLIENT_ADDR = None
+CLIENT_ADDR = ("1.2.3.4", 1234)
 
-SERVER_ADDR = None
+SERVER_ADDR = ("2.3.4.5", 4433)
 SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
     load("ssl_cert.pem"), backend=default_backend()
 )
@@ -627,12 +627,23 @@ class QuicConnectionTest(TestCase):
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
 
-        # server sends PATH_CHALLENGE
-        network_path = server._network_paths[0]
-        network_path.is_validated = False
-        server._send_path_challenge(network_path)
+        # client changes address and sends some data
+        client_transport.local_addr = ("1.2.3.4", 2345)
+        reader, writer = run(client.create_stream())
+        writer.write(b"01234567")
         run(asyncio.sleep(0))
-        self.assertTrue(network_path.is_validated)
+
+        # server sends PATH_CHALLENGE and receives PATH_RESPONSE
+        network_path = server._network_paths[0]
+        self.assertEqual(len(server._network_paths), 2)
+
+        # check new path
+        self.assertEqual(server._network_paths[0].addr, ("1.2.3.4", 2345))
+        self.assertTrue(server._network_paths[0].is_validated)
+
+        # check old path
+        self.assertEqual(server._network_paths[1].addr, ("1.2.3.4", 1234))
+        self.assertTrue(server._network_paths[1].is_validated)
 
     def test_handle_path_response_frame_bad(self):
         client = QuicConnection(is_client=True)

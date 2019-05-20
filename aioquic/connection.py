@@ -139,8 +139,9 @@ class QuicNetworkPath:
     addr: NetworkAddress
     bytes_received: int = 0
     bytes_sent: int = 0
-    challenge: Optional[bytes] = None
     is_validated: bool = False
+    local_challenge: Optional[bytes] = None
+    remote_challenge: Optional[bytes] = None
 
     def can_send(self, size: int) -> bool:
         return self.is_validated or (self.bytes_sent + size) <= 3 * self.bytes_received
@@ -215,7 +216,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__logger = logger
         self.__path_challenge: Optional[bytes] = None
         self._network_paths: List[QuicNetworkPath] = []
-        self._pending_flow_control: List[bytes] = []
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -467,6 +467,11 @@ class QuicConnection(asyncio.DatagramProtocol):
             network_path.bytes_received += buf.tell() - start_off
             if network_path not in self._network_paths:
                 self._network_paths.append(network_path)
+            idx = self._network_paths.index(network_path)
+            if idx and not is_probing:
+                self.__logger.info("Network path %s promoted", network_path.addr)
+                self._network_paths.pop(idx)
+                self._network_paths.insert(0, network_path)
 
             # record packet as received
             space.ack_queue.add(packet_number)
@@ -782,7 +787,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a PATH_CHALLENGE frame.
         """
         data = pull_bytes(buf, 8)
-        self._pending_flow_control.append(bytes([QuicFrameType.PATH_RESPONSE]) + data)
+        context.network_path.remote_challenge = data
 
     def _handle_path_response_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -791,7 +796,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a PATH_RESPONSE frame.
         """
         data = pull_bytes(buf, 8)
-        if data != context.network_path.challenge:
+        if data != context.network_path.local_challenge:
             raise QuicConnectionError(
                 error_code=QuicErrorCode.PROTOCOL_VIOLATION,
                 frame_type=frame_type,
@@ -945,28 +950,20 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         return is_ack_only, bool(is_probing)
 
-    def _pending_datagrams(self) -> Iterator[bytes]:
+    def _pending_datagrams(self, network_path: QuicNetworkPath) -> Iterator[bytes]:
         for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
             yield from self._write_handshake(epoch)
 
-        yield from self._write_application()
+        yield from self._write_application(network_path)
 
     def _push_crypto_data(self) -> None:
         for epoch, buf in self.send_buffer.items():
             self.streams[epoch].write(buf.data)
             buf.seek(0)
 
-    def _send_path_challenge(self, network_path: QuicNetworkPath) -> None:
-        if network_path.challenge is None:
-            network_path.challenge = os.urandom(8)
-        self._pending_flow_control.append(
-            bytes([QuicFrameType.PATH_CHALLENGE]) + network_path.challenge
-        )
-        self._send_pending()
-
     def _send_pending(self) -> None:
         network_path = self._network_paths[0]
-        for datagram in self._pending_datagrams():
+        for datagram in self._pending_datagrams(network_path):
             self.__transport.sendto(datagram, network_path.addr)
             network_path.bytes_sent += len(datagram)
         self.__send_pending_task = None
@@ -1041,7 +1038,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         else:
             crypto.recv.setup(self.tls.key_schedule.cipher_suite, secret)
 
-    def _write_application(self) -> Iterator[bytes]:
+    def _write_application(self, network_path: QuicNetworkPath) -> Iterator[bytes]:
         epoch = tls.Epoch.ONE_RTT
         space = self.spaces[epoch]
         if not space.crypto.send.is_valid():
@@ -1069,10 +1066,24 @@ class QuicConnection(asyncio.DatagramProtocol):
                 packet.push_ack_frame(buf, space.ack_queue, 0)
                 self.send_ack[epoch] = False
 
-            # FLOW CONTROL
-            for control_frame in self._pending_flow_control:
-                push_bytes(buf, control_frame)
-            self._pending_flow_control = []
+            # PATH CHALLENGE
+            if (
+                self.__epoch == tls.Epoch.ONE_RTT
+                and not network_path.is_validated
+                and network_path.local_challenge is None
+            ):
+                self.__logger.info(
+                    "Network path %s sending challenge", network_path.addr
+                )
+                network_path.local_challenge = os.urandom(8)
+                push_uint_var(buf, QuicFrameType.PATH_CHALLENGE)
+                push_bytes(buf, network_path.local_challenge)
+
+            # PATH RESPONSE
+            if network_path.remote_challenge is not None:
+                push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
+                push_bytes(buf, network_path.remote_challenge)
+                network_path.remote_challenge = None
 
             # CLOSE
             if self.__close and self.__epoch == epoch:
