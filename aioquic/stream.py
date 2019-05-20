@@ -100,7 +100,7 @@ class QuicStream(asyncio.BaseTransport):
         # apply flow control
         if self.stream_id is not None:
             size = min(size, self.max_stream_data_remote - self._send_start)
-        if size < 0 or (size == 0 and self._send_buffer and not self._send_eof):
+        if size < 0 or (size == 0 and self._send_buffer):
             return None
 
         # create frame

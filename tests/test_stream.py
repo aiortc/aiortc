@@ -332,3 +332,27 @@ class QuicStreamTest(TestCase):
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
+
+    def test_send_fin_only_despite_blocked(self):
+        stream = QuicStream(stream_id=0, max_stream_data_remote=0)
+
+        # nothing to send yet
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write EOF
+        stream.write_eof()
+        self.assertTrue(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"")
+        self.assertTrue(frame.fin)
+        self.assertEqual(frame.offset, 0)
+
+        # nothing more to send
+        self.assertFalse(stream.has_data_to_send())
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
