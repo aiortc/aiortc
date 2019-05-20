@@ -167,18 +167,13 @@ def maybe_connection_error(
 class QuicConnection(asyncio.DatagramProtocol):
     """
     A QUIC connection.
-
-    :param: is_client: `True` for a client, `False` for a server.
-    :param: certificate: For a server, its certificate.
-            See :func:`cryptography.x509.load_pem_x509_certificate`.
-    :param: private_key: For a server, its private key.
-            See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
     """
 
     supported_versions = [QuicProtocolVersion.DRAFT_19, QuicProtocolVersion.DRAFT_20]
 
     def __init__(
         self,
+        *,
         is_client: bool = True,
         certificate: Any = None,
         private_key: Any = None,

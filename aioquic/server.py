@@ -1,16 +1,6 @@
 import asyncio
 import os
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Text,
-    TextIO,
-    Union,
-    cast,
-)
+from typing import Any, Awaitable, Callable, Dict, Optional, Text, TextIO, Union, cast
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -31,9 +21,8 @@ class QuicServer(asyncio.DatagramProtocol):
     def __init__(
         self,
         *,
-        alpn_protocols: Optional[List[str]],
         certificate: Any,
-        handler: Callable[[QuicConnection], None],
+        handler: Callable[[QuicConnection], Awaitable[Any]],
         private_key: Any,
         stateless_retry: bool,
         secrets_log_file: Optional[TextIO],
@@ -130,31 +119,37 @@ class QuicServer(asyncio.DatagramProtocol):
 
 
 async def serve(
-    handler: Callable[[QuicConnection], None],
+    handler: Callable[[QuicConnection], Awaitable[Any]],
     host: str,
     port: int,
     *,
     certificate: Any,
     private_key: Any,
-    alpn_protocols: Optional[List[str]] = None,
     secrets_log_file: Optional[TextIO] = None,
     stateless_retry: bool = False,
-) -> QuicServer:
+) -> None:
     """
     Start a QUIC server at the given `host` and `port`.
 
-    :meth:`connect()` returns an awaitable. Awaiting it yields a
-    :class:`~aioquic.server.QuicServer` which can be used to create streams.
+    The ``handler`` argument is the QUIC connection handler. It must be a
+    coroutine accepting a single argument: a :class:`~aioquic.QuicConnection`.
 
-    The `handler` argument is the QUIC connection handler. It must be a coroutine accepting
-    a single argument: a :class:`~aioquic.QuicConnection`.
+    :func:`serve` also accepts the following optional arguments:
+
+    * ``certificate`` is the server's TLS certificate.
+      See :func:`cryptography.x509.load_pem_x509_certificate`.
+    * ``private_key`` is the server's private key.
+      See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
+    * ``secrets_log_file`` is  a file-like object in which to log traffic
+      secrets. This is useful to analyze traffic captures with Wireshark.
+    * ``stateless_retry`` specifies whether a stateless retry should be
+      performed prior to handling new connections.
     """
 
     loop = asyncio.get_event_loop()
 
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
-            alpn_protocols=alpn_protocols,
             certificate=certificate,
             handler=handler,
             private_key=private_key,
@@ -163,4 +158,3 @@ async def serve(
         ),
         local_addr=(host, port),
     )
-    return cast(QuicServer, protocol)

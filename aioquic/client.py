@@ -15,7 +15,7 @@ async def connect(
     port: int,
     *,
     alpn_protocols: Optional[List[str]] = None,
-    secrets_log_file: TextIO = None,
+    secrets_log_file: Optional[TextIO] = None,
 ) -> AsyncGenerator[QuicConnection, None]:
     """
     Connect to a QUIC server at the given `host` and `port`.
@@ -23,9 +23,12 @@ async def connect(
     :meth:`connect()` returns an awaitable. Awaiting it yields a
     :class:`~aioquic.QuicConnection` which can be used to create streams.
 
-    :param: alpn_protocols: a list of ALPN protocols to offer in the ClientHello.
-    :param: secrets_log_file: a file-like object in which to log traffic secrets. This is useful
-                              to analyze traffic captures with Wireshark.
+    :func:`connect` also accepts the following optional arguments:
+
+    * ``alpn_protocols`` is a list of ALPN protocols to offer in the
+      ClientHello.
+    * ``secrets_log_file`` is a file-like object in which to log traffic
+      secrets. This is useful to analyze traffic captures with Wireshark.
     """
     loop = asyncio.get_event_loop()
 

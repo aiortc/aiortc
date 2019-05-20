@@ -97,9 +97,8 @@ if __name__ == "__main__":
     protocol = loop.run_until_complete(
         aioquic.serve(
             handle_connection,
-            args.host,
-            args.port,
-            alpn_protocols=["http/0.9"],
+            host=args.host,
+            port=args.port,
             certificate=certificate,
             private_key=private_key,
             secrets_log_file=secrets_log_file,
