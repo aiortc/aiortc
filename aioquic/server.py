@@ -16,6 +16,8 @@ from .packet import (
 )
 from .tls import Buffer
 
+__all__ = ["serve"]
+
 
 class QuicServer(asyncio.DatagramProtocol):
     def __init__(
