@@ -1,4 +1,10 @@
 from enum import Enum
+from typing import Optional, Union
+
+from cryptography.hazmat.backends.interfaces import PEMSerializationBackend
+from cryptography.hazmat.primitives.asymmetric.dsa import DSAPrivateKey
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 class Encoding(Enum):
     PEM: str
@@ -26,3 +32,7 @@ class BestAvailableEncryption(KeySerializationEncryption):
     def __init__(self, password: bytes): ...
 
 class NoEncryption(KeySerializationEncryption): ...
+
+def load_pem_private_key(
+    data: bytes, password: Optional[str], backend: PEMSerializationBackend
+) -> Union[DSAPrivateKey, EllipticCurvePrivateKey, RSAPrivateKey]: ...

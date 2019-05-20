@@ -21,13 +21,13 @@ class EllipticCurvePrivateKey:
     def exchange(
         self, algorithm: ECDH, peer_public_key: EllipticCurvePublicKey
     ) -> bytes: ...
+    def public_key(self) -> EllipticCurvePublicKey: ...
     def private_bytes(
         self,
         encoding: Encoding,
         format: PrivateFormat,
         encryption_algorithm: KeySerializationEncryption,
     ) -> bytes: ...
-    def public_key(self) -> EllipticCurvePublicKey: ...
 
 class EllipticCurvePublicKey:
     curve: EllipticCurve
