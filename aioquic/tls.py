@@ -20,7 +20,7 @@ from typing import (
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
-from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa
+from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25519
 from cryptography.hazmat.primitives.ciphers import aead
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -773,13 +773,21 @@ def cipher_suite_hash(cipher_suite: CipherSuite) -> hashes.HashAlgorithm:
     return CIPHER_SUITES[cipher_suite][1]()
 
 
-def decode_public_key(key_share: KeyShareEntry) -> ec.EllipticCurvePublicKey:
+def decode_public_key(
+    key_share: KeyShareEntry
+) -> Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]:
+    if key_share[0] == Group.X25519:
+        return x25519.X25519PublicKey.from_public_bytes(key_share[1])
     return ec.EllipticCurvePublicKey.from_encoded_point(
         GROUP_TO_CURVE[key_share[0]](), key_share[1]
     )
 
 
-def encode_public_key(public_key: ec.EllipticCurvePublicKey) -> KeyShareEntry:
+def encode_public_key(
+    public_key: Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]
+) -> KeyShareEntry:
+    if isinstance(public_key, x25519.X25519PublicKey):
+        return (Group.X25519, public_key.public_bytes(Encoding.Raw, PublicFormat.Raw))
     return (
         CURVE_TO_GROUP[public_key.curve.__class__],
         public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint),
@@ -845,6 +853,7 @@ class Context:
             SignatureAlgorithm.RSA_PKCS1_SHA256,
             SignatureAlgorithm.RSA_PKCS1_SHA1,
         ]
+        self._supported_groups = [Group.SECP256R1]
         self._supported_versions = [TLS_VERSION_1_3]
 
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
@@ -854,17 +863,16 @@ class Context:
         self._dec_key: Optional[bytes] = None
         self.__logger = logger
 
+        self._ec_private_key: Optional[ec.EllipticCurvePrivateKey] = None
+        self._x25519_private_key: Optional[x25519.X25519PrivateKey] = None
+
         if is_client:
             self.client_random = os.urandom(32)
             self.session_id = os.urandom(32)
-            self.private_key = ec.generate_private_key(
-                ec.SECP256R1(), default_backend()
-            )
             self.state = State.CLIENT_HANDSHAKE_START
         else:
             self.client_random = None
             self.session_id = None
-            self.private_key = None
             self.state = State.SERVER_EXPECT_CLIENT_HELLO
 
     def handle_message(
@@ -952,6 +960,23 @@ class Context:
             assert input_buf.eof()
 
     def _client_send_hello(self, output_buf: Buffer) -> None:
+        key_share: List[KeyShareEntry] = []
+        supported_groups: List[Group] = []
+
+        if Group.SECP256R1 in self._supported_groups:
+            self._ec_private_key = ec.generate_private_key(
+                GROUP_TO_CURVE[Group.SECP256R1](), default_backend()
+            )
+            key_share.append(encode_public_key(self._ec_private_key.public_key()))
+            supported_groups.append(Group.SECP256R1)
+
+        if Group.X25519 in self._supported_groups:
+            self._x25519_private_key = x25519.X25519PrivateKey.generate()
+            key_share.append(encode_public_key(self._x25519_private_key.public_key()))
+            supported_groups.append(Group.X25519)
+
+        assert len(key_share), "no key share entries"
+
         hello = ClientHello(
             random=self.client_random,
             session_id=self.session_id,
@@ -959,10 +984,10 @@ class Context:
             compression_methods=self._compression_methods,
             alpn_protocols=self.alpn_protocols,
             key_exchange_modes=self._key_exchange_modes,
-            key_share=[encode_public_key(self.private_key.public_key())],
+            key_share=key_share,
             server_name=self.server_name,
             signature_algorithms=self._signature_algorithms,
-            supported_groups=[Group.SECP256R1],
+            supported_groups=supported_groups,
             supported_versions=self._supported_versions,
             other_extensions=self.handshake_extensions,
         )
@@ -982,8 +1007,22 @@ class Context:
         assert peer_hello.compression_method in self._compression_methods
         assert peer_hello.supported_version in self._supported_versions
 
+        # perform key exchange
         peer_public_key = decode_public_key(peer_hello.key_share)
-        shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
+        shared_key: Optional[bytes] = None
+        if (
+            isinstance(peer_public_key, x25519.X25519PublicKey)
+            and self._x25519_private_key is not None
+        ):
+            shared_key = self._x25519_private_key.exchange(peer_public_key)
+        elif (
+            isinstance(peer_public_key, ec.EllipticCurvePublicKey)
+            and self._ec_private_key is not None
+            and self._ec_private_key.public_key().curve.__class__
+            == peer_public_key.curve.__class__
+        ):
+            shared_key = self._ec_private_key.exchange(ec.ECDH(), peer_public_key)
+        assert shared_key is not None
 
         self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
         self.key_schedule.update_hash(input_buf.data)
@@ -1100,15 +1139,30 @@ class Context:
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
         self.session_id = peer_hello.session_id
-        self.private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
         self.received_extensions = peer_hello.other_extensions
 
         self.key_schedule = KeySchedule(cipher_suite)
         self.key_schedule.extract(None)
         self.key_schedule.update_hash(input_buf.data)
 
-        peer_public_key = decode_public_key(peer_hello.key_share[0])
-        shared_key = self.private_key.exchange(ec.ECDH(), peer_public_key)
+        # perform key exchange
+        public_key: Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]
+        shared_key: Optional[bytes] = None
+        for key_share in peer_hello.key_share:
+            peer_public_key = decode_public_key(key_share)
+            if isinstance(peer_public_key, x25519.X25519PublicKey):
+                self._x25519_private_key = x25519.X25519PrivateKey.generate()
+                public_key = self._x25519_private_key.public_key()
+                shared_key = self._x25519_private_key.exchange(peer_public_key)
+                break
+            elif isinstance(peer_public_key, ec.EllipticCurvePublicKey):
+                self._ec_private_key = ec.generate_private_key(
+                    GROUP_TO_CURVE[key_share[0]](), default_backend()
+                )
+                public_key = self._ec_private_key.public_key()
+                shared_key = self._ec_private_key.exchange(ec.ECDH(), peer_public_key)
+                break
+        assert shared_key is not None
 
         # send hello
         hello = ServerHello(
@@ -1116,7 +1170,7 @@ class Context:
             session_id=self.session_id,
             cipher_suite=cipher_suite,
             compression_method=compression_method,
-            key_share=encode_public_key(self.private_key.public_key()),
+            key_share=encode_public_key(public_key),
             supported_version=supported_version,
         )
         with push_message(self.key_schedule, initial_buf):
