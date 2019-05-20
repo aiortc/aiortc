@@ -634,7 +634,6 @@ class QuicConnectionTest(TestCase):
         run(asyncio.sleep(0))
 
         # server sends PATH_CHALLENGE and receives PATH_RESPONSE
-        network_path = server._network_paths[0]
         self.assertEqual(len(server._network_paths), 2)
 
         # check new path
