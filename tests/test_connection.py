@@ -3,10 +3,6 @@ import binascii
 import io
 from unittest import TestCase
 
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-
 from aioquic import tls
 from aioquic.buffer import Buffer
 from aioquic.connection import (
@@ -29,17 +25,11 @@ from aioquic.packet import (
     push_uint_var,
 )
 
-from .utils import load, run
+from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
 SERVER_ADDR = ("2.3.4.5", 4433)
-SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
-    load("ssl_cert.pem"), backend=default_backend()
-)
-SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
-    load("ssl_key.pem"), password=None, backend=default_backend()
-)
 
 
 def encode_uint_var(v):

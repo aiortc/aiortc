@@ -1,10 +1,6 @@
 import binascii
 from unittest import TestCase
 
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-
 from aioquic import tls
 from aioquic.buffer import Buffer, BufferReadError
 from aioquic.tls import (
@@ -32,14 +28,7 @@ from aioquic.tls import (
     push_server_hello,
 )
 
-from .utils import load
-
-SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
-    load("ssl_cert.pem"), backend=default_backend()
-)
-SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
-    load("ssl_key.pem"), password=None, backend=default_backend()
-)
+from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, load
 
 CERTIFICATE_DATA = load("tls_certificate.bin")[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load("tls_certificate_verify.bin")[-384:]
