@@ -34,6 +34,7 @@ from .buffer import (
     push_bytes,
     push_uint8,
     push_uint16,
+    push_uint32,
 )
 
 TLS_VERSION_1_2 = 0x0303
@@ -353,6 +354,17 @@ def push_alpn_protocol(buf: Buffer, protocol: str) -> None:
 Extension = Tuple[int, bytes]
 
 
+def pull_raw_extension(buf: Buffer) -> Extension:
+    extension_type = pull_uint16(buf)
+    extension_length = pull_uint16(buf)
+    return (extension_type, pull_bytes(buf, extension_length))
+
+
+def push_raw_extension(buf: Buffer, extension: Extension) -> None:
+    with push_extension(buf, extension[0]):
+        push_bytes(buf, extension[1])
+
+
 @dataclass
 class ClientHello:
     random: bytes
@@ -527,19 +539,39 @@ def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
 
 @dataclass
 class NewSessionTicket:
-    lifetime_hint: int = 0
+    ticket_lifetime: int = 0
+    ticket_age_add: int = 0
+    ticket_nonce: bytes = b""
     ticket: bytes = b""
+    extensions: List[Extension] = field(default_factory=list)
 
 
 def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
     new_session_ticket = NewSessionTicket()
 
     assert pull_uint8(buf) == HandshakeType.NEW_SESSION_TICKET
-    with pull_block(buf, 3) as length:
-        new_session_ticket.lifetime_hint = pull_uint32(buf)
-        new_session_ticket.ticket = pull_bytes(buf, length - 4)
+    with pull_block(buf, 3):
+        new_session_ticket.ticket_lifetime = pull_uint32(buf)
+        new_session_ticket.ticket_age_add = pull_uint32(buf)
+        with pull_block(buf, 1) as length:
+            new_session_ticket.ticket_nonce = pull_bytes(buf, length)
+        with pull_block(buf, 2) as length:
+            new_session_ticket.ticket = pull_bytes(buf, length)
+        new_session_ticket.extensions = pull_list(buf, 2, pull_raw_extension)
 
     return new_session_ticket
+
+
+def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -> None:
+    push_uint8(buf, HandshakeType.NEW_SESSION_TICKET)
+    with push_block(buf, 3):
+        push_uint32(buf, new_session_ticket.ticket_lifetime)
+        push_uint32(buf, new_session_ticket.ticket_age_add)
+        with push_block(buf, 1):
+            push_bytes(buf, new_session_ticket.ticket_nonce)
+        with push_block(buf, 2):
+            push_bytes(buf, new_session_ticket.ticket)
+        push_list(buf, 2, push_raw_extension, new_session_ticket.extensions)
 
 
 @dataclass
@@ -552,15 +584,7 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 
     assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
-
-        def pull_extension(buf: Buffer) -> None:
-            extension_type = pull_uint16(buf)
-            extension_length = pull_uint16(buf)
-            extensions.other_extensions.append(
-                (extension_type, pull_bytes(buf, extension_length))
-            )
-
-        pull_list(buf, 2, pull_extension)
+        extensions.other_extensions = pull_list(buf, 2, pull_raw_extension)
 
     return extensions
 
@@ -568,10 +592,7 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> None:
     push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
     with push_block(buf, 3):
-        with push_block(buf, 2):
-            for extension_type, extension_value in extensions.other_extensions:
-                with push_extension(buf, extension_type):
-                    push_bytes(buf, extension_value)
+        push_list(buf, 2, push_raw_extension, extensions.other_extensions)
 
 
 CertificateEntry = Tuple[bytes, bytes]

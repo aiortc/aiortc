@@ -10,6 +10,7 @@ from aioquic.tls import (
     Context,
     EncryptedExtensions,
     Finished,
+    NewSessionTicket,
     ServerHello,
     State,
     pull_block,
@@ -25,6 +26,7 @@ from aioquic.tls import (
     push_client_hello,
     push_encrypted_extensions,
     push_finished,
+    push_new_session_ticket,
     push_server_hello,
 )
 
@@ -652,8 +654,34 @@ class TlsTest(TestCase):
         self.assertIsNotNone(new_session_ticket)
         self.assertTrue(buf.eof())
 
-        self.assertEqual(new_session_ticket.lifetime_hint, 86400)
-        self.assertEqual(len(new_session_ticket.ticket), 49)
+        self.assertEqual(new_session_ticket.ticket_lifetime, 86400)
+        self.assertEqual(new_session_ticket.ticket_age_add, 3303452425)
+        self.assertEqual(new_session_ticket.ticket_nonce, b"")
+        self.assertEqual(
+            new_session_ticket.ticket,
+            binascii.unhexlify(
+                "dbe6f1a77a78c0426bfa607cd0d02b350247d90618704709596beda7e962cc81"
+            ),
+        )
+        self.assertEqual(
+            new_session_ticket.extensions,
+            [(tls.ExtensionType.EARLY_DATA, b"\xff\xff\xff\xff")],
+        )
+
+    def test_push_new_session_ticket(self):
+        new_session_ticket = NewSessionTicket(
+            ticket_lifetime=86400,
+            ticket_age_add=3303452425,
+            ticket_nonce=b"",
+            ticket=binascii.unhexlify(
+                "dbe6f1a77a78c0426bfa607cd0d02b350247d90618704709596beda7e962cc81"
+            ),
+            extensions=[(tls.ExtensionType.EARLY_DATA, b"\xff\xff\xff\xff")],
+        )
+
+        buf = Buffer(100)
+        push_new_session_ticket(buf, new_session_ticket)
+        self.assertEqual(buf.data, load("tls_new_session_ticket.bin"))
 
     def test_pull_encrypted_extensions(self):
         buf = Buffer(data=load("tls_encrypted_extensions.bin"))
