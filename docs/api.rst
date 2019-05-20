@@ -8,6 +8,11 @@ Client
 
    .. autofunction:: connect
 
+Server
+------
+
+   .. autofunction:: serve
+
 Common
 ------
 

@@ -216,7 +216,7 @@ def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
 
 
 def encode_quic_retry(
-    version: QuicProtocolVersion,
+    version: int,
     source_cid: bytes,
     destination_cid: bytes,
     original_destination_cid: bytes,
