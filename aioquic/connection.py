@@ -164,6 +164,9 @@ def maybe_connection_error(
         return None
 
 
+QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
+
+
 class QuicConnection(asyncio.DatagramProtocol):
     """
     A QUIC connection.
@@ -180,6 +183,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         secrets_log_file: TextIO = None,
         alpn_protocols: Optional[List[str]] = None,
         server_name: Optional[str] = None,
+        stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         if not is_client:
             assert certificate is not None, "SSL certificate is required"
@@ -227,9 +231,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._version: Optional[int] = None
 
         # callbacks
-        self.stream_created_cb: Callable[
-            [asyncio.StreamReader, asyncio.StreamWriter], None
-        ] = lambda r, w: None
+        if stream_handler is not None:
+            self._stream_handler = stream_handler
+        else:
+            self._stream_handler = lambda r, w: None
 
         # frame handlers
         self.__frame_handlers = [
@@ -329,7 +334,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             max_stream_data_local=max_stream_data_local,
             max_stream_data_remote=max_stream_data_remote,
         )
-        self.stream_created_cb(stream.reader, stream.writer)
+        self._stream_handler(stream.reader, stream.writer)
 
         return stream.reader, stream.writer
 
@@ -564,7 +569,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 max_stream_data_local=max_stream_data_local,
                 max_stream_data_remote=max_stream_data_remote,
             )
-            self.stream_created_cb(stream.reader, stream.writer)
+            self._stream_handler(stream.reader, stream.writer)
         return stream
 
     def _initialize(self, peer_cid: bytes) -> None:

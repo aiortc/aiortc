@@ -17,10 +17,6 @@ async def run_client(host):
         return await reader.read()
 
 
-async def handle_connection(connection):
-    connection.stream_created_cb = handle_stream
-
-
 def handle_stream(reader, writer):
     async def serve():
         data = await reader.read()
@@ -32,12 +28,12 @@ def handle_stream(reader, writer):
 
 async def run_server(stateless_retry):
     await serve(
-        handle_connection,
         host="::",
         port="4433",
         certificate=SERVER_CERTIFICATE,
         private_key=SERVER_PRIVATE_KEY,
         stateless_retry=stateless_retry,
+        stream_handler=handle_stream,
     )
 
 

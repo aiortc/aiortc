@@ -4,7 +4,7 @@ import socket
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
-from .connection import QuicConnection
+from .connection import QuicConnection, QuicStreamHandler
 
 __all__ = ["connect"]
 
@@ -16,6 +16,7 @@ async def connect(
     *,
     alpn_protocols: Optional[List[str]] = None,
     secrets_log_file: Optional[TextIO] = None,
+    stream_handler: Optional[QuicStreamHandler] = None,
 ) -> AsyncGenerator[QuicConnection, None]:
     """
     Connect to a QUIC server at the given `host` and `port`.
@@ -29,6 +30,9 @@ async def connect(
       ClientHello.
     * ``secrets_log_file`` is a file-like object in which to log traffic
       secrets. This is useful to analyze traffic captures with Wireshark.
+    * ``stream_handler`` is a callback which is invoked whenever a stream is
+      created. It must accept two arguments: a :class:`asyncio.StreamReader`
+      and a :class:`asyncio.StreamWriter`.
     """
     loop = asyncio.get_event_loop()
 
@@ -48,7 +52,10 @@ async def connect(
     # connect
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicConnection(
-            alpn_protocols=alpn_protocols, is_client=True, server_name=server_name
+            alpn_protocols=alpn_protocols,
+            is_client=True,
+            server_name=server_name,
+            stream_handler=stream_handler,
         ),
         local_addr=("::", 0),
     )

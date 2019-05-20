@@ -50,20 +50,20 @@ async def serve_http_request(reader, writer):
     writer.write_eof()
 
 
-async def handle_connection(connection):
-    def stream_created(reader, writer):
-        connection = writer.get_extra_info("connection")
-        stream_id = writer.get_extra_info("stream_id")
-        logger.info(
-            "%s Stream %d created by remote party"
-            % (connection_id(connection), stream_id)
-        )
+def handle_connection(connection):
+    logger.info("%s Connection created" % connection_id(connection))
 
-        # we serve HTTP/0.9 on Client-Initiated Bidirectional streams
-        if not stream_id % 4:
-            asyncio.ensure_future(serve_http_request(reader, writer))
 
-    connection.stream_created_cb = stream_created
+def handle_stream(reader, writer):
+    connection = writer.get_extra_info("connection")
+    stream_id = writer.get_extra_info("stream_id")
+    logger.info(
+        "%s Stream %d created by remote party" % (connection_id(connection), stream_id)
+    )
+
+    # we serve HTTP/0.9 on Client-Initiated Bidirectional streams
+    if not stream_id % 4:
+        asyncio.ensure_future(serve_http_request(reader, writer))
 
 
 if __name__ == "__main__":
@@ -96,11 +96,12 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     protocol = loop.run_until_complete(
         aioquic.serve(
-            handle_connection,
             host=args.host,
             port=args.port,
             certificate=certificate,
             private_key=private_key,
+            connection_handler=handle_connection,
+            stream_handler=handle_stream,
             secrets_log_file=secrets_log_file,
             stateless_retry=args.stateless_retry,
         )

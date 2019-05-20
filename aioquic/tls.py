@@ -846,6 +846,10 @@ def push_message(
     key_schedule.update_hash(buf.data_slice(hash_start, buf.tell()))
 
 
+# callback types
+SessionTicketHandler = Callable[[NewSessionTicket], None]
+
+
 class Context:
     def __init__(self, is_client: bool, logger: logging.Logger = None):
         self.alpn_protocols: Optional[List[str]] = None
@@ -858,6 +862,9 @@ class Context:
         self.key_schedule: Optional[KeySchedule] = None
         self.received_extensions: List[Extension] = []
         self.server_name: Optional[str] = None
+
+        # callbacks
+        self.session_ticket_cb: SessionTicketHandler = lambda t: None
         self.update_traffic_key_cb: Callable[
             [Direction, Epoch, bytes], None
         ] = lambda d, e, s: None
@@ -1123,7 +1130,8 @@ class Context:
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
     def _client_handle_new_session_ticket(self, input_buf: Buffer) -> None:
-        pull_new_session_ticket(input_buf)
+        ticket = pull_new_session_ticket(input_buf)
+        self.session_ticket_cb(ticket)
 
     def _server_handle_hello(
         self, input_buf: Buffer, initial_buf: Buffer, output_buf: Buffer
