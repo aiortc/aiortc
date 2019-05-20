@@ -3,6 +3,7 @@ import asyncio
 import binascii
 import ipaddress
 import logging
+import os
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -42,8 +43,12 @@ async def serve_http_request(reader, writer):
     """
     request = await reader.read()
 
-    if request == b"GET /\r\n":
+    if request == b"GET /\r\n" or request == "GET /index.html\r\n":
         writer.write(TEMPLATE.format(content="It works!").encode("utf8"))
+    elif request == b"GET /5000000\r\n":
+        writer.write(os.urandom(5000000))
+    elif request == b"GET /10000000\r\n":
+        writer.write(os.urandom(10000000))
     else:
         writer.write(
             TEMPLATE.format(content="The document could not be found.").encode("utf8")
