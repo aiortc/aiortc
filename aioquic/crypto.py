@@ -197,6 +197,7 @@ class CryptoPair:
         self.aead_tag_size = 16
         self.recv = CryptoContext()
         self.send = CryptoContext()
+        self._update_key_requested = False
 
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int
@@ -205,10 +206,12 @@ class CryptoPair:
             packet, encrypted_offset
         )
         if update_key:
-            self.update_key()
+            self._update_key()
         return plain_header, payload, packet_number
 
     def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
+        if self._update_key_requested:
+            self._update_key()
         return self.send.encrypt_packet(plain_header, plain_payload)
 
     def setup_initial(self, cid: bytes, is_client: bool) -> None:
@@ -237,9 +240,16 @@ class CryptoPair:
         self.send.teardown()
 
     def update_key(self) -> None:
-        self.recv.apply_key_phase(self.recv.next_key_phase())
-        self.send.apply_key_phase(self.send.next_key_phase())
+        self._update_key_requested = True
 
     @property
     def key_phase(self) -> int:
-        return self.recv.key_phase
+        if self._update_key_requested:
+            return int(not self.recv.key_phase)
+        else:
+            return self.recv.key_phase
+
+    def _update_key(self) -> None:
+        self.recv.apply_key_phase(self.recv.next_key_phase())
+        self.send.apply_key_phase(self.send.next_key_phase())
+        self._update_key_requested = False

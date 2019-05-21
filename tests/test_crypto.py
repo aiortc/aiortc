@@ -266,8 +266,6 @@ class CryptoTest(TestCase):
 
         # pair 1 key update
         pair1.update_key()
-        self.assertEqual(pair1.key_phase, 1)
-        self.assertEqual(pair2.key_phase, 0)
 
         # roundtrip
         send(pair1, pair2)
@@ -277,11 +275,18 @@ class CryptoTest(TestCase):
 
         # pair 2 key update
         pair2.update_key()
-        self.assertEqual(pair1.key_phase, 1)
-        self.assertEqual(pair2.key_phase, 0)
 
         # roundtrip
         send(pair2, pair1)
         send(pair1, pair2)
         self.assertEqual(pair1.key_phase, 0)
         self.assertEqual(pair2.key_phase, 0)
+
+        # pair 1 key - update, but not next to send
+        pair1.update_key()
+
+        # roundtrip
+        send(pair2, pair1)
+        send(pair1, pair2)
+        self.assertEqual(pair1.key_phase, 1)
+        self.assertEqual(pair2.key_phase, 1)
