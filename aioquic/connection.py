@@ -1129,7 +1129,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                         if frame.fin:
                             flags |= QuicStreamFlag.FIN
                         push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
-                        with push_stream_frame(buf, 0, frame.offset):
+                        with push_stream_frame(buf, stream_id, frame.offset):
                             push_bytes(buf, frame.data)
                         self._remote_max_data_used += len(frame.data)
 
