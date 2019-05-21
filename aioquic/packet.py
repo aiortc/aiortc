@@ -222,7 +222,13 @@ def encode_quic_retry(
     original_destination_cid: bytes,
     retry_token: bytes,
 ) -> bytes:
-    buf = Buffer(capacity=100)
+    buf = Buffer(
+        capacity=6
+        + len(destination_cid)
+        + len(source_cid)
+        + len(original_destination_cid)
+        + len(retry_token)
+    )
     push_uint8(
         buf, PACKET_TYPE_RETRY | encode_cid_length(len(original_destination_cid))
     )
@@ -244,7 +250,12 @@ def encode_quic_version_negotiation(
     destination_cid: bytes,
     supported_versions: List[QuicProtocolVersion],
 ) -> bytes:
-    buf = Buffer(capacity=100)
+    buf = Buffer(
+        capacity=6
+        + len(destination_cid)
+        + len(source_cid)
+        + 4 * len(supported_versions)
+    )
     push_uint8(buf, os.urandom(1)[0] | PACKET_LONG_HEADER)
     push_uint32(buf, QuicProtocolVersion.NEGOTIATION)
     push_uint8(
