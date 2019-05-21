@@ -1,7 +1,7 @@
 import asyncio
 import ipaddress
 import os
-from typing import Any, Callable, Dict, Optional, Text, TextIO, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cast
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -31,11 +31,13 @@ class QuicServer(asyncio.DatagramProtocol):
         *,
         certificate: Any,
         private_key: Any,
+        alpn_protocols: Optional[List[str]] = None,
         connection_handler: Optional[QuicConnectionHandler] = None,
-        stream_handler: Optional[QuicStreamHandler] = None,
-        stateless_retry: bool = False,
         secrets_log_file: Optional[TextIO] = None,
+        stateless_retry: bool = False,
+        stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
+        self._alpn_protocols = alpn_protocols
         self._certificate = certificate
         self._connections: Dict[bytes, QuicConnection] = {}
         self._private_key = private_key
@@ -125,10 +127,11 @@ class QuicServer(asyncio.DatagramProtocol):
 
             # create new connection
             connection = QuicConnection(
+                alpn_protocols=self._alpn_protocols,
                 certificate=self._certificate,
-                private_key=self._private_key,
                 is_client=False,
                 original_connection_id=original_connection_id,
+                private_key=self._private_key,
                 secrets_log_file=self._secrets_log_file,
                 stream_handler=self._stream_handler,
             )
@@ -146,6 +149,7 @@ async def serve(
     *,
     certificate: Any,
     private_key: Any,
+    alpn_protocols: Optional[List[str]] = None,
     connection_handler: QuicConnectionHandler = None,
     stream_handler: QuicStreamHandler = None,
     secrets_log_file: Optional[TextIO] = None,
@@ -180,12 +184,13 @@ async def serve(
 
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
+            alpn_protocols=alpn_protocols,
             certificate=certificate,
             connection_handler=connection_handler,
             private_key=private_key,
             secrets_log_file=secrets_log_file,
-            stream_handler=stream_handler,
             stateless_retry=stateless_retry,
+            stream_handler=stream_handler,
         ),
         local_addr=(host, port),
     )

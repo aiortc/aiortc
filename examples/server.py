@@ -91,6 +91,7 @@ if __name__ == "__main__":
         aioquic.serve(
             host=args.host,
             port=args.port,
+            alpn_protocols=["hq-20"],
             certificate=certificate,
             private_key=private_key,
             stream_handler=handle_stream,
