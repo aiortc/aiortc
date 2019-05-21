@@ -580,6 +580,8 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
 
 @dataclass
 class EncryptedExtensions:
+    alpn_protocol: Optional[str] = None
+
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
@@ -588,7 +590,18 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 
     assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
-        extensions.other_extensions = pull_list(buf, 2, pull_raw_extension)
+
+        def pull_extension(buf: Buffer) -> None:
+            extension_type = pull_uint16(buf)
+            extension_length = pull_uint16(buf)
+            if extension_type == ExtensionType.ALPN:
+                extensions.alpn_protocol = pull_list(buf, 2, pull_alpn_protocol)[0]
+            else:
+                extensions.other_extensions.append(
+                    (extension_type, pull_bytes(buf, extension_length))
+                )
+
+        pull_list(buf, 2, pull_extension)
 
     return extensions
 
@@ -596,7 +609,14 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> None:
     push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
     with push_block(buf, 3):
-        push_list(buf, 2, push_raw_extension, extensions.other_extensions)
+        with push_block(buf, 2):
+            if extensions.alpn_protocol is not None:
+                with push_extension(buf, ExtensionType.ALPN):
+                    push_list(buf, 2, push_alpn_protocol, [extensions.alpn_protocol])
+
+            for extension_type, extension_value in extensions.other_extensions:
+                with push_extension(buf, extension_type):
+                    push_bytes(buf, extension_value)
 
 
 CertificateEntry = Tuple[bytes, bytes]
@@ -866,6 +886,7 @@ class Context:
         is_client: bool,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
     ):
+        self.alpn_negotiated: Optional[str] = None
         self.alpn_protocols: Optional[List[str]] = None
         self.certificate: Optional[x509.Certificate] = None
         self.certificate_private_key: Optional[
@@ -1079,6 +1100,7 @@ class Context:
 
     def _client_handle_encrypted_extensions(self, input_buf: Buffer) -> None:
         encrypted_extensions = pull_encrypted_extensions(input_buf)
+        self.alpn_negotiated = encrypted_extensions.alpn_protocol
         self.received_extensions = encrypted_extensions.other_extensions
 
         self._setup_traffic_protection(
@@ -1180,6 +1202,14 @@ class Context:
             AlertProtocolVersion("No supported protocol version"),
         )
 
+        # negotiate ALPN
+        if self.alpn_protocols is not None:
+            self.alpn_negotiated = negotiate(
+                self.alpn_protocols,
+                peer_hello.alpn_protocols,
+                AlertHandshakeFailure("No common ALPN protocols"),
+            )
+
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)
         self.session_id = peer_hello.session_id
@@ -1232,7 +1262,10 @@ class Context:
         with push_message(self.key_schedule, output_buf):
             push_encrypted_extensions(
                 output_buf,
-                EncryptedExtensions(other_extensions=self.handshake_extensions),
+                EncryptedExtensions(
+                    alpn_protocol=self.alpn_negotiated,
+                    other_extensions=self.handshake_extensions,
+                ),
             )
 
         # send certificate

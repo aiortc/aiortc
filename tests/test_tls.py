@@ -46,6 +46,12 @@ SERVER_QUIC_TRANSPORT_PARAMETERS = binascii.unhexlify(
     b"000000000000000800024064000a00010a"
 )
 
+SERVER_QUIC_TRANSPORT_PARAMETERS_2 = binascii.unhexlify(
+    b"0057000600048000ffff000500048000ffff00020010c5ac410fbdd4fe6e2c1"
+    b"42279f231e8e0000a000103000400048005fffa000b000119000100026710ff"
+    b"42000c5c067f27e39321c63e28e7c90003000247e40008000106"
+)
+
 
 class BufferTest(TestCase):
     def test_pull_block_truncated(self):
@@ -230,6 +236,72 @@ class ContextTest(TestCase):
         client.handle_message(new_session_ticket, client_buf)
         server_input = merge_buffers(client_buf)
         self.assertEqual(len(server_input), 0)
+
+    def test_handshake_with_alpn(self):
+        client = self.create_client()
+        client.alpn_protocols = ["hq-20"]
+        server = self.create_server()
+        server.alpn_protocols = ["hq-20", "h3-20"]
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 264)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 2239)
+        reset_buffers(server_buf)
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # send finished
+        client.handle_message(client_input, client_buf)
+        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 52)
+        reset_buffers(client_buf)
+
+        # handle finished
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
+        client_input = merge_buffers(server_buf)
+        self.assertEqual(len(client_input), 0)
+
+        # check keys match
+        self.assertEqual(client._dec_key, server._enc_key)
+        self.assertEqual(client._enc_key, server._dec_key)
+
+        # check ALPN matches
+        self.assertEqual(client.alpn_negotiated, "hq-20")
+        self.assertEqual(server.alpn_negotiated, "hq-20")
+
+    def test_handshake_with_alpn_fail(self):
+        client = self.create_client()
+        client.alpn_protocols = ["hq-20"]
+        server = self.create_server()
+        server.alpn_protocols = ["h3-20"]
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 264)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+            server.handle_message(server_input, server_buf)
+        self.assertEqual(str(cm.exception), "No common ALPN protocols")
 
     def test_handshake_with_rsa_pkcs1_sha256_signature(self):
         client = self.create_client()
@@ -699,6 +771,26 @@ class TlsTest(TestCase):
             ],
         )
 
+    def test_pull_encrypted_extensions_with_alpn(self):
+        buf = Buffer(data=load("tls_encrypted_extensions_with_alpn.bin"))
+        extensions = pull_encrypted_extensions(buf)
+        self.assertIsNotNone(extensions)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            extensions,
+            EncryptedExtensions(
+                alpn_protocol="hq-20",
+                other_extensions=[
+                    (tls.ExtensionType.SERVER_NAME, b""),
+                    (
+                        tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
+                        SERVER_QUIC_TRANSPORT_PARAMETERS_2,
+                    ),
+                ],
+            ),
+        )
+
     def test_push_encrypted_extensions(self):
         extensions = EncryptedExtensions(
             other_extensions=[
@@ -712,6 +804,22 @@ class TlsTest(TestCase):
         buf = Buffer(100)
         push_encrypted_extensions(buf, extensions)
         self.assertEqual(buf.data, load("tls_encrypted_extensions.bin"))
+
+    def test_push_encrypted_extensions_with_alpn(self):
+        extensions = EncryptedExtensions(
+            alpn_protocol="hq-20",
+            other_extensions=[
+                (tls.ExtensionType.SERVER_NAME, b""),
+                (
+                    tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
+                    SERVER_QUIC_TRANSPORT_PARAMETERS_2,
+                ),
+            ],
+        )
+
+        buf = Buffer(115)
+        push_encrypted_extensions(buf, extensions)
+        self.assertTrue(buf.eof())
 
     def test_pull_certificate(self):
         buf = Buffer(data=load("tls_certificate.bin"))
