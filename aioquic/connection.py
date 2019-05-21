@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import logging
 import os
 from dataclasses import dataclass
@@ -127,6 +128,11 @@ class QuicConnectionError(Exception):
         return "Error: %d, reason: %s" % (self.error_code, self.reason_phrase)
 
 
+class QuicConnectionAdapter(logging.LoggerAdapter):
+    def process(self, msg: str, kwargs: Any) -> Tuple[str, Any]:
+        return "[%s] %s" % (self.extra["host_cid"], msg), kwargs
+
+
 class QuicConnectionState(Enum):
     FIRSTFLIGHT = 0
     CONNECTED = 1
@@ -222,7 +228,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_stream_data_uni = 1048576
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
-        self.__logger = logger
+        self._logger = QuicConnectionAdapter(
+            logger, {"host_cid": binascii.hexlify(self.host_cid).decode("ascii")}
+        )
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
         self._remote_idle_timeout = 0  # milliseconds
@@ -395,11 +403,11 @@ class QuicConnection(asyncio.DatagramProtocol):
                     versions.append(pull_uint32(buf))
                 common = set(self.supported_versions).intersection(versions)
                 if not common:
-                    self.__logger.error("Could not find a common protocol version")
+                    self._logger.error("Could not find a common protocol version")
                     return
                 self._version = QuicProtocolVersion(max(common))
                 self._version_negotiation_count += 1
-                self.__logger.info("Retrying with %s", self._version)
+                self._logger.info("Retrying with %s", self._version)
                 self._connect()
                 return
             elif (
@@ -420,7 +428,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
                     self._stateless_retry_count += 1
-                    self.__logger.info("Performing stateless retry")
+                    self._logger.info("Performing stateless retry")
                     self._connect()
                 return
 
@@ -449,7 +457,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     data[start_off:end_off], encrypted_off
                 )
             except CryptoError as exc:
-                self.__logger.warning(exc)
+                self._logger.warning(exc)
                 return
 
             if not self.peer_cid_set:
@@ -477,7 +485,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             try:
                 is_ack_only, is_probing = self._payload_received(context, plain_payload)
             except QuicConnectionError as exc:
-                self.__logger.warning(exc)
+                self._logger.warning(exc)
                 self.close(
                     error_code=exc.error_code,
                     frame_type=exc.frame_type,
@@ -487,7 +495,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # update network path
             if not network_path.is_validated and epoch == tls.Epoch.HANDSHAKE:
-                self.__logger.info(
+                self._logger.info(
                     "Network path %s validated by handshake", network_path.addr
                 )
                 network_path.is_validated = True
@@ -496,7 +504,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._network_paths.append(network_path)
             idx = self._network_paths.index(network_path)
             if idx and not is_probing:
-                self.__logger.info("Network path %s promoted", network_path.addr)
+                self._logger.info("Network path %s promoted", network_path.addr)
                 self._network_paths.pop(idx)
                 self._network_paths.insert(0, network_path)
 
@@ -508,7 +516,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._send_pending()
 
     def error_received(self, exc: Exception) -> None:
-        self.__logger.warning(exc)
+        self._logger.warning(exc)
 
     # Private
 
@@ -554,7 +562,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # new network path
         network_path = QuicNetworkPath(addr)
-        self.__logger.info("Network path %s discovered", network_path.addr)
+        self._logger.info("Network path %s discovered", network_path.addr)
         return network_path
 
     def _get_or_create_stream(self, frame_type: int, stream_id: int) -> QuicStream:
@@ -590,7 +598,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
 
             # create stream
-            self.__logger.info("Stream %d created by peer" % stream_id)
+            self._logger.info("Stream %d created by peer" % stream_id)
             stream = self.streams[stream_id] = QuicStream(
                 connection=self,
                 stream_id=stream_id,
@@ -602,7 +610,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _initialize(self, peer_cid: bytes) -> None:
         # TLS
-        self.tls = tls.Context(is_client=self.is_client, logger=self.__logger)
+        self.tls = tls.Context(is_client=self.is_client, logger=self._logger)
         self.tls.alpn_protocols = self.alpn_protocols
         self.tls.certificate = self.certificate
         self.tls.certificate_private_key = self.private_key
@@ -666,7 +674,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         else:
             error_code, reason_phrase = packet.pull_application_close_frame(buf)
             frame_type = None
-        self.__logger.info(
+        self._logger.info(
             "Connection close code 0x%X, reason %s", error_code, reason_phrase
         )
         self._set_state(QuicConnectionState.DRAINING)
@@ -734,7 +742,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_data = pull_uint_var(buf)
         if max_data > self._remote_max_data:
-            self.__logger.info("Remote max_data raised to %d", max_data)
+            self._logger.info("Remote max_data raised to %d", max_data)
             self._remote_max_data = max_data
 
     def _handle_max_stream_data_frame(
@@ -753,7 +761,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         stream = self._get_or_create_stream(frame_type, stream_id)
         if max_stream_data > stream.max_stream_data_remote:
-            self.__logger.info(
+            self._logger.info(
                 "Stream %d remote max_stream_data raised to %d",
                 stream_id,
                 max_stream_data,
@@ -770,7 +778,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_streams = pull_uint_var(buf)
         if max_streams > self._remote_max_streams_bidi:
-            self.__logger.info("Remote max_streams_bidi raised to %d", max_streams)
+            self._logger.info("Remote max_streams_bidi raised to %d", max_streams)
             self._remote_max_streams_bidi = max_streams
 
     def _handle_max_streams_uni_frame(
@@ -783,7 +791,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_streams = pull_uint_var(buf)
         if max_streams > self._remote_max_streams_uni:
-            self.__logger.info("Remote max_streams_uni raised to %d", max_streams)
+            self._logger.info("Remote max_streams_uni raised to %d", max_streams)
             self._remote_max_streams_uni = max_streams
 
     def _handle_new_connection_id_frame(
@@ -832,7 +840,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 frame_type=frame_type,
                 reason_phrase="Response does not match challenge",
             )
-        self.__logger.info(
+        self._logger.info(
             "Network path %s validated by challenge", context.network_path.addr
         )
         context.network_path.is_validated = True
@@ -850,7 +858,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        self.__logger.info(
+        self._logger.info(
             "Stream %d reset by peer (error code %d, final size %d)",
             stream_id,
             error_code,
@@ -1058,7 +1066,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         return buf.data
 
     def _set_state(self, state: QuicConnectionState) -> None:
-        self.__logger.info("%s -> %s", self.__state, state)
+        self._logger.info("%s -> %s", self.__state, state)
         self.__state = state
 
     def _stream_can_receive(self, stream_id: int) -> bool:
@@ -1122,7 +1130,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 and not network_path.is_validated
                 and network_path.local_challenge is None
             ):
-                self.__logger.info(
+                self._logger.info(
                     "Network path %s sending challenge", network_path.addr
                 )
                 network_path.local_challenge = os.urandom(8)

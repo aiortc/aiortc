@@ -861,7 +861,11 @@ SessionTicketHandler = Callable[[NewSessionTicket], None]
 
 
 class Context:
-    def __init__(self, is_client: bool, logger: logging.Logger = None):
+    def __init__(
+        self,
+        is_client: bool,
+        logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
+    ):
         self.alpn_protocols: Optional[List[str]] = None
         self.certificate: Optional[x509.Certificate] = None
         self.certificate_private_key: Optional[

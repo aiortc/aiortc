@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import binascii
 import logging
 import re
 
@@ -9,8 +8,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 import aioquic
-
-logger = logging.getLogger("server")
 
 TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -24,10 +21,6 @@ TEMPLATE = """<!DOCTYPE html>
     </body>
 </html>
 """
-
-
-def connection_id(connection):
-    return "Connection %s" % binascii.hexlify(connection.host_cid).decode("ascii")
 
 
 def render(content):
@@ -56,10 +49,6 @@ async def serve_http_request(reader, writer):
         writer.write(render("The document could not be found."))
 
     writer.write_eof()
-
-
-def handle_connection(connection):
-    logger.info("%s Connection created" % connection_id(connection))
 
 
 def handle_stream(reader, writer):
@@ -104,7 +93,6 @@ if __name__ == "__main__":
             port=args.port,
             certificate=certificate,
             private_key=private_key,
-            connection_handler=handle_connection,
             stream_handler=handle_stream,
             secrets_log_file=secrets_log_file,
             stateless_retry=args.stateless_retry,
