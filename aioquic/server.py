@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import os
 from typing import Any, Callable, Dict, Optional, Text, TextIO, Union, cast
 
@@ -19,6 +20,10 @@ from .tls import Buffer
 __all__ = ["serve"]
 
 QuicConnectionHandler = Callable[[QuicConnection], None]
+
+
+def encode_address(addr: NetworkAddress):
+    return ipaddress.ip_address(addr[0]).packed + bytes([addr[1] >> 8, addr[1] & 0xFF])
 
 
 class QuicServer(asyncio.DatagramProtocol):
@@ -47,7 +52,7 @@ class QuicServer(asyncio.DatagramProtocol):
 
         if stateless_retry:
             self._retry_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=512, backend=default_backend()
+                public_exponent=65537, key_size=1024, backend=default_backend()
             )
         else:
             self._retry_key = None
@@ -76,18 +81,19 @@ class QuicServer(asyncio.DatagramProtocol):
             return
 
         connection = self._connections.get(header.destination_cid, None)
+        original_connection_id: Optional[bytes] = None
         if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
             # stateless retry
             if self._retry_key is not None:
-                retry_message = str(addr).encode("ascii")
                 if not header.token:
-                    retry_token = self._retry_key.sign(
+                    retry_message = encode_address(addr) + b"|" + header.destination_cid
+                    retry_token = self._retry_key.public_key().encrypt(
                         retry_message,
-                        padding.PSS(
+                        padding.OAEP(
                             mgf=padding.MGF1(hashes.SHA256()),
-                            salt_length=padding.PSS.MAX_LENGTH,
+                            algorithm=hashes.SHA256(),
+                            label=None,
                         ),
-                        hashes.SHA256(),
                     )
                     self._transport.sendto(
                         encode_quic_retry(
@@ -102,16 +108,20 @@ class QuicServer(asyncio.DatagramProtocol):
                     return
                 else:
                     try:
-                        self._retry_key.public_key().verify(
+                        retry_message = self._retry_key.decrypt(
                             header.token,
-                            retry_message,
-                            padding.PSS(
+                            padding.OAEP(
                                 mgf=padding.MGF1(hashes.SHA256()),
-                                salt_length=padding.PSS.MAX_LENGTH,
+                                algorithm=hashes.SHA256(),
+                                label=None,
                             ),
-                            hashes.SHA256(),
                         )
-                    except InvalidSignature:
+                        encoded_addr, original_connection_id = retry_message.split(
+                            b"|", maxsplit=1
+                        )
+                        if encoded_addr != encode_address(addr):
+                            return
+                    except ValueError:
                         return
 
             # create new connection
@@ -119,6 +129,7 @@ class QuicServer(asyncio.DatagramProtocol):
                 certificate=self._certificate,
                 private_key=self._private_key,
                 is_client=False,
+                original_connection_id=original_connection_id,
                 secrets_log_file=self._secrets_log_file,
                 stream_handler=self._stream_handler,
             )

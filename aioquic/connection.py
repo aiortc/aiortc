@@ -180,14 +180,19 @@ class QuicConnection(asyncio.DatagramProtocol):
         is_client: bool = True,
         certificate: Any = None,
         private_key: Any = None,
-        secrets_log_file: TextIO = None,
         alpn_protocols: Optional[List[str]] = None,
+        original_connection_id: Optional[bytes] = None,
+        secrets_log_file: TextIO = None,
         server_name: Optional[str] = None,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
-        if not is_client:
-            assert certificate is not None, "SSL certificate is required"
-            assert private_key is not None, "SSL private key is required"
+        if is_client:
+            assert (
+                original_connection_id is None
+            ), "Cannot set original_connection_id for a client"
+        else:
+            assert certificate is not None, "SSL certificate is required for a server"
+            assert private_key is not None, "SSL private key is required for a server"
 
         self.alpn_protocols = alpn_protocols
         self.certificate = certificate
@@ -217,8 +222,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
         self.__logger = logger
-        self.__path_challenge: Optional[bytes] = None
         self._network_paths: List[QuicNetworkPath] = []
+        self._original_connection_id = original_connection_id
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -401,7 +406,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 if (
                     header.destination_cid == self.host_cid
                     and header.original_destination_cid == self.peer_cid
+                    and not self._stateless_retry_count
                 ):
+                    self._original_connection_id = self.peer_cid
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
                     self._stateless_retry_count += 1
@@ -987,6 +994,17 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _parse_transport_parameters(self, data: bytes) -> None:
         quic_transport_parameters = pull_quic_transport_parameters(Buffer(data=data))
 
+        # validate remote parameters
+        if self.is_client and (
+            quic_transport_parameters.original_connection_id
+            != self._original_connection_id
+        ):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.TRANSPORT_PARAMETER_ERROR,
+                frame_type=QuicFrameType.CRYPTO,
+                reason_phrase="original_connection_id does not match",
+            )
+
         # store remote parameters
         if quic_transport_parameters.idle_timeout is not None:
             self._remote_idle_timeout = quic_transport_parameters.idle_timeout
@@ -1013,6 +1031,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             initial_max_streams_uni=self._local_max_streams_uni,
             ack_delay_exponent=10,
         )
+        if not self.is_client:
+            quic_transport_parameters.original_connection_id = (
+                self._original_connection_id
+            )
 
         buf = Buffer(capacity=512)
         push_quic_transport_parameters(buf, quic_transport_parameters)
