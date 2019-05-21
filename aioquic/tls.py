@@ -213,7 +213,6 @@ class SignatureAlgorithm(IntEnum):
     ECDSA_SECP521R1_SHA512 = 0x0603
     ED25519 = 0x0807
     ED448 = 0x0808
-    RSA_PKCS1_SHA1 = 0x0201
     RSA_PKCS1_SHA256 = 0x0401
     RSA_PKCS1_SHA384 = 0x0501
     RSA_PKCS1_SHA512 = 0x0601
@@ -223,6 +222,11 @@ class SignatureAlgorithm(IntEnum):
     RSA_PSS_RSAE_SHA256 = 0x0804
     RSA_PSS_RSAE_SHA384 = 0x0805
     RSA_PSS_RSAE_SHA512 = 0x0806
+
+    # legacy
+    RSA_PKCS1_SHA1 = 0x0201
+    SHA1_DSA = 0x0202
+    ECDSA_SHA1 = 0x0203
 
 
 # INTEGERS
