@@ -3,7 +3,6 @@ import ipaddress
 import os
 from typing import Any, Callable, Dict, Optional, Text, TextIO, Union, cast
 
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -22,7 +21,7 @@ __all__ = ["serve"]
 QuicConnectionHandler = Callable[[QuicConnection], None]
 
 
-def encode_address(addr: NetworkAddress):
+def encode_address(addr: NetworkAddress) -> bytes:
     return ipaddress.ip_address(addr[0]).packed + bytes([addr[1] >> 8, addr[1] & 0xFF])
 
 

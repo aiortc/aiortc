@@ -833,7 +833,7 @@ def negotiate(supported: List[T], offered: Optional[List[T]], exc: Alert) -> T:
 
 def signature_algorithm_params(
     signature_algorithm: SignatureAlgorithm
-) -> Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]:
+) -> Union[Tuple[ec.ECDSA], Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]]:
     padding_cls, algorithm_cls = SIGNATURE_ALGORITHMS[signature_algorithm]
     algorithm = algorithm_cls()
     if padding_cls is None:
