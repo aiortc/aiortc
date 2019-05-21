@@ -269,6 +269,30 @@ class QuicConnectionTest(TestCase):
         reader, writer = run(server.create_stream(is_unidirectional=True))
         self.assertEqual(writer.get_extra_info("stream_id"), 7)
 
+    def test_create_stream_over_max_streams(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # create streams
+        for i in range(128):
+            client_reader, client_writer = run(client.create_stream())
+        self.assertEqual(client_transport.sent, 4)
+        self.assertEqual(server_transport.sent, 4)
+
+        # create one too many
+        with self.assertRaises(ValueError) as cm:
+            client_reader, client_writer = run(client.create_stream())
+        self.assertEqual(str(cm.exception), "Too many streams open")
+
     def test_decryption_error(self):
         client = QuicConnection(is_client=True)
 

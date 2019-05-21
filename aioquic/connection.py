@@ -335,12 +335,19 @@ class QuicConnection(asyncio.DatagramProtocol):
         while stream_id in self.streams:
             stream_id += 4
 
+        # determine limits
         if is_unidirectional:
             max_stream_data_local = 0
             max_stream_data_remote = self._remote_max_stream_data_uni
+            max_streams = self._remote_max_streams_uni
         else:
             max_stream_data_local = self._local_max_stream_data_bidi_local
             max_stream_data_remote = self._remote_max_stream_data_bidi_remote
+            max_streams = self._remote_max_streams_bidi
+
+        # check max streams
+        if stream_id // 4 >= max_streams:
+            raise ValueError("Too many streams open")
 
         # create stream
         stream = self.streams[stream_id] = QuicStream(
@@ -349,7 +356,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             max_stream_data_local=max_stream_data_local,
             max_stream_data_remote=max_stream_data_remote,
         )
-        self._stream_handler(stream.reader, stream.writer)
 
         return stream.reader, stream.writer
 
