@@ -460,11 +460,15 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._logger.warning(exc)
                 return
 
+            # discard initial keys
+            if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
+                self.spaces[tls.Epoch.INITIAL].crypto.teardown()
+
+            # update state
             if not self.peer_cid_set:
                 self.peer_cid = header.source_cid
                 self.peer_cid_set = True
 
-            # update state
             if self.__state == QuicConnectionState.FIRSTFLIGHT:
                 self._set_state(QuicConnectionState.CONNECTED)
 
@@ -1261,5 +1265,9 @@ class QuicConnection(asyncio.DatagramProtocol):
 
                 self.packet_number += 1
                 buf.seek(0)
+
+                # discard initial keys
+                if self.is_client and epoch == tls.Epoch.HANDSHAKE:
+                    self.spaces[tls.Epoch.INITIAL].crypto.teardown()
             else:
                 break

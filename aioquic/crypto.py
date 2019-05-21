@@ -232,6 +232,10 @@ class CryptoPair:
             ),
         )
 
+    def teardown(self) -> None:
+        self.recv.teardown()
+        self.send.teardown()
+
     def update_key(self) -> None:
         self.recv.apply_key_phase(self.recv.next_key_phase())
         self.send.apply_key_phase(self.send.next_key_phase())
