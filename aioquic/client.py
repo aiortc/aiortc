@@ -55,6 +55,7 @@ async def connect(
         lambda: QuicConnection(
             alpn_protocols=alpn_protocols,
             is_client=True,
+            secrets_log_file=secrets_log_file,
             server_name=server_name,
             stream_handler=stream_handler,
         ),
