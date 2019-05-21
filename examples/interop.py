@@ -7,6 +7,7 @@
 import argparse
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from enum import Flag
 
 import aioquic
@@ -43,90 +44,119 @@ class Result(Flag):
         return result_str
 
 
-IMPLEMENTATIONS = [
-    ("aioquic", "quic.aiortc.org", 4434, "/"),
-    ("ats", "quic.ogre.com", 4434, "/"),
-    ("f5", "208.85.208.226", 4433, "/"),
-    ("lsquic", "http3-test.litespeedtech.com", 4434, None),
-    ("mvfst", "fb.mvfst.net", 4433, "/"),
-    ("ngtcp2", "nghttp2.org", 4434, None),
-    ("ngx_quic", "cloudflare-quic.com", 443, None),
-    ("picoquic", "test.privateoctopus.com", 4434, "/"),
-    ("quant", "quant.eggert.org", 4434, "/"),
-    ("quic-go", "quic.seemann.io", 443, "/"),
-    ("quiche", "quic.tech", 4433, "/"),
-    ("quicker", "quicker.edm.uhasselt.be", 4433, "/"),
-    ("quicly", "kazuhooku.com", 4434, "/"),
-    ("quinn", "ralith.com", 4433, "/"),
-    ("winquic", "quic.westus.cloudapp.azure.com", 4434, "/"),
+@dataclass
+class Config:
+    name: str
+    host: str
+    port: int
+    path: str
+    result: Result = field(default_factory=lambda: Result(0))
+
+
+CONFIGS = [
+    Config("aioquic", "quic.aiortc.org", 4434, "/"),
+    Config("ats", "quic.ogre.com", 4434, "/"),
+    Config("f5", "208.85.208.226", 4433, "/"),
+    Config("lsquic", "http3-test.litespeedtech.com", 4434, None),
+    Config("mvfst", "fb.mvfst.net", 4433, "/"),
+    Config("ngtcp2", "nghttp2.org", 4434, None),
+    Config("ngx_quic", "cloudflare-quic.com", 443, None),
+    Config("picoquic", "test.privateoctopus.com", 4434, "/"),
+    Config("quant", "quant.eggert.org", 4434, "/"),
+    Config("quic-go", "quic.seemann.io", 443, "/"),
+    Config("quiche", "quic.tech", 4433, "/"),
+    Config("quicker", "quicker.edm.uhasselt.be", 4433, "/"),
+    Config("quicly", "kazuhooku.com", 4434, "/"),
+    Config("quinn", "ralith.com", 4433, "/"),
+    Config("winquic", "quic.westus.cloudapp.azure.com", 4434, "/"),
 ]
 
 
-async def run_one(name, host, port, hq_path, **kwargs):
-    result = Result(0)
+async def http_request(connection, path):
+    # perform HTTP/0.9 request
+    reader, writer = await connection.create_stream()
+    writer.write(("GET %s\r\n" % path).encode("utf8"))
+    writer.write_eof()
 
-    print("\n==== %s ====\n" % name)
+    return await reader.read()
 
-    # version negotiation
+
+async def test_version_negotiation(config, **kwargs):
     async with aioquic.connect(
-        host, port, protocol_version=0x1A2A3A4A, **kwargs
+        config.host, config.port, protocol_version=0x1A2A3A4A, **kwargs
     ) as connection:
         if connection._version_negotiation_count == 1:
-            result |= Result.V
+            config.result |= Result.V
 
-    # handshake + close
-    async with aioquic.connect(host, port, **kwargs) as connection:
-        result |= Result.H
-        result |= Result.C
+
+async def test_handshake_and_close(config, **kwargs):
+    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+        config.result |= Result.H
         if connection._stateless_retry_count == 1:
-            result |= Result.S
+            config.result |= Result.S
+    config.result |= Result.C
 
-    # data transfer
-    if hq_path is not None:
-        async with aioquic.connect(host, port, **kwargs) as connection:
-            # perform HTTP/0.9 request
-            reader, writer = await connection.create_stream()
-            writer.write(("GET %s\r\n" % hq_path).encode("utf8"))
-            writer.write_eof()
 
-            response1 = await reader.read()
+async def test_data_transfer(config, **kwargs):
+    if config.path is None:
+        return
 
-            # perform HTTP/0.9 request
-            reader, writer = await connection.create_stream()
-            writer.write(("GET %s\r\n" % hq_path).encode("utf8"))
-            writer.write_eof()
+    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+        response1 = await http_request(connection, config.path)
+        response2 = await http_request(connection, config.path)
 
-            response2 = await reader.read()
+        if response1 and response2:
+            config.result |= Result.D
 
-            if response1 and response2:
-                result |= Result.D
 
-    # spin bit
-    async with aioquic.connect(host, port, **kwargs) as connection:
+async def test_key_update(config, **kwargs):
+    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+        # cause some traffic
+        await connection.ping()
+
+        # request key update
+        connection.request_key_update()
+
+        # cause more traffic
+        await asyncio.wait_for(connection.ping(), timeout=5)
+
+        config.result |= Result.U
+
+
+async def test_spin_bit(config, **kwargs):
+    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
         spin_bits = set()
         for i in range(4):
-            reader, writer = await connection.create_stream()
-            writer.write_eof()
-            await asyncio.sleep(0.5)
+            await connection.ping()
             spin_bits.add(connection._spin_bit_peer)
         if len(spin_bits) == 2:
-            result |= Result.P
+            config.result |= Result.P
 
-    return result
+
+def print_result(config):
+    print("%s%s%s" % (config.name, " " * (20 - len(config.name)), config.result))
 
 
 async def run(only=None, **kwargs):
-    results = []
-    for name, host, port, path in IMPLEMENTATIONS:
-        if not only or name == only:
-            result = await run_one(name, host, port, path, **kwargs)
-            results.append((name, result))
-            print("\n%s%s%s" % (name, " " * (20 - len(name)), result))
+    configs = list(filter(lambda x: not only or x.name == only, CONFIGS))
 
-    # print results
-    print("")
-    for name, result in results:
-        print("%s%s%s" % (name, " " * (20 - len(name)), result))
+    for config in configs:
+        for test_name, test_func in filter(
+            lambda x: x[0].startswith("test_"), globals().items()
+        ):
+            print("\n=== %s %s ===\n" % (config.name, test_name))
+            try:
+                await asyncio.wait_for(test_func(config, **kwargs), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+        print("")
+        print_result(config)
+
+    # print summary
+    if len(configs) > 1:
+        print("SUMMARY")
+        for config in configs:
+            print_result(config)
 
 
 if __name__ == "__main__":
