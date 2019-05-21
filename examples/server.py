@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import binascii
 import logging
-import os
+import re
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -30,22 +30,30 @@ def connection_id(connection):
     return "Connection %s" % binascii.hexlify(connection.host_cid).decode("ascii")
 
 
+def render(content):
+    return TEMPLATE.format(content=content).encode("utf8")
+
+
 async def serve_http_request(reader, writer):
     """
     Serve an HTTP/0.9 request.
     """
-    request = await reader.read()
+    try:
+        line = await reader.readline()
+        method, path = line.decode("utf8").split()
+    except (UnicodeDecodeError, ValueError):
+        writer.write(render("Bad request"))
+        writer.write_eof()
+        return
 
-    if request == b"GET /\r\n" or request == "GET /index.html\r\n":
-        writer.write(TEMPLATE.format(content="It works!").encode("utf8"))
-    elif request == b"GET /5000000\r\n":
-        writer.write(os.urandom(5000000))
-    elif request == b"GET /10000000\r\n":
-        writer.write(os.urandom(10000000))
+    size_match = re.match(r"^/(\d+)$", path)
+    if size_match:
+        size = min(10000000, int(size_match.group(1)))
+        writer.write(b'Z' * size)
+    elif path in ["/", "/index.html"]:
+        writer.write(render("It works!"))
     else:
-        writer.write(
-            TEMPLATE.format(content="The document could not be found.").encode("utf8")
-        )
+        writer.write(render("The document could not be found."))
 
     writer.write_eof()
 
