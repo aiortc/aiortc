@@ -389,6 +389,13 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._send_soon()
         await asyncio.shield(self._ping_waiter)
 
+    def request_key_update(self) -> None:
+        """
+        Request an update of the encryption keys.
+        """
+        if self.__epoch == tls.Epoch.ONE_RTT:
+            self.spaces[tls.Epoch.ONE_RTT].crypto.update_key()
+
     # asyncio.DatagramProtocol
 
     def connection_lost(self, exc: Exception) -> None:

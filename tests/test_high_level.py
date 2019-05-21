@@ -65,9 +65,23 @@ class HighLevelTest(TestCase):
         )
         self.assertEqual(response, b"gnip")
 
+    def test_key_update(self):
+        async def run_client_key_update(host, **kwargs):
+            async with connect(host, 4433, **kwargs) as client:
+                await client.ping()
+                client.request_key_update()
+                await client.ping()
+
+        run(
+            asyncio.gather(
+                run_server(stateless_retry=False), run_client_key_update("127.0.0.1")
+            )
+        )
+
     def test_ping(self):
         async def run_client_ping(host, **kwargs):
             async with connect(host, 4433, **kwargs) as client:
+                await client.ping()
                 await client.ping()
 
         run(

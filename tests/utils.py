@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from cryptography import x509
@@ -22,3 +23,6 @@ SERVER_CERTIFICATE = x509.load_pem_x509_certificate(
 SERVER_PRIVATE_KEY = serialization.load_pem_private_key(
     load("ssl_key.pem"), password=None, backend=default_backend()
 )
+
+if os.environ.get("AIOQUIC_DEBUG"):
+    logging.basicConfig(level=logging.DEBUG)
