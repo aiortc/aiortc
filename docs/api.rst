@@ -20,4 +20,5 @@ Common
 
           .. automethod:: close()
           .. automethod:: create_stream()
+          .. automethod:: ping()
           .. autoattribute:: alpn_protocol

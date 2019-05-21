@@ -234,6 +234,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         )
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
+        self._ping_packet_number: Optional[int] = None
+        self._ping_waiter: Optional[asyncio.Future[None]] = None
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -376,6 +378,16 @@ class QuicConnection(asyncio.DatagramProtocol):
         )
 
         return stream.reader, stream.writer
+
+    async def ping(self) -> None:
+        """
+        Pings the remote host and waits for the response.
+        """
+        assert self._ping_waiter is None
+        self._ping_packet_number = None
+        self._ping_waiter = self._loop.create_future()
+        self._send_soon()
+        await asyncio.shield(self._ping_waiter)
 
     # asyncio.DatagramProtocol
 
@@ -668,7 +680,19 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle an ACK frame.
         """
-        packet.pull_ack_frame(buf)
+        rangeset, _ = packet.pull_ack_frame(buf)
+
+        # handle PING response
+        if (
+            self._ping_packet_number is not None
+            and self._ping_packet_number in rangeset
+        ):
+            waiter = self._ping_waiter
+            self._ping_waiter = None
+            self._ping_packet_number = None
+            self._logger.info("Received PING response")
+            waiter.set_result(None)
+
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
@@ -1164,6 +1188,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
                 push_bytes(buf, network_path.remote_challenge)
                 network_path.remote_challenge = None
+
+            # PING
+            if self._ping_waiter is not None and self._ping_packet_number is None:
+                self._ping_packet_number = self.packet_number
+                self._logger.info("Sending PING in packet %d", self.packet_number)
+                push_uint_var(buf, QuicFrameType.PING)
 
             # CLOSE
             if self.__close and self.__epoch == epoch:

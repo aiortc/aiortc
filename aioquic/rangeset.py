@@ -53,6 +53,12 @@ class RangeSet(Sequence):
     def __getitem__(self, key: Any) -> range:
         return self.__ranges[key]
 
+    def __contains__(self, val: Any) -> bool:
+        for r in self.__ranges:
+            if val in r:
+                return True
+        return False
+
     def __len__(self) -> int:
         return len(self.__ranges)
 

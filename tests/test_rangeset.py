@@ -142,6 +142,23 @@ class RangeSetTest(TestCase):
         rangeset = RangeSet([range(0, 1)])
         self.assertTrue(bool(rangeset))
 
+    def test_contains(self):
+        rangeset = RangeSet()
+        self.assertFalse(0 in rangeset)
+
+        rangeset = RangeSet([range(0, 1)])
+        self.assertTrue(0 in rangeset)
+        self.assertFalse(1 in rangeset)
+
+        rangeset = RangeSet([range(0, 1), range(3, 6)])
+        self.assertTrue(0 in rangeset)
+        self.assertFalse(1 in rangeset)
+        self.assertFalse(2 in rangeset)
+        self.assertTrue(3 in rangeset)
+        self.assertTrue(4 in rangeset)
+        self.assertTrue(5 in rangeset)
+        self.assertFalse(6 in rangeset)
+
     def test_eq(self):
         r0 = RangeSet([range(0, 1)])
         r1 = RangeSet([range(1, 2), range(3, 4)])
