@@ -995,6 +995,27 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, 0x1E)
         self.assertEqual(cm.exception.reason_phrase, "Unexpected frame type")
 
+    def test_handle_malformed_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives malformed frame
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._payload_received(
+                client_receive_context(client), b"\x1c\x00\x01\x00"
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.FRAME_ENCODING_ERROR)
+        self.assertEqual(cm.exception.frame_type, 0x1C)
+        self.assertEqual(cm.exception.reason_phrase, "Failed to parse frame")
+
     def test_stream_direction(self):
         client = QuicConnection(is_client=True)
         server = QuicConnection(

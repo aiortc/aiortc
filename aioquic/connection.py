@@ -20,6 +20,8 @@ from typing import (
 
 from . import packet, tls
 from .buffer import (
+    Buffer,
+    BufferReadError,
     pull_bytes,
     pull_uint16,
     pull_uint32,
@@ -54,7 +56,6 @@ from .packet import (
 )
 from .rangeset import RangeSet
 from .stream import QuicStream
-from .tls import Buffer
 
 logger = logging.getLogger("quic")
 
@@ -986,7 +987,14 @@ class QuicConnection(asyncio.DatagramProtocol):
                 is_probing = True
 
             if frame_type < len(self.__frame_handlers):
-                self.__frame_handlers[frame_type](context, frame_type, buf)
+                try:
+                    self.__frame_handlers[frame_type](context, frame_type, buf)
+                except BufferReadError:
+                    raise QuicConnectionError(
+                        error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                        frame_type=frame_type,
+                        reason_phrase="Failed to parse frame",
+                    )
             else:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.PROTOCOL_VIOLATION,

@@ -7,6 +7,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from .buffer import Buffer
 from .connection import NetworkAddress, QuicConnection, QuicStreamHandler
 from .packet import (
     PACKET_TYPE_INITIAL,
@@ -14,7 +15,6 @@ from .packet import (
     encode_quic_version_negotiation,
     pull_quic_header,
 )
-from .tls import Buffer
 
 __all__ = ["serve"]
 
