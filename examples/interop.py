@@ -11,9 +11,30 @@ class Result(Flag):
     H = 2
     D = 4
     C = 8
-    R = 16
-    Z = 32
+    # R = 16
+    # Z = 32
     S = 64
+    # M = 128
+    # B = 256
+    U = 512
+    # 3 = 1024
+    P = 2048
+
+    def __str__(self):
+        flags = sorted(
+            map(
+                lambda x: getattr(Result, x),
+                filter(lambda x: not x.startswith("_"), dir(Result)),
+            ),
+            key=lambda x: x.value,
+        )
+        result_str = ""
+        for flag in flags:
+            if self & flag:
+                result_str += flag.name
+            else:
+                result_str += "-"
+        return result_str
 
 
 IMPLEMENTATIONS = [
@@ -53,6 +74,7 @@ async def run_one(name, host, port, hq_path, **kwargs):
         if connection._stateless_retry_count == 1:
             result |= Result.S
 
+    # data transfer
     if hq_path is not None:
         async with aioquic.connect(host, port, **kwargs) as connection:
             # perform HTTP/0.9 request
@@ -72,6 +94,17 @@ async def run_one(name, host, port, hq_path, **kwargs):
             if response1 and response2:
                 result |= Result.D
 
+    # spin bit
+    async with aioquic.connect(host, port, **kwargs) as connection:
+        spin_bits = set()
+        for i in range(4):
+            reader, writer = await connection.create_stream()
+            writer.write_eof()
+            await asyncio.sleep(0.5)
+            spin_bits.add(connection._spin_bit_peer)
+        if len(spin_bits) == 2:
+            result |= Result.P
+
     return result
 
 
@@ -81,24 +114,12 @@ async def run(only=None, **kwargs):
         if not only or name == only:
             result = await run_one(name, host, port, path, **kwargs)
             results.append((name, result))
+            print("\n%s%s%s" % (name, " " * (20 - len(name)), result))
 
     # print results
     print("")
-    flags = sorted(
-        map(
-            lambda x: getattr(Result, x),
-            filter(lambda x: not x.startswith("_"), dir(Result)),
-        ),
-        key=lambda x: x.value,
-    )
     for name, result in results:
-        result_str = ""
-        for flag in flags:
-            if result & flag:
-                result_str += flag.name
-            else:
-                result_str += "-"
-        print("%s%s%s" % (name, " " * (20 - len(name)), result_str))
+        print("%s%s%s" % (name, " " * (20 - len(name)), result))
 
 
 if __name__ == "__main__":

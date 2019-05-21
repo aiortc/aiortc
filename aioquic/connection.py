@@ -233,6 +233,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
         self._spin_bit = False
+        self._spin_bit_peer = False
         self._spin_highest_pn = 0
         self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__state = QuicConnectionState.FIRSTFLIGHT
@@ -457,10 +458,11 @@ class QuicConnection(asyncio.DatagramProtocol):
                 not is_long_header(plain_header[0])
                 and packet_number > self._spin_highest_pn
             ):
+                self._spin_bit_peer = get_spin_bit(plain_header[0])
                 if self.is_client:
-                    self._spin_bit = not get_spin_bit(plain_header[0])
+                    self._spin_bit = not self._spin_bit_peer
                 else:
-                    self._spin_bit = get_spin_bit(plain_header[0])
+                    self._spin_bit = self._spin_bit_peer
                 self._spin_highest_pn = packet_number
 
             # handle payload
