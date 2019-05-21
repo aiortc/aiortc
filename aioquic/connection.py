@@ -113,12 +113,6 @@ def stream_is_unidirectional(stream_id: int) -> bool:
     return bool(stream_id & 2)
 
 
-class PacketSpace:
-    def __init__(self) -> None:
-        self.ack_queue = RangeSet()
-        self.crypto = CryptoPair()
-
-
 class QuicConnectionError(Exception):
     def __init__(self, error_code: int, frame_type: int, reason_phrase: str):
         self.error_code = error_code
@@ -152,6 +146,12 @@ class QuicNetworkPath:
 
     def can_send(self, size: int) -> bool:
         return self.is_validated or (self.bytes_sent + size) <= 3 * self.bytes_received
+
+
+class QuicPacketSpace:
+    def __init__(self) -> None:
+        self.ack_queue = RangeSet()
+        self.crypto = CryptoPair()
 
 
 @dataclass
@@ -247,7 +247,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._spin_highest_pn = 0
         self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__state = QuicConnectionState.FIRSTFLIGHT
-        self.__transport: Optional[asyncio.DatagramTransport] = None
+        self._transport: Optional[asyncio.DatagramTransport] = None
         self._version: Optional[int] = None
 
         # callbacks
@@ -290,6 +290,13 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._handle_connection_close_frame,
         ]
 
+    @property
+    def alpn_protocol(self) -> Optional[str]:
+        """
+        The protocol which was negotiated via ALPN.
+        """
+        return self.tls.alpn_negotiated
+
     def close(
         self,
         error_code: int = QuicErrorCode.NO_ERROR,
@@ -324,6 +331,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Initiate the TLS handshake and wait for it to complete.
         """
+        assert self.is_client
         self._network_paths = [QuicNetworkPath(addr, is_validated=True)]
         if protocol_version is not None:
             self._version = protocol_version
@@ -376,7 +384,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             stream.connection_lost(exc)
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        self.__transport = cast(asyncio.DatagramTransport, transport)
+        self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
         """
@@ -640,9 +648,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             tls.Epoch.ONE_RTT: Buffer(capacity=4096),
         }
         self.spaces = {
-            tls.Epoch.INITIAL: PacketSpace(),
-            tls.Epoch.HANDSHAKE: PacketSpace(),
-            tls.Epoch.ONE_RTT: PacketSpace(),
+            tls.Epoch.INITIAL: QuicPacketSpace(),
+            tls.Epoch.HANDSHAKE: QuicPacketSpace(),
+            tls.Epoch.ONE_RTT: QuicPacketSpace(),
         }
         self.streams[tls.Epoch.INITIAL] = QuicStream()
         self.streams[tls.Epoch.HANDSHAKE] = QuicStream()
@@ -1020,7 +1028,7 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _send_pending(self) -> None:
         network_path = self._network_paths[0]
         for datagram in self._pending_datagrams(network_path):
-            self.__transport.sendto(datagram, network_path.addr)
+            self._transport.sendto(datagram, network_path.addr)
             network_path.bytes_sent += len(datagram)
         self.__send_pending_task = None
 
@@ -1056,6 +1064,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             value = getattr(quic_transport_parameters, "initial_" + param)
             if value is not None:
                 setattr(self, "_remote_" + param, value)
+
+        self._logger.info("ALPN negotiated protocol %s", self.alpn_protocol)
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(

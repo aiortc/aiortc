@@ -6,15 +6,18 @@ API Reference
 Client
 ------
 
-   .. autofunction:: connect
+     .. autofunction:: connect
 
 Server
 ------
 
-   .. autofunction:: serve
+     .. autofunction:: serve
 
 Common
 ------
 
-   .. autoclass:: QuicConnection
-      :members: close, create_stream
+     .. autoclass:: QuicConnection
+
+          .. automethod:: close()
+          .. automethod:: create_stream()
+          .. autoattribute:: alpn_protocol
