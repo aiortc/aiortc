@@ -1,3 +1,9 @@
+#
+# !!! WARNING !!!
+#
+# This example uses some private APIs.
+#
+
 import argparse
 import asyncio
 import logging
@@ -47,6 +53,7 @@ IMPLEMENTATIONS = [
     ("ngx_quic", "cloudflare-quic.com", 443, None),
     ("picoquic", "test.privateoctopus.com", 4434, "/"),
     ("quant", "quant.eggert.org", 4434, "/"),
+    ("quic-go", "quic.seemann.io", 443, "/"),
     ("quiche", "quic.tech", 4433, "/"),
     ("quicker", "quicker.edm.uhasselt.be", 4433, "/"),
     ("quicly", "kazuhooku.com", 4434, "/"),
