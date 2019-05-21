@@ -32,6 +32,7 @@ from .buffer import (
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     PACKET_FIXED_BIT,
+    PACKET_NUMBER_MAX_SIZE,
     PACKET_NUMBER_SEND_SIZE,
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
@@ -1241,6 +1242,17 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             packet_size = buf.tell()
             if packet_size > header_size:
+                # check whether we need padding
+                padding_size = (
+                    PACKET_NUMBER_MAX_SIZE
+                    - PACKET_NUMBER_SEND_SIZE
+                    + header_size
+                    - packet_size
+                )
+                if padding_size > 0:
+                    push_bytes(buf, bytes(padding_size))
+                    packet_size += padding_size
+
                 # encrypt
                 data = buf.data
                 yield space.crypto.encrypt_packet(
