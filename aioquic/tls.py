@@ -819,10 +819,11 @@ def encode_public_key(
     )
 
 
-def negotiate(supported: List[T], offered: List[T], exc: Alert) -> T:
-    for c in supported:
-        if c in offered:
-            return c
+def negotiate(supported: List[T], offered: Optional[List[T]], exc: Alert) -> T:
+    if offered is not None:
+        for c in supported:
+            if c in offered:
+                return c
 
     raise exc
 
