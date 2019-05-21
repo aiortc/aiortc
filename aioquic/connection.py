@@ -201,6 +201,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.server_name = server_name
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
 
+        # counters for debugging
+        self._stateless_retry_count = 0
+        self._version_negotiation_count = 0
+
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
@@ -381,6 +385,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     self.__logger.error("Could not find a common protocol version")
                     return
                 self._version = QuicProtocolVersion(max(common))
+                self._version_negotiation_count += 1
                 self.__logger.info("Retrying with %s", self._version)
                 self._connect()
                 return
@@ -397,9 +402,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                     header.destination_cid == self.host_cid
                     and header.original_destination_cid == self.peer_cid
                 ):
-                    self.__logger.info("Performing stateless retry")
                     self.peer_cid = header.source_cid
                     self.peer_token = header.token
+                    self._stateless_retry_count += 1
+                    self.__logger.info("Performing stateless retry")
                     self._connect()
                 return
 
