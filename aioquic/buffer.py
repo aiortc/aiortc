@@ -7,6 +7,10 @@ class BufferReadError(ValueError):
     pass
 
 
+class BufferWriteError(ValueError):
+    pass
+
+
 class Buffer:
     def __init__(self, capacity: Optional[int] = 0, data: Optional[bytes] = None):
         if data is not None:
@@ -58,6 +62,8 @@ def push_bytes(buf: Buffer, v: bytes) -> None:
     Push bytes.
     """
     length = len(v)
+    if buf._pos + length > buf._length:
+        raise BufferWriteError
     buf._data[buf._pos : buf._pos + length] = v
     buf._pos += length
 

@@ -3,6 +3,7 @@ from unittest import TestCase
 from aioquic.buffer import (
     Buffer,
     BufferReadError,
+    BufferWriteError,
     pull_bytes,
     pull_uint8,
     pull_uint16,
@@ -76,6 +77,12 @@ class BufferTest(TestCase):
         push_bytes(buf, b"\x08\x07\x06")
         self.assertEqual(buf.data, b"\x08\x07\x06")
         self.assertEqual(buf.tell(), 3)
+
+    def test_push_bytes_truncated(self):
+        buf = Buffer(capacity=3)
+        with self.assertRaises(BufferWriteError):
+            push_bytes(buf, b"\x08\x07\x06\x05")
+        self.assertEqual(buf.tell(), 0)
 
     def test_push_uint8(self):
         buf = Buffer(capacity=1)
