@@ -210,6 +210,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._stateless_retry_count = 0
         self._version_negotiation_count = 0
 
+        self._loop = asyncio.get_event_loop()
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
@@ -698,19 +699,21 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
 
             # update current epoch
-            if self.tls.state in [
+            if self.__epoch == tls.Epoch.HANDSHAKE and self.tls.state in [
                 tls.State.CLIENT_POST_HANDSHAKE,
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
-                if not self.__connected.is_set():
-                    # parse transport parameters
-                    for ext_type, ext_data in self.tls.received_extensions:
-                        if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
-                            self._parse_transport_parameters(ext_data)
-                            break
-                    self.__connected.set()
+                # parse transport parameters
+                for ext_type, ext_data in self.tls.received_extensions:
+                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                        self._parse_transport_parameters(ext_data)
+                        break
                 self.__epoch = tls.Epoch.ONE_RTT
-            else:
+
+                # wakeup waiter
+                if not self.__connected.is_set():
+                    self.__connected.set()
+            elif self.__epoch == tls.Epoch.INITIAL:
                 self.__epoch = tls.Epoch.HANDSHAKE
 
     def _handle_data_blocked_frame(
@@ -1003,8 +1006,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _send_soon(self) -> None:
         if self.__send_pending_task is None:
-            loop = asyncio.get_event_loop()
-            self.__send_pending_task = loop.call_soon(self._send_pending)
+            self.__send_pending_task = self._loop.call_soon(self._send_pending)
 
     def _parse_transport_parameters(self, data: bytes) -> None:
         quic_transport_parameters = pull_quic_transport_parameters(Buffer(data=data))
