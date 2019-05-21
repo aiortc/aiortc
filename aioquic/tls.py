@@ -773,6 +773,9 @@ CIPHER_SUITES = {
 }
 
 SIGNATURE_ALGORITHMS = {
+    SignatureAlgorithm.ECDSA_SECP256R1_SHA256: (None, hashes.SHA256),
+    SignatureAlgorithm.ECDSA_SECP384R1_SHA384: (None, hashes.SHA384),
+    SignatureAlgorithm.ECDSA_SECP521R1_SHA512: (None, hashes.SHA512),
     SignatureAlgorithm.RSA_PKCS1_SHA1: (padding.PKCS1v15, hashes.SHA1),
     SignatureAlgorithm.RSA_PKCS1_SHA256: (padding.PKCS1v15, hashes.SHA256),
     SignatureAlgorithm.RSA_PKCS1_SHA384: (padding.PKCS1v15, hashes.SHA384),
@@ -833,7 +836,9 @@ def signature_algorithm_params(
 ) -> Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]:
     padding_cls, algorithm_cls = SIGNATURE_ALGORITHMS[signature_algorithm]
     algorithm = algorithm_cls()
-    if padding_cls == padding.PSS:
+    if padding_cls is None:
+        return (ec.ECDSA(algorithm),)
+    elif padding_cls == padding.PSS:
         padding_obj = padding_cls(
             mgf=padding.MGF1(algorithm), salt_length=algorithm.digest_size
         )
@@ -883,6 +888,7 @@ class Context:
         self._key_exchange_modes = [KeyExchangeMode.PSK_DHE_KE]
         self._signature_algorithms = [
             SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+            SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
             SignatureAlgorithm.RSA_PKCS1_SHA256,
             SignatureAlgorithm.RSA_PKCS1_SHA1,
         ]
