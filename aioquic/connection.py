@@ -298,12 +298,17 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
         self._send_pending()
 
-    async def connect(self, addr: NetworkAddress) -> None:
+    async def connect(
+        self, addr: NetworkAddress, protocol_version: Optional[int] = None
+    ) -> None:
         """
         Initiate the TLS handshake and wait for it to complete.
         """
         self._network_paths = [QuicNetworkPath(addr, is_validated=True)]
-        self._version = max(self.supported_versions)
+        if protocol_version is not None:
+            self._version = protocol_version
+        else:
+            self._version = max(self.supported_versions)
         self._connect()
         await self.__connected.wait()
 

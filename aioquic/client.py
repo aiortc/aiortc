@@ -15,6 +15,7 @@ async def connect(
     port: int,
     *,
     alpn_protocols: Optional[List[str]] = None,
+    protocol_version: Optional[int] = None,
     secrets_log_file: Optional[TextIO] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
 ) -> AsyncGenerator[QuicConnection, None]:
@@ -60,7 +61,7 @@ async def connect(
         local_addr=("::", 0),
     )
     protocol = cast(QuicConnection, protocol)
-    await protocol.connect(addr)
+    await protocol.connect(addr, protocol_version=protocol_version)
     try:
         yield protocol
     finally:

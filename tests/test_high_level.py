@@ -7,8 +7,8 @@ from aioquic.server import serve
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
 
-async def run_client(host):
-    async with connect(host, 4433) as client:
+async def run_client(host, **kwargs):
+    async with connect(host, 4433, **kwargs) as client:
         reader, writer = await client.create_stream()
 
         writer.write(b"ping")
@@ -53,5 +53,14 @@ class HighLevelTest(TestCase):
     def test_connect_and_serve_with_stateless_retry(self):
         _, response = run(
             asyncio.gather(run_server(stateless_retry=True), run_client("127.0.0.1"))
+        )
+        self.assertEqual(response, b"gnip")
+
+    def test_connect_and_serve_with_version_negotiation(self):
+        _, response = run(
+            asyncio.gather(
+                run_server(stateless_retry=False),
+                run_client("127.0.0.1", protocol_version=0x1A2A3A4A),
+            )
         )
         self.assertEqual(response, b"gnip")
