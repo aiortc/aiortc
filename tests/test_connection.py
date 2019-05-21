@@ -673,7 +673,7 @@ class QuicConnectionTest(TestCase):
         client._handle_reset_stream_frame(
             client_receive_context(client),
             QuicFrameType.RESET_STREAM,
-            Buffer(data=binascii.unhexlify("001122000001")),
+            Buffer(data=binascii.unhexlify("00112200")),
         )
 
     def test_handle_reset_stream_frame_send_only(self):
@@ -695,7 +695,7 @@ class QuicConnectionTest(TestCase):
             client._handle_reset_stream_frame(
                 client_receive_context(client),
                 QuicFrameType.RESET_STREAM,
-                Buffer(data=binascii.unhexlify("021122000001")),
+                Buffer(data=binascii.unhexlify("02112200")),
             )
         self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
         self.assertEqual(cm.exception.frame_type, QuicFrameType.RESET_STREAM)

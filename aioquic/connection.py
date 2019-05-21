@@ -833,7 +833,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         stream_id = pull_uint_var(buf)
         pull_uint16(buf)  # application error code
-        pull_uint16(buf)  # unused
         pull_uint_var(buf)  # final size
 
         # check stream direction
