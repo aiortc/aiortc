@@ -63,11 +63,7 @@ def handle_connection(connection):
 
 
 def handle_stream(reader, writer):
-    connection = writer.get_extra_info("connection")
     stream_id = writer.get_extra_info("stream_id")
-    logger.info(
-        "%s Stream %d created by remote party" % (connection_id(connection), stream_id)
-    )
 
     # we serve HTTP/0.9 on Client-Initiated Bidirectional streams
     if not stream_id % 4:

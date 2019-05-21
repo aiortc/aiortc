@@ -581,6 +581,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
 
             # create stream
+            self.__logger.info("Stream %d created by peer" % stream_id)
             stream = self.streams[stream_id] = QuicStream(
                 connection=self,
                 stream_id=stream_id,
@@ -832,13 +833,20 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a RESET_STREAM frame.
         """
         stream_id = pull_uint_var(buf)
-        pull_uint16(buf)  # application error code
-        pull_uint_var(buf)  # final size
+        error_code = pull_uint16(buf)
+        final_size = pull_uint_var(buf)
 
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
 
-        self._get_or_create_stream(frame_type, stream_id)
+        self.__logger.info(
+            "Stream %d reset by peer (error code %d, final size %d)",
+            stream_id,
+            error_code,
+            final_size,
+        )
+        stream = self._get_or_create_stream(frame_type, stream_id)
+        stream.connection_lost(None)
 
     def _handle_retire_connection_id_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
