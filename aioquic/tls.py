@@ -988,6 +988,7 @@ class Context:
         self._supported_groups = [Group.SECP256R1]
         self._supported_versions = [TLS_VERSION_1_3]
 
+        self._key_schedule_psk: Optional[KeySchedule] = None
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._peer_certificate: Optional[x509.Certificate] = None
         self._receive_buffer = b""
@@ -1126,10 +1127,10 @@ class Context:
 
         # PSK
         if self.session_ticket:
-            tmp_schedule = KeySchedule(self.session_ticket.cipher_suite)
-            tmp_schedule.extract(self.session_ticket.resumption_secret)
-            binder_key = tmp_schedule.derive_secret(b"res binder")
-            binder_length = tmp_schedule.algorithm.digest_size
+            self._key_schedule_psk = KeySchedule(self.session_ticket.cipher_suite)
+            self._key_schedule_psk.extract(self.session_ticket.resumption_secret)
+            binder_key = self._key_schedule_psk.derive_secret(b"res binder")
+            binder_length = self._key_schedule_psk.algorithm.digest_size
 
             # serialize hello without binder
             tmp_buf = Buffer(capacity=1024)
@@ -1142,11 +1143,12 @@ class Context:
             push_client_hello(tmp_buf, hello)
 
             # calculate binder
-            tmp_schedule.update_hash(
-                tmp_buf.data_slice(0, tmp_buf.tell() - binder_length - 3)
-            )
-            hello.pre_shared_key.binders[0] = tmp_schedule.finished_verify_data(
-                binder_key
+            hash_offset = tmp_buf.tell() - binder_length - 3
+            self._key_schedule_psk.update_hash(tmp_buf.data_slice(0, hash_offset))
+            binder = self._key_schedule_psk.finished_verify_data(binder_key)
+            hello.pre_shared_key.binders[0] = binder
+            self._key_schedule_psk.update_hash(
+                tmp_buf.data_slice(hash_offset, hash_offset + 3) + binder
             )
 
         self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
@@ -1163,6 +1165,14 @@ class Context:
         assert peer_hello.cipher_suite in self._cipher_suites
         assert peer_hello.compression_method in self._compression_methods
         assert peer_hello.supported_version in self._supported_versions
+
+        # select key schedule
+        if self._key_schedule_psk is not None and peer_hello.pre_shared_key is not None:
+            assert peer_hello.pre_shared_key == 0
+            self.key_schedule = self._key_schedule_psk
+        else:
+            self._key_schedule_psk = None
+            self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
 
         # perform key exchange
         peer_public_key = decode_public_key(peer_hello.key_share)
@@ -1181,7 +1191,6 @@ class Context:
             shared_key = self._ec_private_key.exchange(ec.ECDH(), peer_public_key)
         assert shared_key is not None
 
-        self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
         self.key_schedule.update_hash(input_buf.data)
         self.key_schedule.extract(shared_key)
 
@@ -1201,7 +1210,10 @@ class Context:
         )
         self.key_schedule.update_hash(input_buf.data)
 
-        self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
+        if self._key_schedule_psk is not None:
+            self._set_state(State.CLIENT_EXPECT_FINISHED)
+        else:
+            self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
 
     def _client_handle_certificate(self, input_buf: Buffer) -> None:
         certificate = pull_certificate(input_buf)
