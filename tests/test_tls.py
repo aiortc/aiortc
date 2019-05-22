@@ -534,6 +534,40 @@ class TlsTest(TestCase):
         push_client_hello(buf, hello)
         self.assertEqual(len(buf.data), len(load("tls_client_hello_with_alpn.bin")))
 
+    def test_pull_client_hello_with_psk(self):
+        buf = Buffer(data=load("tls_client_hello_with_psk.bin"))
+        hello = pull_client_hello(buf)
+
+        self.assertEqual(
+            hello.pre_shared_key,
+            tls.OfferedPsks(
+                identities=[
+                    (
+                        binascii.unhexlify(
+                            "fab3dc7d79f35ea53e9adf21150e601591a750b80cde0cd167fef6e0cdbc032a"
+                            "c4161fc5c5b66679de49524bd5624c50d71ba3e650780a4bfe402d6a06a00525"
+                            "0b5dc52085233b69d0dd13924cc5c713a396784ecafc59f5ea73c1585d79621b"
+                            "8a94e4f2291b17427d5185abf4a994fca74ee7a7f993a950c71003fc7cf8"
+                        ),
+                        2067156378,
+                    )
+                ],
+                binders=[
+                    binascii.unhexlify(
+                        "1788ad43fdff37cfc628f24b6ce7c8c76180705380da17da32811b5bae4e78"
+                        "d7aaaf65a9b713872f2bb28818ca1a6b01"
+                    )
+                ],
+            ),
+        )
+
+        self.assertTrue(buf.eof())
+
+        # serialize
+        buf = Buffer(1000)
+        push_client_hello(buf, hello)
+        self.assertEqual(buf.data, load("tls_client_hello_with_psk.bin"))
+
     def test_pull_client_hello_with_sni(self):
         buf = Buffer(data=load("tls_client_hello_with_sni.bin"))
         hello = pull_client_hello(buf)

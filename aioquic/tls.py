@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import struct
@@ -313,23 +314,20 @@ def push_list(
             func(buf, value)
 
 
-# KeyShareEntry
+def pull_opaque(buf: Buffer, capacity: int) -> bytes:
+    """
+    Pull an opaque value prefixed by a length.
+    """
+    with pull_block(buf, capacity) as length:
+        return pull_bytes(buf, length)
 
 
-KeyShareEntry = Tuple[Group, bytes]
-
-
-def pull_key_share(buf: Buffer) -> KeyShareEntry:
-    group = pull_group(buf)
-    data_length = pull_uint16(buf)
-    data = pull_bytes(buf, data_length)
-    return (group, data)
-
-
-def push_key_share(buf: Buffer, value: KeyShareEntry) -> None:
-    push_group(buf, value[0])
-    with push_block(buf, 2):
-        push_bytes(buf, value[1])
+def push_opaque(buf: Buffer, capacity: int, value: bytes) -> None:
+    """
+    Push an opaque value prefix by a length.
+    """
+    with push_block(buf, capacity):
+        push_bytes(buf, value)
 
 
 @contextmanager
@@ -339,18 +337,56 @@ def push_extension(buf: Buffer, extension_type: int) -> Generator:
         yield
 
 
+# KeyShareEntry
+
+
+KeyShareEntry = Tuple[Group, bytes]
+
+
+def pull_key_share(buf: Buffer) -> KeyShareEntry:
+    group = pull_group(buf)
+    data = pull_opaque(buf, 2)
+    return (group, data)
+
+
+def push_key_share(buf: Buffer, value: KeyShareEntry) -> None:
+    push_group(buf, value[0])
+    push_opaque(buf, 2, value[1])
+
+
 # ALPN
 
 
 def pull_alpn_protocol(buf: Buffer) -> str:
-    length = pull_uint8(buf)
-    return pull_bytes(buf, length).decode("ascii")
+    return pull_opaque(buf, 1).decode("ascii")
 
 
 def push_alpn_protocol(buf: Buffer, protocol: str) -> None:
-    data = protocol.encode("ascii")
-    push_uint8(buf, len(data))
-    push_bytes(buf, data)
+    push_opaque(buf, 1, protocol.encode("ascii"))
+
+
+# PRE SHARED KEY
+
+PskIdentity = Tuple[bytes, int]
+
+
+def pull_psk_identity(buf: Buffer) -> PskIdentity:
+    identity = pull_opaque(buf, 2)
+    obfuscated_ticket_age = pull_uint32(buf)
+    return (identity, obfuscated_ticket_age)
+
+
+def push_psk_identity(buf: Buffer, entry: PskIdentity) -> None:
+    push_opaque(buf, 2, entry[0])
+    push_uint32(buf, entry[1])
+
+
+def pull_psk_binder(buf: Buffer) -> bytes:
+    return pull_opaque(buf, 1)
+
+
+def push_psk_binder(buf: Buffer, binder: bytes) -> None:
+    push_opaque(buf, 1, binder)
 
 
 # MESSAGES
@@ -370,6 +406,12 @@ def push_raw_extension(buf: Buffer, extension: Extension) -> None:
 
 
 @dataclass
+class OfferedPsks:
+    identities: List[PskIdentity]
+    binders: List[bytes]
+
+
+@dataclass
 class ClientHello:
     random: bytes
     session_id: bytes
@@ -380,6 +422,7 @@ class ClientHello:
     alpn_protocols: Optional[List[str]] = None
     key_exchange_modes: Optional[List[KeyExchangeMode]] = None
     key_share: Optional[List[KeyShareEntry]] = None
+    pre_shared_key: Optional[OfferedPsks] = None
     server_name: Optional[str] = None
     signature_algorithms: Optional[List[SignatureAlgorithm]] = None
     supported_groups: Optional[List[Group]] = None
@@ -393,17 +436,22 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
         client_random = pull_bytes(buf, 32)
-        session_id_length = pull_uint8(buf)
 
         hello = ClientHello(
             random=client_random,
-            session_id=pull_bytes(buf, session_id_length),
+            session_id=pull_opaque(buf, 1),
             cipher_suites=pull_list(buf, 2, pull_cipher_suite),
             compression_methods=pull_list(buf, 1, pull_compression_method),
         )
 
         # extensions
+        after_psk = False
+
         def pull_extension(buf: Buffer) -> None:
+            # pre_shared_key MUST be last
+            nonlocal after_psk
+            assert not after_psk
+
             extension_type = pull_uint16(buf)
             extension_length = pull_uint16(buf)
             if extension_type == ExtensionType.KEY_SHARE:
@@ -419,10 +467,15 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
             elif extension_type == ExtensionType.SERVER_NAME:
                 with pull_block(buf, 2):
                     assert pull_uint8(buf) == 0
-                    with pull_block(buf, 2) as length:
-                        hello.server_name = pull_bytes(buf, length).decode("ascii")
+                    hello.server_name = pull_opaque(buf, 2).decode("ascii")
             elif extension_type == ExtensionType.ALPN:
                 hello.alpn_protocols = pull_list(buf, 2, pull_alpn_protocol)
+            elif extension_type == ExtensionType.PRE_SHARED_KEY:
+                hello.pre_shared_key = OfferedPsks(
+                    identities=pull_list(buf, 2, pull_psk_identity),
+                    binders=pull_list(buf, 2, pull_psk_binder),
+                )
+                after_psk = True
             else:
                 hello.other_extensions.append(
                     (extension_type, pull_bytes(buf, extension_length))
@@ -438,8 +491,7 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
     with push_block(buf, 3):
         push_uint16(buf, TLS_VERSION_1_2)
         push_bytes(buf, hello.random)
-        with push_block(buf, 1):
-            push_bytes(buf, hello.session_id)
+        push_opaque(buf, 1, hello.session_id)
         push_list(buf, 2, push_cipher_suite, hello.cipher_suites)
         push_list(buf, 1, push_compression_method, hello.compression_methods)
 
@@ -464,8 +516,7 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
                 with push_extension(buf, ExtensionType.SERVER_NAME):
                     with push_block(buf, 2):
                         push_uint8(buf, 0)
-                        with push_block(buf, 2):
-                            push_bytes(buf, hello.server_name.encode("ascii"))
+                        push_opaque(buf, 2, hello.server_name.encode("ascii"))
 
             if hello.alpn_protocols is not None:
                 with push_extension(buf, ExtensionType.ALPN):
@@ -474,6 +525,14 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
                     push_bytes(buf, extension_value)
+
+            # pre_shared_key MUST be last
+            if hello.pre_shared_key is not None:
+                with push_extension(buf, ExtensionType.PRE_SHARED_KEY):
+                    push_list(
+                        buf, 2, push_psk_identity, hello.pre_shared_key.identities
+                    )
+                    push_list(buf, 2, push_psk_binder, hello.pre_shared_key.binders)
 
 
 @dataclass
@@ -493,11 +552,10 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
     with pull_block(buf, 3):
         assert pull_uint16(buf) == TLS_VERSION_1_2
         server_random = pull_bytes(buf, 32)
-        session_id_length = pull_uint8(buf)
 
         hello = ServerHello(
             random=server_random,
-            session_id=pull_bytes(buf, session_id_length),
+            session_id=pull_opaque(buf, 1),
             cipher_suite=pull_cipher_suite(buf),
             compression_method=pull_compression_method(buf),
         )
@@ -524,9 +582,7 @@ def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
         push_uint16(buf, TLS_VERSION_1_2)
         push_bytes(buf, hello.random)
 
-        with push_block(buf, 1):
-            push_bytes(buf, hello.session_id)
-
+        push_opaque(buf, 1, hello.session_id)
         push_cipher_suite(buf, hello.cipher_suite)
         push_compression_method(buf, hello.compression_method)
 
@@ -557,10 +613,8 @@ def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
     with pull_block(buf, 3):
         new_session_ticket.ticket_lifetime = pull_uint32(buf)
         new_session_ticket.ticket_age_add = pull_uint32(buf)
-        with pull_block(buf, 1) as length:
-            new_session_ticket.ticket_nonce = pull_bytes(buf, length)
-        with pull_block(buf, 2) as length:
-            new_session_ticket.ticket = pull_bytes(buf, length)
+        new_session_ticket.ticket_nonce = pull_opaque(buf, 1)
+        new_session_ticket.ticket = pull_opaque(buf, 2)
         new_session_ticket.extensions = pull_list(buf, 2, pull_raw_extension)
 
     return new_session_ticket
@@ -571,10 +625,8 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
     with push_block(buf, 3):
         push_uint32(buf, new_session_ticket.ticket_lifetime)
         push_uint32(buf, new_session_ticket.ticket_age_add)
-        with push_block(buf, 1):
-            push_bytes(buf, new_session_ticket.ticket_nonce)
-        with push_block(buf, 2):
-            push_bytes(buf, new_session_ticket.ticket)
+        push_opaque(buf, 1, new_session_ticket.ticket_nonce)
+        push_opaque(buf, 2, new_session_ticket.ticket)
         push_list(buf, 2, push_raw_extension, new_session_ticket.extensions)
 
 
@@ -633,14 +685,11 @@ def pull_certificate(buf: Buffer) -> Certificate:
 
     assert pull_uint8(buf) == HandshakeType.CERTIFICATE
     with pull_block(buf, 3):
-        with pull_block(buf, 1) as length:
-            certificate.request_context = pull_bytes(buf, length)
+        certificate.request_context = pull_opaque(buf, 1)
 
         def pull_certificate_entry(buf: Buffer) -> CertificateEntry:
-            with pull_block(buf, 3) as length:
-                data = pull_bytes(buf, length)
-            with pull_block(buf, 2) as length:
-                extensions = pull_bytes(buf, length)
+            data = pull_opaque(buf, 3)
+            extensions = pull_opaque(buf, 2)
             return (data, extensions)
 
         certificate.certificates = pull_list(buf, 3, pull_certificate_entry)
@@ -651,14 +700,11 @@ def pull_certificate(buf: Buffer) -> Certificate:
 def push_certificate(buf: Buffer, certificate: Certificate) -> None:
     push_uint8(buf, HandshakeType.CERTIFICATE)
     with push_block(buf, 3):
-        with push_block(buf, 1):
-            push_bytes(buf, certificate.request_context)
+        push_opaque(buf, 1, certificate.request_context)
 
         def push_certificate_entry(buf: Buffer, entry: CertificateEntry) -> None:
-            with push_block(buf, 3):
-                push_bytes(buf, entry[0])
-            with push_block(buf, 2):
-                push_bytes(buf, entry[1])
+            push_opaque(buf, 3, entry[0])
+            push_opaque(buf, 2, entry[1])
 
         push_list(buf, 3, push_certificate_entry, certificate.certificates)
 
@@ -673,8 +719,7 @@ def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
     assert pull_uint8(buf) == HandshakeType.CERTIFICATE_VERIFY
     with pull_block(buf, 3):
         algorithm = pull_signature_algorithm(buf)
-        with pull_block(buf, 2) as length:
-            signature = pull_bytes(buf, length)
+        signature = pull_opaque(buf, 2)
 
     return CertificateVerify(algorithm=algorithm, signature=signature)
 
@@ -683,8 +728,7 @@ def push_certificate_verify(buf: Buffer, verify: CertificateVerify) -> None:
     push_uint8(buf, HandshakeType.CERTIFICATE_VERIFY)
     with push_block(buf, 3):
         push_signature_algorithm(buf, verify.algorithm)
-        with push_block(buf, 2):
-            push_bytes(buf, verify.signature)
+        push_opaque(buf, 2, verify.signature)
 
 
 @dataclass
@@ -696,16 +740,14 @@ def pull_finished(buf: Buffer) -> Finished:
     finished = Finished()
 
     assert pull_uint8(buf) == HandshakeType.FINISHED
-    with pull_block(buf, 3) as length:
-        finished.verify_data = pull_bytes(buf, length)
+    finished.verify_data = pull_opaque(buf, 3)
 
     return finished
 
 
 def push_finished(buf: Buffer, finished: Finished) -> None:
     push_uint8(buf, HandshakeType.FINISHED)
-    with push_block(buf, 3):
-        push_bytes(buf, finished.verify_data)
+    push_opaque(buf, 3, finished.verify_data)
 
 
 # CONTEXT
@@ -877,7 +919,25 @@ def push_message(
 
 
 # callback types
-SessionTicketHandler = Callable[[NewSessionTicket], None]
+
+
+@dataclass
+class SessionTicket:
+    age_add: int
+    cipher_suite: CipherSuite
+    not_valid_after: datetime.datetime
+    not_valid_before: datetime.datetime
+    resumption_secret: bytes
+    server_name: str
+    ticket: bytes
+
+    @property
+    def obfuscated_age(self) -> int:
+        age = int((datetime.datetime.now() - self.not_valid_before).total_seconds())
+        return (age + self.age_add) % (1 << 32)
+
+
+NewSessionTicketHandler = Callable[[SessionTicket], None]
 
 
 class Context:
@@ -896,10 +956,11 @@ class Context:
         self.is_client = is_client
         self.key_schedule: Optional[KeySchedule] = None
         self.received_extensions: List[Extension] = []
+        self.session_ticket: Optional[SessionTicket] = None
         self.server_name: Optional[str] = None
 
         # callbacks
-        self.session_ticket_cb: SessionTicketHandler = lambda t: None
+        self.new_session_ticket_cb: NewSessionTicketHandler = lambda t: None
         self.update_traffic_key_cb: Callable[
             [Direction, Epoch, bytes], None
         ] = lambda d, e, s: None
@@ -1056,6 +1117,31 @@ class Context:
             other_extensions=self.handshake_extensions,
         )
 
+        # PSK
+        if self.session_ticket:
+            tmp_schedule = KeySchedule(self.session_ticket.cipher_suite)
+            tmp_schedule.extract(self.session_ticket.resumption_secret)
+            binder_key = tmp_schedule.derive_secret(b"res binder")
+            binder_length = tmp_schedule.algorithm.digest_size
+
+            # serialize hello without binder
+            tmp_buf = Buffer(capacity=1024)
+            hello.pre_shared_key = OfferedPsks(
+                identities=[
+                    (self.session_ticket.ticket, self.session_ticket.obfuscated_age)
+                ],
+                binders=[bytes(binder_length)],
+            )
+            push_client_hello(tmp_buf, hello)
+
+            # calculate binder
+            tmp_schedule.update_hash(
+                tmp_buf.data_slice(0, tmp_buf.tell() - binder_length - 3)
+            )
+            hello.pre_shared_key.binders[0] = tmp_schedule.finished_verify_data(
+                binder_key
+            )
+
         self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
         self._key_schedule_proxy.extract(None)
 
@@ -1155,10 +1241,13 @@ class Context:
         next_enc_key = self.key_schedule.derive_secret(b"c ap traffic")
 
         # send finished
-        push_finished(
-            output_buf,
-            Finished(verify_data=self.key_schedule.finished_verify_data(self._enc_key)),
-        )
+        with push_message(self.key_schedule, output_buf):
+            push_finished(
+                output_buf,
+                Finished(
+                    verify_data=self.key_schedule.finished_verify_data(self._enc_key)
+                ),
+            )
 
         # commit traffic key
         self._enc_key = next_enc_key
@@ -1167,8 +1256,30 @@ class Context:
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
     def _client_handle_new_session_ticket(self, input_buf: Buffer) -> None:
-        ticket = pull_new_session_ticket(input_buf)
-        self.session_ticket_cb(ticket)
+        new_session_ticket = pull_new_session_ticket(input_buf)
+
+        # compute resumption secret
+        resumption_master_secret = self.key_schedule.derive_secret(b"res master")
+        resumption_secret = hkdf_expand_label(
+            algorithm=self.key_schedule.algorithm,
+            secret=resumption_master_secret,
+            label=b"resumption",
+            hash_value=new_session_ticket.ticket_nonce,
+            length=self.key_schedule.algorithm.digest_size,
+        )
+
+        timestamp = datetime.datetime.now()
+        ticket = SessionTicket(
+            age_add=new_session_ticket.ticket_age_add,
+            cipher_suite=self.key_schedule.cipher_suite,
+            not_valid_after=timestamp
+            + datetime.timedelta(seconds=new_session_ticket.ticket_lifetime),
+            not_valid_before=timestamp,
+            resumption_secret=resumption_secret,
+            server_name=self.server_name,
+            ticket=new_session_ticket.ticket,
+        )
+        self.new_session_ticket_cb(ticket)
 
     def _server_handle_hello(
         self, input_buf: Buffer, initial_buf: Buffer, output_buf: Buffer
