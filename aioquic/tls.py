@@ -971,6 +971,11 @@ class SessionTicket:
     max_early_data_size: Optional[int] = None
 
     @property
+    def is_valid(self) -> bool:
+        now = datetime.datetime.now()
+        return now > self.not_valid_before and now < self.not_valid_after
+
+    @property
     def obfuscated_age(self) -> int:
         age = int((datetime.datetime.now() - self.not_valid_before).total_seconds())
         return (age + self.age_add) % (1 << 32)
@@ -1185,7 +1190,7 @@ class Context:
         )
 
         # PSK
-        if self.session_ticket:
+        if self.session_ticket and self.session_ticket.is_valid:
             self._key_schedule_psk = KeySchedule(self.session_ticket.cipher_suite)
             self._key_schedule_psk.extract(self.session_ticket.resumption_secret)
             binder_key = self._key_schedule_psk.derive_secret(b"res binder")
@@ -1405,6 +1410,7 @@ class Context:
             # validate session ticket
             if (
                 session_ticket is not None
+                and session_ticket.is_valid
                 and session_ticket.cipher_suite == cipher_suite
             ):
                 self.key_schedule = KeySchedule(cipher_suite)
