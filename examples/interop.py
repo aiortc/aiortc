@@ -57,10 +57,12 @@ CONFIGS = [
     Config("aioquic", "quic.aiortc.org", 4434, "/"),
     Config("ats", "quic.ogre.com", 4434, "/"),
     Config("f5", "208.85.208.226", 4433, "/"),
+    Config("gquic", "quic.rocks", 4433, "/"),
     Config("lsquic", "http3-test.litespeedtech.com", 4434, None),
     Config("mvfst", "fb.mvfst.net", 4433, "/"),
     Config("ngtcp2", "nghttp2.org", 4434, None),
     Config("ngx_quic", "cloudflare-quic.com", 443, None),
+    Config("pandora", "pandora.cm.in.tum.de", 4433, "/"),
     Config("picoquic", "test.privateoctopus.com", 4434, "/"),
     Config("quant", "quant.eggert.org", 4434, "/"),
     Config("quic-go", "quic.seemann.io", 443, "/"),
@@ -118,7 +120,7 @@ async def test_key_update(config, **kwargs):
         connection.request_key_update()
 
         # cause more traffic
-        await asyncio.wait_for(connection.ping(), timeout=5)
+        await connection.ping()
 
         config.result |= Result.U
 
