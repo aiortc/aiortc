@@ -382,7 +382,7 @@ class ContextTest(TestCase):
             self.assertEqual(client._dec_key, server._enc_key)
             self.assertEqual(client._enc_key, server._dec_key)
 
-        def second_handshake_fail():
+        def second_handshake_bad_binder():
             client = self.create_client()
             client.session_ticket = client_tickets[0]
 
@@ -407,9 +407,42 @@ class ContextTest(TestCase):
                 server.handle_message(server_input, server_buf)
             self.assertEqual(str(cm.exception), "PSK validation failed")
 
+        def second_handshake_bad_pre_shared_key():
+            client = self.create_client()
+            client.session_ticket = client_tickets[0]
+
+            server = self.create_server()
+            server.get_session_ticket_cb = server_get_ticket
+
+            # send client hello with pre_shared_key
+            client_buf = create_buffers()
+            client.handle_message(b"", client_buf)
+            self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+            server_input = merge_buffers(client_buf)
+            self.assertEqual(len(server_input), 379)
+            reset_buffers(client_buf)
+
+            # handle client hello
+            # send server hello, encrypted extensions, finished
+            server_buf = create_buffers()
+            server.handle_message(server_input, server_buf)
+            self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+
+            # tamper with pre_share_key index
+            buf = server_buf[tls.Epoch.INITIAL]
+            buf._data[buf.tell() - 1] = 1
+            client_input = merge_buffers(server_buf)
+            self.assertEqual(len(client_input), 303)
+            reset_buffers(server_buf)
+
+            # handle server hello and bomb
+            with self.assertRaises(tls.AlertIllegalParameter):
+                client.handle_message(client_input, client_buf)
+
         first_handshake()
         second_handshake()
-        second_handshake_fail()
+        second_handshake_bad_binder()
+        second_handshake_bad_pre_shared_key()
 
 
 class TlsTest(TestCase):

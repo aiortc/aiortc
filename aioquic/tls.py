@@ -85,6 +85,10 @@ class AlertHandshakeFailure(Alert):
     description = AlertDescription.handshake_failure
 
 
+class AlertIllegalParameter(Alert):
+    description = AlertDescription.illegal_parameter
+
+
 class AlertProtocolVersion(Alert):
     description = AlertDescription.protocol_version
 
@@ -1193,11 +1197,15 @@ class Context:
         assert peer_hello.supported_version in self._supported_versions
 
         # select key schedule
-        if self._key_schedule_psk is not None and peer_hello.pre_shared_key is not None:
-            assert peer_hello.pre_shared_key == 0
+        if peer_hello.pre_shared_key is not None:
+            if (
+                self._key_schedule_psk is None
+                or peer_hello.pre_shared_key != 0
+                or peer_hello.cipher_suite != self._key_schedule_psk.cipher_suite
+            ):
+                raise AlertIllegalParameter
             self.key_schedule = self._key_schedule_psk
         else:
-            self._key_schedule_psk = None
             self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
 
         # perform key exchange
