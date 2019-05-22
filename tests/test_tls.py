@@ -727,7 +727,46 @@ class TlsTest(TestCase):
                 ),
             ),
         )
+        self.assertEqual(hello.pre_shared_key, None)
         self.assertEqual(hello.supported_version, tls.TLS_VERSION_1_3)
+
+    def test_pull_server_hello_with_psk(self):
+        buf = Buffer(data=load("tls_server_hello_with_psk.bin"))
+        hello = pull_server_hello(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            hello.random,
+            binascii.unhexlify(
+                "ccbaaf04fc1bd5143b2cc6b97520cf37d91470dbfc8127131a7bf0f941e3a137"
+            ),
+        )
+        self.assertEqual(
+            hello.session_id,
+            binascii.unhexlify(
+                "9483e7e895d0f4cec17086b0849601c0632662cd764e828f2f892f4c4b7771b0"
+            ),
+        )
+        self.assertEqual(hello.cipher_suite, tls.CipherSuite.AES_256_GCM_SHA384)
+        self.assertEqual(hello.compression_method, tls.CompressionMethod.NULL)
+        self.assertEqual(
+            hello.key_share,
+            (
+                tls.Group.SECP256R1,
+                binascii.unhexlify(
+                    "0485d7cecbebfc548fc657bf51b8e8da842a4056b164a27f7702ca318c16e488"
+                    "18b6409593b15c6649d6f459387a53128b164178adc840179aad01d36ce95d62"
+                    "76"
+                ),
+            ),
+        )
+        self.assertEqual(hello.pre_shared_key, 0)
+        self.assertEqual(hello.supported_version, tls.TLS_VERSION_1_3)
+
+        # serialize
+        buf = Buffer(1000)
+        push_server_hello(buf, hello)
+        self.assertEqual(buf.data, load("tls_server_hello_with_psk.bin"))
 
     def test_push_server_hello(self):
         hello = ServerHello(

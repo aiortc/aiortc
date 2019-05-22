@@ -544,6 +544,7 @@ class ServerHello:
 
     # extensions
     key_share: Optional[KeyShareEntry] = None
+    pre_shared_key: Optional[int] = None
     supported_version: Optional[int] = None
 
 
@@ -568,6 +569,8 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
                 hello.supported_version = pull_uint16(buf)
             elif extension_type == ExtensionType.KEY_SHARE:
                 hello.key_share = pull_key_share(buf)
+            elif extension_type == ExtensionType.PRE_SHARED_KEY:
+                hello.pre_shared_key = pull_uint16(buf)
             else:
                 pull_bytes(buf, extension_length)
 
@@ -595,6 +598,10 @@ def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
             if hello.key_share is not None:
                 with push_extension(buf, ExtensionType.KEY_SHARE):
                     push_key_share(buf, hello.key_share)
+
+            if hello.pre_shared_key is not None:
+                with push_extension(buf, ExtensionType.PRE_SHARED_KEY):
+                    push_uint16(buf, hello.pre_shared_key)
 
 
 @dataclass
