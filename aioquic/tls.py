@@ -614,7 +614,9 @@ class NewSessionTicket:
     ticket_age_add: int = 0
     ticket_nonce: bytes = b""
     ticket: bytes = b""
-    extensions: List[Extension] = field(default_factory=list)
+
+    # extensions
+    max_early_data_size: Optional[int] = None
 
 
 def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
@@ -626,7 +628,16 @@ def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
         new_session_ticket.ticket_age_add = pull_uint32(buf)
         new_session_ticket.ticket_nonce = pull_opaque(buf, 1)
         new_session_ticket.ticket = pull_opaque(buf, 2)
-        new_session_ticket.extensions = pull_list(buf, 2, pull_raw_extension)
+
+        def pull_extension(buf: Buffer) -> None:
+            extension_type = pull_uint16(buf)
+            extension_length = pull_uint16(buf)
+            if extension_type == ExtensionType.EARLY_DATA:
+                new_session_ticket.max_early_data_size = pull_uint32(buf)
+            else:
+                pull_bytes(buf, extension_length)
+
+        pull_list(buf, 2, pull_extension)
 
     return new_session_ticket
 
@@ -638,7 +649,11 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
         push_uint32(buf, new_session_ticket.ticket_age_add)
         push_opaque(buf, 1, new_session_ticket.ticket_nonce)
         push_opaque(buf, 2, new_session_ticket.ticket)
-        push_list(buf, 2, push_raw_extension, new_session_ticket.extensions)
+
+        with push_block(buf, 2):
+            if new_session_ticket.max_early_data_size is not None:
+                with push_extension(buf, ExtensionType.EARLY_DATA):
+                    push_uint32(buf, new_session_ticket.max_early_data_size)
 
 
 @dataclass
@@ -934,6 +949,10 @@ def push_message(
 
 @dataclass
 class SessionTicket:
+    """
+    A TLS session ticket for session resumption.
+    """
+
     age_add: int
     cipher_suite: CipherSuite
     not_valid_after: datetime.datetime
@@ -941,6 +960,8 @@ class SessionTicket:
     resumption_secret: bytes
     server_name: str
     ticket: bytes
+
+    max_early_data_size: Optional[int] = None
 
     @property
     def obfuscated_age(self) -> int:
@@ -1114,6 +1135,7 @@ class Context:
         return SessionTicket(
             age_add=new_session_ticket.ticket_age_add,
             cipher_suite=self.key_schedule.cipher_suite,
+            max_early_data_size=new_session_ticket.max_early_data_size,
             not_valid_after=timestamp
             + datetime.timedelta(seconds=new_session_ticket.ticket_lifetime),
             not_valid_before=timestamp,
