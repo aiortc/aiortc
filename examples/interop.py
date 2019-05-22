@@ -18,7 +18,7 @@ class Result(Flag):
     H = 2
     D = 4
     C = 8
-    # R = 16
+    R = 16
     # Z = 32
     S = 64
     # M = 128
@@ -109,6 +109,32 @@ async def test_data_transfer(config, **kwargs):
 
         if response1 and response2:
             config.result |= Result.D
+
+
+async def test_session_resumption(config, **kwargs):
+    saved_ticket = None
+
+    def session_ticket_handler(ticket):
+        nonlocal saved_ticket
+        saved_ticket = ticket
+
+    # connect a first time, receive a ticket
+    async with aioquic.connect(
+        config.host,
+        config.port,
+        session_ticket_handler=session_ticket_handler,
+        **kwargs
+    ) as connection:
+        await connection.ping()
+
+    # connect a second time, with the ticket
+    if saved_ticket is not None:
+        async with aioquic.connect(
+            config.host, config.port, session_ticket=saved_ticket, **kwargs
+        ) as connection:
+            await connection.ping()
+
+        config.result |= Result.R
 
 
 async def test_key_update(config, **kwargs):
