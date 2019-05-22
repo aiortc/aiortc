@@ -189,94 +189,81 @@ class ContextTest(TestCase):
             self._server_fail_hello(client, server)
         self.assertEqual(str(cm.exception), "No supported protocol version")
 
+    def _handshake(self, client, server, create_ticket):
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        self.assertGreaterEqual(len(server_input), 219)
+        self.assertLessEqual(len(server_input), 264)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        self.assertGreaterEqual(len(client_input), 2194)
+        self.assertLessEqual(len(client_input), 2239)
+        reset_buffers(server_buf)
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # send finished
+        client.handle_message(client_input, client_buf)
+        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+        server_input = merge_buffers(client_buf)
+        self.assertEqual(len(server_input), 52)
+        reset_buffers(client_buf)
+
+        # handle finished
+        # send new_session_ticket
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
+        client_input = merge_buffers(server_buf)
+        if create_ticket:
+            self.assertEqual(len(client_input), 81)
+            reset_buffers(server_buf)
+
+            # handle new_session_ticket
+            client.handle_message(client_input, client_buf)
+            self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+            server_input = merge_buffers(client_buf)
+            self.assertEqual(len(server_input), 0)
+        else:
+            self.assertEqual(len(client_input), 0)
+
+        # check keys match
+        self.assertEqual(client._dec_key, server._enc_key)
+        self.assertEqual(client._enc_key, server._dec_key)
+
+        # check cipher suite
+        self.assertEqual(
+            client.key_schedule.cipher_suite, tls.CipherSuite.AES_256_GCM_SHA384
+        )
+        self.assertEqual(
+            server.key_schedule.cipher_suite, tls.CipherSuite.AES_256_GCM_SHA384
+        )
+
     def test_handshake(self):
         client = self.create_client()
         server = self.create_server()
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b"", client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 252)
-        reset_buffers(client_buf)
+        self._handshake(client, server, create_ticket=False)
 
-        # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = create_buffers()
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 2227)
-        reset_buffers(server_buf)
-
-        # handle server hello, encrypted extensions, certificate, certificate verify, finished
-        # send finished
-        client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 52)
-        reset_buffers(client_buf)
-
-        # handle finished
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 0)
-
-        # check keys match
-        self.assertEqual(client._dec_key, server._enc_key)
-        self.assertEqual(client._enc_key, server._dec_key)
-
-        # handle new session ticket
-        new_session_ticket = binascii.unhexlify(
-            "04000035000151809468b842000020441fc19f9eb6ea425b48989c800258495"
-            "a2bc30cac3a55032a7c0822feb842eb0008002a0004ffffffff"
-        )
-        client.handle_message(new_session_ticket, client_buf)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 0)
+        # check ALPN matches
+        self.assertEqual(client.alpn_negotiated, None)
+        self.assertEqual(server.alpn_negotiated, None)
 
     def test_handshake_with_alpn(self):
         client = self.create_client()
         client.alpn_protocols = ["hq-20"]
+
         server = self.create_server()
         server.alpn_protocols = ["hq-20", "h3-20"]
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b"", client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 264)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = create_buffers()
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 2239)
-        reset_buffers(server_buf)
-
-        # handle server hello, encrypted extensions, certificate, certificate verify, finished
-        # send finished
-        client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 52)
-        reset_buffers(client_buf)
-
-        # handle finished
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 0)
-
-        # check keys match
-        self.assertEqual(client._dec_key, server._enc_key)
-        self.assertEqual(client._enc_key, server._dec_key)
+        self._handshake(client, server, create_ticket=False)
 
         # check ALPN matches
         self.assertEqual(client.alpn_negotiated, "hq-20")
@@ -285,6 +272,7 @@ class ContextTest(TestCase):
     def test_handshake_with_alpn_fail(self):
         client = self.create_client()
         client.alpn_protocols = ["hq-20"]
+
         server = self.create_server()
         server.alpn_protocols = ["h3-20"]
 
@@ -308,80 +296,14 @@ class ContextTest(TestCase):
         client._signature_algorithms = [tls.SignatureAlgorithm.RSA_PKCS1_SHA256]
         server = self.create_server()
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b"", client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 246)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = create_buffers()
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 2227)
-        reset_buffers(server_buf)
-
-        # handle server hello, encrypted extensions, certificate, certificate verify, finished
-        # send finished
-        client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 52)
-        reset_buffers(client_buf)
-
-        # handle finished
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 0)
-
-        # check keys match
-        self.assertEqual(client._dec_key, server._enc_key)
-        self.assertEqual(client._enc_key, server._dec_key)
+        self._handshake(client, server, create_ticket=False)
 
     def test_handshake_with_x25519(self):
         client = self.create_client()
         client._supported_groups = [tls.Group.X25519]
         server = self.create_server()
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b"", client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 219)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = create_buffers()
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 2194)
-        reset_buffers(server_buf)
-
-        # handle server hello, encrypted extensions, certificate, certificate verify, finished
-        # send finished
-        client.handle_message(client_input, client_buf)
-        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-        server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 52)
-        reset_buffers(client_buf)
-
-        # handle finished
-        server.handle_message(server_input, server_buf)
-        self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-        client_input = merge_buffers(server_buf)
-        self.assertEqual(len(client_input), 0)
-
-        # check keys match
-        self.assertEqual(client._dec_key, server._enc_key)
-        self.assertEqual(client._enc_key, server._dec_key)
+        self._handshake(client, server, create_ticket=False)
 
     def test_session_ticket(self):
         client_tickets = []
@@ -404,51 +326,9 @@ class ContextTest(TestCase):
             client.new_session_ticket_cb = client_new_ticket
 
             server = self.create_server()
-            server.get_session_ticket_cb = server_get_ticket
             server.new_session_ticket_cb = server_new_ticket
 
-            # send client hello
-            client_buf = create_buffers()
-            client.handle_message(b"", client_buf)
-            self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-            server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 252)
-            reset_buffers(client_buf)
-
-            # handle client hello
-            # send server hello, encrypted extensions, certificate, certificate verify, finished
-            server_buf = create_buffers()
-            server.handle_message(server_input, server_buf)
-            self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
-            client_input = merge_buffers(server_buf)
-            self.assertEqual(len(client_input), 2227)
-            reset_buffers(server_buf)
-
-            # handle server hello, encrypted extensions, certificate, certificate verify, finished
-            # send finished
-            client.handle_message(client_input, client_buf)
-            self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-            server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 52)
-            reset_buffers(client_buf)
-
-            # handle finished
-            # send new_session_ticket
-            server.handle_message(server_input, server_buf)
-            self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
-            client_input = merge_buffers(server_buf)
-            self.assertEqual(len(client_input), 81)
-            reset_buffers(server_buf)
-
-            # handle new_session_ticket
-            client.handle_message(client_input, client_buf)
-            self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-            server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 0)
-
-            # check keys match
-            self.assertEqual(client._dec_key, server._enc_key)
-            self.assertEqual(client._enc_key, server._dec_key)
+            self._handshake(client, server, create_ticket=True)
 
             # check tickets match
             self.assertEqual(len(client_tickets), 1)
@@ -460,12 +340,10 @@ class ContextTest(TestCase):
 
         def second_handshake():
             client = self.create_client()
-            client.new_session_ticket_cb = client_new_ticket
             client.session_ticket = client_tickets[0]
 
             server = self.create_server()
             server.get_session_ticket_cb = server_get_ticket
-            server.new_session_ticket_cb = server_new_ticket
 
             # send client hello with pre_shared_key
             client_buf = create_buffers()
@@ -497,21 +375,41 @@ class ContextTest(TestCase):
             server.handle_message(server_input, server_buf)
             self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
             client_input = merge_buffers(server_buf)
-            self.assertEqual(len(client_input), 81)
+            self.assertEqual(len(client_input), 0)
             reset_buffers(server_buf)
-
-            # handle new_session_ticket
-            client.handle_message(client_input, client_buf)
-            self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-            server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 0)
 
             # check keys match
             self.assertEqual(client._dec_key, server._enc_key)
             self.assertEqual(client._enc_key, server._dec_key)
 
+        def second_handshake_fail():
+            client = self.create_client()
+            client.session_ticket = client_tickets[0]
+
+            server = self.create_server()
+            server.get_session_ticket_cb = server_get_ticket
+
+            # send client hello with pre_shared_key
+            client_buf = create_buffers()
+            client.handle_message(b"", client_buf)
+            self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+            server_input = merge_buffers(client_buf)
+            self.assertEqual(len(server_input), 379)
+            reset_buffers(client_buf)
+
+            # tamper with binder
+            server_input = server_input[:-4] + bytes(4)
+
+            # handle client hello
+            # send server hello, encrypted extensions, finished
+            server_buf = create_buffers()
+            with self.assertRaises(tls.AlertHandshakeFailure) as cm:
+                server.handle_message(server_input, server_buf)
+            self.assertEqual(str(cm.exception), "PSK validation failed")
+
         first_handshake()
         second_handshake()
+        second_handshake_fail()
 
 
 class TlsTest(TestCase):
