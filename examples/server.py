@@ -66,8 +66,8 @@ class SessionTicketStore:
     def add(self, ticket):
         self.tickets[ticket.ticket] = ticket
 
-    def get(self, label):
-        return self.tickets.get(label)
+    def pop(self, label):
+        return self.tickets.pop(label, None)
 
 
 if __name__ == "__main__":
@@ -110,7 +110,7 @@ if __name__ == "__main__":
             private_key=private_key,
             stream_handler=handle_stream,
             secrets_log_file=secrets_log_file,
-            session_ticket_fetcher=ticket_store.get,
+            session_ticket_fetcher=ticket_store.pop,
             session_ticket_handler=ticket_store.add,
             stateless_retry=args.stateless_retry,
         )
