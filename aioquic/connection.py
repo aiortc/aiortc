@@ -192,6 +192,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         original_connection_id: Optional[bytes] = None,
         secrets_log_file: TextIO = None,
         server_name: Optional[str] = None,
+        session_ticket: Optional[tls.SessionTicket] = None,
+        session_ticket_handler: Optional[tls.SessionTicketHandler] = None,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         if is_client:
@@ -245,6 +247,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._remote_max_stream_data_uni = 0
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
+        self._session_ticket = session_ticket
         self._spin_bit = False
         self._spin_bit_peer = False
         self._spin_highest_pn = 0
@@ -254,6 +257,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._version: Optional[int] = None
 
         # callbacks
+        if session_ticket_handler is not None:
+            self._session_ticket_handler = session_ticket_handler
+        else:
+            self._session_ticket_handler = lambda t: None
+
         if stream_handler is not None:
             self._stream_handler = stream_handler
         else:
@@ -654,6 +662,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
         ]
         self.tls.server_name = self.server_name
+        self.tls.session_ticket = self._session_ticket
+        self.tls.new_session_ticket_cb = self._session_ticket_handler
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
         # packet spaces
@@ -1136,6 +1146,10 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _update_traffic_key(
         self, direction: tls.Direction, epoch: tls.Epoch, secret: bytes
     ) -> None:
+        """
+        Callback which is invoked by the TLS engine when new traffic keys are
+        available.
+        """
         if self.secrets_log_file is not None:
             label_row = self.is_client == (direction == tls.Direction.DECRYPT)
             label = SECRETS_LABELS[label_row][epoch.value]

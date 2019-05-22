@@ -944,7 +944,7 @@ class SessionTicket:
         return (age + self.age_add) % (1 << 32)
 
 
-NewSessionTicketHandler = Callable[[SessionTicket], None]
+SessionTicketHandler = Callable[[SessionTicket], None]
 
 
 class Context:
@@ -967,7 +967,7 @@ class Context:
         self.server_name: Optional[str] = None
 
         # callbacks
-        self.new_session_ticket_cb: NewSessionTicketHandler = lambda t: None
+        self.new_session_ticket_cb: SessionTicketHandler = lambda t: None
         self.update_traffic_key_cb: Callable[
             [Direction, Epoch, bytes], None
         ] = lambda d, e, s: None

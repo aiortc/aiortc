@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
 from .connection import QuicConnection, QuicStreamHandler
+from .tls import SessionTicket, SessionTicketHandler
 
 __all__ = ["connect"]
 
@@ -17,6 +18,8 @@ async def connect(
     alpn_protocols: Optional[List[str]] = None,
     protocol_version: Optional[int] = None,
     secrets_log_file: Optional[TextIO] = None,
+    session_ticket: Optional[SessionTicket] = None,
+    session_ticket_handler: Optional[SessionTicketHandler] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
 ) -> AsyncGenerator[QuicConnection, None]:
     """
@@ -31,6 +34,10 @@ async def connect(
       ClientHello.
     * ``secrets_log_file`` is a file-like object in which to log traffic
       secrets. This is useful to analyze traffic captures with Wireshark.
+    * ``session_ticket`` is a TLS session ticket which should be used for
+      resumption.
+    * ``session_ticket_handler`` is a callback which is invoked by the TLS
+      engine when a new session ticket is received.
     * ``stream_handler`` is a callback which is invoked whenever a stream is
       created. It must accept two arguments: a :class:`asyncio.StreamReader`
       and a :class:`asyncio.StreamWriter`.
@@ -57,6 +64,8 @@ async def connect(
             is_client=True,
             secrets_log_file=secrets_log_file,
             server_name=server_name,
+            session_ticket=session_ticket,
+            session_ticket_handler=session_ticket_handler,
             stream_handler=stream_handler,
         ),
         local_addr=("::", 0),
