@@ -545,6 +545,7 @@ class TlsTest(TestCase):
 
         # extensions
         self.assertEqual(hello.alpn_protocols, ["h3-19"])
+        self.assertEqual(hello.early_data, False)
         self.assertEqual(hello.key_exchange_modes, [tls.KeyExchangeMode.PSK_DHE_KE])
         self.assertEqual(
             hello.key_share,
@@ -599,6 +600,7 @@ class TlsTest(TestCase):
         buf = Buffer(data=load("tls_client_hello_with_psk.bin"))
         hello = pull_client_hello(buf)
 
+        self.assertEqual(hello.early_data, True)
         self.assertEqual(
             hello.pre_shared_key,
             tls.OfferedPsks(

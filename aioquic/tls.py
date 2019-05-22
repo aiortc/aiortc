@@ -424,6 +424,7 @@ class ClientHello:
 
     # extensions
     alpn_protocols: Optional[List[str]] = None
+    early_data: bool = False
     key_exchange_modes: Optional[List[KeyExchangeMode]] = None
     key_share: Optional[List[KeyShareEntry]] = None
     pre_shared_key: Optional[OfferedPsks] = None
@@ -474,6 +475,8 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
                     hello.server_name = pull_opaque(buf, 2).decode("ascii")
             elif extension_type == ExtensionType.ALPN:
                 hello.alpn_protocols = pull_list(buf, 2, pull_alpn_protocol)
+            elif extension_type == ExtensionType.EARLY_DATA:
+                hello.early_data = True
             elif extension_type == ExtensionType.PRE_SHARED_KEY:
                 hello.pre_shared_key = OfferedPsks(
                     identities=pull_list(buf, 2, pull_psk_identity),
@@ -529,6 +532,10 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
                     push_bytes(buf, extension_value)
+
+            if hello.early_data:
+                with push_extension(buf, ExtensionType.EARLY_DATA):
+                    pass
 
             # pre_shared_key MUST be last
             if hello.pre_shared_key is not None:
