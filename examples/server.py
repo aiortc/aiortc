@@ -59,6 +59,17 @@ def handle_stream(reader, writer):
         asyncio.ensure_future(serve_http_request(reader, writer))
 
 
+class SessionTicketStore:
+    def __init__(self):
+        self.tickets = {}
+
+    def add(self, ticket):
+        self.tickets[ticket.ticket] = ticket
+
+    def get(self, label):
+        return self.tickets.get(label)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC server")
     parser.add_argument("--certificate", type=str, required=True)
@@ -86,6 +97,9 @@ if __name__ == "__main__":
     else:
         secrets_log_file = None
 
+    # session tickets
+    ticket_store = SessionTicketStore()
+
     loop = asyncio.get_event_loop()
     protocol = loop.run_until_complete(
         aioquic.serve(
@@ -96,6 +110,8 @@ if __name__ == "__main__":
             private_key=private_key,
             stream_handler=handle_stream,
             secrets_log_file=secrets_log_file,
+            session_ticket_fetcher=ticket_store.get,
+            session_ticket_handler=ticket_store.add,
             stateless_retry=args.stateless_retry,
         )
     )

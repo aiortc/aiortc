@@ -15,6 +15,7 @@ from .packet import (
     encode_quic_version_negotiation,
     pull_quic_header,
 )
+from .tls import SessionTicketFetcher, SessionTicketHandler
 
 __all__ = ["serve"]
 
@@ -34,6 +35,8 @@ class QuicServer(asyncio.DatagramProtocol):
         alpn_protocols: Optional[List[str]] = None,
         connection_handler: Optional[QuicConnectionHandler] = None,
         secrets_log_file: Optional[TextIO] = None,
+        session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
+        session_ticket_handler: Optional[SessionTicketHandler] = None,
         stateless_retry: bool = False,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
@@ -42,6 +45,8 @@ class QuicServer(asyncio.DatagramProtocol):
         self._connections: Dict[bytes, QuicConnection] = {}
         self._private_key = private_key
         self._secrets_log_file = secrets_log_file
+        self._session_ticket_fetcher = session_ticket_fetcher
+        self._session_ticket_handler = session_ticket_handler
         self._transport: Optional[asyncio.DatagramTransport] = None
 
         if connection_handler is not None:
@@ -133,6 +138,8 @@ class QuicServer(asyncio.DatagramProtocol):
                 original_connection_id=original_connection_id,
                 private_key=self._private_key,
                 secrets_log_file=self._secrets_log_file,
+                session_ticket_fetcher=self._session_ticket_fetcher,
+                session_ticket_handler=self._session_ticket_handler,
                 stream_handler=self._stream_handler,
             )
             connection.connection_made(self._transport)
@@ -153,6 +160,8 @@ async def serve(
     connection_handler: QuicConnectionHandler = None,
     stream_handler: QuicStreamHandler = None,
     secrets_log_file: Optional[TextIO] = None,
+    session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
+    session_ticket_handler: Optional[SessionTicketHandler] = None,
     stateless_retry: bool = False,
 ) -> None:
     """
@@ -189,6 +198,8 @@ async def serve(
             connection_handler=connection_handler,
             private_key=private_key,
             secrets_log_file=secrets_log_file,
+            session_ticket_fetcher=session_ticket_fetcher,
+            session_ticket_handler=session_ticket_handler,
             stateless_retry=stateless_retry,
             stream_handler=stream_handler,
         ),

@@ -193,6 +193,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         secrets_log_file: TextIO = None,
         server_name: Optional[str] = None,
         session_ticket: Optional[tls.SessionTicket] = None,
+        session_ticket_fetcher: Optional[tls.SessionTicketFetcher] = None,
         session_ticket_handler: Optional[tls.SessionTicketHandler] = None,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
@@ -257,10 +258,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._version: Optional[int] = None
 
         # callbacks
-        if session_ticket_handler is not None:
-            self._session_ticket_handler = session_ticket_handler
-        else:
-            self._session_ticket_handler = lambda t: None
+        self._session_ticket_fetcher = session_ticket_fetcher
+        self._session_ticket_handler = session_ticket_handler
 
         if stream_handler is not None:
             self._stream_handler = stream_handler
@@ -663,7 +662,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         ]
         self.tls.server_name = self.server_name
         self.tls.session_ticket = self._session_ticket
-        self.tls.new_session_ticket_cb = self._session_ticket_handler
+        if self._session_ticket_fetcher is not None:
+            self.tls.get_session_ticket_cb = self._session_ticket_fetcher
+        if self._session_ticket_handler is not None:
+            self.tls.new_session_ticket_cb = self._session_ticket_handler
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
         # packet spaces
@@ -1222,9 +1224,19 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_close(buf, **self.__close)
                 self.__close = None
 
-            # STREAM
             for stream_id, stream in self.streams.items():
-                if isinstance(stream_id, int):
+                # CRYPTO
+                if stream_id == tls.Epoch.ONE_RTT:
+                    stream = self.streams[epoch]
+                    frame_overhead = 3 + quic_uint_length(stream._send_start)
+                    frame = stream.get_frame(capacity - buf.tell() - frame_overhead)
+                    if frame is not None:
+                        push_uint_var(buf, QuicFrameType.CRYPTO)
+                        with packet.push_crypto_frame(buf, frame.offset):
+                            push_bytes(buf, frame.data)
+
+                # STREAM
+                elif isinstance(stream_id, int):
                     # the frame data size is constrained by our peer's MAX_DATA and
                     # the space available in the current packet
                     frame_overhead = (

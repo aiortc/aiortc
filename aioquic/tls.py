@@ -944,6 +944,7 @@ class SessionTicket:
         return (age + self.age_add) % (1 << 32)
 
 
+SessionTicketFetcher = Callable[[bytes], Optional[SessionTicket]]
 SessionTicketHandler = Callable[[SessionTicket], None]
 
 
@@ -967,7 +968,8 @@ class Context:
         self.server_name: Optional[str] = None
 
         # callbacks
-        self.new_session_ticket_cb: SessionTicketHandler = lambda t: None
+        self.get_session_ticket_cb: Optional[SessionTicketFetcher] = None
+        self.new_session_ticket_cb: Optional[SessionTicketHandler] = None
         self.update_traffic_key_cb: Callable[
             [Direction, Epoch, bytes], None
         ] = lambda d, e, s: None
@@ -1079,7 +1081,7 @@ class Context:
                     raise AlertUnexpectedMessage
             elif self.state == State.SERVER_EXPECT_FINISHED:
                 if message_type == HandshakeType.FINISHED:
-                    self._server_handle_finished(input_buf)
+                    self._server_handle_finished(input_buf, output_buf[Epoch.ONE_RTT])
                 else:
                     raise AlertUnexpectedMessage
             elif self.state == State.SERVER_POST_HANDSHAKE:
@@ -1091,6 +1093,30 @@ class Context:
                 raise Exception("unhandled state")
 
             assert input_buf.eof()
+
+    def _build_session_ticket(
+        self, new_session_ticket: NewSessionTicket
+    ) -> SessionTicket:
+        resumption_master_secret = self.key_schedule.derive_secret(b"res master")
+        resumption_secret = hkdf_expand_label(
+            algorithm=self.key_schedule.algorithm,
+            secret=resumption_master_secret,
+            label=b"resumption",
+            hash_value=new_session_ticket.ticket_nonce,
+            length=self.key_schedule.algorithm.digest_size,
+        )
+
+        timestamp = datetime.datetime.now()
+        return SessionTicket(
+            age_add=new_session_ticket.ticket_age_add,
+            cipher_suite=self.key_schedule.cipher_suite,
+            not_valid_after=timestamp
+            + datetime.timedelta(seconds=new_session_ticket.ticket_lifetime),
+            not_valid_before=timestamp,
+            resumption_secret=resumption_secret,
+            server_name=self.server_name,
+            ticket=new_session_ticket.ticket,
+        )
 
     def _client_send_hello(self, output_buf: Buffer) -> None:
         key_share: List[KeyShareEntry] = []
@@ -1277,28 +1303,10 @@ class Context:
     def _client_handle_new_session_ticket(self, input_buf: Buffer) -> None:
         new_session_ticket = pull_new_session_ticket(input_buf)
 
-        # compute resumption secret
-        resumption_master_secret = self.key_schedule.derive_secret(b"res master")
-        resumption_secret = hkdf_expand_label(
-            algorithm=self.key_schedule.algorithm,
-            secret=resumption_master_secret,
-            label=b"resumption",
-            hash_value=new_session_ticket.ticket_nonce,
-            length=self.key_schedule.algorithm.digest_size,
-        )
-
-        timestamp = datetime.datetime.now()
-        ticket = SessionTicket(
-            age_add=new_session_ticket.ticket_age_add,
-            cipher_suite=self.key_schedule.cipher_suite,
-            not_valid_after=timestamp
-            + datetime.timedelta(seconds=new_session_ticket.ticket_lifetime),
-            not_valid_before=timestamp,
-            resumption_secret=resumption_secret,
-            server_name=self.server_name,
-            ticket=new_session_ticket.ticket,
-        )
-        self.new_session_ticket_cb(ticket)
+        # notify application
+        if self.new_session_ticket_cb is not None:
+            ticket = self._build_session_ticket(new_session_ticket)
+            self.new_session_ticket_cb(ticket)
 
     def _server_handle_hello(
         self, input_buf: Buffer, initial_buf: Buffer, output_buf: Buffer
@@ -1345,9 +1353,48 @@ class Context:
         self.session_id = peer_hello.session_id
         self.received_extensions = peer_hello.other_extensions
 
-        self.key_schedule = KeySchedule(cipher_suite)
-        self.key_schedule.extract(None)
-        self.key_schedule.update_hash(input_buf.data)
+        # select key schedule
+        pre_shared_key = None
+        if (
+            self.get_session_ticket_cb is not None
+            and peer_hello.pre_shared_key is not None
+            and len(peer_hello.pre_shared_key.identities) == 1
+            and len(peer_hello.pre_shared_key.binders) == 1
+        ):
+            # ask application to find session ticket
+            identity = peer_hello.pre_shared_key.identities[0]
+            session_ticket = self.get_session_ticket_cb(identity[0])
+
+            # validate session ticket
+            if (
+                session_ticket is not None
+                and session_ticket.cipher_suite == cipher_suite
+            ):
+                self.key_schedule = KeySchedule(cipher_suite)
+                self.key_schedule.extract(session_ticket.resumption_secret)
+
+                binder_key = self.key_schedule.derive_secret(b"res binder")
+                binder_length = self.key_schedule.algorithm.digest_size
+
+                hash_offset = input_buf.tell() - binder_length - 3
+                binder = input_buf.data_slice(
+                    hash_offset + 3, hash_offset + 3 + binder_length
+                )
+
+                self.key_schedule.update_hash(input_buf.data_slice(0, hash_offset))
+                expected_binder = self.key_schedule.finished_verify_data(binder_key)
+
+                if binder != expected_binder:
+                    raise AlertHandshakeFailure("PSK validation failed")
+
+                self.key_schedule.update_hash(
+                    input_buf.data_slice(hash_offset, hash_offset + 3 + binder_length)
+                )
+                pre_shared_key = 0
+        if pre_shared_key is None:
+            self.key_schedule = KeySchedule(cipher_suite)
+            self.key_schedule.extract(None)
+            self.key_schedule.update_hash(input_buf.data)
 
         # perform key exchange
         public_key: Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]
@@ -1375,6 +1422,7 @@ class Context:
             cipher_suite=cipher_suite,
             compression_method=compression_method,
             key_share=encode_public_key(public_key),
+            pre_shared_key=pre_shared_key,
             supported_version=supported_version,
         )
         with push_message(self.key_schedule, initial_buf):
@@ -1398,28 +1446,33 @@ class Context:
                 ),
             )
 
-        # send certificate
-        with push_message(self.key_schedule, output_buf):
-            push_certificate(
-                output_buf,
-                Certificate(
-                    request_context=b"",
-                    certificates=[(self.certificate.public_bytes(Encoding.DER), b"")],
-                ),
-            )
+        if pre_shared_key is None:
+            # send certificate
+            with push_message(self.key_schedule, output_buf):
+                push_certificate(
+                    output_buf,
+                    Certificate(
+                        request_context=b"",
+                        certificates=[
+                            (self.certificate.public_bytes(Encoding.DER), b"")
+                        ],
+                    ),
+                )
 
-        # send certificate verify
-        signature = self.certificate_private_key.sign(
-            self.key_schedule.certificate_verify_data(
-                b"TLS 1.3, server CertificateVerify"
-            ),
-            *signature_algorithm_params(signature_algorithm),
-        )
-        with push_message(self.key_schedule, output_buf):
-            push_certificate_verify(
-                output_buf,
-                CertificateVerify(algorithm=signature_algorithm, signature=signature),
+            # send certificate verify
+            signature = self.certificate_private_key.sign(
+                self.key_schedule.certificate_verify_data(
+                    b"TLS 1.3, server CertificateVerify"
+                ),
+                *signature_algorithm_params(signature_algorithm),
             )
+            with push_message(self.key_schedule, output_buf):
+                push_certificate_verify(
+                    output_buf,
+                    CertificateVerify(
+                        algorithm=signature_algorithm, signature=signature
+                    ),
+                )
 
         # send finished
         with push_message(self.key_schedule, output_buf):
@@ -1440,7 +1493,7 @@ class Context:
 
         self._set_state(State.SERVER_EXPECT_FINISHED)
 
-    def _server_handle_finished(self, input_buf: Buffer) -> None:
+    def _server_handle_finished(self, input_buf: Buffer, output_buf: Buffer) -> None:
         finished = pull_finished(input_buf)
 
         # check verify data
@@ -1455,6 +1508,22 @@ class Context:
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.SERVER_POST_HANDSHAKE)
+
+        # create a new session ticket
+        if self.new_session_ticket_cb is not None:
+            new_session_ticket = NewSessionTicket(
+                ticket_lifetime=86400,
+                ticket_age_add=0,
+                ticket_nonce=b"",
+                ticket=os.urandom(64),
+            )
+
+            # notify application
+            ticket = self._build_session_ticket(new_session_ticket)
+            self.new_session_ticket_cb(ticket)
+
+            # send messsage
+            push_new_session_ticket(output_buf, new_session_ticket)
 
     def _setup_traffic_protection(
         self, direction: Direction, epoch: Epoch, label: bytes
