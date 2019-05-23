@@ -505,14 +505,14 @@ class QuicConnection(asyncio.DatagramProtocol):
             epoch = get_epoch(header.packet_type)
             crypto = self.cryptos[epoch]
             if not crypto.recv.is_valid():
-                return
+                continue
             try:
                 plain_header, plain_payload, packet_number = crypto.decrypt_packet(
                     data[start_off:end_off], encrypted_off
                 )
             except CryptoError as exc:
                 self._logger.warning(exc)
-                return
+                continue
 
             # discard initial keys
             if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
