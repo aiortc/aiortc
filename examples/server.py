@@ -78,9 +78,12 @@ if __name__ == "__main__":
     parser.add_argument("--private-key", type=str, required=True)
     parser.add_argument("--secrets-log-file", type=str)
     parser.add_argument("--stateless-retry", action="store_true")
+    parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
+
     logging.basicConfig(
-        format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
     with open(args.certificate, "rb") as fp:

@@ -35,9 +35,13 @@ if __name__ == "__main__":
     parser.add_argument("--path", type=str, default="/")
     parser.add_argument("--secrets-log-file", type=str)
     parser.add_argument("--session-ticket-file", type=str)
+    parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
+    )
 
     if args.secrets_log_file:
         secrets_log_file = open(args.secrets_log_file, "a")
