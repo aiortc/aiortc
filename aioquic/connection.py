@@ -1196,7 +1196,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         ) == self.is_client or not stream_is_unidirectional(stream_id)
 
     def _update_traffic_key(
-        self, direction: tls.Direction, epoch: tls.Epoch, secret: bytes
+        self,
+        direction: tls.Direction,
+        epoch: tls.Epoch,
+        cipher_suite: tls.CipherSuite,
+        secret: bytes,
     ) -> None:
         """
         Callback which is invoked by the TLS engine when new traffic keys are
@@ -1212,9 +1216,9 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         crypto = self.cryptos[epoch]
         if direction == tls.Direction.ENCRYPT:
-            crypto.send.setup(self.tls.key_schedule.cipher_suite, secret)
+            crypto.send.setup(cipher_suite, secret)
         else:
-            crypto.recv.setup(self.tls.key_schedule.cipher_suite, secret)
+            crypto.recv.setup(cipher_suite, secret)
 
     def _write_application(self, network_path: QuicNetworkPath) -> Iterator[bytes]:
         epoch = tls.Epoch.ONE_RTT

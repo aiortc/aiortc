@@ -1014,8 +1014,8 @@ class Context:
         self.get_session_ticket_cb: Optional[SessionTicketFetcher] = None
         self.new_session_ticket_cb: Optional[SessionTicketHandler] = None
         self.update_traffic_key_cb: Callable[
-            [Direction, Epoch, bytes], None
-        ] = lambda d, e, s: None
+            [Direction, Epoch, CipherSuite, bytes], None
+        ] = lambda d, e, c, s: None
 
         # supported parameters
         self._cipher_suites = [
@@ -1238,7 +1238,12 @@ class Context:
             # calculate early data key
             if hello.early_data:
                 early_key = self._key_schedule_psk.derive_secret(b"c e traffic")
-                self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ZERO_RTT, early_key)
+                self.update_traffic_key_cb(
+                    Direction.ENCRYPT,
+                    Epoch.ZERO_RTT,
+                    self._key_schedule_psk.cipher_suite,
+                    early_key,
+                )
 
         self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
         self._key_schedule_proxy.extract(None)
@@ -1364,7 +1369,12 @@ class Context:
 
         # commit traffic key
         self._enc_key = next_enc_key
-        self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ONE_RTT, self._enc_key)
+        self.update_traffic_key_cb(
+            Direction.ENCRYPT,
+            Epoch.ONE_RTT,
+            self.key_schedule.cipher_suite,
+            self._enc_key,
+        )
 
         self._set_state(State.CLIENT_POST_HANDSHAKE)
 
@@ -1467,7 +1477,10 @@ class Context:
                     early_data = True
                     early_key = self.key_schedule.derive_secret(b"c e traffic")
                     self.update_traffic_key_cb(
-                        Direction.DECRYPT, Epoch.ZERO_RTT, early_key
+                        Direction.DECRYPT,
+                        Epoch.ZERO_RTT,
+                        self.key_schedule.cipher_suite,
+                        early_key,
                     )
 
                 pre_shared_key = 0
@@ -1586,7 +1599,12 @@ class Context:
         # commit traffic key
         self._dec_key = self._next_dec_key
         self._next_dec_key = None
-        self.update_traffic_key_cb(Direction.DECRYPT, Epoch.ONE_RTT, self._dec_key)
+        self.update_traffic_key_cb(
+            Direction.DECRYPT,
+            Epoch.ONE_RTT,
+            self.key_schedule.cipher_suite,
+            self._dec_key,
+        )
 
         self.key_schedule.update_hash(input_buf.data)
 
@@ -1618,7 +1636,9 @@ class Context:
         else:
             self._dec_key = key
 
-        self.update_traffic_key_cb(direction, epoch, key)
+        self.update_traffic_key_cb(
+            direction, epoch, self.key_schedule.cipher_suite, key
+        )
 
     def _set_state(self, state: State) -> None:
         if self.__logger:
