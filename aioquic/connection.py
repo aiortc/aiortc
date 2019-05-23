@@ -38,6 +38,7 @@ from .packet import (
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
+    PACKET_TYPE_ZERO_RTT,
     QuicErrorCode,
     QuicFrameType,
     QuicHeader,
@@ -94,6 +95,8 @@ def EPOCHS(shortcut: str) -> FrozenSet[tls.Epoch]:
 def get_epoch(packet_type: int) -> tls.Epoch:
     if packet_type == PACKET_TYPE_INITIAL:
         return tls.Epoch.INITIAL
+    elif packet_type == PACKET_TYPE_ZERO_RTT:
+        return tls.Epoch.ZERO_RTT
     elif packet_type == PACKET_TYPE_HANDSHAKE:
         return tls.Epoch.HANDSHAKE
     else:
@@ -500,7 +503,6 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             epoch = get_epoch(header.packet_type)
             crypto = self.cryptos[epoch]
-            space = self.spaces[epoch]
             if not crypto.recv.is_valid():
                 return
             try:
@@ -564,6 +566,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._network_paths.insert(0, network_path)
 
             # record packet as received
+            if epoch == tls.Epoch.ZERO_RTT:
+                space = self.spaces[tls.Epoch.ONE_RTT]
+            else:
+                space = self.spaces[epoch]
             space.ack_queue.add(packet_number)
             if not is_ack_only:
                 space.ack_required = True
@@ -686,6 +692,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         # packet spaces
         self.cryptos = {
             tls.Epoch.INITIAL: CryptoPair(),
+            tls.Epoch.ZERO_RTT: CryptoPair(),
             tls.Epoch.HANDSHAKE: CryptoPair(),
             tls.Epoch.ONE_RTT: CryptoPair(),
         }
