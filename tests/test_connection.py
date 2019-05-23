@@ -974,7 +974,26 @@ class QuicConnectionTest(TestCase):
             Buffer(data=b"\x00"),
         )
 
-    def test_handle_unknown_frame(self):
+    def test_payload_received_padding_only(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives padding only
+        is_ack_only, is_probing = client._payload_received(
+            client_receive_context(client), b"\x00" * 1200
+        )
+        self.assertTrue(is_ack_only)
+        self.assertTrue(is_probing)
+
+    def test_payload_received_unknown_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -993,7 +1012,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, 0x1E)
         self.assertEqual(cm.exception.reason_phrase, "Unknown frame type")
 
-    def test_handle_unexpected_frame(self):
+    def test_payload_received_unexpected_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -1014,7 +1033,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(cm.exception.frame_type, QuicFrameType.CRYPTO)
         self.assertEqual(cm.exception.reason_phrase, "Unexpected frame type")
 
-    def test_handle_malformed_frame(self):
+    def test_payload_received_malformed_frame(self):
         client = QuicConnection(is_client=True)
 
         server = QuicConnection(
@@ -1097,3 +1116,26 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
         )
         self.assertEqual(client_transport.sent, 2)
+
+
+class QuicNetworkPathTest(TestCase):
+    def test_can_send(self):
+        path = QuicNetworkPath(("1.2.3.4", 1234))
+        self.assertFalse(path.is_validated)
+
+        # initially, cannot send any data
+        self.assertTrue(path.can_send(0))
+        self.assertFalse(path.can_send(1))
+
+        # receive some data
+        path.bytes_received += 1
+        self.assertTrue(path.can_send(0))
+        self.assertTrue(path.can_send(1))
+        self.assertTrue(path.can_send(2))
+        self.assertTrue(path.can_send(3))
+        self.assertFalse(path.can_send(4))
+
+        # send some data
+        path.bytes_sent += 3
+        self.assertTrue(path.can_send(0))
+        self.assertFalse(path.can_send(1))
