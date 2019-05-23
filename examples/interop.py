@@ -134,7 +134,9 @@ async def test_session_resumption(config, **kwargs):
         ) as connection:
             await connection.ping()
 
-        config.result |= Result.R
+        # check session was resumed
+        if connection.tls.session_resumed:
+            config.result |= Result.R
 
 
 async def test_key_update(config, **kwargs):

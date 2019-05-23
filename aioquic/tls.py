@@ -1031,6 +1031,7 @@ class Context:
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._peer_certificate: Optional[x509.Certificate] = None
         self._receive_buffer = b""
+        self._session_resumed = False
         self._enc_key: Optional[bytes] = None
         self._dec_key: Optional[bytes] = None
         self.__logger = logger
@@ -1046,6 +1047,13 @@ class Context:
             self.client_random = None
             self.session_id = None
             self.state = State.SERVER_EXPECT_CLIENT_HELLO
+
+    @property
+    def session_resumed(self) -> bool:
+        """
+        Returns True if session resumption was successfully used.
+        """
+        return self._session_resumed
 
     def handle_message(
         self, input_data: bytes, output_buf: Dict[Epoch, Buffer]
@@ -1239,6 +1247,7 @@ class Context:
             ):
                 raise AlertIllegalParameter
             self.key_schedule = self._key_schedule_psk
+            self._session_resumed = True
         else:
             self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
 
@@ -1433,6 +1442,7 @@ class Context:
                 self.key_schedule.update_hash(
                     input_buf.data_slice(hash_offset, hash_offset + 3 + binder_length)
                 )
+                self._session_resumed = True
                 pre_shared_key = 0
         if pre_shared_key is None:
             self.key_schedule = KeySchedule(cipher_suite)

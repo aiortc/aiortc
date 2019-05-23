@@ -330,6 +330,10 @@ class ContextTest(TestCase):
 
             self._handshake(client, server, create_ticket=True)
 
+            # check session resumption was not used
+            self.assertFalse(client.session_resumed)
+            self.assertFalse(server.session_resumed)
+
             # check tickets match
             self.assertEqual(len(client_tickets), 1)
             self.assertEqual(len(server_tickets), 1)
@@ -381,6 +385,10 @@ class ContextTest(TestCase):
             # check keys match
             self.assertEqual(client._dec_key, server._enc_key)
             self.assertEqual(client._enc_key, server._dec_key)
+
+            # check session resumption was used
+            self.assertTrue(client.session_resumed)
+            self.assertTrue(server.session_resumed)
 
         def second_handshake_bad_binder():
             client = self.create_client()
