@@ -998,7 +998,6 @@ class Context:
             Union[dsa.DSAPublicKey, ec.EllipticCurvePublicKey, rsa.RSAPublicKey]
         ] = None
         self.handshake_extensions: List[Extension] = []
-        self.is_client = is_client
         self.key_schedule: Optional[KeySchedule] = None
         self.received_extensions: List[Extension] = []
         self.session_ticket: Optional[SessionTicket] = None
@@ -1011,6 +1010,7 @@ class Context:
             [Direction, Epoch, bytes], None
         ] = lambda d, e, s: None
 
+        # supported parameters
         self._cipher_suites = [
             CipherSuite.AES_256_GCM_SHA384,
             CipherSuite.AES_128_GCM_SHA256,
@@ -1027,6 +1027,7 @@ class Context:
         self._supported_groups = [Group.SECP256R1]
         self._supported_versions = [TLS_VERSION_1_3]
 
+        # state
         self._key_schedule_psk: Optional[KeySchedule] = None
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._peer_certificate: Optional[x509.Certificate] = None
@@ -1566,7 +1567,7 @@ class Context:
         if self.new_session_ticket_cb is not None:
             new_session_ticket = NewSessionTicket(
                 ticket_lifetime=86400,
-                ticket_age_add=0,
+                ticket_age_add=struct.unpack("I", os.urandom(4))[0],
                 ticket_nonce=b"",
                 ticket=os.urandom(64),
             )
