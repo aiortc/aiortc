@@ -6,7 +6,6 @@ from unittest import TestCase
 from aioquic import tls
 from aioquic.buffer import Buffer
 from aioquic.connection import (
-    PACKET_NUMBER_SEND_SIZE,
     QuicConnection,
     QuicConnectionError,
     QuicNetworkPath,
@@ -24,6 +23,7 @@ from aioquic.packet import (
     push_quic_header,
     push_uint_var,
 )
+from aioquic.packet_builder import PACKET_NUMBER_SEND_SIZE
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
