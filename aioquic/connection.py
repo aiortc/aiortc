@@ -8,6 +8,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     Iterator,
     List,
     Optional,
@@ -60,6 +61,12 @@ from .stream import QuicStream
 
 logger = logging.getLogger("quic")
 
+EPOCH_SHORTCUTS = {
+    "I": tls.Epoch.INITIAL,
+    "Z": tls.Epoch.ZERO_RTT,
+    "H": tls.Epoch.HANDSHAKE,
+    "O": tls.Epoch.ONE_RTT,
+}
 PACKET_MAX_SIZE = 1280
 SECRETS_LABELS = [
     [
@@ -78,6 +85,10 @@ SECRETS_LABELS = [
 STREAM_FLAGS = 0x07
 
 NetworkAddress = Any
+
+
+def EPOCHS(shortcut: str) -> FrozenSet[tls.Epoch]:
+    return frozenset(EPOCH_SHORTCUTS[i] for i in shortcut)
 
 
 def get_epoch(packet_type: int) -> tls.Epoch:
@@ -121,7 +132,10 @@ class QuicConnectionError(Exception):
         self.reason_phrase = reason_phrase
 
     def __str__(self) -> str:
-        return "Error: %d, reason: %s" % (self.error_code, self.reason_phrase)
+        s = "Error: %d, reason: %s" % (self.error_code, self.reason_phrase)
+        if self.frame_type is not None:
+            s += ", frame_type: %s" % self.frame_type
+        return s
 
 
 class QuicConnectionAdapter(logging.LoggerAdapter):
@@ -268,36 +282,36 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # frame handlers
         self.__frame_handlers = [
-            self._handle_padding_frame,
-            self._handle_padding_frame,
-            self._handle_ack_frame,
-            self._handle_ack_frame,
-            self._handle_reset_stream_frame,
-            self._handle_stop_sending_frame,
-            self._handle_crypto_frame,
-            self._handle_new_token_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_stream_frame,
-            self._handle_max_data_frame,
-            self._handle_max_stream_data_frame,
-            self._handle_max_streams_bidi_frame,
-            self._handle_max_streams_uni_frame,
-            self._handle_data_blocked_frame,
-            self._handle_stream_data_blocked_frame,
-            self._handle_streams_blocked_frame,
-            self._handle_streams_blocked_frame,
-            self._handle_new_connection_id_frame,
-            self._handle_retire_connection_id_frame,
-            self._handle_path_challenge_frame,
-            self._handle_path_response_frame,
-            self._handle_connection_close_frame,
-            self._handle_connection_close_frame,
+            (self._handle_padding_frame, EPOCHS("IZHO")),
+            (self._handle_padding_frame, EPOCHS("ZO")),
+            (self._handle_ack_frame, EPOCHS("IHO")),
+            (self._handle_ack_frame, EPOCHS("IHO")),
+            (self._handle_reset_stream_frame, EPOCHS("ZO")),
+            (self._handle_stop_sending_frame, EPOCHS("ZO")),
+            (self._handle_crypto_frame, EPOCHS("IHO")),
+            (self._handle_new_token_frame, EPOCHS("O")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_stream_frame, EPOCHS("ZO")),
+            (self._handle_max_data_frame, EPOCHS("ZO")),
+            (self._handle_max_stream_data_frame, EPOCHS("ZO")),
+            (self._handle_max_streams_bidi_frame, EPOCHS("ZO")),
+            (self._handle_max_streams_uni_frame, EPOCHS("ZO")),
+            (self._handle_data_blocked_frame, EPOCHS("ZO")),
+            (self._handle_stream_data_blocked_frame, EPOCHS("ZO")),
+            (self._handle_streams_blocked_frame, EPOCHS("ZO")),
+            (self._handle_streams_blocked_frame, EPOCHS("ZO")),
+            (self._handle_new_connection_id_frame, EPOCHS("ZO")),
+            (self._handle_retire_connection_id_frame, EPOCHS("O")),
+            (self._handle_path_challenge_frame, EPOCHS("ZO")),
+            (self._handle_path_response_frame, EPOCHS("O")),
+            (self._handle_connection_close_frame, EPOCHS("IZHO")),
+            (self._handle_connection_close_frame, EPOCHS("ZO")),
         ]
 
     @property
@@ -1021,6 +1035,36 @@ class QuicConnection(asyncio.DatagramProtocol):
         is_probing = None
         while not buf.eof():
             frame_type = pull_uint_var(buf)
+
+            # check frame type is known
+            try:
+                frame_handler, frame_epochs = self.__frame_handlers[frame_type]
+            except IndexError:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                    frame_type=frame_type,
+                    reason_phrase="Unknown frame type",
+                )
+
+            # check frame is allowed for the epoch
+            if context.epoch not in frame_epochs:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                    frame_type=frame_type,
+                    reason_phrase="Unexpected frame type",
+                )
+
+            # handle the frame
+            try:
+                frame_handler(context, frame_type, buf)
+            except BufferReadError:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                    frame_type=frame_type,
+                    reason_phrase="Failed to parse frame",
+                )
+
+            # update ACK only / probing flags
             if frame_type not in [
                 QuicFrameType.ACK,
                 QuicFrameType.ACK_ECN,
@@ -1037,22 +1081,6 @@ class QuicConnection(asyncio.DatagramProtocol):
                 is_probing = False
             elif is_probing is None:
                 is_probing = True
-
-            if frame_type < len(self.__frame_handlers):
-                try:
-                    self.__frame_handlers[frame_type](context, frame_type, buf)
-                except BufferReadError:
-                    raise QuicConnectionError(
-                        error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
-                        frame_type=frame_type,
-                        reason_phrase="Failed to parse frame",
-                    )
-            else:
-                raise QuicConnectionError(
-                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
-                    frame_type=frame_type,
-                    reason_phrase="Unexpected frame type",
-                )
 
         self._push_crypto_data()
 

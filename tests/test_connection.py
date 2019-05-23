@@ -51,10 +51,8 @@ class FakeTransport:
             self.target.datagram_received(data, self.local_addr)
 
 
-def client_receive_context(client):
-    return QuicReceiveContext(
-        epoch=tls.Epoch.ONE_RTT, network_path=client._network_paths[0]
-    )
+def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
+    return QuicReceiveContext(epoch=epoch, network_path=client._network_paths[0])
 
 
 def create_standalone_client():
@@ -993,6 +991,27 @@ class QuicConnectionTest(TestCase):
             client._payload_received(client_receive_context(client), b"\x1e")
         self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
         self.assertEqual(cm.exception.frame_type, 0x1E)
+        self.assertEqual(cm.exception.reason_phrase, "Unknown frame type")
+
+    def test_handle_unexpected_frame(self):
+        client = QuicConnection(is_client=True)
+
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+
+        # client receives CRYPTO frame in 0-RTT
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._payload_received(
+                client_receive_context(client, epoch=tls.Epoch.ZERO_RTT), b"\x06"
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.CRYPTO)
         self.assertEqual(cm.exception.reason_phrase, "Unexpected frame type")
 
     def test_handle_malformed_frame(self):
