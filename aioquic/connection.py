@@ -255,6 +255,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         )
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
+        self._parameters_received = False
         self._ping_packet_number: Optional[int] = None
         self._ping_waiter: Optional[asyncio.Future[None]] = None
         self._remote_idle_timeout = 0  # milliseconds
@@ -539,6 +540,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # handle payload
             context = QuicReceiveContext(epoch=epoch, network_path=network_path)
+            self._logger.debug("[%s] handling packet %d", context.epoch, packet_number)
             try:
                 is_ack_only, is_probing = self._payload_received(context, plain_payload)
             except QuicConnectionError as exc:
@@ -785,18 +787,23 @@ class QuicConnection(asyncio.DatagramProtocol):
                     reason_phrase=str(exc),
                 )
 
+            # parse transport parameters
+            if (
+                not self._parameters_received
+                and self.tls.received_extensions is not None
+            ):
+                for ext_type, ext_data in self.tls.received_extensions:
+                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                        self._parse_transport_parameters(ext_data)
+                        break
+                self._parameters_received = True
+
             # update current epoch
             if self.__epoch == tls.Epoch.HANDSHAKE and self.tls.state in [
                 tls.State.CLIENT_POST_HANDSHAKE,
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
-                # parse transport parameters
-                for ext_type, ext_data in self.tls.received_extensions:
-                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
-                        self._parse_transport_parameters(ext_data)
-                        break
                 self.__epoch = tls.Epoch.ONE_RTT
-
                 # wakeup waiter
                 if not self.__connected.is_set():
                     self.__connected.set()
@@ -1037,6 +1044,9 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _payload_received(
         self, context: QuicReceiveContext, plain: bytes
     ) -> Tuple[bool, bool]:
+        """
+        Handle a QUIC packet payload.
+        """
         buf = Buffer(data=plain)
 
         is_ack_only = True
@@ -1063,14 +1073,18 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
 
             # handle the frame
-            try:
-                frame_handler(context, frame_type, buf)
-            except BufferReadError:
-                raise QuicConnectionError(
-                    error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
-                    frame_type=frame_type,
-                    reason_phrase="Failed to parse frame",
+            if frame_type != QuicFrameType.PADDING:
+                self._logger.debug(
+                    "[%s] handling frame type %s", context.epoch, frame_type
                 )
+                try:
+                    frame_handler(context, frame_type, buf)
+                except BufferReadError:
+                    raise QuicConnectionError(
+                        error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                        frame_type=frame_type,
+                        reason_phrase="Failed to parse frame",
+                    )
 
             # update ACK only / probing flags
             if frame_type not in [

@@ -1006,7 +1006,7 @@ class Context:
         ] = None
         self.handshake_extensions: List[Extension] = []
         self.key_schedule: Optional[KeySchedule] = None
-        self.received_extensions: List[Extension] = []
+        self.received_extensions: Optional[List[Extension]] = None
         self.session_ticket: Optional[SessionTicket] = None
         self.server_name: Optional[str] = None
 
@@ -1212,14 +1212,18 @@ class Context:
             binder_key = self._key_schedule_psk.derive_secret(b"res binder")
             binder_length = self._key_schedule_psk.algorithm.digest_size
 
-            # serialize hello without binder
-            tmp_buf = Buffer(capacity=1024)
+            # update hello
+            if self.session_ticket.max_early_data_size is not None:
+                hello.early_data = True
             hello.pre_shared_key = OfferedPsks(
                 identities=[
                     (self.session_ticket.ticket, self.session_ticket.obfuscated_age)
                 ],
                 binders=[bytes(binder_length)],
             )
+
+            # serialize hello without binder
+            tmp_buf = Buffer(capacity=1024)
             push_client_hello(tmp_buf, hello)
 
             # calculate binder
@@ -1230,6 +1234,11 @@ class Context:
             self._key_schedule_psk.update_hash(
                 tmp_buf.data_slice(hash_offset, hash_offset + 3) + binder
             )
+
+            # calculate early data key
+            if hello.early_data:
+                early_key = self._key_schedule_psk.derive_secret(b"c e traffic")
+                self.update_traffic_key_cb(Direction.ENCRYPT, Epoch.ZERO_RTT, early_key)
 
         self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
         self._key_schedule_proxy.extract(None)
@@ -1413,6 +1422,7 @@ class Context:
         self.received_extensions = peer_hello.other_extensions
 
         # select key schedule
+        early_data = False
         pre_shared_key = None
         if (
             self.get_session_ticket_cb is not None
@@ -1451,7 +1461,18 @@ class Context:
                     input_buf.data_slice(hash_offset, hash_offset + 3 + binder_length)
                 )
                 self._session_resumed = True
+
+                # calculate early data key
+                if peer_hello.early_data:
+                    early_data = True
+                    early_key = self.key_schedule.derive_secret(b"c e traffic")
+                    self.update_traffic_key_cb(
+                        Direction.DECRYPT, Epoch.ZERO_RTT, early_key
+                    )
+
                 pre_shared_key = 0
+
+        # if PSK is not used, initialize key schedule
         if pre_shared_key is None:
             self.key_schedule = KeySchedule(cipher_suite)
             self.key_schedule.extract(None)
@@ -1503,6 +1524,7 @@ class Context:
                 output_buf,
                 EncryptedExtensions(
                     alpn_protocol=self.alpn_negotiated,
+                    early_data=early_data,
                     other_extensions=self.handshake_extensions,
                 ),
             )
