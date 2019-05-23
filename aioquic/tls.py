@@ -666,7 +666,7 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
 @dataclass
 class EncryptedExtensions:
     alpn_protocol: Optional[str] = None
-    early_data: Optional[bool] = None
+    early_data: bool = False
 
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
@@ -1004,6 +1004,7 @@ class Context:
         self.certificate_private_key: Optional[
             Union[dsa.DSAPublicKey, ec.EllipticCurvePublicKey, rsa.RSAPublicKey]
         ] = None
+        self.early_data_accepted = False
         self.handshake_extensions: List[Extension] = []
         self.key_schedule: Optional[KeySchedule] = None
         self.received_extensions: Optional[List[Extension]] = None
@@ -1301,7 +1302,9 @@ class Context:
 
     def _client_handle_encrypted_extensions(self, input_buf: Buffer) -> None:
         encrypted_extensions = pull_encrypted_extensions(input_buf)
+
         self.alpn_negotiated = encrypted_extensions.alpn_protocol
+        self.early_data_accepted = encrypted_extensions.early_data
         self.received_extensions = encrypted_extensions.other_extensions
 
         self._setup_traffic_protection(
@@ -1432,7 +1435,6 @@ class Context:
         self.received_extensions = peer_hello.other_extensions
 
         # select key schedule
-        early_data = False
         pre_shared_key = None
         if (
             self.get_session_ticket_cb is not None
@@ -1474,8 +1476,8 @@ class Context:
 
                 # calculate early data key
                 if peer_hello.early_data:
-                    early_data = True
                     early_key = self.key_schedule.derive_secret(b"c e traffic")
+                    self.early_data_accepted = True
                     self.update_traffic_key_cb(
                         Direction.DECRYPT,
                         Epoch.ZERO_RTT,
@@ -1537,7 +1539,7 @@ class Context:
                 output_buf,
                 EncryptedExtensions(
                     alpn_protocol=self.alpn_negotiated,
-                    early_data=early_data,
+                    early_data=self.early_data_accepted,
                     other_extensions=self.handshake_extensions,
                 ),
             )

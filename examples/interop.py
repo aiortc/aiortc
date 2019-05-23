@@ -19,7 +19,7 @@ class Result(Flag):
     D = 4
     C = 8
     R = 16
-    # Z = 32
+    Z = 32
     S = 64
     # M = 128
     # B = 256
@@ -137,6 +137,10 @@ async def test_session_resumption(config, **kwargs):
         # check session was resumed
         if connection.tls.session_resumed:
             config.result |= Result.R
+
+        # check early data was accepted
+        if connection.tls.early_data_accepted:
+            config.result |= Result.Z
 
 
 async def test_key_update(config, **kwargs):
