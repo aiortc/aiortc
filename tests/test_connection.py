@@ -6,13 +6,13 @@ from unittest import TestCase
 from aioquic import tls
 from aioquic.buffer import Buffer
 from aioquic.connection import (
+    PACKET_NUMBER_SEND_SIZE,
     QuicConnection,
     QuicConnectionError,
     QuicNetworkPath,
     QuicReceiveContext,
 )
 from aioquic.packet import (
-    PACKET_NUMBER_SEND_SIZE,
     PACKET_TYPE_INITIAL,
     QuicErrorCode,
     QuicFrameType,

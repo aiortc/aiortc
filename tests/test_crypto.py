@@ -152,7 +152,7 @@ class CryptoTest(TestCase):
         )
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            CHACHA20_CLIENT_ENCRYPTED_PACKET, 34
+            CHACHA20_CLIENT_ENCRYPTED_PACKET, 34, 0
         )
         self.assertEqual(plain_header, CHACHA20_CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, CHACHA20_CLIENT_PLAIN_PAYLOAD)
@@ -162,7 +162,7 @@ class CryptoTest(TestCase):
         pair = self.create_crypto(is_client=False)
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            LONG_CLIENT_ENCRYPTED_PACKET, 17
+            LONG_CLIENT_ENCRYPTED_PACKET, 17, 0
         )
         self.assertEqual(plain_header, LONG_CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
@@ -172,7 +172,7 @@ class CryptoTest(TestCase):
         pair = self.create_crypto(is_client=True)
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            LONG_SERVER_ENCRYPTED_PACKET, 17
+            LONG_SERVER_ENCRYPTED_PACKET, 17, 0
         )
         self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
@@ -188,7 +188,7 @@ class CryptoTest(TestCase):
         )
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            SHORT_SERVER_ENCRYPTED_PACKET, 9
+            SHORT_SERVER_ENCRYPTED_PACKET, 9, 0
         )
         self.assertEqual(plain_header, SHORT_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
@@ -253,7 +253,7 @@ class CryptoTest(TestCase):
             plain_header, plain_payload = create_packet(key_phase=sender.key_phase)
             encrypted = sender.encrypt_packet(plain_header, plain_payload)
             recov_header, recov_payload, _ = receiver.decrypt_packet(
-                encrypted, len(plain_header) - 2
+                encrypted, len(plain_header) - 2, 0
             )
             self.assertEqual(recov_header, plain_header)
             self.assertEqual(recov_payload, plain_payload)

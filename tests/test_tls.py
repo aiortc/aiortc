@@ -950,7 +950,6 @@ class TlsTest(TestCase):
         self.assertIsNotNone(extensions)
         self.assertTrue(buf.eof())
 
-        print(binascii.hexlify(extensions.other_extensions[1][1]))
         self.assertEqual(
             extensions,
             EncryptedExtensions(

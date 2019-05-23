@@ -7,7 +7,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .packet import PACKET_NUMBER_MAX_SIZE, is_long_header
+from .packet import PACKET_NUMBER_MAX_SIZE, decode_packet_number, is_long_header
 from .tls import (
     CipherSuite,
     cipher_suite_aead,
@@ -57,7 +57,7 @@ class CryptoContext:
         self.secret = crypto.secret
 
     def decrypt_packet(
-        self, packet: bytes, encrypted_offset: int
+        self, packet: bytes, encrypted_offset: int, expected_packet_number: int
     ) -> Tuple[bytes, bytes, int, bool]:
         assert self.is_valid(), "Decryption key is not available"
 
@@ -102,6 +102,9 @@ class CryptoContext:
         packet_number = 0
         for i in range(pn_length):
             packet_number = (packet_number << 8) | pn[i]
+        packet_number = decode_packet_number(
+            packet_number, pn_length * 8, expected_packet_number
+        )
 
         return plain_header, payload, packet_number, crypto != self
 
@@ -200,10 +203,10 @@ class CryptoPair:
         self._update_key_requested = False
 
     def decrypt_packet(
-        self, packet: bytes, encrypted_offset: int
+        self, packet: bytes, encrypted_offset: int, expected_packet_number: int
     ) -> Tuple[bytes, bytes, int]:
         plain_header, payload, packet_number, update_key = self.recv.decrypt_packet(
-            packet, encrypted_offset
+            packet, encrypted_offset, expected_packet_number
         )
         if update_key:
             self._update_key()

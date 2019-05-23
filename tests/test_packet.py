@@ -9,6 +9,7 @@ from aioquic.packet import (
     QuicHeader,
     QuicProtocolVersion,
     QuicTransportParameters,
+    decode_packet_number,
     encode_quic_version_negotiation,
     pull_quic_header,
     pull_quic_transport_parameters,
@@ -78,6 +79,28 @@ class UintTest(TestCase):
 
 
 class PacketTest(TestCase):
+    def test_decode_packet_number(self):
+        # expected = 0
+        for i in range(0, 256):
+            self.assertEqual(decode_packet_number(i, 8, expected=0), i)
+
+        # expected = 128
+        self.assertEqual(decode_packet_number(0, 8, expected=128), 256)
+        for i in range(1, 256):
+            self.assertEqual(decode_packet_number(i, 8, expected=128), i)
+
+        # expected = 129
+        self.assertEqual(decode_packet_number(0, 8, expected=129), 256)
+        self.assertEqual(decode_packet_number(1, 8, expected=129), 257)
+        for i in range(2, 256):
+            self.assertEqual(decode_packet_number(i, 8, expected=129), i)
+
+        # expected = 256
+        for i in range(0, 128):
+            self.assertEqual(decode_packet_number(i, 8, expected=256), 256 + i)
+        for i in range(129, 256):
+            self.assertEqual(decode_packet_number(i, 8, expected=256), i)
+
     def test_pull_empty(self):
         buf = Buffer(data=b"")
         with self.assertRaises(BufferReadError):

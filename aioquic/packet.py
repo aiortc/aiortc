@@ -32,7 +32,6 @@ PACKET_TYPE_RETRY = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x30
 PACKET_TYPE_MASK = 0xF0
 
 PACKET_NUMBER_MAX_SIZE = 4
-PACKET_NUMBER_SEND_SIZE = 2
 
 UINT_VAR_FORMATS = [
     (pull_uint8, push_uint8, 0x3F),
@@ -83,6 +82,23 @@ class QuicHeader:
 
 def decode_cid_length(length: int) -> int:
     return length + 3 if length else 0
+
+
+def decode_packet_number(truncated: int, num_bits: int, expected: int) -> int:
+    """
+    Recover a packet number from a truncated packet number.
+
+    See: Appendix A - Sample Packet Number Decoding Algorithm
+    """
+    window = 1 << num_bits
+    half_window = window // 2
+    candidate = (expected & ~(window - 1)) | truncated
+    if candidate <= expected - half_window:
+        return candidate + window
+    elif candidate > expected + half_window and candidate > window:
+        return candidate - window
+    else:
+        return candidate
 
 
 def encode_cid_length(length: int) -> int:
