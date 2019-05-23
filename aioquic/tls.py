@@ -666,6 +666,7 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
 @dataclass
 class EncryptedExtensions:
     alpn_protocol: Optional[str] = None
+    early_data: Optional[bool] = None
 
     other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
@@ -681,6 +682,8 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
             extension_length = pull_uint16(buf)
             if extension_type == ExtensionType.ALPN:
                 extensions.alpn_protocol = pull_list(buf, 2, pull_alpn_protocol)[0]
+            elif extension_type == ExtensionType.EARLY_DATA:
+                extensions.early_data = True
             else:
                 extensions.other_extensions.append(
                     (extension_type, pull_bytes(buf, extension_length))
@@ -698,6 +701,10 @@ def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> N
             if extensions.alpn_protocol is not None:
                 with push_extension(buf, ExtensionType.ALPN):
                     push_list(buf, 2, push_alpn_protocol, [extensions.alpn_protocol])
+
+            if extensions.early_data:
+                with push_extension(buf, ExtensionType.EARLY_DATA):
+                    pass
 
             for extension_type, extension_value in extensions.other_extensions:
                 with push_extension(buf, extension_type):

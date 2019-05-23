@@ -52,6 +52,12 @@ SERVER_QUIC_TRANSPORT_PARAMETERS_2 = binascii.unhexlify(
     b"42000c5c067f27e39321c63e28e7c90003000247e40008000106"
 )
 
+SERVER_QUIC_TRANSPORT_PARAMETERS_3 = binascii.unhexlify(
+    b"0054000200100dcb50a442513295b4679baf04cb5effff8a0009c8afe72a6397"
+    b"255407000600048000ffff0008000106000400048005fffa000500048000ffff"
+    b"0003000247e4000a000103000100026710000b000119"
+)
+
 
 class BufferTest(TestCase):
     def test_pull_block_truncated(self):
@@ -888,24 +894,33 @@ class TlsTest(TestCase):
         push_new_session_ticket(buf, new_session_ticket)
         self.assertEqual(buf.data, load("tls_new_session_ticket.bin"))
 
-    def test_pull_encrypted_extensions(self):
-        buf = Buffer(data=load("tls_encrypted_extensions.bin"))
+    def test_encrypted_extensions(self):
+        data = load("tls_encrypted_extensions.bin")
+        buf = Buffer(data=data)
         extensions = pull_encrypted_extensions(buf)
         self.assertIsNotNone(extensions)
         self.assertTrue(buf.eof())
 
         self.assertEqual(
-            extensions.other_extensions,
-            [
-                (
-                    tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
-                    SERVER_QUIC_TRANSPORT_PARAMETERS,
-                )
-            ],
+            extensions,
+            EncryptedExtensions(
+                other_extensions=[
+                    (
+                        tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
+                        SERVER_QUIC_TRANSPORT_PARAMETERS,
+                    )
+                ]
+            ),
         )
 
-    def test_pull_encrypted_extensions_with_alpn(self):
-        buf = Buffer(data=load("tls_encrypted_extensions_with_alpn.bin"))
+        # serialize
+        buf = Buffer(capacity=100)
+        push_encrypted_extensions(buf, extensions)
+        self.assertEqual(buf.data, data)
+
+    def test_encrypted_extensions_with_alpn(self):
+        data = load("tls_encrypted_extensions_with_alpn.bin")
+        buf = Buffer(data=data)
         extensions = pull_encrypted_extensions(buf)
         self.assertIsNotNone(extensions)
         self.assertTrue(buf.eof())
@@ -924,33 +939,35 @@ class TlsTest(TestCase):
             ),
         )
 
-    def test_push_encrypted_extensions(self):
-        extensions = EncryptedExtensions(
-            other_extensions=[
-                (
-                    tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
-                    SERVER_QUIC_TRANSPORT_PARAMETERS,
-                )
-            ]
-        )
-
-        buf = Buffer(100)
-        push_encrypted_extensions(buf, extensions)
-        self.assertEqual(buf.data, load("tls_encrypted_extensions.bin"))
-
-    def test_push_encrypted_extensions_with_alpn(self):
-        extensions = EncryptedExtensions(
-            alpn_protocol="hq-20",
-            other_extensions=[
-                (tls.ExtensionType.SERVER_NAME, b""),
-                (
-                    tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
-                    SERVER_QUIC_TRANSPORT_PARAMETERS_2,
-                ),
-            ],
-        )
-
+        # serialize
         buf = Buffer(115)
+        push_encrypted_extensions(buf, extensions)
+        self.assertTrue(buf.eof())
+
+    def test_pull_encrypted_extensions_with_alpn_and_early_data(self):
+        buf = Buffer(data=load("tls_encrypted_extensions_with_alpn_and_early_data.bin"))
+        extensions = pull_encrypted_extensions(buf)
+        self.assertIsNotNone(extensions)
+        self.assertTrue(buf.eof())
+
+        print(binascii.hexlify(extensions.other_extensions[1][1]))
+        self.assertEqual(
+            extensions,
+            EncryptedExtensions(
+                alpn_protocol="hq-20",
+                early_data=True,
+                other_extensions=[
+                    (tls.ExtensionType.SERVER_NAME, b""),
+                    (
+                        tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
+                        SERVER_QUIC_TRANSPORT_PARAMETERS_3,
+                    ),
+                ],
+            ),
+        )
+
+        # serialize
+        buf = Buffer(116)
         push_encrypted_extensions(buf, extensions)
         self.assertTrue(buf.eof())
 
