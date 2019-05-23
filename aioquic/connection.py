@@ -166,7 +166,7 @@ class QuicNetworkPath:
 class QuicPacketSpace:
     def __init__(self) -> None:
         self.ack_queue = RangeSet()
-        self.crypto = CryptoPair()
+        self.ack_required = False
 
 
 @dataclass
@@ -416,7 +416,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Request an update of the encryption keys.
         """
         if self.__epoch == tls.Epoch.ONE_RTT:
-            self.spaces[tls.Epoch.ONE_RTT].crypto.update_key()
+            self.cryptos[tls.Epoch.ONE_RTT].update_key()
 
     # asyncio.DatagramProtocol
 
@@ -499,11 +499,12 @@ class QuicConnection(asyncio.DatagramProtocol):
             pull_bytes(buf, header.rest_length)
 
             epoch = get_epoch(header.packet_type)
+            crypto = self.cryptos[epoch]
             space = self.spaces[epoch]
-            if not space.crypto.recv.is_valid():
+            if not crypto.recv.is_valid():
                 return
             try:
-                plain_header, plain_payload, packet_number = space.crypto.decrypt_packet(
+                plain_header, plain_payload, packet_number = crypto.decrypt_packet(
                     data[start_off:end_off], encrypted_off
                 )
             except CryptoError as exc:
@@ -512,7 +513,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # discard initial keys
             if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
-                self.spaces[tls.Epoch.INITIAL].crypto.teardown()
+                self.cryptos[tls.Epoch.INITIAL].teardown()
 
             # update state
             if not self.peer_cid_set:
@@ -565,7 +566,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # record packet as received
             space.ack_queue.add(packet_number)
             if not is_ack_only:
-                self.send_ack[epoch] = True
+                space.ack_required = True
 
         self._send_pending()
 
@@ -683,10 +684,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
         # packet spaces
-        self.send_ack = {
-            tls.Epoch.INITIAL: False,
-            tls.Epoch.HANDSHAKE: False,
-            tls.Epoch.ONE_RTT: False,
+        self.cryptos = {
+            tls.Epoch.INITIAL: CryptoPair(),
+            tls.Epoch.HANDSHAKE: CryptoPair(),
+            tls.Epoch.ONE_RTT: CryptoPair(),
         }
         self.send_buffer = {
             tls.Epoch.INITIAL: Buffer(capacity=4096),
@@ -702,7 +703,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.streams[tls.Epoch.HANDSHAKE] = QuicStream()
         self.streams[tls.Epoch.ONE_RTT] = QuicStream()
 
-        self.spaces[tls.Epoch.INITIAL].crypto.setup_initial(
+        self.cryptos[tls.Epoch.INITIAL].setup_initial(
             cid=peer_cid, is_client=self.is_client
         )
 
@@ -1188,7 +1189,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
             self.secrets_log_file.flush()
 
-        crypto = self.spaces[epoch].crypto
+        crypto = self.cryptos[epoch]
         if direction == tls.Direction.ENCRYPT:
             crypto.send.setup(self.tls.key_schedule.cipher_suite, secret)
         else:
@@ -1196,12 +1197,13 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _write_application(self, network_path: QuicNetworkPath) -> Iterator[bytes]:
         epoch = tls.Epoch.ONE_RTT
+        crypto = self.cryptos[epoch]
         space = self.spaces[epoch]
-        if not space.crypto.send.is_valid():
+        if not crypto.send.is_valid():
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
-        capacity = buf.capacity - space.crypto.aead_tag_size
+        capacity = buf.capacity - crypto.aead_tag_size
 
         while True:
             # write header
@@ -1209,7 +1211,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 buf,
                 PACKET_FIXED_BIT
                 | (self._spin_bit << 5)
-                | (space.crypto.key_phase << 2)
+                | (crypto.key_phase << 2)
                 | (PACKET_NUMBER_SEND_SIZE - 1),
             )
             push_bytes(buf, self.peer_cid)
@@ -1217,10 +1219,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             header_size = buf.tell()
 
             # ACK
-            if self.send_ack[epoch] and space.ack_queue:
+            if space.ack_required and space.ack_queue:
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
-                self.send_ack[epoch] = False
+                space.ack_required = False
 
             # PATH CHALLENGE
             if (
@@ -1309,7 +1311,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
                 # encrypt
                 data = buf.data
-                yield space.crypto.encrypt_packet(
+                yield crypto.encrypt_packet(
                     data[0:header_size], data[header_size:packet_size]
                 )
 
@@ -1319,12 +1321,13 @@ class QuicConnection(asyncio.DatagramProtocol):
                 break
 
     def _write_handshake(self, epoch: tls.Epoch) -> Iterator[bytes]:
+        crypto = self.cryptos[epoch]
         space = self.spaces[epoch]
-        if not space.crypto.send.is_valid():
+        if not crypto.send.is_valid():
             return
 
         buf = Buffer(capacity=PACKET_MAX_SIZE)
-        capacity = buf.capacity - space.crypto.aead_tag_size
+        capacity = buf.capacity - crypto.aead_tag_size
 
         while True:
             if epoch == tls.Epoch.INITIAL:
@@ -1346,10 +1349,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             header_size = buf.tell()
 
             # ACK
-            if self.send_ack[epoch] and space.ack_queue:
+            if space.ack_required and space.ack_queue:
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
-                self.send_ack[epoch] = False
+                space.ack_required = False
 
             # CLOSE
             if self.__close and self.__epoch == epoch:
@@ -1373,14 +1376,14 @@ class QuicConnection(asyncio.DatagramProtocol):
             if packet_size > header_size:
                 # finalize length
                 buf.seek(header_size - PACKET_NUMBER_SEND_SIZE - 2)
-                length = packet_size - header_size + 2 + space.crypto.aead_tag_size
+                length = packet_size - header_size + 2 + crypto.aead_tag_size
                 push_uint16(buf, length | 0x4000)
                 push_uint16(buf, self.packet_number)
                 buf.seek(packet_size)
 
                 # encrypt
                 data = buf.data
-                yield space.crypto.encrypt_packet(
+                yield crypto.encrypt_packet(
                     data[0:header_size], data[header_size:packet_size]
                 )
 
@@ -1389,6 +1392,6 @@ class QuicConnection(asyncio.DatagramProtocol):
 
                 # discard initial keys
                 if self.is_client and epoch == tls.Epoch.HANDSHAKE:
-                    self.spaces[tls.Epoch.INITIAL].crypto.teardown()
+                    self.cryptos[tls.Epoch.INITIAL].teardown()
             else:
                 break

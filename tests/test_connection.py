@@ -306,7 +306,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(server_transport.sent, 4)
 
         # mess with encryption key
-        server.spaces[tls.Epoch.ONE_RTT].crypto.send.setup(
+        server.cryptos[tls.Epoch.ONE_RTT].send.setup(
             tls.CipherSuite.AES_128_GCM_SHA256, bytes(48)
         )
 
