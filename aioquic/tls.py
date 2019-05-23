@@ -1617,6 +1617,7 @@ class Context:
                 ticket_age_add=struct.unpack("I", os.urandom(4))[0],
                 ticket_nonce=b"",
                 ticket=os.urandom(64),
+                max_early_data_size=0xFFFFFFFF,
             )
 
             # notify application
