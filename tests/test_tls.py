@@ -229,7 +229,7 @@ class ContextTest(TestCase):
         self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
         client_input = merge_buffers(server_buf)
         if create_ticket:
-            self.assertEqual(len(client_input), 81)
+            self.assertEqual(len(client_input), 89)
             reset_buffers(server_buf)
 
             # handle new_session_ticket
@@ -360,7 +360,7 @@ class ContextTest(TestCase):
             client.handle_message(b"", client_buf)
             self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
             server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 379)
+            self.assertEqual(len(server_input), 383)
             reset_buffers(client_buf)
 
             # handle client hello
@@ -369,7 +369,7 @@ class ContextTest(TestCase):
             server.handle_message(server_input, server_buf)
             self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
             client_input = merge_buffers(server_buf)
-            self.assertEqual(len(client_input), 303)
+            self.assertEqual(len(client_input), 307)
             reset_buffers(server_buf)
 
             # handle server hello, encrypted extensions, certificate, certificate verify, finished
@@ -408,7 +408,7 @@ class ContextTest(TestCase):
             client.handle_message(b"", client_buf)
             self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
             server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 379)
+            self.assertEqual(len(server_input), 383)
             reset_buffers(client_buf)
 
             # tamper with binder
@@ -433,7 +433,7 @@ class ContextTest(TestCase):
             client.handle_message(b"", client_buf)
             self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
             server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 379)
+            self.assertEqual(len(server_input), 383)
             reset_buffers(client_buf)
 
             # handle client hello
@@ -446,7 +446,7 @@ class ContextTest(TestCase):
             buf = server_buf[tls.Epoch.INITIAL]
             buf._data[buf.tell() - 1] = 1
             client_input = merge_buffers(server_buf)
-            self.assertEqual(len(client_input), 303)
+            self.assertEqual(len(client_input), 307)
             reset_buffers(server_buf)
 
             # handle server hello and bomb
