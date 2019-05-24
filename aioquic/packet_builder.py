@@ -69,6 +69,7 @@ class QuicPacketBuilder:
         """
         Returns the assembled datagrams.
         """
+        self._flush_current_datagram()
         datagrams = self._datagrams
         self._datagrams = []
         return datagrams
@@ -77,6 +78,11 @@ class QuicPacketBuilder:
         """
         Starts a new packet.
         """
+        # if there is too little space remaining, start a new datagram
+        # FIXME: the limit is arbitrary!
+        if self.buffer.capacity - self.buffer.tell() < 128:
+            self._flush_current_datagram()
+
         self._packet_start = self.buffer.tell()
 
         # write header
@@ -114,13 +120,15 @@ class QuicPacketBuilder:
         """
         buf = self.buffer
         empty = True
-        packet_size = buf.tell()
+        packet_size = buf.tell() - self._packet_start
         if packet_size > self._header_size:
             empty = False
 
             if is_long_header(self._packet_type):
                 # finalize length
-                buf.seek(self._header_size - PACKET_NUMBER_SEND_SIZE - 2)
+                buf.seek(
+                    self._packet_start + self._header_size - PACKET_NUMBER_SEND_SIZE - 2
+                )
                 length = (
                     packet_size - self._header_size + 2 + self._crypto.aead_tag_size
                 )
@@ -139,14 +147,30 @@ class QuicPacketBuilder:
                     push_bytes(buf, bytes(padding_size))
                     packet_size += padding_size
 
-            # encrypt
+            # encrypt in place
             plain = buf.data_slice(self._packet_start, self._packet_start + packet_size)
-            packet = self._crypto.encrypt_packet(
-                plain[0 : self._header_size], plain[self._header_size : packet_size]
+            self.buffer.seek(self._packet_start)
+            push_bytes(
+                self.buffer,
+                self._crypto.encrypt_packet(
+                    plain[0 : self._header_size], plain[self._header_size : packet_size]
+                ),
             )
 
-            self._datagrams.append(packet)
-            self._packet_number += 1
+            # short header packets cannot be coallesced, we need a new datagram
+            if not is_long_header(self._packet_type):
+                self._flush_current_datagram()
 
-        self.buffer.seek(self._packet_start)
+            self._packet_number += 1
+        else:
+            # "cancel" the packet
+            self.buffer.seek(self._packet_start)
+
+        self._crypto = None
+
         return not empty
+
+    def _flush_current_datagram(self) -> None:
+        if self.buffer.tell():
+            self._datagrams.append(self.buffer.data)
+            self.buffer.seek(0)
