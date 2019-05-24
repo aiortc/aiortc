@@ -87,15 +87,16 @@ class QuicPacketBuilder:
         """
         Starts a new packet.
         """
+        buf = self.buffer
+
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
-        if self.buffer.capacity - self.buffer.tell() < 128:
+        if buf.capacity - buf.tell() < 128:
             self._flush_current_datagram()
 
-        self._packet_start = self.buffer.tell()
+        self._packet_start = buf.tell()
 
         # write header
-        buf = self.buffer
         if is_long_header(packet_type):
             push_uint8(buf, packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
             push_uint32(buf, self._version)
@@ -113,17 +114,17 @@ class QuicPacketBuilder:
             push_packet_number(buf, 0)  # packet number
         else:
             push_uint8(
-                self.buffer,
+                buf,
                 packet_type
                 | (self._spin_bit << 5)
                 | (crypto.key_phase << 2)
                 | (PACKET_NUMBER_SEND_SIZE - 1),
             )
-            push_bytes(self.buffer, self._peer_cid)
-            push_packet_number(self.buffer, self._packet_number)
+            push_bytes(buf, self._peer_cid)
+            push_packet_number(buf, self._packet_number)
 
         self._crypto = crypto
-        self._header_size = self.buffer.tell() - self._packet_start
+        self._header_size = buf.tell() - self._packet_start
         self._packet_type = packet_type
 
     def end_packet(self) -> bool:
@@ -169,9 +170,9 @@ class QuicPacketBuilder:
 
             # encrypt in place
             plain = buf.data_slice(self._packet_start, self._packet_start + packet_size)
-            self.buffer.seek(self._packet_start)
+            buf.seek(self._packet_start)
             push_bytes(
-                self.buffer,
+                buf,
                 self._crypto.encrypt_packet(
                     plain[0 : self._header_size], plain[self._header_size : packet_size]
                 ),
@@ -184,7 +185,7 @@ class QuicPacketBuilder:
             self._packet_number += 1
         else:
             # "cancel" the packet
-            self.buffer.seek(self._packet_start)
+            buf.seek(self._packet_start)
 
         self._crypto = None
 
