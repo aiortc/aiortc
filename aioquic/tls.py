@@ -976,6 +976,7 @@ class SessionTicket:
     ticket: bytes
 
     max_early_data_size: Optional[int] = None
+    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
@@ -1168,6 +1169,7 @@ class Context:
             not_valid_after=timestamp
             + datetime.timedelta(seconds=new_session_ticket.ticket_lifetime),
             not_valid_before=timestamp,
+            other_extensions=self.handshake_extensions,
             resumption_secret=resumption_secret,
             server_name=self.server_name,
             ticket=new_session_ticket.ticket,

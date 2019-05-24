@@ -682,7 +682,18 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
         ]
         self.tls.server_name = self.server_name
-        self.tls.session_ticket = self._session_ticket
+
+        # TLS session resumption
+        if self._session_ticket is not None:
+            self.tls.session_ticket = self._session_ticket
+
+            # parse saved QUIC transport parameters - for 0-RTT
+            for ext_type, ext_data in self._session_ticket.other_extensions:
+                if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                    self._parse_transport_parameters(ext_data)
+                    break
+
+        # TLS callbacks
         if self._session_ticket_fetcher is not None:
             self.tls.get_session_ticket_cb = self._session_ticket_fetcher
         if self._session_ticket_handler is not None:
@@ -1231,12 +1242,11 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _write_application(
         self, builder: QuicPacketBuilder, network_path: QuicNetworkPath
     ) -> None:
-        epoch = tls.Epoch.ONE_RTT
-        crypto = self.cryptos[epoch]
-        space = self.spaces[epoch]
+        crypto = self.cryptos[tls.Epoch.ONE_RTT]
         if not crypto.send.is_valid():
             return
-
+        space = self.spaces[tls.Epoch.ONE_RTT]
+        is_one_rtt = self.__epoch == tls.Epoch.ONE_RTT
         buf = builder.buffer
 
         while True:
@@ -1244,14 +1254,14 @@ class QuicConnection(asyncio.DatagramProtocol):
             builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
 
             # ACK
-            if space.ack_required and space.ack_queue:
+            if is_one_rtt and space.ack_required and space.ack_queue:
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_required = False
 
             # PATH CHALLENGE
             if (
-                self.__epoch == tls.Epoch.ONE_RTT
+                is_one_rtt
                 and not network_path.is_validated
                 and network_path.local_challenge is None
             ):
@@ -1263,7 +1273,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_bytes(buf, network_path.local_challenge)
 
             # PATH RESPONSE
-            if network_path.remote_challenge is not None:
+            if is_one_rtt and network_path.remote_challenge is not None:
                 push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
                 push_bytes(buf, network_path.remote_challenge)
                 network_path.remote_challenge = None
@@ -1275,13 +1285,13 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_uint_var(buf, QuicFrameType.PING)
 
             # CLOSE
-            if self.__close and self.__epoch == epoch:
+            if is_one_rtt and self.__close:
                 push_close(buf, **self.__close)
                 self.__close = None
 
             for stream_id, stream in self.streams.items():
                 # CRYPTO
-                if stream_id == tls.Epoch.ONE_RTT:
+                if is_one_rtt and stream_id == tls.Epoch.ONE_RTT:
                     frame_overhead = 3 + quic_uint_length(stream._send_start)
                     frame = stream.get_frame(builder.remaining_space - frame_overhead)
                     if frame is not None:
