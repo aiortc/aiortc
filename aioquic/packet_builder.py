@@ -12,6 +12,7 @@ from .packet import (
 )
 
 PACKET_MAX_SIZE = 1280
+PACKET_LENGTH_SEND_SIZE = 2
 PACKET_NUMBER_SEND_SIZE = 2
 
 
@@ -140,10 +141,16 @@ class QuicPacketBuilder:
             if is_long_header(self._packet_type):
                 # finalize length
                 buf.seek(
-                    self._packet_start + self._header_size - PACKET_NUMBER_SEND_SIZE - 2
+                    self._packet_start
+                    + self._header_size
+                    - PACKET_NUMBER_SEND_SIZE
+                    - PACKET_LENGTH_SEND_SIZE
                 )
                 length = (
-                    packet_size - self._header_size + 2 + self._crypto.aead_tag_size
+                    packet_size
+                    - self._header_size
+                    + PACKET_NUMBER_SEND_SIZE
+                    + self._crypto.aead_tag_size
                 )
                 push_uint16(buf, length | 0x4000)
                 push_packet_number(buf, self._packet_number)
