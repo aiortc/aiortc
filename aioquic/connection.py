@@ -688,10 +688,13 @@ class QuicConnection(asyncio.DatagramProtocol):
             self.tls.session_ticket = self._session_ticket
 
             # parse saved QUIC transport parameters - for 0-RTT
-            for ext_type, ext_data in self._session_ticket.other_extensions:
-                if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
-                    self._parse_transport_parameters(ext_data)
-                    break
+            if self._session_ticket.max_early_data_size == 0xFFFFFFFF:
+                for ext_type, ext_data in self._session_ticket.other_extensions:
+                    if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
+                        self._parse_transport_parameters(
+                            ext_data, from_session_ticket=True
+                        )
+                        break
 
         # TLS callbacks
         if self._session_ticket_fetcher is not None:
@@ -1149,13 +1152,19 @@ class QuicConnection(asyncio.DatagramProtocol):
         if self.__send_pending_task is None:
             self.__send_pending_task = self._loop.call_soon(self._send_pending)
 
-    def _parse_transport_parameters(self, data: bytes) -> None:
+    def _parse_transport_parameters(
+        self, data: bytes, from_session_ticket: bool = False
+    ) -> None:
         quic_transport_parameters = pull_quic_transport_parameters(Buffer(data=data))
 
         # validate remote parameters
-        if self.is_client and (
-            quic_transport_parameters.original_connection_id
-            != self._original_connection_id
+        if (
+            self.is_client
+            and not from_session_ticket
+            and (
+                quic_transport_parameters.original_connection_id
+                != self._original_connection_id
+            )
         ):
             raise QuicConnectionError(
                 error_code=QuicErrorCode.TRANSPORT_PARAMETER_ERROR,
