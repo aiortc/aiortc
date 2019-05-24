@@ -1275,6 +1275,8 @@ class Context:
             self._session_resumed = True
         else:
             self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
+        self._key_schedule_psk = None
+        self._key_schedule_proxy = None
 
         # perform key exchange
         peer_public_key = decode_public_key(peer_hello.key_share)
@@ -1314,7 +1316,8 @@ class Context:
         )
         self.key_schedule.update_hash(input_buf.data)
 
-        if self._key_schedule_psk is not None:
+        # if the server accepted our PSK we are done, other we want its certificate
+        if self._session_resumed:
             self._set_state(State.CLIENT_EXPECT_FINISHED)
         else:
             self._set_state(State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE)
