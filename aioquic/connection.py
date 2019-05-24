@@ -1242,16 +1242,21 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _write_application(
         self, builder: QuicPacketBuilder, network_path: QuicNetworkPath
     ) -> None:
-        crypto = self.cryptos[tls.Epoch.ONE_RTT]
-        if not crypto.send.is_valid():
+        if self.cryptos[tls.Epoch.ONE_RTT].send.is_valid():
+            crypto = self.cryptos[tls.Epoch.ONE_RTT]
+            packet_type = PACKET_TYPE_ONE_RTT
+        elif self.cryptos[tls.Epoch.ZERO_RTT].send.is_valid():
+            crypto = self.cryptos[tls.Epoch.ZERO_RTT]
+            packet_type = PACKET_TYPE_ZERO_RTT
+        else:
             return
         space = self.spaces[tls.Epoch.ONE_RTT]
         is_one_rtt = self.__epoch == tls.Epoch.ONE_RTT
-        buf = builder.buffer
 
+        buf = builder.buffer
         while True:
             # write header
-            builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+            builder.start_packet(packet_type, crypto)
 
             # ACK
             if is_one_rtt and space.ack_required and space.ack_queue:
