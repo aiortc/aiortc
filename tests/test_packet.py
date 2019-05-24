@@ -6,7 +6,6 @@ from aioquic.buffer import Buffer, BufferReadError
 from aioquic.packet import (
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
-    QuicHeader,
     QuicProtocolVersion,
     QuicTransportParameters,
     decode_packet_number,
@@ -14,7 +13,6 @@ from aioquic.packet import (
     pull_quic_header,
     pull_quic_transport_parameters,
     pull_uint_var,
-    push_quic_header,
     push_quic_transport_parameters,
     push_uint_var,
     quic_uint_length,
@@ -205,19 +203,6 @@ class PacketTest(TestCase):
             supported_versions=[QuicProtocolVersion.DRAFT_18, 0x1A2A3A4A],
         )
         self.assertEqual(data[1:], load("version_negotiation.bin")[1:])
-
-    def test_push_initial(self):
-        buf = Buffer(capacity=32)
-        header = QuicHeader(
-            version=QuicProtocolVersion.DRAFT_17,
-            packet_type=PACKET_TYPE_INITIAL,
-            destination_cid=binascii.unhexlify("90ed1e1c7b04b5d3"),
-            source_cid=b"",
-        )
-        push_quic_header(buf, header)
-        self.assertEqual(
-            buf.data, binascii.unhexlify("c0ff0000115090ed1e1c7b04b5d30000000000")
-        )
 
 
 class ParamsTest(TestCase):

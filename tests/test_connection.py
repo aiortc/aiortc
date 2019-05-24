@@ -4,26 +4,25 @@ import io
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.buffer import Buffer
+from aioquic.buffer import Buffer, push_bytes
 from aioquic.connection import (
     QuicConnection,
     QuicConnectionError,
     QuicNetworkPath,
     QuicReceiveContext,
 )
+from aioquic.crypto import CryptoPair
 from aioquic.packet import (
     PACKET_TYPE_INITIAL,
     QuicErrorCode,
     QuicFrameType,
-    QuicHeader,
     QuicProtocolVersion,
     QuicStreamFlag,
     encode_quic_retry,
     encode_quic_version_negotiation,
-    push_quic_header,
     push_uint_var,
 )
-from aioquic.packet_builder import PACKET_NUMBER_SEND_SIZE
+from aioquic.packet_builder import QuicPacketBuilder
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
@@ -340,18 +339,19 @@ class QuicConnectionTest(TestCase):
         client, client_transport = create_standalone_client()
         self.assertEqual(client_transport.sent, 1)
 
-        buf = Buffer(capacity=1300)
-        push_quic_header(
-            buf,
-            QuicHeader(
-                version=0xFF000011,  # DRAFT_16
-                packet_type=PACKET_TYPE_INITIAL | (PACKET_NUMBER_SEND_SIZE - 1),
-                destination_cid=client.host_cid,
-                source_cid=client.peer_cid,
-            ),
+        builder = QuicPacketBuilder(
+            host_cid=client.peer_cid,
+            peer_cid=client.host_cid,
+            version=0xFF000011,  # DRAFT_16
         )
-        buf.seek(1300)
-        client.datagram_received(buf.data, SERVER_ADDR)
+        crypto = CryptoPair()
+        crypto.setup_initial(client.host_cid, is_client=False)
+        builder.start_packet(PACKET_TYPE_INITIAL, crypto=crypto)
+        push_bytes(builder.buffer, bytes(1200))
+        builder.end_packet()
+
+        for datagram in builder.flush():
+            client.datagram_received(datagram, SERVER_ADDR)
         self.assertEqual(client_transport.sent, 1)
 
     def test_datagram_received_retry(self):

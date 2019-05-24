@@ -1,8 +1,15 @@
 from typing import List, Optional
 
-from .buffer import Buffer, push_bytes, push_uint8, push_uint16
+from .buffer import Buffer, push_bytes, push_uint8, push_uint16, push_uint32
 from .crypto import CryptoPair
-from .packet import PACKET_NUMBER_MAX_SIZE, QuicHeader, is_long_header, push_quic_header
+from .packet import (
+    PACKET_NUMBER_MAX_SIZE,
+    PACKET_TYPE_INITIAL,
+    PACKET_TYPE_MASK,
+    encode_cid_length,
+    is_long_header,
+    push_uint_var,
+)
 
 PACKET_MAX_SIZE = 1280
 PACKET_NUMBER_SEND_SIZE = 2
@@ -25,12 +32,13 @@ class QuicPacketBuilder:
 
     def __init__(
         self,
+        *,
         host_cid: bytes,
-        packet_number: int,
         peer_cid: bytes,
-        peer_token: bytes,
-        spin_bit: bool,
         version: int,
+        packet_number: int = 0,
+        peer_token: bytes = b"",
+        spin_bit: bool = False,
     ):
         self._host_cid = host_cid
         self._peer_cid = peer_cid
@@ -86,17 +94,22 @@ class QuicPacketBuilder:
         self._packet_start = self.buffer.tell()
 
         # write header
+        buf = self.buffer
         if is_long_header(packet_type):
-            push_quic_header(
-                self.buffer,
-                QuicHeader(
-                    version=self._version,
-                    packet_type=packet_type | (PACKET_NUMBER_SEND_SIZE - 1),
-                    destination_cid=self._peer_cid,
-                    source_cid=self._host_cid,
-                    token=self._peer_token,
-                ),
+            push_uint8(buf, packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
+            push_uint32(buf, self._version)
+            push_uint8(
+                buf,
+                (encode_cid_length(len(self._peer_cid)) << 4)
+                | encode_cid_length(len(self._host_cid)),
             )
+            push_bytes(buf, self._peer_cid)
+            push_bytes(buf, self._host_cid)
+            if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
+                push_uint_var(buf, len(self._peer_token))
+                push_bytes(buf, self._peer_token)
+            push_uint16(buf, 0)  # length
+            push_packet_number(buf, 0)  # packet number
         else:
             push_uint8(
                 self.buffer,

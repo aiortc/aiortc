@@ -215,23 +215,6 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
         )
 
 
-def push_quic_header(buf: Buffer, header: QuicHeader) -> None:
-    push_uint8(buf, header.packet_type)
-    push_uint32(buf, header.version)
-    push_uint8(
-        buf,
-        (encode_cid_length(len(header.destination_cid)) << 4)
-        | encode_cid_length(len(header.source_cid)),
-    )
-    push_bytes(buf, header.destination_cid)
-    push_bytes(buf, header.source_cid)
-    if (header.packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
-        push_uint_var(buf, len(header.token))
-        push_bytes(buf, header.token)
-    push_uint16(buf, 0)  # length
-    push_uint16(buf, 0)  # pn
-
-
 def encode_quic_retry(
     version: int,
     source_cid: bytes,
