@@ -684,7 +684,12 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.tls.server_name = self.server_name
 
         # TLS session resumption
-        if self._session_ticket is not None:
+        if (
+            self.is_client
+            and self._session_ticket is not None
+            and self._session_ticket.is_valid
+            and self._session_ticket.server_name == self.server_name
+        ):
             self.tls.session_ticket = self._session_ticket
 
             # parse saved QUIC transport parameters - for 0-RTT
