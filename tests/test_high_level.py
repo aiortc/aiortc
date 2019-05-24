@@ -77,7 +77,8 @@ class HighLevelTest(TestCase):
         # second request
         _, response = run(
             asyncio.gather(
-                run_server(session_ticket_fetcher=store.pop), run_client("127.0.0.1")
+                run_server(session_ticket_fetcher=store.pop),
+                run_client("127.0.0.1", session_ticket=client_ticket),
             )
         )
         self.assertEqual(response, b"gnip")
