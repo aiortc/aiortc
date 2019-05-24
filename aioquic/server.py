@@ -144,6 +144,7 @@ class QuicServer(asyncio.DatagramProtocol):
             )
             connection.connection_made(self._transport)
             self._connections[connection.host_cid] = connection
+            self._connections[header.destination_cid] = connection
             self._connection_handler(connection)
 
         if connection is not None:
