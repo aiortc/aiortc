@@ -398,17 +398,6 @@ def push_psk_binder(buf: Buffer, binder: bytes) -> None:
 Extension = Tuple[int, bytes]
 
 
-def pull_raw_extension(buf: Buffer) -> Extension:
-    extension_type = pull_uint16(buf)
-    extension_length = pull_uint16(buf)
-    return (extension_type, pull_bytes(buf, extension_length))
-
-
-def push_raw_extension(buf: Buffer, extension: Extension) -> None:
-    with push_extension(buf, extension[0]):
-        push_bytes(buf, extension[1])
-
-
 @dataclass
 class OfferedPsks:
     identities: List[PskIdentity]
