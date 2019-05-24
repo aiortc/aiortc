@@ -160,7 +160,7 @@ async def test_key_update(config, **kwargs):
 async def test_spin_bit(config, **kwargs):
     async with aioquic.connect(config.host, config.port, **kwargs) as connection:
         spin_bits = set()
-        for i in range(4):
+        for i in range(5):
             await connection.ping()
             spin_bits.add(connection._spin_bit_peer)
         if len(spin_bits) == 2:
@@ -181,7 +181,7 @@ async def run(only=None, **kwargs):
             print("\n=== %s %s ===\n" % (config.name, test_name))
             try:
                 await asyncio.wait_for(test_func(config, **kwargs), timeout=5)
-            except asyncio.TimeoutError:
+            except Exception:
                 pass
         print("")
         print_result(config)
