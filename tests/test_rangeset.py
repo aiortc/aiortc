@@ -135,6 +135,50 @@ class RangeSetTest(TestCase):
         rangeset.add(3, 5)
         self.assertEqual(list(rangeset), [range(0, 2), range(3, 5), range(6, 8)])
 
+    def test_subtract(self):
+        rangeset = RangeSet()
+        rangeset.add(0, 10)
+        rangeset.add(20, 30)
+
+        rangeset.subtract(0, 3)
+        self.assertEqual(list(rangeset), [range(3, 10), range(20, 30)])
+
+    def test_subtract_no_change(self):
+        rangeset = RangeSet()
+        rangeset.add(5, 10)
+        rangeset.add(15, 20)
+        rangeset.add(25, 30)
+
+        rangeset.subtract(0, 5)
+        self.assertEqual(list(rangeset), [range(5, 10), range(15, 20), range(25, 30)])
+
+        rangeset.subtract(10, 15)
+        self.assertEqual(list(rangeset), [range(5, 10), range(15, 20), range(25, 30)])
+
+    def test_subtract_overlap(self):
+        rangeset = RangeSet()
+        rangeset.add(1, 4)
+        rangeset.add(6, 8)
+        rangeset.add(10, 20)
+        rangeset.add(30, 40)
+        self.assertEqual(
+            list(rangeset), [range(1, 4), range(6, 8), range(10, 20), range(30, 40)]
+        )
+
+        rangeset.subtract(0, 2)
+        self.assertEqual(
+            list(rangeset), [range(2, 4), range(6, 8), range(10, 20), range(30, 40)]
+        )
+
+        rangeset.subtract(3, 11)
+        self.assertEqual(list(rangeset), [range(2, 3), range(11, 20), range(30, 40)])
+
+    def test_subtract_split(self):
+        rangeset = RangeSet()
+        rangeset.add(0, 10)
+        rangeset.subtract(2, 5)
+        self.assertEqual(list(rangeset), [range(0, 2), range(5, 10)])
+
     def test_bool(self):
         rangeset = RangeSet()
         self.assertFalse(bool(rangeset))

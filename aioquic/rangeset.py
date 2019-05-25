@@ -41,6 +41,37 @@ class RangeSet(Sequence):
     def shift(self) -> range:
         return self.__ranges.pop(0)
 
+    def subtract(self, start: int, stop: int) -> None:
+        assert stop > start
+
+        i = 0
+        while i < len(self.__ranges):
+            r = self.__ranges[i]
+
+            # the removed range is entirely before current item, stop here
+            if stop <= r.start:
+                return
+
+            # the removed range is entirely after current item, keep looking
+            if start >= r.stop:
+                i += 1
+                continue
+
+            # the removed range completely covers the current item, remove it
+            if start <= r.start and stop >= r.stop:
+                self.__ranges.pop(i)
+                continue
+
+            # the removed range touches the current item
+            if start > r.start:
+                self.__ranges[i] = range(r.start, start)
+                if stop < r.stop:
+                    self.__ranges.insert(i + 1, range(stop, r.stop))
+            else:
+                self.__ranges[i] = range(stop, r.stop)
+
+            i += 1
+
     def __bool__(self) -> bool:
         return bool(self.__ranges)
 
