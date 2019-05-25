@@ -11,6 +11,7 @@ from typing import (
     FrozenSet,
     List,
     Optional,
+    Sequence,
     Text,
     TextIO,
     Tuple,
@@ -146,6 +147,9 @@ class QuicConnectionState(Enum):
     DRAINING = 3
 
 
+QuicDeliveryHandler = Callable[..., None]
+
+
 @dataclass
 class QuicNetworkPath:
     addr: NetworkAddress
@@ -164,6 +168,14 @@ class QuicPacketSpace:
         self.ack_queue = RangeSet()
         self.ack_required = False
         self.expected_packet_number = 0
+        self.delivery_handlers: Dict[int, List[Tuple[QuicDeliveryHandler, Any]]] = {}
+
+    def expect_ack(
+        self, packet_number: int, handler: QuicDeliveryHandler, args: Sequence[Any] = []
+    ) -> None:
+        if packet_number not in self.delivery_handlers:
+            self.delivery_handlers[packet_number] = []
+        self.delivery_handlers[packet_number].append((handler, args))
 
 
 @dataclass
@@ -250,7 +262,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
         self._parameters_received = False
-        self._ping_packet_number: Optional[int] = None
+        self._ping_pending = False
         self._ping_waiter: Optional[asyncio.Future[None]] = None
         self._probe_timeout = 0.1  # seconds
         self._remote_idle_timeout = 0  # milliseconds
@@ -405,7 +417,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Pings the remote host and waits for the response.
         """
         assert self._ping_waiter is None
-        self._ping_packet_number = None
+        self._ping_pending = True
         self._ping_waiter = self._loop.create_future()
         self._send_soon()
         await asyncio.shield(self._ping_waiter)
@@ -743,22 +755,19 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle an ACK frame.
         """
         rangeset, _ = packet.pull_ack_frame(buf)
-
-        # handle PING response
-        if (
-            self._ping_packet_number is not None
-            and self._ping_packet_number in rangeset
-        ):
-            waiter = self._ping_waiter
-            self._ping_waiter = None
-            self._ping_packet_number = None
-            self._logger.info("Received PING response")
-            waiter.set_result(None)
-
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
             pull_uint_var(buf)
+
+        # trigger callbacks
+        handlers = self.spaces[context.epoch].delivery_handlers
+        for packet_range in rangeset:
+            for packet_number in packet_range:
+                if packet_number in handlers:
+                    for handler, args in handlers[packet_number]:
+                        handler(*args)
+                    del handlers[packet_number]
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1059,6 +1068,15 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         pull_uint_var(buf)  # limit
 
+    def _on_ping_delivery(self) -> None:
+        """
+        Callback when a PING is ACK'd.
+        """
+        self._logger.info("Received PING response")
+        waiter = self._ping_waiter
+        self._ping_waiter = None
+        waiter.set_result(None)
+
     def _payload_received(
         self, context: QuicReceiveContext, plain: bytes
     ) -> Tuple[bool, bool]:
@@ -1315,20 +1333,26 @@ class QuicConnection(asyncio.DatagramProtocol):
                 network_path.remote_challenge = None
 
             # PING
-            if self._ping_waiter is not None and self._ping_packet_number is None:
-                self._ping_packet_number = builder.packet_number
+            if self._ping_pending:
                 self._logger.info("Sending PING in packet %d", builder.packet_number)
                 push_uint_var(buf, QuicFrameType.PING)
+                space.expect_ack(builder.packet_number, self._on_ping_delivery)
+                self._ping_pending = False
 
             for stream_id, stream in self.streams.items():
                 # CRYPTO
                 if is_one_rtt and stream_id == tls.Epoch.ONE_RTT:
-                    frame_overhead = 3 + quic_uint_length(stream._send_start)
+                    frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
                     frame = stream.get_frame(builder.remaining_space - frame_overhead)
                     if frame is not None:
                         push_uint_var(buf, QuicFrameType.CRYPTO)
                         with packet.push_crypto_frame(buf, frame.offset):
                             push_bytes(buf, frame.data)
+                        space.expect_ack(
+                            builder.packet_number,
+                            stream.on_data_delivery,
+                            (frame.offset, frame.offset + len(frame.data)),
+                        )
 
                 # STREAM
                 elif isinstance(stream_id, int):
@@ -1338,11 +1362,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                         3
                         + quic_uint_length(stream_id)
                         + (
-                            quic_uint_length(stream._send_start)
-                            if stream._send_start
+                            quic_uint_length(stream.next_send_offset)
+                            if stream.next_send_offset
                             else 0
                         )
                     )
+                    previous_send_highest = stream._send_highest
                     frame = stream.get_frame(
                         min(
                             builder.remaining_space - frame_overhead,
@@ -1359,7 +1384,14 @@ class QuicConnection(asyncio.DatagramProtocol):
                         push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
                         with push_stream_frame(buf, stream_id, frame.offset):
                             push_bytes(buf, frame.data)
-                        self._remote_max_data_used += len(frame.data)
+                        self._remote_max_data_used += (
+                            stream._send_highest - previous_send_highest
+                        )
+                        space.expect_ack(
+                            builder.packet_number,
+                            stream.on_data_delivery,
+                            (frame.offset, frame.offset + len(frame.data)),
+                        )
 
             if not builder.end_packet():
                 break
@@ -1387,12 +1419,17 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # CRYPTO
             stream = self.streams[epoch]
-            frame_overhead = 3 + quic_uint_length(stream._send_start)
+            frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
             frame = stream.get_frame(builder.remaining_space - frame_overhead)
             if frame is not None:
                 push_uint_var(buf, QuicFrameType.CRYPTO)
                 with packet.push_crypto_frame(buf, frame.offset):
                     push_bytes(buf, frame.data)
+                space.expect_ack(
+                    builder.packet_number,
+                    stream.on_data_delivery,
+                    (frame.offset, frame.offset + len(frame.data)),
+                )
 
                 # PADDING
                 if epoch == tls.Epoch.INITIAL and self.is_client:

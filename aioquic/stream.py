@@ -30,18 +30,29 @@ class QuicStream(asyncio.BaseTransport):
         self._recv_start = 0  # the offset for the start of the buffer
         self._recv_ranges = RangeSet()
 
+        self._send_acked = RangeSet()
         self._send_buffer = bytearray()
         self._send_complete = False
         self._send_eof = False
+        self._send_highest = 0
         self._send_pending = RangeSet()
-        self._send_start = 0
-        self._send_end = 0
+        self._send_buffer_start = 0  # the offset for the start of the buffer
+        self._send_buffer_stop = 0  # the offset for the stop of the buffer
 
         self.__stream_id = stream_id
 
     @property
     def stream_id(self) -> Optional[int]:
         return self.__stream_id
+
+    def connection_lost(self, exc: Exception) -> None:
+        if self.reader is not None:
+            if exc is None:
+                self.reader.feed_eof()
+            else:
+                self.reader.set_exception(exc)
+
+    # reader
 
     def add_frame(self, frame: QuicStreamFrame) -> None:
         """
@@ -84,64 +95,9 @@ class QuicStream(asyncio.BaseTransport):
             if self._recv_fin and not self._recv_ranges:
                 self.reader.feed_eof()
 
-    def connection_lost(self, exc: Exception) -> None:
-        if self.reader is not None:
-            if exc is None:
-                self.reader.feed_eof()
-            else:
-                self.reader.set_exception(exc)
-
-    def get_frame(self, size: int) -> Optional[QuicStreamFrame]:
-        """
-        Get a frame of data to send.
-        """
-        # check there is something to send
-        if self._send_complete or not (self._send_eof or bool(self._send_pending)):
-            return None
-
-        if not self._send_pending:
-            # FIN only
-            self._send_complete = True
-            return QuicStreamFrame(fin=True, offset=self._send_end)
-
-        # apply flow control
-        r = self._send_pending[0]
-        size = min(size, r.stop - r.start)
-        if self.stream_id is not None:
-            size = min(size, self.max_stream_data_remote - r.start)
-        if size <= 0:
-            return None
-
-        # create frame
-        send = range(r.start, r.start + size)
-        frame = QuicStreamFrame(
-            data=self._send_buffer[
-                send.start - self._send_start : send.start + size - self._send_start
-            ],
-            offset=send.start,
-        )
-        self._send_pending.subtract(send.start, send.stop)
-
-        # if the buffer is empty and EOF was written, set the FIN bit
-        if self._send_eof and not self._send_pending:
-            frame.fin = True
-            self._send_complete = True
-
-        return frame
-
     def has_data_to_read(self) -> bool:
         return (
             bool(self._recv_ranges) and self._recv_ranges[0].start == self._recv_start
-        )
-
-    def is_blocked(self) -> bool:
-        """
-        Returns True if there is data to send but the peer's MAX_STREAM_DATA
-        prevents us from sending it.
-        """
-        return (
-            bool(self._send_pending)
-            and self._send_pending[0].start >= self.max_stream_data_remote
         )
 
     def pull_data(self) -> bytes:
@@ -157,6 +113,88 @@ class QuicStream(asyncio.BaseTransport):
         self._recv_buffer = self._recv_buffer[pos:]
         self._recv_start = r.stop
         return data
+
+    # writer
+
+    @property
+    def next_send_offset(self) -> int:
+        """
+        The offset for the next frame to send.
+
+        This is used to determine the space needed for the frame's `offset` field.
+        """
+        try:
+            return self._send_pending[0].start
+        except IndexError:
+            return self._send_buffer_stop
+
+    def get_frame(self, size: int) -> Optional[QuicStreamFrame]:
+        """
+        Get a frame of data to send.
+        """
+        # check there is something to send
+        if self._send_complete or not (self._send_eof or self._send_pending):
+            return None
+
+        # FIN only
+        if not self._send_pending:
+            self._send_complete = True
+            return QuicStreamFrame(fin=True, offset=self._send_buffer_stop)
+
+        # apply flow control
+        r = self._send_pending[0]
+        size = min(size, r.stop - r.start)
+        if self.stream_id is not None:
+            size = min(size, self.max_stream_data_remote - r.start)
+        if size <= 0:
+            return None
+
+        # create frame
+        send = range(r.start, r.start + size)
+        frame = QuicStreamFrame(
+            data=self._send_buffer[
+                send.start
+                - self._send_buffer_start : send.start
+                + size
+                - self._send_buffer_start
+            ],
+            offset=send.start,
+        )
+        self._send_pending.subtract(send.start, send.stop)
+
+        # track the highest offset ever sent
+        if send.stop > self._send_highest:
+            self._send_highest = send.stop
+
+        # if the buffer is empty and EOF was written, set the FIN bit
+        if self._send_eof and not self._send_pending:
+            frame.fin = True
+            self._send_complete = True
+
+        return frame
+
+    def is_blocked(self) -> bool:
+        """
+        Returns True if there is data to send but the peer's MAX_STREAM_DATA
+        prevents us from sending it.
+        """
+        return (
+            bool(self._send_pending)
+            and self._send_pending[0].start >= self.max_stream_data_remote
+        )
+
+    def on_data_delivery(self, start: int, stop: int) -> None:
+        """
+        Callback when sent data is ACK'd.
+        """
+        if stop - start:
+            self._send_acked.add(start, stop)
+            first_range = self._send_acked[0]
+            if first_range.start == self._send_buffer_start:
+                size = first_range.stop - first_range.start
+                self._send_acked.shift()
+                self._send_buffer_start += size
+                del self._send_buffer[:size]
 
     # asyncio.Transport
 
@@ -174,9 +212,11 @@ class QuicStream(asyncio.BaseTransport):
         size = len(data)
 
         if size:
+            self._send_pending.add(
+                self._send_buffer_stop, self._send_buffer_stop + size
+            )
             self._send_buffer += data
-            self._send_pending.add(self._send_end, self._send_end + size)
-            self._send_end += size
+            self._send_buffer_stop += size
             if self._connection is not None:
                 self._connection._send_soon()
 
