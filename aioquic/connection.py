@@ -252,6 +252,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._parameters_received = False
         self._ping_packet_number: Optional[int] = None
         self._ping_waiter: Optional[asyncio.Future[None]] = None
+        self._probe_timeout = 0.1  # seconds
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -1142,9 +1143,25 @@ class QuicConnection(asyncio.DatagramProtocol):
             spin_bit=self._spin_bit,
             version=self._version,
         )
-        for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
-            self._write_handshake(builder, epoch)
-        self._write_application(builder, network_path)
+
+        if self.__close:
+            for epoch, packet_type in (
+                (tls.Epoch.ONE_RTT, PACKET_TYPE_ONE_RTT),
+                (tls.Epoch.HANDSHAKE, PACKET_TYPE_HANDSHAKE),
+                (tls.Epoch.INITIAL, PACKET_TYPE_INITIAL),
+            ):
+                crypto = self.cryptos[epoch]
+                if crypto.send.is_valid():
+                    builder.start_packet(packet_type, crypto)
+                    push_close(builder.buffer, **self.__close)
+                    builder.end_packet()
+                    self.__close = None
+                    break
+        else:
+            for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
+                self._write_handshake(builder, epoch)
+            self._write_application(builder, network_path)
+
         self.packet_number = builder.packet_number
 
         # send datagrams
@@ -1303,11 +1320,6 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._logger.info("Sending PING in packet %d", builder.packet_number)
                 push_uint_var(buf, QuicFrameType.PING)
 
-            # CLOSE
-            if is_one_rtt and self.__close:
-                push_close(buf, **self.__close)
-                self.__close = None
-
             for stream_id, stream in self.streams.items():
                 # CRYPTO
                 if is_one_rtt and stream_id == tls.Epoch.ONE_RTT:
@@ -1372,11 +1384,6 @@ class QuicConnection(asyncio.DatagramProtocol):
                 push_uint_var(buf, QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_required = False
-
-            # CLOSE
-            if self.__close and self.__epoch == epoch:
-                push_close(buf, **self.__close)
-                self.__close = None
 
             # CRYPTO
             stream = self.streams[epoch]
