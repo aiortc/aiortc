@@ -97,6 +97,16 @@ def get_epoch(packet_type: int) -> tls.Epoch:
         return tls.Epoch.ONE_RTT
 
 
+def frame_type_name(frame_type: int) -> str:
+    if (
+        frame_type >= QuicFrameType.STREAM_BASE
+        and frame_type < QuicFrameType.STREAM_BASE + 16
+    ):
+        return "STREAM"
+    else:
+        return QuicFrameType(frame_type).name
+
+
 def push_close(
     buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: str
 ) -> None:
@@ -138,6 +148,13 @@ class QuicConnectionError(Exception):
 class QuicConnectionAdapter(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> Tuple[str, Any]:
         return "[%s] %s" % (self.extra["host_cid"], msg), kwargs
+
+
+@dataclass
+class QuicConnectionId:
+    cid: bytes
+    sequence_number: int
+    stateless_reset_token: bytes = b""
 
 
 class QuicConnectionState(Enum):
@@ -182,6 +199,9 @@ class QuicPacketSpace:
 class QuicReceiveContext:
     epoch: tls.Epoch
     network_path: QuicNetworkPath
+
+    def __str__(self) -> str:
+        return self.epoch.name
 
 
 def maybe_connection_error(
@@ -232,8 +252,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.certificate = certificate
         self.is_client = is_client
         self.host_cid = os.urandom(8)
+        self.host_cids = [QuicConnectionId(cid=self.host_cid, sequence_number=0)]
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
+        self.peer_cids: List[QuicConnectionId] = []
         self.peer_token = b""
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
@@ -536,6 +558,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             # update state
             if not self.peer_cid_set:
                 self.peer_cid = header.source_cid
+                self.peer_cids = [
+                    QuicConnectionId(cid=header.source_cid, sequence_number=0)
+                ]
                 self.peer_cid_set = True
 
             if self.__state == QuicConnectionState.FIRSTFLIGHT:
@@ -555,7 +580,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # handle payload
             context = QuicReceiveContext(epoch=epoch, network_path=network_path)
-            self._logger.debug("[%s] handling packet %d", context.epoch, packet_number)
+            self._logger.debug("[%s] handling packet %d", context, packet_number)
             try:
                 is_ack_only, is_probing = self._payload_received(context, plain_payload)
             except QuicConnectionError as exc:
@@ -913,7 +938,21 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a NEW_CONNECTION_ID frame.
         """
-        packet.pull_new_connection_id_frame(buf)
+        sequence_number, cid, stateless_reset_token = packet.pull_new_connection_id_frame(
+            buf
+        )
+        self._logger.info(
+            "New connection ID received %d %s",
+            sequence_number,
+            binascii.hexlify(cid).decode("ascii"),
+        )
+        self.peer_cids.append(
+            QuicConnectionId(
+                cid=cid,
+                sequence_number=sequence_number,
+                stateless_reset_token=stateless_reset_token,
+            )
+        )
 
     def _handle_new_token_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1111,7 +1150,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # handle the frame
             if frame_type != QuicFrameType.PADDING:
                 self._logger.debug(
-                    "[%s] handling frame type %s", context.epoch, frame_type
+                    "[%s] handling frame %s", context, frame_type_name(frame_type)
                 )
                 try:
                     frame_handler(context, frame_type, buf)
