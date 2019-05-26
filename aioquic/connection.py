@@ -155,6 +155,7 @@ class QuicConnectionId:
     cid: bytes
     sequence_number: int
     stateless_reset_token: bytes = b""
+    was_sent: bool = False
 
 
 class QuicConnectionState(Enum):
@@ -198,6 +199,7 @@ class QuicPacketSpace:
 @dataclass
 class QuicReceiveContext:
     epoch: tls.Epoch
+    host_cid: bytes
     network_path: QuicNetworkPath
 
     def __str__(self) -> str:
@@ -215,6 +217,7 @@ def maybe_connection_error(
         return None
 
 
+QuicConnectionIdHandler = Callable[[bytes], None]
 QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
 
 
@@ -251,8 +254,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.alpn_protocols = alpn_protocols
         self.certificate = certificate
         self.is_client = is_client
-        self.host_cid = os.urandom(8)
-        self.host_cids = [QuicConnectionId(cid=self.host_cid, sequence_number=0)]
         self.peer_cid = os.urandom(8)
         self.peer_cid_set = False
         self.peer_cids: List[QuicConnectionId] = []
@@ -270,6 +271,16 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
+        self._host_cids = [
+            QuicConnectionId(
+                cid=os.urandom(8),
+                sequence_number=0,
+                stateless_reset_token=os.urandom(16),
+                was_sent=True,
+            )
+        ]
+        self.host_cid = self._host_cids[0].cid
+        self._host_cid_seq = 1
         self._local_idle_timeout = 60000  # milliseconds
         self._local_max_data = 1048576
         self._local_max_data_used = 0
@@ -305,6 +316,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._version: Optional[int] = None
 
         # callbacks
+        self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
+        self._connection_id_retired_handler: QuicConnectionIdHandler = lambda c: None
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
 
@@ -579,7 +592,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._spin_highest_pn = packet_number
 
             # handle payload
-            context = QuicReceiveContext(epoch=epoch, network_path=network_path)
+            context = QuicReceiveContext(
+                epoch=epoch, host_cid=header.destination_cid, network_path=network_path
+            )
             self._logger.debug("[%s] handling packet %d", context, packet_number)
             try:
                 is_ack_only, is_probing = self._payload_received(context, plain_payload)
@@ -855,6 +870,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 tls.State.CLIENT_POST_HANDSHAKE,
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
+                self._replenish_connection_ids()
                 self.__epoch = tls.Epoch.ONE_RTT
                 # wakeup waiter
                 if not self.__connected.is_set():
@@ -1025,7 +1041,23 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a RETIRE_CONNECTION_ID frame.
         """
-        pull_uint_var(buf)  # sequence number
+        sequence_number = pull_uint_var(buf)
+
+        # find the connection ID by sequence number
+        for index, connection_id in enumerate(self._host_cids):
+            if connection_id.sequence_number == sequence_number:
+                if connection_id.cid == context.host_cid:
+                    raise QuicConnectionError(
+                        error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                        frame_type=frame_type,
+                        reason_phrase="Cannot retire current connection ID",
+                    )
+                del self._host_cids[index]
+                self._connection_id_retired_handler(connection_id.cid)
+                break
+
+        # issue a new connection ID
+        self._replenish_connection_ids()
 
     def _handle_stop_sending_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1182,6 +1214,20 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._push_crypto_data()
 
         return is_ack_only, bool(is_probing)
+
+    def _replenish_connection_ids(self) -> None:
+        """
+        Generate new connection IDs.
+        """
+        while len(self._host_cids) < 8:
+            self._host_cids.append(
+                QuicConnectionId(
+                    cid=os.urandom(8),
+                    sequence_number=self._host_cid_seq,
+                    stateless_reset_token=os.urandom(16),
+                )
+            )
+            self._host_cid_seq += 1
 
     def _push_crypto_data(self) -> None:
         for epoch, buf in self.send_buffer.items():
@@ -1346,30 +1392,44 @@ class QuicConnection(asyncio.DatagramProtocol):
             # write header
             builder.start_packet(packet_type, crypto)
 
-            # ACK
-            if is_one_rtt and space.ack_required and space.ack_queue:
-                push_uint_var(buf, QuicFrameType.ACK)
-                packet.push_ack_frame(buf, space.ack_queue, 0)
-                space.ack_required = False
+            if is_one_rtt:
+                # ACK
+                if space.ack_required and space.ack_queue:
+                    push_uint_var(buf, QuicFrameType.ACK)
+                    packet.push_ack_frame(buf, space.ack_queue, 0)
+                    space.ack_required = False
 
-            # PATH CHALLENGE
-            if (
-                is_one_rtt
-                and not network_path.is_validated
-                and network_path.local_challenge is None
-            ):
-                self._logger.info(
-                    "Network path %s sending challenge", network_path.addr
-                )
-                network_path.local_challenge = os.urandom(8)
-                push_uint_var(buf, QuicFrameType.PATH_CHALLENGE)
-                push_bytes(buf, network_path.local_challenge)
+                # PATH CHALLENGE
+                if (
+                    not network_path.is_validated
+                    and network_path.local_challenge is None
+                ):
+                    self._logger.info(
+                        "Network path %s sending challenge", network_path.addr
+                    )
+                    network_path.local_challenge = os.urandom(8)
+                    push_uint_var(buf, QuicFrameType.PATH_CHALLENGE)
+                    push_bytes(buf, network_path.local_challenge)
 
-            # PATH RESPONSE
-            if is_one_rtt and network_path.remote_challenge is not None:
-                push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
-                push_bytes(buf, network_path.remote_challenge)
-                network_path.remote_challenge = None
+                # PATH RESPONSE
+                if network_path.remote_challenge is not None:
+                    push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
+                    push_bytes(buf, network_path.remote_challenge)
+                    network_path.remote_challenge = None
+
+                # NEW_CONNECTION_ID
+                for connection_id in self._host_cids:
+                    if not connection_id.was_sent:
+                        push_uint_var(buf, QuicFrameType.NEW_CONNECTION_ID)
+                        packet.push_new_connection_id_frame(
+                            buf,
+                            connection_id.sequence_number,
+                            connection_id.cid,
+                            connection_id.stateless_reset_token,
+                        )
+                        connection_id.was_sent = True
+                        space.expect_ack(builder.packet_number, lambda: None)
+                        self._connection_id_issued_handler(connection_id.cid)
 
             # PING
             if self._ping_pending:

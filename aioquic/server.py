@@ -142,9 +142,19 @@ class QuicServer(asyncio.DatagramProtocol):
                 session_ticket_handler=self._session_ticket_handler,
                 stream_handler=self._stream_handler,
             )
-            connection.connection_made(self._transport)
-            self._connections[connection.host_cid] = connection
             self._connections[header.destination_cid] = connection
+
+            def connection_id_issued(cid: bytes) -> None:
+                self._connections[cid] = connection
+
+            def connection_id_retired(cid: bytes) -> None:
+                del self._connections[cid]
+
+            connection._connection_id_issued_handler = connection_id_issued
+            connection._connection_id_retired_handler = connection_id_retired
+            connection.connection_made(self._transport)
+
+            self._connections[connection.host_cid] = connection
             self._connection_handler(connection)
 
         if connection is not None:
