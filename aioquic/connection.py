@@ -255,8 +255,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.certificate = certificate
         self.is_client = is_client
         self.peer_cid = os.urandom(8)
-        self.peer_cid_set = False
-        self.peer_cids: List[QuicConnectionId] = []
+        self._peer_cid_seq: Optional[int] = None
+        self._peer_cid_available: List[QuicConnectionId] = []
         self.peer_token = b""
         self.private_key = private_key
         self.secrets_log_file = secrets_log_file
@@ -314,6 +314,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__state = QuicConnectionState.FIRSTFLIGHT
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._version: Optional[int] = None
+
+        # things to send
+        self._retire_connection_ids: List[int] = []
 
         # callbacks
         self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
@@ -569,12 +572,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self.cryptos[tls.Epoch.INITIAL].teardown()
 
             # update state
-            if not self.peer_cid_set:
+            if self._peer_cid_seq is None:
                 self.peer_cid = header.source_cid
-                self.peer_cids = [
-                    QuicConnectionId(cid=header.source_cid, sequence_number=0)
-                ]
-                self.peer_cid_set = True
+                self._peer_cid_seq = 0
 
             if self.__state == QuicConnectionState.FIRSTFLIGHT:
                 self._set_state(QuicConnectionState.CONNECTED)
@@ -667,6 +667,20 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.tls.handle_message(b"", self.send_buffer)
         self._push_crypto_data()
         self._send_pending()
+
+    def _consume_connection_id(self) -> None:
+        """
+        Switch to the next available connection ID and retire
+        the previous one.
+        """
+        if self._peer_cid_available:
+            # retire previous CID
+            self._retire_connection_ids.append(self._peer_cid_seq)
+
+            # assign new CID
+            connection_id = self._peer_cid_available.pop(0)
+            self._peer_cid_seq = connection_id.sequence_number
+            self.peer_cid = connection_id.cid
 
     def _find_network_path(self, addr: NetworkAddress) -> QuicNetworkPath:
         # check existing network paths
@@ -962,7 +976,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             sequence_number,
             binascii.hexlify(cid).decode("ascii"),
         )
-        self.peer_cids.append(
+        self._peer_cid_available.append(
             QuicConnectionId(
                 cid=cid,
                 sequence_number=sequence_number,
@@ -1430,6 +1444,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                         connection_id.was_sent = True
                         space.expect_ack(builder.packet_number, lambda: None)
                         self._connection_id_issued_handler(connection_id.cid)
+
+                # RETIRE_CONNECTION_ID
+                while self._retire_connection_ids:
+                    push_uint_var(buf, QuicFrameType.RETIRE_CONNECTION_ID)
+                    push_uint_var(buf, self._retire_connection_ids.pop(0))
+                    space.expect_ack(builder.packet_number, lambda: None)
 
             # PING
             if self._ping_pending:

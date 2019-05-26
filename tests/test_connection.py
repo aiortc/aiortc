@@ -87,6 +87,10 @@ def create_transport(client, server):
     return client_transport, server_transport
 
 
+def sequence_numbers(connection_ids):
+    return list(map(lambda x: x.sequence_number, connection_ids))
+
+
 class QuicConnectionTest(TestCase):
     def _test_connect_with_version(self, client_versions, server_versions):
         client = QuicConnection(is_client=True)
@@ -103,6 +107,14 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
         self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 3)
+
+        # check each endpoint has available connection IDs for the peer
+        self.assertEqual(
+            sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+        )
+        self.assertEqual(
+            sequence_numbers(server._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+        )
 
         # send data over stream
         client_reader, client_writer = run(client.create_stream())
@@ -229,6 +241,32 @@ class QuicConnectionTest(TestCase):
         with self.assertRaises(Exception) as cm:
             run(client_reader.read())
         self.assertEqual(cm.exception, exc)
+
+    def test_consume_connection_id(self):
+        client = QuicConnection(is_client=True)
+        server = QuicConnection(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+        )
+
+        # perform handshake
+        client_transport, server_transport = create_transport(client, server)
+        self.assertEqual(
+            sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+        )
+
+        # change connection ID
+        client._consume_connection_id()
+        self.assertEqual(
+            sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
+        )
+
+        # the server provides a new connection ID
+        client._send_pending()
+        self.assertEqual(
+            sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
+        )
 
     def test_create_stream(self):
         client = QuicConnection(is_client=True)
@@ -590,28 +628,6 @@ class QuicConnectionTest(TestCase):
         )
         self.assertEqual(client._remote_max_streams_uni, 129)
 
-    def test_handle_new_connection_id_frame(self):
-        client = QuicConnection(is_client=True)
-        server = QuicConnection(
-            is_client=False,
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-        )
-
-        # perform handshake
-        client_transport, server_transport = create_transport(client, server)
-
-        # client receives NEW_CONNECTION_ID
-        client._handle_new_connection_id_frame(
-            client_receive_context(client),
-            QuicFrameType.NEW_CONNECTION_ID,
-            Buffer(
-                data=binascii.unhexlify(
-                    "02117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
-                )
-            ),
-        )
-
     def test_handle_new_token_frame(self):
         client = QuicConnection(is_client=True)
         server = QuicConnection(
@@ -735,10 +751,7 @@ class QuicConnectionTest(TestCase):
 
         # perform handshake
         client_transport, server_transport = create_transport(client, server)
-        self.assertEqual(
-            list(map(lambda x: x.sequence_number, client._host_cids)),
-            [0, 1, 2, 3, 4, 5, 6, 7],
-        )
+        self.assertEqual(sequence_numbers(client._host_cids), [0, 1, 2, 3, 4, 5, 6, 7])
 
         # client receives RETIRE_CONNECTION_ID
         client._handle_retire_connection_id_frame(
@@ -746,10 +759,7 @@ class QuicConnectionTest(TestCase):
             QuicFrameType.RETIRE_CONNECTION_ID,
             Buffer(data=b"\x02"),
         )
-        self.assertEqual(
-            list(map(lambda x: x.sequence_number, client._host_cids)),
-            [0, 1, 3, 4, 5, 6, 7, 8],
-        )
+        self.assertEqual(sequence_numbers(client._host_cids), [0, 1, 3, 4, 5, 6, 7, 8])
 
     def test_handle_retire_connection_id_frame_current_cid(self):
         client = QuicConnection(is_client=True)
@@ -774,6 +784,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(
             cm.exception.reason_phrase, "Cannot retire current connection ID"
         )
+        self.assertEqual(sequence_numbers(client._host_cids), [0, 1, 2, 3, 4, 5, 6, 7])
 
     def test_handle_stop_sending_frame(self):
         client = QuicConnection(is_client=True)
