@@ -136,6 +136,58 @@ class ContextTest(TestCase):
         with self.assertRaises(tls.AlertUnexpectedMessage):
             client.handle_message(b"\x00\x00\x00\x00", create_buffers())
 
+    def test_client_bad_certificate_verify_data(self):
+        client = self.create_client()
+        server = self.create_server()
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        reset_buffers(server_buf)
+
+        # mess with certificate verify
+        client_input = client_input[:-56] + bytes(4) + client_input[-52:]
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        with self.assertRaises(tls.AlertDecryptError):
+            client.handle_message(client_input, client_buf)
+
+    def test_client_bad_finished_verify_data(self):
+        client = self.create_client()
+        server = self.create_server()
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        reset_buffers(server_buf)
+
+        # mess with finished verify data
+        client_input = client_input[:-4] + bytes(4)
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        with self.assertRaises(tls.AlertDecryptError):
+            client.handle_message(client_input, client_buf)
+
     def test_server_unexpected_message(self):
         server = self.create_server()
 
@@ -195,7 +247,40 @@ class ContextTest(TestCase):
             self._server_fail_hello(client, server)
         self.assertEqual(str(cm.exception), "No supported protocol version")
 
-    def _handshake(self, client, server, create_ticket):
+    def test_server_bad_finished_verify_data(self):
+        client = self.create_client()
+        server = self.create_server()
+
+        # send client hello
+        client_buf = create_buffers()
+        client.handle_message(b"", client_buf)
+        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # handle client hello
+        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        server_buf = create_buffers()
+        server.handle_message(server_input, server_buf)
+        self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
+        client_input = merge_buffers(server_buf)
+        reset_buffers(server_buf)
+
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # send finished
+        client.handle_message(client_input, client_buf)
+        self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
+        server_input = merge_buffers(client_buf)
+        reset_buffers(client_buf)
+
+        # mess with finished verify data
+        server_input = server_input[:-4] + bytes(4)
+
+        # handle finished
+        with self.assertRaises(tls.AlertDecryptError):
+            server.handle_message(server_input, server_buf)
+
+    def _handshake(self, client, server):
         # send client hello
         client_buf = create_buffers()
         client.handle_message(b"", client_buf)

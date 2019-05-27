@@ -19,6 +19,7 @@ from typing import (
 )
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25519
@@ -79,6 +80,10 @@ class AlertDescription(IntEnum):
 
 class Alert(Exception):
     description: AlertDescription
+
+
+class AlertDecryptError(Alert):
+    description = AlertDescription.decrypt_error
 
 
 class AlertHandshakeFailure(Alert):
@@ -1327,13 +1332,16 @@ class Context:
         assert verify.algorithm in self._signature_algorithms
 
         # check signature
-        self._peer_certificate.public_key().verify(
-            verify.signature,
-            self.key_schedule.certificate_verify_data(
-                b"TLS 1.3, server CertificateVerify"
-            ),
-            *signature_algorithm_params(verify.algorithm),
-        )
+        try:
+            self._peer_certificate.public_key().verify(
+                verify.signature,
+                self.key_schedule.certificate_verify_data(
+                    b"TLS 1.3, server CertificateVerify"
+                ),
+                *signature_algorithm_params(verify.algorithm),
+            )
+        except InvalidSignature:
+            raise AlertDecryptError
 
         self.key_schedule.update_hash(input_buf.data)
 
@@ -1344,7 +1352,8 @@ class Context:
 
         # check verify data
         expected_verify_data = self.key_schedule.finished_verify_data(self._dec_key)
-        assert finished.verify_data == expected_verify_data
+        if finished.verify_data != expected_verify_data:
+            raise AlertDecryptError
         self.key_schedule.update_hash(input_buf.data)
 
         # prepare traffic keys
@@ -1590,7 +1599,8 @@ class Context:
 
         # check verify data
         expected_verify_data = self.key_schedule.finished_verify_data(self._dec_key)
-        assert finished.verify_data == expected_verify_data
+        if finished.verify_data != expected_verify_data:
+            raise AlertDecryptError
 
         # commit traffic key
         self._dec_key = self._next_dec_key
