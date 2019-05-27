@@ -254,8 +254,9 @@ class QuicStreamTest(TestCase):
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
 
-        # write data
+        # write data and EOF
         stream.write(b"0123456789012345")
+        stream.write_eof()
         self.assertEqual(list(stream._send_pending), [range(0, 16)])
 
         # send a chunk
@@ -266,7 +267,7 @@ class QuicStreamTest(TestCase):
 
         # send another chunk
         self.assertEqual(
-            stream.get_frame(8), QuicStreamFrame(data=b"89012345", fin=False, offset=8)
+            stream.get_frame(8), QuicStreamFrame(data=b"89012345", fin=True, offset=8)
         )
         self.assertEqual(list(stream._send_pending), [])
 
@@ -281,6 +282,45 @@ class QuicStreamTest(TestCase):
         # send chunk again
         self.assertEqual(
             stream.get_frame(8), QuicStreamFrame(data=b"01234567", fin=False, offset=0)
+        )
+        self.assertEqual(list(stream._send_pending), [])
+
+    def test_send_data_lost_fin(self):
+        stream = QuicStream(stream_id=0, max_stream_data_remote=512)
+
+        # nothing to send yet
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write data and EOF
+        stream.write(b"0123456789012345")
+        stream.write_eof()
+        self.assertEqual(list(stream._send_pending), [range(0, 16)])
+
+        # send a chunk
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"01234567", fin=False, offset=0)
+        )
+        self.assertEqual(list(stream._send_pending), [range(8, 16)])
+
+        # send another chunk
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"89012345", fin=True, offset=8)
+        )
+        self.assertEqual(list(stream._send_pending), [])
+
+        # nothing more to send
+        self.assertIsNone(stream.get_frame(8))
+        self.assertEqual(list(stream._send_pending), [])
+
+        # a chunk gets lost
+        stream.on_data_delivery(QuicDeliveryState.LOST, 8, 16)
+        self.assertEqual(list(stream._send_pending), [range(8, 16)])
+
+        # send chunk again
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"89012345", fin=True, offset=8)
         )
         self.assertEqual(list(stream._send_pending), [])
 

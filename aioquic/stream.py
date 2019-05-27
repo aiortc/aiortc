@@ -32,10 +32,10 @@ class QuicStream(asyncio.BaseTransport):
 
         self._send_acked = RangeSet()
         self._send_buffer = bytearray()
-        self._send_complete = False
-        self._send_eof = False
+        self._send_buffer_fin: Optional[int] = None
         self._send_highest = 0
         self._send_pending = RangeSet()
+        self._send_pending_eof = False
         self._send_buffer_start = 0  # the offset for the start of the buffer
         self._send_buffer_stop = 0  # the offset for the stop of the buffer
 
@@ -133,12 +133,12 @@ class QuicStream(asyncio.BaseTransport):
         Get a frame of data to send.
         """
         # check there is something to send
-        if self._send_complete or not (self._send_eof or self._send_pending):
+        if not (self._send_pending or self._send_pending_eof):
             return None
 
         # FIN only
         if not self._send_pending:
-            self._send_complete = True
+            self._send_pending_eof = False
             return QuicStreamFrame(fin=True, offset=self._send_buffer_stop)
 
         # apply flow control
@@ -167,9 +167,9 @@ class QuicStream(asyncio.BaseTransport):
             self._send_highest = send.stop
 
         # if the buffer is empty and EOF was written, set the FIN bit
-        if self._send_eof and not self._send_pending:
+        if self._send_buffer_fin == send.stop:
             frame.fin = True
-            self._send_complete = True
+            self._send_pending_eof = False
 
         return frame
 
@@ -200,6 +200,8 @@ class QuicStream(asyncio.BaseTransport):
                     del self._send_buffer[:size]
             else:
                 self._send_pending.add(start, stop)
+                if stop == self._send_buffer_fin:
+                    self._send_pending_eof = True
 
     # asyncio.Transport
 
@@ -213,7 +215,7 @@ class QuicStream(asyncio.BaseTransport):
             return self.stream_id
 
     def write(self, data: bytes) -> None:
-        assert not self._send_complete, "cannot call write() after completion"
+        assert self._send_buffer_fin is None, "cannot call write() after FIN"
         size = len(data)
 
         if size:
@@ -226,8 +228,9 @@ class QuicStream(asyncio.BaseTransport):
                 self._connection._send_soon()
 
     def write_eof(self) -> None:
-        assert not self._send_complete, "cannot call write_eof() after completion"
+        assert self._send_buffer_fin is None, "cannot call write_eof() after FIN"
 
-        self._send_eof = True
+        self._send_buffer_fin = self._send_buffer_stop
+        self._send_pending_eof = True
         if self._connection is not None:
             self._connection._send_soon()
