@@ -1,7 +1,7 @@
 import asyncio
 from unittest import TestCase
 
-from aioquic.packet import QuicStreamFrame
+from aioquic.packet import QuicDeliveryState, QuicStreamFrame
 from aioquic.stream import QuicStream
 
 from .utils import run
@@ -245,6 +245,44 @@ class QuicStreamTest(TestCase):
         self.assertFalse(stream.is_blocked())
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
+
+    def test_send_data_lost(self):
+        stream = QuicStream(stream_id=0, max_stream_data_remote=512)
+
+        # nothing to send yet
+        self.assertFalse(stream.is_blocked())
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write data
+        stream.write(b"0123456789012345")
+        self.assertEqual(list(stream._send_pending), [range(0, 16)])
+
+        # send a chunk
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"01234567", fin=False, offset=0)
+        )
+        self.assertEqual(list(stream._send_pending), [range(8, 16)])
+
+        # send another chunk
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"89012345", fin=False, offset=8)
+        )
+        self.assertEqual(list(stream._send_pending), [])
+
+        # nothing more to send
+        self.assertIsNone(stream.get_frame(8))
+        self.assertEqual(list(stream._send_pending), [])
+
+        # a chunk gets lost
+        stream.on_data_delivery(QuicDeliveryState.LOST, 0, 8)
+        self.assertEqual(list(stream._send_pending), [range(0, 8)])
+
+        # send chunk again
+        self.assertEqual(
+            stream.get_frame(8), QuicStreamFrame(data=b"01234567", fin=False, offset=0)
+        )
+        self.assertEqual(list(stream._send_pending), [])
 
     def test_send_blocked(self):
         stream = QuicStream(stream_id=0, max_stream_data_remote=12)

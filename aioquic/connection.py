@@ -35,6 +35,7 @@ from .packet import (
     PACKET_TYPE_ONE_RTT,
     PACKET_TYPE_RETRY,
     PACKET_TYPE_ZERO_RTT,
+    QuicDeliveryState,
     QuicErrorCode,
     QuicFrameType,
     QuicProtocolVersion,
@@ -846,7 +847,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             for packet_number in packet_range:
                 if packet_number in handlers:
                     for handler, args in handlers[packet_number]:
-                        handler(*args)
+                        handler(QuicDeliveryState.ACKED, *args)
                     del handlers[packet_number]
 
     def _handle_connection_close_frame(
@@ -1177,14 +1178,35 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         pull_uint_var(buf)  # limit
 
-    def _on_ping_delivery(self) -> None:
+    def _on_new_connection_id_delivery(
+        self, delivery: QuicDeliveryState, connection_id: QuicConnectionId
+    ) -> None:
         """
-        Callback when a PING is ACK'd.
+        Callback when a NEW_CONNECTION_ID frame is acknowledged or lost.
         """
-        self._logger.info("Received PING response")
-        waiter = self._ping_waiter
-        self._ping_waiter = None
-        waiter.set_result(None)
+        if delivery != QuicDeliveryState.ACKED:
+            connection_id.was_sent = False
+
+    def _on_ping_delivery(self, delivery: QuicDeliveryState) -> None:
+        """
+        Callback when a PING frame is is acknowledged or lost.
+        """
+        if delivery == QuicDeliveryState.ACKED:
+            self._logger.info("Received PING response")
+            waiter = self._ping_waiter
+            self._ping_waiter = None
+            waiter.set_result(None)
+        else:
+            self._ping_pending = True
+
+    def _on_retire_connection_id_delivery(
+        self, delivery: QuicDeliveryState, sequence_number: int
+    ) -> None:
+        """
+        Callback when a RETIRE_CONNECTION_ID frame is is acknowledged or lost.
+        """
+        if delivery != QuicDeliveryState.ACKED:
+            self._retire_connection_ids.add(sequence_number)
 
     def _payload_received(
         self, context: QuicReceiveContext, plain: bytes
@@ -1468,14 +1490,23 @@ class QuicConnection(asyncio.DatagramProtocol):
                             connection_id.stateless_reset_token,
                         )
                         connection_id.was_sent = True
-                        space.expect_ack(builder.packet_number, lambda: None)
+                        space.expect_ack(
+                            builder.packet_number,
+                            self._on_new_connection_id_delivery,
+                            (connection_id,),
+                        )
                         self._connection_id_issued_handler(connection_id.cid)
 
                 # RETIRE_CONNECTION_ID
                 while self._retire_connection_ids:
+                    sequence_number = self._retire_connection_ids.pop(0)
                     push_uint_var(buf, QuicFrameType.RETIRE_CONNECTION_ID)
-                    push_uint_var(buf, self._retire_connection_ids.pop(0))
-                    space.expect_ack(builder.packet_number, lambda: None)
+                    push_uint_var(buf, sequence_number)
+                    space.expect_ack(
+                        builder.packet_number,
+                        self._on_retire_connection_id_delivery,
+                        (sequence_number,),
+                    )
 
             # PING
             if self._ping_pending:

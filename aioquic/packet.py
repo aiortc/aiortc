@@ -1,7 +1,7 @@
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import IntEnum, IntFlag
+from enum import Enum, IntEnum, IntFlag
 from typing import Generator, List, Optional, Tuple
 
 from .buffer import (
@@ -40,6 +40,12 @@ UINT_VAR_FORMATS = [
     (pull_uint32, push_uint32, 0x3FFFFFFF),
     (pull_uint64, push_uint64, 0x3FFFFFFFFFFFFFFF),
 ]
+
+
+class QuicDeliveryState(Enum):
+    ACKED = 0
+    LOST = 1
+    EXPIRED = 2
 
 
 class QuicErrorCode(IntEnum):

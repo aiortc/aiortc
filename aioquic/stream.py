@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Optional
 
-from .packet import QuicStreamFrame
+from .packet import QuicDeliveryState, QuicStreamFrame
 from .rangeset import RangeSet
 
 
@@ -183,18 +183,23 @@ class QuicStream(asyncio.BaseTransport):
             and self._send_pending[0].start >= self.max_stream_data_remote
         )
 
-    def on_data_delivery(self, start: int, stop: int) -> None:
+    def on_data_delivery(
+        self, delivery: QuicDeliveryState, start: int, stop: int
+    ) -> None:
         """
         Callback when sent data is ACK'd.
         """
         if stop - start:
-            self._send_acked.add(start, stop)
-            first_range = self._send_acked[0]
-            if first_range.start == self._send_buffer_start:
-                size = first_range.stop - first_range.start
-                self._send_acked.shift()
-                self._send_buffer_start += size
-                del self._send_buffer[:size]
+            if delivery == QuicDeliveryState.ACKED:
+                self._send_acked.add(start, stop)
+                first_range = self._send_acked[0]
+                if first_range.start == self._send_buffer_start:
+                    size = first_range.stop - first_range.start
+                    self._send_acked.shift()
+                    self._send_buffer_start += size
+                    del self._send_buffer[:size]
+            else:
+                self._send_pending.add(start, stop)
 
     # asyncio.Transport
 
