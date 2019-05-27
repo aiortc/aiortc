@@ -1414,8 +1414,10 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _write_application(
         self, builder: QuicPacketBuilder, network_path: QuicNetworkPath
     ) -> None:
+        crypto_stream_id: Optional[tls.Epoch] = None
         if self.cryptos[tls.Epoch.ONE_RTT].send.is_valid():
             crypto = self.cryptos[tls.Epoch.ONE_RTT]
+            crypto_stream_id = tls.Epoch.ONE_RTT
             packet_type = PACKET_TYPE_ONE_RTT
         elif self.cryptos[tls.Epoch.ZERO_RTT].send.is_valid():
             crypto = self.cryptos[tls.Epoch.ZERO_RTT]
@@ -1484,7 +1486,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             for stream_id, stream in self.streams.items():
                 # CRYPTO
-                if is_one_rtt and stream_id == tls.Epoch.ONE_RTT:
+                if stream_id == crypto_stream_id:
                     frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
                     frame = stream.get_frame(builder.remaining_space - frame_overhead)
                     if frame is not None:

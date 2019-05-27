@@ -1033,6 +1033,7 @@ class Context:
         # state
         self._key_schedule_psk: Optional[KeySchedule] = None
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
+        self._new_session_ticket: Optional[NewSessionTicket] = None
         self._peer_certificate: Optional[x509.Certificate] = None
         self._receive_buffer = b""
         self._session_resumed = False
@@ -1125,6 +1126,7 @@ class Context:
                         input_buf,
                         output_buf[Epoch.INITIAL],
                         output_buf[Epoch.HANDSHAKE],
+                        output_buf[Epoch.ONE_RTT],
                     )
                 else:
                     raise AlertUnexpectedMessage
@@ -1393,7 +1395,11 @@ class Context:
             self.new_session_ticket_cb(ticket)
 
     def _server_handle_hello(
-        self, input_buf: Buffer, initial_buf: Buffer, output_buf: Buffer
+        self,
+        input_buf: Buffer,
+        initial_buf: Buffer,
+        handshake_buf: Buffer,
+        onertt_buf: Buffer,
     ) -> None:
         peer_hello = pull_client_hello(input_buf)
 
@@ -1537,9 +1543,9 @@ class Context:
         )
 
         # send encrypted extensions
-        with push_message(self.key_schedule, output_buf):
+        with push_message(self.key_schedule, handshake_buf):
             push_encrypted_extensions(
-                output_buf,
+                handshake_buf,
                 EncryptedExtensions(
                     alpn_protocol=self.alpn_negotiated,
                     early_data=self.early_data_accepted,
@@ -1549,9 +1555,9 @@ class Context:
 
         if pre_shared_key is None:
             # send certificate
-            with push_message(self.key_schedule, output_buf):
+            with push_message(self.key_schedule, handshake_buf):
                 push_certificate(
-                    output_buf,
+                    handshake_buf,
                     Certificate(
                         request_context=b"",
                         certificates=[
@@ -1567,18 +1573,18 @@ class Context:
                 ),
                 *signature_algorithm_params(signature_algorithm),
             )
-            with push_message(self.key_schedule, output_buf):
+            with push_message(self.key_schedule, handshake_buf):
                 push_certificate_verify(
-                    output_buf,
+                    handshake_buf,
                     CertificateVerify(
                         algorithm=signature_algorithm, signature=signature
                     ),
                 )
 
         # send finished
-        with push_message(self.key_schedule, output_buf):
+        with push_message(self.key_schedule, handshake_buf):
             push_finished(
-                output_buf,
+                handshake_buf,
                 Finished(
                     verify_data=self.key_schedule.finished_verify_data(self._enc_key)
                 ),
@@ -1592,14 +1598,38 @@ class Context:
         )
         self._next_dec_key = self.key_schedule.derive_secret(b"c ap traffic")
 
+        # anticipate client's FINISHED as we don't use client auth
+        self._expected_verify_data = self.key_schedule.finished_verify_data(
+            self._dec_key
+        )
+        buf = Buffer(capacity=64)
+        push_finished(buf, Finished(verify_data=self._expected_verify_data))
+        self.key_schedule.update_hash(buf.data)
+
+        # create a new session ticket
+        if self.new_session_ticket_cb is not None:
+            self._new_session_ticket = NewSessionTicket(
+                ticket_lifetime=86400,
+                ticket_age_add=struct.unpack("I", os.urandom(4))[0],
+                ticket_nonce=b"",
+                ticket=os.urandom(64),
+                max_early_data_size=0xFFFFFFFF,
+            )
+
+            # send messsage
+            push_new_session_ticket(onertt_buf, self._new_session_ticket)
+
+            # notify application
+            ticket = self._build_session_ticket(self._new_session_ticket)
+            self.new_session_ticket_cb(ticket)
+
         self._set_state(State.SERVER_EXPECT_FINISHED)
 
     def _server_handle_finished(self, input_buf: Buffer, output_buf: Buffer) -> None:
         finished = pull_finished(input_buf)
 
         # check verify data
-        expected_verify_data = self.key_schedule.finished_verify_data(self._dec_key)
-        if finished.verify_data != expected_verify_data:
+        if finished.verify_data != self._expected_verify_data:
             raise AlertDecryptError
 
         # commit traffic key
@@ -1612,26 +1642,7 @@ class Context:
             self._dec_key,
         )
 
-        self.key_schedule.update_hash(input_buf.data)
-
         self._set_state(State.SERVER_POST_HANDSHAKE)
-
-        # create a new session ticket
-        if self.new_session_ticket_cb is not None:
-            new_session_ticket = NewSessionTicket(
-                ticket_lifetime=86400,
-                ticket_age_add=struct.unpack("I", os.urandom(4))[0],
-                ticket_nonce=b"",
-                ticket=os.urandom(64),
-                max_early_data_size=0xFFFFFFFF,
-            )
-
-            # notify application
-            ticket = self._build_session_ticket(new_session_ticket)
-            self.new_session_ticket_cb(ticket)
-
-            # send messsage
-            push_new_session_ticket(output_buf, new_session_ticket)
 
     def _setup_traffic_protection(
         self, direction: Direction, epoch: Epoch, label: bytes

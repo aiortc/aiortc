@@ -291,16 +291,17 @@ class ContextTest(TestCase):
         reset_buffers(client_buf)
 
         # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
+        # send server hello, encrypted extensions, certificate, certificate verify, finished, (session ticket)
         server_buf = create_buffers()
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
         client_input = merge_buffers(server_buf)
         self.assertGreaterEqual(len(client_input), 2194)
-        self.assertLessEqual(len(client_input), 2239)
+        self.assertLessEqual(len(client_input), 2316)
+
         reset_buffers(server_buf)
 
-        # handle server hello, encrypted extensions, certificate, certificate verify, finished
+        # handle server hello, encrypted extensions, certificate, certificate verify, finished, (session ticket)
         # send finished
         client.handle_message(client_input, client_buf)
         self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
@@ -309,21 +310,10 @@ class ContextTest(TestCase):
         reset_buffers(client_buf)
 
         # handle finished
-        # send new_session_ticket
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_POST_HANDSHAKE)
         client_input = merge_buffers(server_buf)
-        if create_ticket:
-            self.assertEqual(len(client_input), 89)
-            reset_buffers(server_buf)
-
-            # handle new_session_ticket
-            client.handle_message(client_input, client_buf)
-            self.assertEqual(client.state, State.CLIENT_POST_HANDSHAKE)
-            server_input = merge_buffers(client_buf)
-            self.assertEqual(len(server_input), 0)
-        else:
-            self.assertEqual(len(client_input), 0)
+        self.assertEqual(len(client_input), 0)
 
         # check keys match
         self.assertEqual(client._dec_key, server._enc_key)
@@ -341,7 +331,7 @@ class ContextTest(TestCase):
         client = self.create_client()
         server = self.create_server()
 
-        self._handshake(client, server, create_ticket=False)
+        self._handshake(client, server)
 
         # check ALPN matches
         self.assertEqual(client.alpn_negotiated, None)
@@ -354,7 +344,7 @@ class ContextTest(TestCase):
         server = self.create_server()
         server.alpn_protocols = ["hq-20", "h3-20"]
 
-        self._handshake(client, server, create_ticket=False)
+        self._handshake(client, server)
 
         # check ALPN matches
         self.assertEqual(client.alpn_negotiated, "hq-20")
@@ -387,14 +377,14 @@ class ContextTest(TestCase):
         client._signature_algorithms = [tls.SignatureAlgorithm.RSA_PKCS1_SHA256]
         server = self.create_server()
 
-        self._handshake(client, server, create_ticket=False)
+        self._handshake(client, server)
 
     def test_handshake_with_x25519(self):
         client = self.create_client()
         client._supported_groups = [tls.Group.X25519]
         server = self.create_server()
 
-        self._handshake(client, server, create_ticket=False)
+        self._handshake(client, server)
 
     def test_session_ticket(self):
         client_tickets = []
@@ -419,7 +409,7 @@ class ContextTest(TestCase):
             server = self.create_server()
             server.new_session_ticket_cb = server_new_ticket
 
-            self._handshake(client, server, create_ticket=True)
+            self._handshake(client, server)
 
             # check session resumption was not used
             self.assertFalse(client.session_resumed)
