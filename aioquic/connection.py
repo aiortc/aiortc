@@ -86,6 +86,10 @@ def EPOCHS(shortcut: str) -> FrozenSet[tls.Epoch]:
     return frozenset(EPOCH_SHORTCUTS[i] for i in shortcut)
 
 
+def dump_cid(cid: bytes) -> str:
+    return binascii.hexlify(cid).decode("ascii")
+
+
 def get_epoch(packet_type: int) -> tls.Epoch:
     if packet_type == PACKET_TYPE_INITIAL:
         return tls.Epoch.INITIAL
@@ -290,7 +294,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
         self._logger = QuicConnectionAdapter(
-            logger, {"host_cid": binascii.hexlify(self.host_cid).decode("ascii")}
+            logger, {"host_cid": dump_cid(self.host_cid)}
         )
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
@@ -491,7 +495,12 @@ class QuicConnection(asyncio.DatagramProtocol):
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
 
             # check destination CID matches
-            if self.is_client and header.destination_cid != self.host_cid:
+            destination_cid_seq: Optional[int] = None
+            for connection_id in self._host_cids:
+                if header.destination_cid == connection_id.cid:
+                    destination_cid_seq = connection_id.sequence_number
+                    break
+            if self.is_client and destination_cid_seq is None:
                 return
 
             # check protocol version
@@ -607,6 +616,20 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
                 return
 
+            # handle migration
+            if (
+                not self.is_client
+                and context.host_cid != self.host_cid
+                and epoch == tls.Epoch.ONE_RTT
+            ):
+                self._logger.info(
+                    "Peer migrating to %s (%d)",
+                    dump_cid(context.host_cid),
+                    destination_cid_seq,
+                )
+                self.host_cid = context.host_cid
+                self._consume_connection_id()
+
             # update network path
             if not network_path.is_validated and epoch == tls.Epoch.HANDSHAKE:
                 self._logger.info(
@@ -681,6 +704,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             connection_id = self._peer_cid_available.pop(0)
             self._peer_cid_seq = connection_id.sequence_number
             self.peer_cid = connection_id.cid
+            self._logger.info(
+                "Migrating to %s (%d)", dump_cid(self.peer_cid), self._peer_cid_seq
+            )
 
     def _find_network_path(self, addr: NetworkAddress) -> QuicNetworkPath:
         # check existing network paths
@@ -972,9 +998,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             buf
         )
         self._logger.info(
-            "New connection ID received %d %s",
-            sequence_number,
-            binascii.hexlify(cid).decode("ascii"),
+            "New connection ID received %d %s", sequence_number, dump_cid(cid)
         )
         self._peer_cid_available.append(
             QuicConnectionId(
