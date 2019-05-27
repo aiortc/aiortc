@@ -1704,23 +1704,15 @@ class QuicConnection(asyncio.DatagramProtocol):
                         (sequence_number,),
                     )
 
-                # MAX_DATA
-                if (
-                    self._local_max_data_used + MAX_DATA_WINDOW // 2
-                    > self._local_max_data
-                ):
-                    self._local_max_data += MAX_DATA_WINDOW
-                    self._logger.info(
-                        "Local max_data raised to %d", self._local_max_data
-                    )
-                    builder.start_frame(QuicFrameType.MAX_DATA)
-                    push_uint_var(buf, self._local_max_data)
-                    space.expect_ack(builder.packet_number, lambda d: None)
+                # connection-level limits
+                self._write_connection_limits(builder=builder, space=space)
 
-            # STREAM limits
+            # stream-level limits
             for stream_id, stream in self.streams.items():
                 if isinstance(stream_id, int):
-                    self._write_stream_limits(builder, space, stream)
+                    self._write_stream_limits(
+                        builder=builder, space=space, stream=stream
+                    )
 
             # PING
             if self._ping_pending:
@@ -1782,13 +1774,27 @@ class QuicConnection(asyncio.DatagramProtocol):
             if self.is_client and epoch == tls.Epoch.HANDSHAKE:
                 self.cryptos[tls.Epoch.INITIAL].teardown()
 
+    def _write_connection_limits(
+        self, builder: QuicPacketBuilder, space: QuicPacketSpace
+    ) -> None:
+        # raise MAX_DATA if needed
+        if self._local_max_data_used + MAX_DATA_WINDOW // 2 > self._local_max_data:
+            self._local_max_data += MAX_DATA_WINDOW
+            self._logger.info("Local max_data raised to %d", self._local_max_data)
+            builder.start_frame(QuicFrameType.MAX_DATA)
+            push_uint_var(builder.buffer, self._local_max_data)
+            space.expect_ack(builder.packet_number, lambda d: None)
+
     def _write_stream_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
     ) -> None:
+        # raise MAX_STREAM_DATA if needed
         if stream._recv_highest + MAX_DATA_WINDOW // 2 > stream.max_stream_data_local:
             stream.max_stream_data_local += MAX_DATA_WINDOW
             self._logger.info(
-                "Local max_stream_data raised to %d", stream.max_stream_data_local
+                "Stream %d local max_stream_data raised to %d",
+                stream.stream_id,
+                stream.max_stream_data_local,
             )
             builder.start_frame(QuicFrameType.MAX_STREAM_DATA)
             push_uint_var(builder.buffer, stream.stream_id)
