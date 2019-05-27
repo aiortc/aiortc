@@ -31,6 +31,7 @@ from .buffer import (
     pull_uint16,
     pull_uint32,
     push_bytes,
+    push_uint16,
 )
 from .crypto import CryptoError, CryptoPair
 from .packet import (
@@ -52,7 +53,6 @@ from .packet import (
     pull_quic_transport_parameters,
     pull_uint_var,
     push_quic_transport_parameters,
-    push_stream_frame,
     push_uint_var,
     quic_uint_length,
 )
@@ -130,6 +130,70 @@ def push_close(
     else:
         push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
         packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
+
+
+def write_crypto_frame(
+    builder: QuicPacketBuilder,
+    space: QuicPacketSpace,
+    stream: QuicStream,
+    padding: bool = False,
+) -> None:
+    frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
+    frame = stream.get_frame(builder.remaining_space - frame_overhead)
+    if frame is not None:
+        builder.start_frame(QuicFrameType.CRYPTO)
+        push_uint_var(builder.buffer, frame.offset)
+        push_uint16(builder.buffer, len(frame.data) | 0x4000)
+        push_bytes(builder.buffer, frame.data)
+        space.expect_ack(
+            builder.packet_number,
+            stream.on_data_delivery,
+            (frame.offset, frame.offset + len(frame.data)),
+        )
+
+        # PADDING
+        if padding:
+            push_bytes(builder.buffer, bytes(builder.remaining_space))
+
+
+def write_stream_frame(
+    builder: QuicPacketBuilder,
+    space: QuicPacketSpace,
+    stream: QuicStream,
+    max_size: int,
+) -> int:
+    buf = builder.buffer
+
+    # the frame data size is constrained by our peer's MAX_DATA and
+    # the space available in the current packet
+    frame_overhead = (
+        3
+        + quic_uint_length(stream.stream_id)
+        + (quic_uint_length(stream.next_send_offset) if stream.next_send_offset else 0)
+    )
+    previous_send_highest = stream._send_highest
+    frame = stream.get_frame(min(builder.remaining_space - frame_overhead, max_size))
+
+    if frame is not None:
+        flags = QuicStreamFlag.LEN
+        if frame.offset:
+            flags |= QuicStreamFlag.OFF
+        if frame.fin:
+            flags |= QuicStreamFlag.FIN
+        builder.start_frame(QuicFrameType.STREAM_BASE | flags)
+        push_uint_var(buf, stream.stream_id)
+        if frame.offset:
+            push_uint_var(buf, frame.offset)
+        push_uint16(buf, len(frame.data) | 0x4000)
+        push_bytes(buf, frame.data)
+        space.expect_ack(
+            builder.packet_number,
+            stream.on_data_delivery,
+            (frame.offset, frame.offset + len(frame.data)),
+        )
+        return stream._send_highest - previous_send_highest
+    else:
+        return 0
 
 
 def stream_is_client_initiated(stream_id: int) -> bool:
@@ -1668,56 +1732,16 @@ class QuicConnection(asyncio.DatagramProtocol):
             for stream_id, stream in self.streams.items():
                 # CRYPTO
                 if stream_id == crypto_stream_id:
-                    frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
-                    frame = stream.get_frame(builder.remaining_space - frame_overhead)
-                    if frame is not None:
-                        builder.start_frame(QuicFrameType.CRYPTO)
-                        with packet.push_crypto_frame(buf, frame.offset):
-                            push_bytes(buf, frame.data)
-                        space.expect_ack(
-                            builder.packet_number,
-                            stream.on_data_delivery,
-                            (frame.offset, frame.offset + len(frame.data)),
-                        )
+                    write_crypto_frame(builder=builder, space=space, stream=stream)
 
                 # STREAM
                 elif isinstance(stream_id, int):
-                    # the frame data size is constrained by our peer's MAX_DATA and
-                    # the space available in the current packet
-                    frame_overhead = (
-                        3
-                        + quic_uint_length(stream_id)
-                        + (
-                            quic_uint_length(stream.next_send_offset)
-                            if stream.next_send_offset
-                            else 0
-                        )
+                    self._remote_max_data_used += write_stream_frame(
+                        builder=builder,
+                        space=space,
+                        stream=stream,
+                        max_size=self._remote_max_data - self._remote_max_data_used,
                     )
-                    previous_send_highest = stream._send_highest
-                    frame = stream.get_frame(
-                        min(
-                            builder.remaining_space - frame_overhead,
-                            self._remote_max_data - self._remote_max_data_used,
-                        )
-                    )
-
-                    if frame is not None:
-                        flags = QuicStreamFlag.LEN
-                        if frame.offset:
-                            flags |= QuicStreamFlag.OFF
-                        if frame.fin:
-                            flags |= QuicStreamFlag.FIN
-                        builder.start_frame(QuicFrameType.STREAM_BASE | flags)
-                        with push_stream_frame(buf, stream_id, frame.offset):
-                            push_bytes(buf, frame.data)
-                        self._remote_max_data_used += (
-                            stream._send_highest - previous_send_highest
-                        )
-                        space.expect_ack(
-                            builder.packet_number,
-                            stream.on_data_delivery,
-                            (frame.offset, frame.offset + len(frame.data)),
-                        )
 
             if not builder.end_packet():
                 break
@@ -1744,22 +1768,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 space.ack_required = False
 
             # CRYPTO
-            stream = self.streams[epoch]
-            frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
-            frame = stream.get_frame(builder.remaining_space - frame_overhead)
-            if frame is not None:
-                builder.start_frame(QuicFrameType.CRYPTO)
-                with packet.push_crypto_frame(buf, frame.offset):
-                    push_bytes(buf, frame.data)
-                space.expect_ack(
-                    builder.packet_number,
-                    stream.on_data_delivery,
-                    (frame.offset, frame.offset + len(frame.data)),
-                )
-
-                # PADDING
-                if epoch == tls.Epoch.INITIAL and self.is_client:
-                    push_bytes(buf, bytes(builder.remaining_space))
+            write_crypto_frame(
+                builder=builder,
+                space=space,
+                stream=self.streams[epoch],
+                padding=(epoch == tls.Epoch.INITIAL and self.is_client),
+            )
 
             if not builder.end_packet():
                 break

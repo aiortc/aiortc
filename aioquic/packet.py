@@ -1,8 +1,7 @@
 import os
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
-from typing import Generator, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .buffer import (
     Buffer,
@@ -438,32 +437,6 @@ def pull_crypto_frame(buf: Buffer) -> QuicStreamFrame:
     offset = pull_uint_var(buf)
     length = pull_uint_var(buf)
     return QuicStreamFrame(offset=offset, data=pull_bytes(buf, length))
-
-
-@contextmanager
-def push_crypto_frame(buf: Buffer, offset: int = 0) -> Generator:
-    push_uint_var(buf, offset)
-    push_uint16(buf, 0)  # we always write the size as 2 bytes
-    start = buf.tell()
-    yield
-    end = buf.tell()
-    buf.seek(start - 2)
-    push_uint16(buf, (end - start) | 0x4000)
-    buf.seek(end)
-
-
-@contextmanager
-def push_stream_frame(buf: Buffer, stream_id: int, offset: int) -> Generator:
-    push_uint_var(buf, stream_id)
-    if offset:
-        push_uint_var(buf, offset)
-    push_uint16(buf, 0)  # we always write the size as 2 bytes
-    start = buf.tell()
-    yield
-    end = buf.tell()
-    buf.seek(start - 2)
-    push_uint16(buf, (end - start) | 0x4000)
-    buf.seek(end)
 
 
 def pull_new_token_frame(buf: Buffer) -> bytes:
