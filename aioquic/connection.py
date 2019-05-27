@@ -309,6 +309,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         )
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
+        self._parameters_available = asyncio.Event()
         self._parameters_received = False
         self._ping_pending = False
         self._ping_waiter: Optional[asyncio.Future[None]] = None
@@ -443,6 +444,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         The returned reader and writer objects are instances of :class:`asyncio.StreamReader`
         and :class:`asyncio.StreamWriter` classes.
         """
+        await self._parameters_available.wait()
+
         stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
         while stream_id in self.streams:
             stream_id += 4
@@ -979,8 +982,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 for ext_type, ext_data in self.tls.received_extensions:
                     if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
                         self._parse_transport_parameters(ext_data)
+                        self._parameters_received = True
                         break
-                self._parameters_received = True
+                assert (
+                    self._parameters_received
+                ), "No QUIC transport parameters received"
+                self._logger.info("ALPN negotiated protocol %s", self.alpn_protocol)
 
             # update current epoch
             if self.__epoch == tls.Epoch.HANDSHAKE and self.tls.state in [
@@ -1448,7 +1455,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             if value is not None:
                 setattr(self, "_remote_" + param, value)
 
-        self._logger.info("ALPN negotiated protocol %s", self.alpn_protocol)
+        # wakeup waiters
+        if not self._parameters_available.is_set():
+            self._parameters_available.set()
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
