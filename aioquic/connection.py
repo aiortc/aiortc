@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import binascii
 import logging
@@ -71,6 +72,7 @@ K_PACKET_THRESHOLD = 3
 K_INITIAL_RTT = 0.5  # seconds
 K_GRANULARITY = 0.001  # seconds
 K_TIME_THRESHOLD = 9 / 8
+MAX_DATA_WINDOW = 1048576
 SECRETS_LABELS = [
     [
         None,
@@ -381,9 +383,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_idle_timeout = 60000  # milliseconds
         self._local_max_data = 1048576
         self._local_max_data_used = 0
-        self._local_max_stream_data_bidi_local = 1048576
-        self._local_max_stream_data_bidi_remote = 1048576
-        self._local_max_stream_data_uni = 1048576
+        self._local_max_stream_data_bidi_local = MAX_DATA_WINDOW
+        self._local_max_stream_data_bidi_remote = MAX_DATA_WINDOW
+        self._local_max_stream_data_uni = MAX_DATA_WINDOW
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
         self._logger = QuicConnectionAdapter(
@@ -1638,6 +1640,24 @@ class QuicConnection(asyncio.DatagramProtocol):
                         (sequence_number,),
                     )
 
+                # MAX_DATA
+                if (
+                    self._local_max_data_used + MAX_DATA_WINDOW // 2
+                    > self._local_max_data
+                ):
+                    self._local_max_data += MAX_DATA_WINDOW
+                    self._logger.info(
+                        "Local max_data raised to %d", self._local_max_data
+                    )
+                    builder.start_frame(QuicFrameType.MAX_DATA)
+                    push_uint_var(buf, self._local_max_data)
+                    space.expect_ack(builder.packet_number, lambda d: None)
+
+            # STREAM limits
+            for stream_id, stream in self.streams.items():
+                if isinstance(stream_id, int):
+                    self._write_stream_limits(builder, space, stream)
+
             # PING
             if self._ping_pending:
                 self._logger.info("Sending PING in packet %d", builder.packet_number)
@@ -1747,3 +1767,16 @@ class QuicConnection(asyncio.DatagramProtocol):
             # discard initial keys
             if self.is_client and epoch == tls.Epoch.HANDSHAKE:
                 self.cryptos[tls.Epoch.INITIAL].teardown()
+
+    def _write_stream_limits(
+        self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
+    ) -> None:
+        if stream._recv_highest + MAX_DATA_WINDOW // 2 > stream.max_stream_data_local:
+            stream.max_stream_data_local += MAX_DATA_WINDOW
+            self._logger.info(
+                "Local max_stream_data raised to %d", stream.max_stream_data_local
+            )
+            builder.start_frame(QuicFrameType.MAX_STREAM_DATA)
+            push_uint_var(builder.buffer, stream.stream_id)
+            push_uint_var(builder.buffer, stream.max_stream_data_local)
+            space.expect_ack(builder.packet_number, lambda d: None)
