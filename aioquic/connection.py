@@ -2,6 +2,7 @@ import asyncio
 import binascii
 import logging
 import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -64,6 +65,10 @@ EPOCH_SHORTCUTS = {
     "H": tls.Epoch.HANDSHAKE,
     "O": tls.Epoch.ONE_RTT,
 }
+K_PACKET_THRESHOLD = 3
+K_INITIAL_RTT = 0.5  # seconds
+K_GRANULARITY = 0.001  # seconds
+K_TIME_THRESHOLD = 9 / 8
 SECRETS_LABELS = [
     [
         None,
@@ -191,7 +196,10 @@ class QuicPacketSpace:
         self.ack_queue = RangeSet()
         self.ack_required = False
         self.expected_packet_number = 0
+
+        # sent packets
         self.delivery_handlers: Dict[int, List[Tuple[QuicDeliveryHandler, Any]]] = {}
+        self.timestamps: Dict[int, float] = {}
 
     def expect_ack(
         self, packet_number: int, handler: QuicDeliveryHandler, args: Sequence[Any] = []
@@ -199,6 +207,7 @@ class QuicPacketSpace:
         if packet_number not in self.delivery_handlers:
             self.delivery_handlers[packet_number] = []
         self.delivery_handlers[packet_number].append((handler, args))
+        self.timestamps[packet_number] = time.time()
 
 
 @dataclass
@@ -276,6 +285,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
+        self._highest_acked_by_peer = -1
         self._host_cids = [
             QuicConnectionId(
                 cid=os.urandom(8),
@@ -322,6 +332,12 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # things to send
         self._retire_connection_ids: List[int] = []
+
+        # RTT estimation (seconds)
+        self._rtt_latest: Optional[float] = None
+        self._rtt_min: Optional[float] = None
+        self._rtt_smoothed: Optional[float] = None
+        self._rtt_var: Optional[float] = None
 
         # callbacks
         self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
@@ -680,6 +696,34 @@ class QuicConnection(asyncio.DatagramProtocol):
                 reason_phrase="Stream is receive-only",
             )
 
+    def _check_packet_loss(self) -> None:
+        """
+        Check whether any packets should be declared lost.
+        """
+        packet_threshold = self._highest_acked_by_peer - K_GRANULARITY
+        rtt = (
+            max(self._rtt_latest, self._rtt_smoothed)
+            if self._rtt_latest is not None
+            else K_INITIAL_RTT
+        )
+        time_threshold = time.time() - K_TIME_THRESHOLD * rtt
+
+        for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE, tls.Epoch.ONE_RTT]:
+            handlers = self.spaces[epoch].delivery_handlers
+            timestamps = self.spaces[epoch].timestamps
+            for packet_number, timestamp in list(timestamps.items()):
+                if packet_number <= packet_threshold or (
+                    packet_number < self._highest_acked_by_peer
+                    and timestamp < time_threshold
+                ):
+                    self._logger.info("Packet %d was lost", packet_number)
+                    for handler, args in handlers[packet_number]:
+                        handler(QuicDeliveryState.LOST, *args)
+                    del handlers[packet_number]
+                    del timestamps[packet_number]
+                else:
+                    break
+
     def _connect(self) -> None:
         """
         Start the client handshake.
@@ -835,20 +879,52 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle an ACK frame.
         """
-        rangeset, _ = packet.pull_ack_frame(buf)
+        ack_time = time.time()
+
+        rangeset, ack_delay = packet.pull_ack_frame(buf)
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
             pull_uint_var(buf)
 
         # trigger callbacks
+        is_ack_eliciting = False
+        largest_pn_is_newly_acked = False
+        largest_pn_send_time = None
         handlers = self.spaces[context.epoch].delivery_handlers
+        timestamps = self.spaces[context.epoch].timestamps
         for packet_range in rangeset:
             for packet_number in packet_range:
+                largest_pn_is_newly_acked = False
                 if packet_number in handlers:
+                    # newly ack'd
                     for handler, args in handlers[packet_number]:
                         handler(QuicDeliveryState.ACKED, *args)
                     del handlers[packet_number]
+                    is_ack_eliciting = True
+                    largest_pn_is_newly_acked = True
+                    largest_pn_send_time = timestamps.pop(packet_number)
+                    if packet_number > self._highest_acked_by_peer:
+                        self._highest_acked_by_peer = packet_number
+
+        # update RTT estimate
+        if is_ack_eliciting and largest_pn_is_newly_acked:
+            latest_rtt = ack_time - largest_pn_send_time
+            if self._rtt_min is None or latest_rtt < self._rtt_min:
+                self._rtt_min = latest_rtt
+
+            if self._rtt_latest is None:
+                self._rtt_var = latest_rtt / 2
+                self._rtt_smoothed = latest_rtt
+            else:
+                self._rtt_var = 3 / 4 * self._rtt_var + 1 / 4 * abs(
+                    self._rtt_min - latest_rtt
+                )
+                self._rtt_smoothed = 7 / 8 * self._rtt_smoothed + 1 / 8 * latest_rtt
+            self._rtt_latest = latest_rtt
+
+        # check for loss
+        self._check_packet_loss()
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1206,7 +1282,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Callback when a RETIRE_CONNECTION_ID frame is is acknowledged or lost.
         """
         if delivery != QuicDeliveryState.ACKED:
-            self._retire_connection_ids.add(sequence_number)
+            self._retire_connection_ids.append(sequence_number)
 
     def _payload_received(
         self, context: QuicReceiveContext, plain: bytes
