@@ -1,6 +1,8 @@
+from __future__ import annotations
 import asyncio
 import binascii
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -191,6 +193,87 @@ class QuicNetworkPath:
         return self.is_validated or (self.bytes_sent + size) <= 3 * self.bytes_received
 
 
+class QuicPacketLoss:
+    def __init__(self) -> None:
+        self.ack_delay_exponent = 3
+        self.max_ack_delay = 25  # ms
+
+        self._highest_acked_pn = -1
+        self._rtt_initialized = False
+        self._rtt_latest = 0.0
+        self._rtt_min = math.inf
+        self._rtt_smoothed = 0.0
+        self._rtt_variance = 0.0
+
+    def ack_received(
+        self, largest_newly_acked: int, latest_rtt: float, ack_delay_encoded: int
+    ) -> None:
+        """
+        Update metrics as the result of an ACK being received.
+        """
+        if largest_newly_acked > self._highest_acked_pn:
+            self._highest_acked_pn = largest_newly_acked
+        else:
+            return
+
+        # decode ACK delay into seconds
+        ack_delay = max(
+            (ack_delay_encoded << self.ack_delay_exponent) / 1000000,
+            self.max_ack_delay / 1000,
+        )
+
+        # update RTT estimate, which cannot be < 1 ms
+        self._rtt_latest = max(latest_rtt, 0.001)
+        if self._rtt_latest < self._rtt_min:
+            self._rtt_min = self._rtt_latest
+        if self._rtt_latest > self._rtt_min + ack_delay:
+            self._rtt_latest -= ack_delay
+
+        if not self._rtt_initialized:
+            self._rtt_initialized = True
+            self._rtt_variance = latest_rtt / 2
+            self._rtt_smoothed = latest_rtt
+        else:
+            self._rtt_variance = 3 / 4 * self._rtt_variance + 1 / 4 * abs(
+                self._rtt_min - self._rtt_latest
+            )
+            self._rtt_smoothed = 7 / 8 * self._rtt_smoothed + 1 / 8 * self._rtt_latest
+
+    def detect_loss(self, space: QuicPacketSpace) -> None:
+        """
+        Check whether any packets should be declared lost.
+        """
+        packet_threshold = self._highest_acked_pn - K_GRANULARITY
+        rtt = (
+            max(self._rtt_latest, self._rtt_smoothed)
+            if self._rtt_initialized
+            else K_INITIAL_RTT
+        )
+        time_threshold = time.time() - K_TIME_THRESHOLD * rtt
+
+        handlers = space.delivery_handlers
+        timestamps = space.timestamps
+        for packet_number, timestamp in list(timestamps.items()):
+            if packet_number <= packet_threshold or (
+                packet_number < self._highest_acked_pn and timestamp < time_threshold
+            ):
+                for handler, args in handlers[packet_number]:
+                    handler(QuicDeliveryState.LOST, *args)
+                del handlers[packet_number]
+                del timestamps[packet_number]
+            else:
+                break
+
+    def get_probe_timeout(self) -> float:
+        if not self._rtt_initialized:
+            return 0.5
+        return (
+            self._rtt_smoothed
+            + max(4 * self._rtt_variance, K_GRANULARITY)
+            + self.max_ack_delay / 1000
+        )
+
+
 class QuicPacketSpace:
     def __init__(self) -> None:
         self.ack_queue = RangeSet()
@@ -285,7 +368,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
         self.__epoch = tls.Epoch.INITIAL
-        self._highest_acked_by_peer = -1
         self._host_cids = [
             QuicConnectionId(
                 cid=os.urandom(8),
@@ -313,7 +395,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._parameters_received = False
         self._ping_pending = False
         self._ping_waiter: Optional[asyncio.Future[None]] = None
-        self._probe_timeout = 0.1  # seconds
         self._remote_idle_timeout = 0  # milliseconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -335,10 +416,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._retire_connection_ids: List[int] = []
 
         # RTT estimation (seconds)
-        self._rtt_latest: Optional[float] = None
-        self._rtt_min: Optional[float] = None
-        self._rtt_smoothed: Optional[float] = None
-        self._rtt_var: Optional[float] = None
+        self._loss = QuicPacketLoss()
 
         # callbacks
         self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
@@ -699,34 +777,6 @@ class QuicConnection(asyncio.DatagramProtocol):
                 reason_phrase="Stream is receive-only",
             )
 
-    def _check_packet_loss(self) -> None:
-        """
-        Check whether any packets should be declared lost.
-        """
-        packet_threshold = self._highest_acked_by_peer - K_GRANULARITY
-        rtt = (
-            max(self._rtt_latest, self._rtt_smoothed)
-            if self._rtt_latest is not None
-            else K_INITIAL_RTT
-        )
-        time_threshold = time.time() - K_TIME_THRESHOLD * rtt
-
-        for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE, tls.Epoch.ONE_RTT]:
-            handlers = self.spaces[epoch].delivery_handlers
-            timestamps = self.spaces[epoch].timestamps
-            for packet_number, timestamp in list(timestamps.items()):
-                if packet_number <= packet_threshold or (
-                    packet_number < self._highest_acked_by_peer
-                    and timestamp < time_threshold
-                ):
-                    self._logger.info("Packet %d was lost", packet_number)
-                    for handler, args in handlers[packet_number]:
-                        handler(QuicDeliveryState.LOST, *args)
-                    del handlers[packet_number]
-                    del timestamps[packet_number]
-                else:
-                    break
-
     def _connect(self) -> None:
         """
         Start the client handshake.
@@ -883,51 +933,39 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle an ACK frame.
         """
         ack_time = time.time()
+        space = self.spaces[context.epoch]
 
-        rangeset, ack_delay = packet.pull_ack_frame(buf)
+        rangeset, ack_delay_encoded = packet.pull_ack_frame(buf)
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
             pull_uint_var(buf)
 
         # trigger callbacks
-        is_ack_eliciting = False
-        largest_pn_is_newly_acked = False
-        largest_pn_send_time = None
-        handlers = self.spaces[context.epoch].delivery_handlers
-        timestamps = self.spaces[context.epoch].timestamps
+        largest_newly_acked = None
+        largest_send_time = None
+        handlers = space.delivery_handlers
+        timestamps = space.timestamps
         for packet_range in rangeset:
             for packet_number in packet_range:
-                largest_pn_is_newly_acked = False
                 if packet_number in handlers:
                     # newly ack'd
                     for handler, args in handlers[packet_number]:
                         handler(QuicDeliveryState.ACKED, *args)
                     del handlers[packet_number]
-                    is_ack_eliciting = True
-                    largest_pn_is_newly_acked = True
-                    largest_pn_send_time = timestamps.pop(packet_number)
-                    if packet_number > self._highest_acked_by_peer:
-                        self._highest_acked_by_peer = packet_number
+                    largest_newly_acked = packet_number
+                    largest_send_time = timestamps.pop(packet_number)
 
         # update RTT estimate
-        if is_ack_eliciting and largest_pn_is_newly_acked:
-            latest_rtt = ack_time - largest_pn_send_time
-            if self._rtt_min is None or latest_rtt < self._rtt_min:
-                self._rtt_min = latest_rtt
-
-            if self._rtt_latest is None:
-                self._rtt_var = latest_rtt / 2
-                self._rtt_smoothed = latest_rtt
-            else:
-                self._rtt_var = 3 / 4 * self._rtt_var + 1 / 4 * abs(
-                    self._rtt_min - latest_rtt
-                )
-                self._rtt_smoothed = 7 / 8 * self._rtt_smoothed + 1 / 8 * latest_rtt
-            self._rtt_latest = latest_rtt
+        if largest_newly_acked is not None:
+            self._loss.ack_received(
+                largest_newly_acked=largest_newly_acked,
+                latest_rtt=ack_time - largest_send_time,
+                ack_delay_encoded=ack_delay_encoded,
+            )
 
         # check for loss
-        self._check_packet_loss()
+        self._loss.detect_loss(space)
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1408,6 +1446,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._write_handshake(builder, epoch)
             self._write_application(builder, network_path)
 
+        # update state
+        if builder.ack_eliciting:
+            self._loss.get_probe_timeout()
         self.packet_number = builder.packet_number
 
         # send datagrams
@@ -1443,6 +1484,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         # store remote parameters
         if quic_transport_parameters.idle_timeout is not None:
             self._remote_idle_timeout = quic_transport_parameters.idle_timeout
+        for param in ["ack_delay_exponent", "max_ack_delay"]:
+            value = getattr(quic_transport_parameters, param)
+            if value is not None:
+                setattr(self._loss, param, value)
         for param in [
             "max_data",
             "max_stream_data_bidi_local",
@@ -1542,7 +1587,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             if is_one_rtt:
                 # ACK
                 if space.ack_required and space.ack_queue:
-                    push_uint_var(buf, QuicFrameType.ACK)
+                    builder.start_frame(QuicFrameType.ACK)
                     packet.push_ack_frame(buf, space.ack_queue, 0)
                     space.ack_required = False
 
@@ -1555,19 +1600,19 @@ class QuicConnection(asyncio.DatagramProtocol):
                         "Network path %s sending challenge", network_path.addr
                     )
                     network_path.local_challenge = os.urandom(8)
-                    push_uint_var(buf, QuicFrameType.PATH_CHALLENGE)
+                    builder.start_frame(QuicFrameType.PATH_CHALLENGE)
                     push_bytes(buf, network_path.local_challenge)
 
                 # PATH RESPONSE
                 if network_path.remote_challenge is not None:
-                    push_uint_var(buf, QuicFrameType.PATH_RESPONSE)
+                    builder.start_frame(QuicFrameType.PATH_RESPONSE)
                     push_bytes(buf, network_path.remote_challenge)
                     network_path.remote_challenge = None
 
                 # NEW_CONNECTION_ID
                 for connection_id in self._host_cids:
                     if not connection_id.was_sent:
-                        push_uint_var(buf, QuicFrameType.NEW_CONNECTION_ID)
+                        builder.start_frame(QuicFrameType.NEW_CONNECTION_ID)
                         packet.push_new_connection_id_frame(
                             buf,
                             connection_id.sequence_number,
@@ -1585,7 +1630,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 # RETIRE_CONNECTION_ID
                 while self._retire_connection_ids:
                     sequence_number = self._retire_connection_ids.pop(0)
-                    push_uint_var(buf, QuicFrameType.RETIRE_CONNECTION_ID)
+                    builder.start_frame(QuicFrameType.RETIRE_CONNECTION_ID)
                     push_uint_var(buf, sequence_number)
                     space.expect_ack(
                         builder.packet_number,
@@ -1596,7 +1641,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # PING
             if self._ping_pending:
                 self._logger.info("Sending PING in packet %d", builder.packet_number)
-                push_uint_var(buf, QuicFrameType.PING)
+                builder.start_frame(QuicFrameType.PING)
                 space.expect_ack(builder.packet_number, self._on_ping_delivery)
                 self._ping_pending = False
 
@@ -1606,7 +1651,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
                     frame = stream.get_frame(builder.remaining_space - frame_overhead)
                     if frame is not None:
-                        push_uint_var(buf, QuicFrameType.CRYPTO)
+                        builder.start_frame(QuicFrameType.CRYPTO)
                         with packet.push_crypto_frame(buf, frame.offset):
                             push_bytes(buf, frame.data)
                         space.expect_ack(
@@ -1642,7 +1687,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                             flags |= QuicStreamFlag.OFF
                         if frame.fin:
                             flags |= QuicStreamFlag.FIN
-                        push_uint_var(buf, QuicFrameType.STREAM_BASE | flags)
+                        builder.start_frame(QuicFrameType.STREAM_BASE | flags)
                         with push_stream_frame(buf, stream_id, frame.offset):
                             push_bytes(buf, frame.data)
                         self._remote_max_data_used += (
@@ -1674,7 +1719,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # ACK
             if space.ack_required and space.ack_queue:
-                push_uint_var(buf, QuicFrameType.ACK)
+                builder.start_frame(QuicFrameType.ACK)
                 packet.push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_required = False
 
@@ -1683,7 +1728,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
             frame = stream.get_frame(builder.remaining_space - frame_overhead)
             if frame is not None:
-                push_uint_var(buf, QuicFrameType.CRYPTO)
+                builder.start_frame(QuicFrameType.CRYPTO)
                 with packet.push_crypto_frame(buf, frame.offset):
                     push_bytes(buf, frame.data)
                 space.expect_ack(

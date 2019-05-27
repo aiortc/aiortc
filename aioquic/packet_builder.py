@@ -6,6 +6,7 @@ from .packet import (
     PACKET_NUMBER_MAX_SIZE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_MASK,
+    QuicFrameType,
     encode_cid_length,
     is_long_header,
     push_uint_var,
@@ -48,6 +49,7 @@ class QuicPacketBuilder:
         self._version = version
 
         # assembled datagrams
+        self._ack_eliciting = False
         self._datagrams: List[bytes] = []
 
         # current packet
@@ -58,6 +60,13 @@ class QuicPacketBuilder:
         self._packet_type = 0
 
         self.buffer = Buffer(PACKET_MAX_SIZE)
+
+    @property
+    def ack_eliciting(self) -> bool:
+        """
+        Returns True if an ack-eliciting frame was written.
+        """
+        return self._ack_eliciting
 
     @property
     def packet_number(self) -> int:
@@ -82,6 +91,18 @@ class QuicPacketBuilder:
         datagrams = self._datagrams
         self._datagrams = []
         return datagrams
+
+    def start_frame(self, frame_type: int) -> None:
+        """
+        Starts a new frame.
+        """
+        push_uint_var(self.buffer, frame_type)
+        if not self._ack_eliciting and frame_type not in [
+            QuicFrameType.ACK,
+            QuicFrameType.ACK_ECN,
+            QuicFrameType.PADDING,
+        ]:
+            self._ack_eliciting = True
 
     def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
         """
