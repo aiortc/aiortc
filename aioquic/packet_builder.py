@@ -38,11 +38,13 @@ class QuicPacketBuilder:
         host_cid: bytes,
         peer_cid: bytes,
         version: int,
+        pad_first_datagram: bool = False,
         packet_number: int = 0,
         peer_token: bytes = b"",
         spin_bit: bool = False,
     ):
         self._host_cid = host_cid
+        self._pad_first_datagram = pad_first_datagram
         self._peer_cid = peer_cid
         self._peer_token = peer_token
         self._spin_bit = spin_bit
@@ -159,6 +161,12 @@ class QuicPacketBuilder:
         packet_size = buf.tell() - self._packet_start
         if packet_size > self._header_size:
             empty = False
+
+            # pad initial datagram
+            if self._pad_first_datagram:
+                push_bytes(buf, bytes(self.remaining_space))
+                packet_size = buf.tell() - self._packet_start
+                self._pad_first_datagram = False
 
             if is_long_header(self._packet_type):
                 # finalize length

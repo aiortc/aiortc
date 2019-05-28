@@ -6,6 +6,7 @@ from aioquic.packet import (
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_ONE_RTT,
+    QuicFrameType,
     QuicProtocolVersion,
     push_bytes,
 )
@@ -39,6 +40,7 @@ class QuicPacketBuilderTest(TestCase):
         builder = QuicPacketBuilder(
             host_cid=bytes(8),
             packet_number=0,
+            pad_first_datagram=True,
             peer_cid=bytes(8),
             peer_token=b"",
             spin_bit=False,
@@ -50,8 +52,8 @@ class QuicPacketBuilderTest(TestCase):
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
-        push_bytes(builder.buffer, bytes(builder.remaining_space))
-        self.assertEqual(builder.remaining_space, 0)
+        builder.start_frame(QuicFrameType.CRYPTO)
+        push_bytes(builder.buffer, bytes(100))
         self.assertTrue(builder.end_packet())
 
         # check builder state
@@ -78,14 +80,20 @@ class QuicPacketBuilderTest(TestCase):
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
+        builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
 
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
+        builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
+
+        # check builder
+        self.assertTrue(builder.ack_eliciting)
+        self.assertEqual(builder.buffer.tell(), 0)
 
         # check datagrams
         datagrams = builder.flush()
@@ -108,7 +116,8 @@ class QuicPacketBuilderTest(TestCase):
         # INITIAL
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
-        push_bytes(builder.buffer, bytes(200))
+        builder.start_frame(QuicFrameType.CRYPTO)
+        push_bytes(builder.buffer, bytes(199))
         self.assertEqual(builder.buffer.tell(), 227)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 243)
@@ -117,7 +126,8 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_HANDSHAKE, crypto)
         self.assertEqual(builder.buffer.tell(), 269)
         self.assertEqual(builder.remaining_space, 995)
-        push_bytes(builder.buffer, bytes(300))
+        builder.start_frame(QuicFrameType.CRYPTO)
+        push_bytes(builder.buffer, bytes(299))
         self.assertEqual(builder.buffer.tell(), 569)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 585)
@@ -125,7 +135,11 @@ class QuicPacketBuilderTest(TestCase):
         # ONE_RTT
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 668)
-        push_bytes(builder.buffer, bytes(300))
+        builder.start_frame(QuicFrameType.CRYPTO)
+        push_bytes(builder.buffer, bytes(299))
+
+        # check builder
+        self.assertTrue(builder.ack_eliciting)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 0)
 
@@ -149,8 +163,10 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.remaining_space, 1253)
 
         # nothing to write
-
         self.assertFalse(builder.end_packet())
+
+        # check builder
+        self.assertFalse(builder.ack_eliciting)
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 0)
 
@@ -172,10 +188,12 @@ class QuicPacketBuilderTest(TestCase):
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
+        builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
 
         # check builder
+        self.assertTrue(builder.ack_eliciting)
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 1)
 

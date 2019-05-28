@@ -485,27 +485,8 @@ def pull_transport_close_frame(buf: Buffer) -> Tuple[int, int, str]:
     return (error_code, frame_type, reason_phrase)
 
 
-def push_transport_close_frame(
-    buf: Buffer, error_code: int, frame_type: int, reason_phrase: str
-) -> None:
-    reason_bytes = reason_phrase.encode("utf8")
-    push_uint16(buf, error_code)
-    push_uint_var(buf, frame_type)
-    push_uint_var(buf, len(reason_bytes))
-    push_bytes(buf, reason_bytes)
-
-
 def pull_application_close_frame(buf: Buffer) -> Tuple[int, str]:
     error_code = pull_uint16(buf)
     reason_length = pull_uint_var(buf)
     reason_phrase = decode_reason_phrase(pull_bytes(buf, reason_length))
     return (error_code, reason_phrase)
-
-
-def push_application_close_frame(
-    buf: Buffer, error_code: int, reason_phrase: str
-) -> None:
-    reason_bytes = reason_phrase.encode("utf8")
-    push_uint16(buf, error_code)
-    push_uint_var(buf, len(reason_bytes))
-    push_bytes(buf, reason_bytes)

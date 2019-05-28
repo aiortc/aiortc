@@ -121,22 +121,31 @@ def frame_type_name(frame_type: int) -> str:
         return QuicFrameType(frame_type).name
 
 
-def push_close(
-    buf: Buffer, error_code: int, frame_type: Optional[int], reason_phrase: str
+def write_close_frame(
+    builder: QuicPacketBuilder,
+    error_code: int,
+    frame_type: Optional[int],
+    reason_phrase: str,
 ) -> None:
+    buf = builder.buffer
+
+    reason_bytes = reason_phrase.encode("utf8")
+
     if frame_type is None:
-        push_uint_var(buf, QuicFrameType.APPLICATION_CLOSE)
-        packet.push_application_close_frame(buf, error_code, reason_phrase)
+        builder.start_frame(QuicFrameType.APPLICATION_CLOSE)
+        push_uint16(buf, error_code)
+        push_uint_var(buf, len(reason_bytes))
+        push_bytes(buf, reason_bytes)
     else:
-        push_uint_var(buf, QuicFrameType.TRANSPORT_CLOSE)
-        packet.push_transport_close_frame(buf, error_code, frame_type, reason_phrase)
+        builder.start_frame(QuicFrameType.TRANSPORT_CLOSE)
+        push_uint16(buf, error_code)
+        push_uint_var(buf, frame_type)
+        push_uint_var(buf, len(reason_bytes))
+        push_bytes(buf, reason_bytes)
 
 
 def write_crypto_frame(
-    builder: QuicPacketBuilder,
-    space: QuicPacketSpace,
-    stream: QuicStream,
-    padding: bool = False,
+    builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
 ) -> None:
     frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
     frame = stream.get_frame(builder.remaining_space - frame_overhead)
@@ -150,10 +159,6 @@ def write_crypto_frame(
             stream.on_data_delivery,
             (frame.offset, frame.offset + len(frame.data)),
         )
-
-        # PADDING
-        if padding:
-            push_bytes(builder.buffer, bytes(builder.remaining_space))
 
 
 def write_stream_frame(
@@ -1488,6 +1493,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         builder = QuicPacketBuilder(
             host_cid=self.host_cid,
             packet_number=self.packet_number,
+            pad_first_datagram=(self.__epoch == tls.Epoch.INITIAL and self.is_client),
             peer_cid=self.peer_cid,
             peer_token=self.peer_token,
             spin_bit=self._spin_bit,
@@ -1503,7 +1509,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 crypto = self.cryptos[epoch]
                 if crypto.send.is_valid():
                     builder.start_packet(packet_type, crypto)
-                    push_close(builder.buffer, **self.__close)
+                    write_close_frame(builder, **self.__close)
                     builder.end_packet()
                     self.__close = None
                     break
@@ -1765,12 +1771,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 space.ack_required = False
 
             # CRYPTO
-            write_crypto_frame(
-                builder=builder,
-                space=space,
-                stream=self.streams[epoch],
-                padding=(epoch == tls.Epoch.INITIAL and self.is_client),
-            )
+            write_crypto_frame(builder=builder, space=space, stream=self.streams[epoch])
 
             if not builder.end_packet():
                 break
