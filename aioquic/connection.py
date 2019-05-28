@@ -359,13 +359,13 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_stream_data_uni = MAX_DATA_WINDOW
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
-        self._loss = QuicPacketLoss(
-            get_time=self._loop.time, send_probe=self._send_probe
-        )
-        self._loss_timer: Optional[asyncio.TimerHandle] = None
         self._logger = QuicConnectionAdapter(
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
+        self._loss = QuicPacketLoss(
+            logger=self._logger, get_time=self._loop.time, send_probe=self._send_probe
+        )
+        self._loss_timer: Optional[asyncio.TimerHandle] = None
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
         self._packet_number = 0
@@ -1397,6 +1397,10 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _send_pending(self) -> None:
         network_path = self._network_paths[0]
 
+        self.__send_pending_task = None
+        if self.__state == QuicConnectionState.DRAINING:
+            return
+
         # build datagrams
         builder = QuicPacketBuilder(
             host_cid=self.host_cid,
@@ -1448,8 +1452,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             for datagram in datagrams:
                 self._transport.sendto(datagram, network_path.addr)
                 network_path.bytes_sent += len(datagram)
-
-        self.__send_pending_task = None
 
     def _send_probe(self) -> None:
         self._logger.info("Sending probe")
@@ -1534,6 +1536,10 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _set_state(self, state: QuicConnectionState) -> None:
         self._logger.info("%s -> %s", self.__state, state)
+        if state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
+            if self._loss_timer is not None:
+                self._loss_timer.cancel()
+                self._loss_timer = None
         self.__state = state
 
     def _stream_can_receive(self, stream_id: int) -> bool:

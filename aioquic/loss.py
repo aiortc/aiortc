@@ -1,3 +1,4 @@
+import logging
 import math
 from typing import Callable, Dict, List, Optional
 
@@ -24,7 +25,10 @@ class QuicPacketSpace:
 
 class QuicPacketLoss:
     def __init__(
-        self, get_time: Callable[[], float], send_probe: Callable[[], None]
+        self,
+        logger: logging.LoggerAdapter,
+        get_time: Callable[[], float],
+        send_probe: Callable[[], None],
     ) -> None:
         self.ack_delay_exponent = 3
         self.max_ack_delay = 25  # ms
@@ -32,6 +36,7 @@ class QuicPacketLoss:
 
         # callbacks
         self._get_time = get_time
+        self._logger = logger
         self._send_probe = send_probe
 
         self._crypto_count = 0
@@ -67,6 +72,7 @@ class QuicPacketLoss:
                 for handler, args in packet.delivery_handlers:
                     handler(QuicDeliveryState.LOST, *args)
                 del space.sent_packets[packet_number]
+                self._logger.info("Packet %d lost", packet_number)
             else:
                 packet_loss_time = packet.sent_time + loss_delay
                 if space.loss_time is None or space.loss_time > packet_loss_time:
@@ -153,6 +159,7 @@ class QuicPacketLoss:
         self._pto_count = 0
 
     def on_loss_timeout(self) -> None:
+        self._logger.info("Loss timeout triggered")
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             self.detect_loss(loss_space)

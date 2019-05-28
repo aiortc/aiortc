@@ -372,7 +372,7 @@ class QuicConnectionTest(TestCase):
 
         # fail handshake
         client_transport, server_transport = create_transport(client, server)
-        self.assertEqual(client_transport.sent, 2)
+        self.assertEqual(client_transport.sent, 1)
         self.assertEqual(server_transport.sent, 1)
 
     def test_datagram_received_wrong_version(self):
@@ -456,7 +456,7 @@ class QuicConnectionTest(TestCase):
         server.close(
             error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
         )
-        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
 
     def test_handle_connection_close_frame_app(self):
@@ -474,7 +474,7 @@ class QuicConnectionTest(TestCase):
 
         # close
         server.close(error_code=QuicErrorCode.NO_ERROR)
-        self.assertEqual(client_transport.sent, 5)
+        self.assertEqual(client_transport.sent, 4)
         self.assertEqual(server_transport.sent, 4)
 
     def test_handle_data_blocked_frame(self):
