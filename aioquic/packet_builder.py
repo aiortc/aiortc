@@ -1,16 +1,21 @@
-from typing import List, Optional
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from .buffer import Buffer, push_bytes, push_uint8, push_uint16, push_uint32
 from .crypto import CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_NUMBER_MAX_SIZE,
+    PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_MASK,
+    QuicFrameType,
     encode_cid_length,
     is_long_header,
     push_uint_var,
 )
+from .tls import Epoch
 
 PACKET_MAX_SIZE = 1280
 PACKET_LENGTH_SEND_SIZE = 2
@@ -25,6 +30,29 @@ def push_packet_number(buf: Buffer, packet_number: int) -> None:
     size and the "window" of packets we can represent.
     """
     push_uint16(buf, packet_number & 0xFFFF)
+
+
+QuicDeliveryHandler = Callable[..., None]
+
+
+class QuicDeliveryState(Enum):
+    ACKED = 0
+    LOST = 1
+    EXPIRED = 2
+
+
+@dataclass
+class QuicSentPacket:
+    epoch: Epoch
+    is_ack_eliciting: bool
+    is_crypto_packet: bool
+    packet_number: int
+    sent_time: Optional[float] = None
+    sent_bytes: int = 0
+
+    delivery_handlers: List[Tuple[QuicDeliveryHandler, Any]] = field(
+        default_factory=list
+    )
 
 
 class QuicPacketBuilder:
@@ -50,13 +78,15 @@ class QuicPacketBuilder:
         self._spin_bit = spin_bit
         self._version = version
 
-        # assembled datagrams
+        # assembled datagrams and packets
         self._ack_eliciting = False
         self._datagrams: List[bytes] = []
+        self._packets: List[QuicSentPacket] = []
 
         # current packet
         self._crypto: Optional[CryptoPair] = None
         self._header_size = 0
+        self._packet: Optional[QuicSentPacket] = None
         self._packet_number = packet_number
         self._packet_start = 0
         self._packet_type = 0
@@ -85,22 +115,34 @@ class QuicPacketBuilder:
         """
         return self.buffer.capacity - self.buffer.tell() - self._crypto.aead_tag_size
 
-    def flush(self) -> List[bytes]:
+    def flush(self) -> Tuple[List[bytes], List[QuicSentPacket]]:
         """
         Returns the assembled datagrams.
         """
         self._flush_current_datagram()
         datagrams = self._datagrams
+        packets = self._packets
         self._datagrams = []
-        return datagrams
+        self._packets = []
+        return datagrams, packets
 
-    def start_frame(self, frame_type: int) -> None:
+    def start_frame(
+        self,
+        frame_type: int,
+        handler: Optional[QuicDeliveryHandler] = None,
+        args: Sequence[Any] = [],
+    ) -> None:
         """
         Starts a new frame.
         """
         push_uint_var(self.buffer, frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
+            self._packet.is_ack_eliciting = True
             self._ack_eliciting = True
+        if frame_type == QuicFrameType.CRYPTO:
+            self._packet.is_crypto_packet = True
+        if handler is not None:
+            self._packet.delivery_handlers.append((handler, args))
 
     def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
         """
@@ -113,6 +155,20 @@ class QuicPacketBuilder:
         if buf.capacity - buf.tell() < 128:
             self._flush_current_datagram()
 
+        # determine ack epoch
+        if packet_type == PACKET_TYPE_INITIAL:
+            epoch = Epoch.INITIAL
+        elif packet_type == PACKET_TYPE_HANDSHAKE:
+            epoch = Epoch.HANDSHAKE
+        else:
+            epoch = Epoch.ONE_RTT
+
+        self._packet = QuicSentPacket(
+            epoch=epoch,
+            is_ack_eliciting=False,
+            is_crypto_packet=False,
+            packet_number=self._packet_number,
+        )
         self._packet_start = buf.tell()
 
         # write header
@@ -202,6 +258,8 @@ class QuicPacketBuilder:
                     plain[0 : self._header_size], plain[self._header_size : packet_size]
                 ),
             )
+            self._packet.sent_bytes = buf.tell() - self._packet_start
+            self._packets.append(self._packet)
 
             # short header packets cannot be coallesced, we need a new datagram
             if not is_long_header(self._packet_type):
@@ -213,6 +271,7 @@ class QuicPacketBuilder:
             buf.seek(self._packet_start)
 
         self._crypto = None
+        self._packet = None
 
         return not empty
 

@@ -1,7 +1,8 @@
 import asyncio
 from unittest import TestCase
 
-from aioquic.packet import QuicDeliveryState, QuicStreamFrame
+from aioquic.packet import QuicStreamFrame
+from aioquic.packet_builder import QuicDeliveryState
 from aioquic.stream import QuicStream
 
 from .utils import run

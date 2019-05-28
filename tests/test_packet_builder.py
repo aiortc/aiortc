@@ -1,6 +1,5 @@
 from unittest import TestCase
 
-from aioquic.connection import QuicPacketBuilder
 from aioquic.crypto import CryptoPair
 from aioquic.packet import (
     PACKET_TYPE_HANDSHAKE,
@@ -10,6 +9,8 @@ from aioquic.packet import (
     QuicProtocolVersion,
     push_bytes,
 )
+from aioquic.packet_builder import QuicPacketBuilder, QuicSentPacket
+from aioquic.tls import Epoch
 
 
 class QuicPacketBuilderTest(TestCase):
@@ -33,8 +34,9 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 0)
 
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 0)
+        self.assertEqual(packets, [])
 
     def test_long_header_padding(self):
         builder = QuicPacketBuilder(
@@ -61,9 +63,21 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.packet_number, 1)
 
         # check datagrams
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
         self.assertEqual(len(datagrams[0]), 1280)
+        self.assertEqual(
+            packets,
+            [
+                QuicSentPacket(
+                    epoch=Epoch.INITIAL,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=0,
+                    sent_bytes=1280,
+                )
+            ],
+        )
 
     def test_long_header_then_short_header(self):
         builder = QuicPacketBuilder(
@@ -87,7 +101,7 @@ class QuicPacketBuilderTest(TestCase):
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
-        builder.start_frame(QuicFrameType.CRYPTO)
+        builder.start_frame(QuicFrameType.STREAM_BASE)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
 
@@ -96,10 +110,29 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.buffer.tell(), 0)
 
         # check datagrams
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 2)
         self.assertEqual(len(datagrams[0]), 1280)
         self.assertEqual(len(datagrams[1]), 1280)
+        self.assertEqual(
+            packets,
+            [
+                QuicSentPacket(
+                    epoch=Epoch.INITIAL,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=0,
+                    sent_bytes=1280,
+                ),
+                QuicSentPacket(
+                    epoch=Epoch.ONE_RTT,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=False,
+                    packet_number=1,
+                    sent_bytes=1280,
+                ),
+            ],
+        )
 
     def test_long_header_then_long_header(self):
         builder = QuicPacketBuilder(
@@ -144,9 +177,35 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.buffer.tell(), 0)
 
         # check datagrams
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
         self.assertEqual(len(datagrams[0]), 912)
+        self.assertEqual(
+            packets,
+            [
+                QuicSentPacket(
+                    epoch=Epoch.INITIAL,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=0,
+                    sent_bytes=243,
+                ),
+                QuicSentPacket(
+                    epoch=Epoch.HANDSHAKE,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=1,
+                    sent_bytes=342,
+                ),
+                QuicSentPacket(
+                    epoch=Epoch.ONE_RTT,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=2,
+                    sent_bytes=327,
+                ),
+            ],
+        )
 
     def test_short_header_empty(self):
         builder = QuicPacketBuilder(
@@ -170,8 +229,9 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 0)
 
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 0)
+        self.assertEqual(packets, [])
 
     def test_short_header_padding(self):
         builder = QuicPacketBuilder(
@@ -198,6 +258,18 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.packet_number, 1)
 
         # check datagrams
-        datagrams = builder.flush()
+        datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
         self.assertEqual(len(datagrams[0]), 1280)
+        self.assertEqual(
+            packets,
+            [
+                QuicSentPacket(
+                    epoch=Epoch.ONE_RTT,
+                    is_ack_eliciting=True,
+                    is_crypto_packet=True,
+                    packet_number=0,
+                    sent_bytes=1280,
+                )
+            ],
+        )

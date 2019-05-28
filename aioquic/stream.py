@@ -1,7 +1,8 @@
 import asyncio
 from typing import Any, Optional
 
-from .packet import QuicDeliveryState, QuicStreamFrame
+from .packet import QuicStreamFrame
+from .packet_builder import QuicDeliveryState
 from .rangeset import RangeSet
 
 

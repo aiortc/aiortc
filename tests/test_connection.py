@@ -386,11 +386,11 @@ class QuicConnectionTest(TestCase):
         )
         crypto = CryptoPair()
         crypto.setup_initial(client.host_cid, is_client=False)
-        builder.start_packet(PACKET_TYPE_INITIAL, crypto=crypto)
+        builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         push_bytes(builder.buffer, bytes(1200))
         builder.end_packet()
 
-        for datagram in builder.flush():
+        for datagram in builder.flush()[0]:
             client.datagram_received(datagram, SERVER_ADDR)
         self.assertEqual(client_transport.sent, 1)
 
