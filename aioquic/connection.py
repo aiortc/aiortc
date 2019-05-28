@@ -23,7 +23,7 @@ from typing import (
     cast,
 )
 
-from . import packet, tls
+from . import tls
 from .buffer import (
     Buffer,
     BufferReadError,
@@ -51,9 +51,17 @@ from .packet import (
     QuicTransportParameters,
     get_spin_bit,
     is_long_header,
+    pull_ack_frame,
+    pull_application_close_frame,
+    pull_crypto_frame,
+    pull_new_connection_id_frame,
+    pull_new_token_frame,
     pull_quic_header,
     pull_quic_transport_parameters,
+    pull_transport_close_frame,
     pull_uint_var,
+    push_ack_frame,
+    push_new_connection_id_frame,
     push_quic_transport_parameters,
     push_uint_var,
     quic_uint_length,
@@ -1010,7 +1018,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         ack_time = time.time()
         space = self.spaces[context.epoch]
 
-        rangeset, ack_delay_encoded = packet.pull_ack_frame(buf)
+        rangeset, ack_delay_encoded = pull_ack_frame(buf)
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
@@ -1049,11 +1057,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a CONNECTION_CLOSE frame.
         """
         if frame_type == QuicFrameType.TRANSPORT_CLOSE:
-            error_code, frame_type, reason_phrase = packet.pull_transport_close_frame(
-                buf
-            )
+            error_code, frame_type, reason_phrase = pull_transport_close_frame(buf)
         else:
-            error_code, reason_phrase = packet.pull_application_close_frame(buf)
+            error_code, reason_phrase = pull_application_close_frame(buf)
             frame_type = None
         self._logger.info(
             "Connection close code 0x%X, reason %s", error_code, reason_phrase
@@ -1074,7 +1080,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a CRYPTO frame.
         """
         stream = self.streams[context.epoch]
-        stream.add_frame(packet.pull_crypto_frame(buf))
+        stream.add_frame(pull_crypto_frame(buf))
         data = stream.pull_data()
         if data:
             # pass data to TLS layer
@@ -1192,9 +1198,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a NEW_CONNECTION_ID frame.
         """
-        sequence_number, cid, stateless_reset_token = packet.pull_new_connection_id_frame(
-            buf
-        )
+        sequence_number, cid, stateless_reset_token = pull_new_connection_id_frame(buf)
         self._logger.info(
             "New connection ID received %d %s", sequence_number, dump_cid(cid)
         )
@@ -1212,7 +1216,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a NEW_TOKEN frame.
         """
-        packet.pull_new_token_frame(buf)
+        pull_new_token_frame(buf)
 
     def _handle_padding_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1654,7 +1658,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 # ACK
                 if space.ack_required and space.ack_queue:
                     builder.start_frame(QuicFrameType.ACK)
-                    packet.push_ack_frame(buf, space.ack_queue, 0)
+                    push_ack_frame(buf, space.ack_queue, 0)
                     space.ack_required = False
 
                 # PATH CHALLENGE
@@ -1679,7 +1683,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 for connection_id in self._host_cids:
                     if not connection_id.was_sent:
                         builder.start_frame(QuicFrameType.NEW_CONNECTION_ID)
-                        packet.push_new_connection_id_frame(
+                        push_new_connection_id_frame(
                             buf,
                             connection_id.sequence_number,
                             connection_id.cid,
@@ -1761,7 +1765,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # ACK
             if space.ack_required and space.ack_queue:
                 builder.start_frame(QuicFrameType.ACK)
-                packet.push_ack_frame(buf, space.ack_queue, 0)
+                push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_required = False
 
             # CRYPTO
