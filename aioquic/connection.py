@@ -351,7 +351,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
         self._local_idle_timeout = 60000  # milliseconds
-        self._local_max_data = 1048576
+        self._local_max_data = MAX_DATA_WINDOW
+        self._local_max_data_sent = MAX_DATA_WINDOW
         self._local_max_data_used = 0
         self._local_max_stream_data_bidi_local = MAX_DATA_WINDOW
         self._local_max_stream_data_bidi_remote = MAX_DATA_WINDOW
@@ -1278,6 +1279,16 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         pull_uint_var(buf)  # limit
 
+    def _on_max_data_delivery(self, delivery: QuicDeliveryState) -> None:
+        if delivery != QuicDeliveryState.ACKED:
+            self._local_max_data_sent = 0
+
+    def _on_max_stream_data_delivery(
+        self, delivery: QuicDeliveryState, stream: QuicStream
+    ) -> None:
+        if delivery != QuicDeliveryState.ACKED:
+            stream.max_stream_data_local_sent = 0
+
     def _on_new_connection_id_delivery(
         self, delivery: QuicDeliveryState, connection_id: QuicConnectionId
     ) -> None:
@@ -1718,8 +1729,10 @@ class QuicConnection(asyncio.DatagramProtocol):
         if self._local_max_data_used + MAX_DATA_WINDOW // 2 > self._local_max_data:
             self._local_max_data += MAX_DATA_WINDOW
             self._logger.info("Local max_data raised to %d", self._local_max_data)
-            builder.start_frame(QuicFrameType.MAX_DATA)
+        if self._local_max_data_sent != self._local_max_data:
+            builder.start_frame(QuicFrameType.MAX_DATA, self._on_max_data_delivery)
             push_uint_var(builder.buffer, self._local_max_data)
+            self._local_max_data_sent = self._local_max_data
 
     def _write_stream_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
@@ -1732,6 +1745,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 stream.stream_id,
                 stream.max_stream_data_local,
             )
-            builder.start_frame(QuicFrameType.MAX_STREAM_DATA)
+        if stream.max_stream_data_local_sent != stream.max_stream_data_local:
+            builder.start_frame(
+                QuicFrameType.MAX_STREAM_DATA,
+                self._on_max_stream_data_delivery,
+                (stream,),
+            )
             push_uint_var(builder.buffer, stream.stream_id)
             push_uint_var(builder.buffer, stream.max_stream_data_local)
+            stream.max_stream_data_local_sent = stream.max_stream_data_local

@@ -16,6 +16,7 @@ class QuicStream(asyncio.BaseTransport):
     ) -> None:
         self._connection = connection
         self.max_stream_data_local = max_stream_data_local
+        self.max_stream_data_local_sent = max_stream_data_local
         self.max_stream_data_remote = max_stream_data_remote
 
         if stream_id is not None:
