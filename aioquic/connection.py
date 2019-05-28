@@ -160,7 +160,7 @@ def write_stream_frame(
     builder: QuicPacketBuilder,
     space: QuicPacketSpace,
     stream: QuicStream,
-    max_size: int,
+    max_offset: int,
 ) -> int:
     buf = builder.buffer
 
@@ -172,7 +172,7 @@ def write_stream_frame(
         + (quic_uint_length(stream.next_send_offset) if stream.next_send_offset else 0)
     )
     previous_send_highest = stream._send_highest
-    frame = stream.get_frame(min(builder.remaining_space - frame_overhead, max_size))
+    frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)
 
     if frame is not None:
         flags = QuicStreamFlag.LEN
@@ -1732,7 +1732,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                         builder=builder,
                         space=space,
                         stream=stream,
-                        max_size=self._remote_max_data - self._remote_max_data_used,
+                        max_offset=min(
+                            stream._send_highest
+                            + self._remote_max_data
+                            - self._remote_max_data_used,
+                            stream.max_stream_data_remote,
+                        ),
                     )
 
             if not builder.end_packet():

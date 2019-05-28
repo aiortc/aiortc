@@ -128,7 +128,9 @@ class QuicStream(asyncio.BaseTransport):
         except IndexError:
             return self._send_buffer_stop
 
-    def get_frame(self, size: int) -> Optional[QuicStreamFrame]:
+    def get_frame(
+        self, max_size: int, max_offset: Optional[int] = None
+    ) -> Optional[QuicStreamFrame]:
         """
         Get a frame of data to send.
         """
@@ -143,45 +145,32 @@ class QuicStream(asyncio.BaseTransport):
 
         # apply flow control
         r = self._send_pending[0]
-        size = min(size, r.stop - r.start)
-        if self.stream_id is not None:
-            size = min(size, self.max_stream_data_remote - r.start)
-        if size <= 0:
+        start = r.start
+        stop = min(r.stop, start + max_size)
+        if max_offset is not None and stop > max_offset:
+            stop = max_offset
+        if stop <= start:
             return None
 
         # create frame
-        send = range(r.start, r.start + size)
         frame = QuicStreamFrame(
             data=self._send_buffer[
-                send.start
-                - self._send_buffer_start : send.start
-                + size
-                - self._send_buffer_start
+                start - self._send_buffer_start : stop - self._send_buffer_start
             ],
-            offset=send.start,
+            offset=start,
         )
-        self._send_pending.subtract(send.start, send.stop)
+        self._send_pending.subtract(start, stop)
 
         # track the highest offset ever sent
-        if send.stop > self._send_highest:
-            self._send_highest = send.stop
+        if stop > self._send_highest:
+            self._send_highest = stop
 
         # if the buffer is empty and EOF was written, set the FIN bit
-        if self._send_buffer_fin == send.stop:
+        if self._send_buffer_fin == stop:
             frame.fin = True
             self._send_pending_eof = False
 
         return frame
-
-    def is_blocked(self) -> bool:
-        """
-        Returns True if there is data to send but the peer's MAX_STREAM_DATA
-        prevents us from sending it.
-        """
-        return (
-            bool(self._send_pending)
-            and self._send_pending[0].start >= self.max_stream_data_remote
-        )
 
     def on_data_delivery(
         self, delivery: QuicDeliveryState, start: int, stop: int
