@@ -316,7 +316,7 @@ class QuicPacketLoss:
         """
         Check whether any packets should be declared lost.
         """
-        packet_threshold = self._highest_acked_pn - K_GRANULARITY
+        packet_threshold = self._highest_acked_pn - K_PACKET_THRESHOLD
         rtt = (
             max(self._rtt_latest, self._rtt_smoothed)
             if self._rtt_initialized
