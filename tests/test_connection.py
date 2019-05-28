@@ -1032,10 +1032,10 @@ class QuicConnectionTest(TestCase):
         client_transport, server_transport = create_transport(client, server)
 
         # client receives padding only
-        is_ack_only, is_probing = client._payload_received(
+        is_ack_eliciting, is_probing = client._payload_received(
             client_receive_context(client), b"\x00" * 1200
         )
-        self.assertTrue(is_ack_only)
+        self.assertFalse(is_ack_eliciting)
         self.assertTrue(is_probing)
 
     def test_payload_received_unknown_frame(self):

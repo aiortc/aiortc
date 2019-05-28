@@ -388,6 +388,19 @@ class QuicFrameType(IntEnum):
     APPLICATION_CLOSE = 0x1D
 
 
+NON_ACK_ELICITING_FRAME_TYPES = frozenset(
+    [QuicFrameType.ACK, QuicFrameType.ACK_ECN, QuicFrameType.PADDING]
+)
+PROBING_FRAME_TYPES = frozenset(
+    [
+        QuicFrameType.PATH_CHALLENGE,
+        QuicFrameType.PATH_RESPONSE,
+        QuicFrameType.PADDING,
+        QuicFrameType.NEW_CONNECTION_ID,
+    ]
+)
+
+
 def pull_ack_frame(buf: Buffer) -> Tuple[RangeSet, int]:
     rangeset = RangeSet()
     end = pull_uint_var(buf)  # largest acknowledged

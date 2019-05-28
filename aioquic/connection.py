@@ -35,11 +35,13 @@ from .buffer import (
 )
 from .crypto import CryptoError, CryptoPair
 from .packet import (
+    NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_ONE_RTT,
     PACKET_TYPE_RETRY,
     PACKET_TYPE_ZERO_RTT,
+    PROBING_FRAME_TYPES,
     QuicDeliveryState,
     QuicErrorCode,
     QuicFrameType,
@@ -775,7 +777,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
             self._logger.debug("[%s] handling packet %d", context, packet_number)
             try:
-                is_ack_only, is_probing = self._payload_received(context, plain_payload)
+                is_ack_eliciting, is_probing = self._payload_received(
+                    context, plain_payload
+                )
             except QuicConnectionError as exc:
                 self._logger.warning(exc)
                 self.close(
@@ -816,7 +820,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # record packet as received
             space.ack_queue.add(packet_number)
-            if not is_ack_only:
+            if is_ack_eliciting:
                 space.ack_required = True
 
         self._send_pending()
@@ -1076,6 +1080,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # pass data to TLS layer
             try:
                 self.tls.handle_message(data, self.send_buffer)
+                self._push_crypto_data()
             except tls.Alert as exc:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.CRYPTO_ERROR + int(exc.description),
@@ -1408,7 +1413,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         buf = Buffer(data=plain)
 
-        is_ack_only = True
+        is_ack_eliciting = False
         is_probing = None
         while not buf.eof():
             frame_type = pull_uint_var(buf)
@@ -1446,26 +1451,15 @@ class QuicConnection(asyncio.DatagramProtocol):
                     )
 
             # update ACK only / probing flags
-            if frame_type not in [
-                QuicFrameType.ACK,
-                QuicFrameType.ACK_ECN,
-                QuicFrameType.PADDING,
-            ]:
-                is_ack_only = False
+            if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
+                is_ack_eliciting = True
 
-            if frame_type not in [
-                QuicFrameType.PATH_CHALLENGE,
-                QuicFrameType.PATH_RESPONSE,
-                QuicFrameType.PADDING,
-                QuicFrameType.NEW_CONNECTION_ID,
-            ]:
+            if frame_type not in PROBING_FRAME_TYPES:
                 is_probing = False
             elif is_probing is None:
                 is_probing = True
 
-        self._push_crypto_data()
-
-        return is_ack_only, bool(is_probing)
+        return is_ack_eliciting, bool(is_probing)
 
     def _replenish_connection_ids(self) -> None:
         """

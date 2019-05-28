@@ -3,10 +3,10 @@ from typing import List, Optional
 from .buffer import Buffer, push_bytes, push_uint8, push_uint16, push_uint32
 from .crypto import CryptoPair
 from .packet import (
+    NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_NUMBER_MAX_SIZE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_MASK,
-    QuicFrameType,
     encode_cid_length,
     is_long_header,
     push_uint_var,
@@ -99,11 +99,7 @@ class QuicPacketBuilder:
         Starts a new frame.
         """
         push_uint_var(self.buffer, frame_type)
-        if not self._ack_eliciting and frame_type not in [
-            QuicFrameType.ACK,
-            QuicFrameType.ACK_ECN,
-            QuicFrameType.PADDING,
-        ]:
+        if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
             self._ack_eliciting = True
 
     def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
