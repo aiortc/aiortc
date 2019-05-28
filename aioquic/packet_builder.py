@@ -54,6 +54,11 @@ class QuicSentPacket:
         default_factory=list
     )
 
+    @property
+    def in_flight(self) -> bool:
+        # FIXME: in_flight and is_ack_eliciting are not exact synonyms!
+        return self.is_ack_eliciting
+
 
 class QuicPacketBuilder:
     """
@@ -82,6 +87,7 @@ class QuicPacketBuilder:
         self._ack_eliciting = False
         self._datagrams: List[bytes] = []
         self._packets: List[QuicSentPacket] = []
+        self._total_bytes = 0
 
         # current packet
         self._crypto: Optional[CryptoPair] = None
@@ -94,11 +100,15 @@ class QuicPacketBuilder:
         self.buffer = Buffer(PACKET_MAX_SIZE)
 
     @property
-    def ack_eliciting(self) -> bool:
+    def flight_bytes(self) -> int:
         """
-        Returns True if an ack-eliciting frame was written.
+        Returns the total number of bytes which will count towards
+        congestion control.
         """
-        return self._ack_eliciting
+        total = self._total_bytes
+        if self._ack_eliciting:
+            total += self.buffer.tell()
+        return total
 
     @property
     def packet_number(self) -> int:
@@ -149,6 +159,7 @@ class QuicPacketBuilder:
         Starts a new packet.
         """
         buf = self.buffer
+        self._ack_eliciting = False
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
@@ -278,4 +289,6 @@ class QuicPacketBuilder:
     def _flush_current_datagram(self) -> None:
         if self.buffer.tell():
             self._datagrams.append(self.buffer.data)
+            if self._ack_eliciting:
+                self._total_bytes += self.buffer.tell()
             self.buffer.seek(0)

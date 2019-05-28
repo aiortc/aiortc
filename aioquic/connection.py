@@ -74,10 +74,6 @@ EPOCH_SHORTCUTS = {
     "H": tls.Epoch.HANDSHAKE,
     "O": tls.Epoch.ONE_RTT,
 }
-K_PACKET_THRESHOLD = 3
-K_INITIAL_RTT = 0.5  # seconds
-K_GRANULARITY = 0.001  # seconds
-K_TIME_THRESHOLD = 9 / 8
 MAX_DATA_WINDOW = 1048576
 SECRETS_LABELS = [
     [
@@ -723,6 +719,8 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # record packet as received
             space.ack_queue.add(packet_number)
+            if len(space.ack_queue) > 63:
+                space.ack_queue.shift()
             if is_ack_eliciting:
                 space.ack_required = True
 
@@ -920,7 +918,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             pull_uint_var(buf)
             pull_uint_var(buf)
 
-        # trigger callbacks
         is_ack_eliciting = False
         largest_newly_acked = None
         largest_sent_time = None
@@ -930,6 +927,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                 if packet is not None:
                     # newly ack'd
                     self._logger.debug("Packet %d ACK'd", packet_number)
+                    if packet.in_flight:
+                        self._loss.on_packet_acked(packet)
+
+                    # trigger callbacks
                     for handler, args in packet.delivery_handlers:
                         handler(QuicDeliveryState.ACKED, *args)
                     if packet.is_ack_eliciting:
@@ -1434,6 +1435,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         if datagrams:
             self._packet_number = builder.packet_number
 
+            # send datagrams
+            for datagram in datagrams:
+                self._transport.sendto(datagram, network_path.addr)
+                network_path.bytes_sent += len(datagram)
+
             # register packets
             now = self._loop.time()
             for packet in packets:
@@ -1443,15 +1449,11 @@ class QuicConnection(asyncio.DatagramProtocol):
                 packet.sent_time = now
 
                 self.spaces[packet.epoch].sent_packets[packet.packet_number] = packet
-                self._loss.on_packet_sent(packet)
+                if packet.in_flight:
+                    self._loss.on_packet_sent(packet)
 
             # arm loss timer
             self._set_loss_timer()
-
-            # send datagrams
-            for datagram in datagrams:
-                self._transport.sendto(datagram, network_path.addr)
-                network_path.bytes_sent += len(datagram)
 
     def _send_probe(self) -> None:
         self._logger.info("Sending probe")
@@ -1595,9 +1597,10 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         buf = builder.buffer
 
-        # FIXME: implement congestion control
-        packets = 0
-        while packets < 5:
+        while (
+            builder.flight_bytes + self._loss._bytes_in_flight
+            < self._loss._congestion_window
+        ):
             # write header
             builder.start_packet(packet_type, crypto)
 
@@ -1695,7 +1698,6 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             if not builder.end_packet():
                 break
-            packets += 1
 
     def _write_handshake(self, builder: QuicPacketBuilder, epoch: tls.Epoch) -> None:
         crypto = self.cryptos[epoch]
@@ -1705,7 +1707,10 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         buf = builder.buffer
 
-        while True:
+        while (
+            builder.flight_bytes + self._loss._bytes_in_flight
+            < self._loss._congestion_window
+        ):
             if epoch == tls.Epoch.INITIAL:
                 packet_type = PACKET_TYPE_INITIAL
             else:

@@ -57,10 +57,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(100))
         self.assertTrue(builder.end_packet())
-
-        # check builder state
         self.assertEqual(builder.buffer.tell(), 1280)
-        self.assertEqual(builder.packet_number, 1)
 
         # check datagrams
         datagrams, packets = builder.flush()
@@ -97,6 +94,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
+        self.assertEqual(builder.buffer.tell(), 1280)
 
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
@@ -104,9 +102,6 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_frame(QuicFrameType.STREAM_BASE)
         push_bytes(builder.buffer, bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
-
-        # check builder
-        self.assertTrue(builder.ack_eliciting)
         self.assertEqual(builder.buffer.tell(), 0)
 
         # check datagrams
@@ -170,9 +165,6 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.remaining_space, 668)
         builder.start_frame(QuicFrameType.CRYPTO)
         push_bytes(builder.buffer, bytes(299))
-
-        # check builder
-        self.assertTrue(builder.ack_eliciting)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 0)
 
@@ -225,7 +217,6 @@ class QuicPacketBuilderTest(TestCase):
         self.assertFalse(builder.end_packet())
 
         # check builder
-        self.assertFalse(builder.ack_eliciting)
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 0)
 
@@ -253,7 +244,6 @@ class QuicPacketBuilderTest(TestCase):
         self.assertTrue(builder.end_packet())
 
         # check builder
-        self.assertTrue(builder.ack_eliciting)
         self.assertEqual(builder.buffer.tell(), 0)
         self.assertEqual(builder.packet_number, 1)
 
