@@ -1456,7 +1456,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._set_loss_timer()
 
     def _send_probe(self) -> None:
-        self._logger.info("Sending probe")
         self._probe_pending = True
         self._send_pending()
 
@@ -1604,7 +1603,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         while (
             builder.flight_bytes + self._loss._bytes_in_flight
             < self._loss._congestion_window
-        ):
+        ) or self._probe_pending:
             # write header
             builder.start_packet(packet_type, crypto)
 
@@ -1678,6 +1677,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # PING (probe)
             if self._probe_pending:
+                self._logger.info("Sending probe")
                 builder.start_frame(QuicFrameType.PING)
                 self._probe_pending = False
 

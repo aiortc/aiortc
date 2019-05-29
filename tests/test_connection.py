@@ -865,6 +865,27 @@ class QuicConnectionTest(TestCase):
         )
         self.assertEqual(client_transport.sent, 2)
 
+    def test_with_packet_loss(self):
+        with client_and_server() as (client, server):
+            # create stream
+            client_reader, client_writer = run(client.create_stream())
+            client_writer.write(b"ping")
+            run(asyncio.sleep(0))
+            server_reader = server.streams[0].reader
+            self.assertEqual(run(server_reader.read(4)), b"ping")
+
+            # cause packet loss in both directions
+            client._transport.loss = 0.2
+            server._transport.loss = 0.2
+
+            # send data over stream
+            sent_data = b"Z" * 1000000
+            client_writer.write(sent_data)
+            client_writer.write_eof()
+
+            # wait for the data to be received
+            self.assertEqual(run(server_reader.read()), sent_data)
+
 
 class QuicNetworkPathTest(TestCase):
     def test_can_send(self):
