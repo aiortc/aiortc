@@ -41,7 +41,8 @@ async def serve_http_request(reader, writer):
 
     size_match = re.match(r"^/(\d+)$", path)
     if size_match:
-        size = min(10000000, int(size_match.group(1)))
+        # we accept a maximum of 20MB
+        size = min(20000000, int(size_match.group(1)))
         writer.write(b"Z" * size)
     elif path in ["/", "/index.html"]:
         writer.write(render("It works!"))
