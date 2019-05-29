@@ -40,6 +40,7 @@ class QuicPacketRecovery:
         logger: logging.LoggerAdapter,
         get_time: Callable[[], float],
         send_probe: Callable[[], None],
+        set_loss_detection_timer: Callable[[], None],
     ) -> None:
         self.ack_delay_exponent = 3
         self.max_ack_delay = 25  # ms
@@ -49,6 +50,7 @@ class QuicPacketRecovery:
         self._get_time = get_time
         self._logger = logger
         self._send_probe = send_probe
+        self._set_loss_detection_timer = set_loss_detection_timer
 
         # loss detection
         self._crypto_count = 0
@@ -206,12 +208,16 @@ class QuicPacketRecovery:
         self._crypto_count = 0
         self._pto_count = 0
 
+        # arm the timer
+        self._set_loss_detection_timer()
+
     def on_loss_detection_timeout(self) -> None:
         self._logger.info("Loss detection timeout triggered")
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
+            # detect loss and re-arm the timer
             self.detect_loss(loss_space)
-            # re-arm timer!
+            self._set_loss_detection_timer()
         else:
             # sending the probe will re-arm the timer
             self._pto_count += 1

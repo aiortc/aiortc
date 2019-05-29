@@ -359,7 +359,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
         self._loss = QuicPacketRecovery(
-            logger=self._logger, get_time=self._loop.time, send_probe=self._send_probe
+            logger=self._logger,
+            get_time=self._loop.time,
+            send_probe=self._send_probe,
+            set_loss_detection_timer=self._set_loss_detection_timer,
         )
         self._loss_timer: Optional[asyncio.TimerHandle] = None
         self._network_paths: List[QuicNetworkPath] = []
@@ -920,9 +923,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             ack_delay_encoded=ack_delay_encoded,
         )
 
-        # arm loss timer
-        self._set_loss_timer()
-
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
@@ -1419,7 +1419,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
 
             # arm loss timer
-            self._set_loss_timer()
+            self._set_loss_detection_timer()
 
     def _send_probe(self) -> None:
         self._probe_pending = True
@@ -1492,7 +1492,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         push_quic_transport_parameters(buf, quic_transport_parameters)
         return buf.data
 
-    def _set_loss_timer(self) -> None:
+    def _set_loss_detection_timer(self) -> None:
         # stop timer
         if self._loss_timer is not None:
             self._loss_timer.cancel()
