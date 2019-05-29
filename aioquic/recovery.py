@@ -16,7 +16,6 @@ K_MAX_DATAGRAM_SIZE = 1280
 K_INITIAL_WINDOW = 10 * K_MAX_DATAGRAM_SIZE
 K_MINIMUM_WINDOW = 2 * K_MAX_DATAGRAM_SIZE
 K_LOSS_REDUCTION_FACTOR = 0.5
-K_PERSISTENT_CONGESTION_THRESHOLD = 0.3
 
 
 class QuicPacketSpace:
@@ -31,7 +30,11 @@ class QuicPacketSpace:
         self.sent_packets: Dict[int, QuicSentPacket] = {}
 
 
-class QuicPacketLoss:
+class QuicPacketRecovery:
+    """
+    Packet loss and congestion controller.
+    """
+
     def __init__(
         self,
         logger: logging.LoggerAdapter,
@@ -59,8 +62,8 @@ class QuicPacketLoss:
         self._time_of_last_sent_crypto_packet = 0.0
 
         # congestion control
-        self._bytes_in_flight = 0
-        self._congestion_window = K_INITIAL_WINDOW
+        self.bytes_in_flight = 0
+        self.congestion_window = K_INITIAL_WINDOW
         self._congestion_recovery_start_time = 0.0
         self._ssthresh = math.inf
 
@@ -124,7 +127,7 @@ class QuicPacketLoss:
 
         # PTO
         if not self._rtt_initialized:
-            timeout = 0.5
+            timeout = K_INITIAL_RTT
         else:
             timeout = (
                 self._rtt_smoothed
@@ -134,20 +137,45 @@ class QuicPacketLoss:
         return self._time_of_last_sent_ack_eliciting_packet + timeout
 
     def on_ack_received(
-        self,
-        space: QuicPacketSpace,
-        is_ack_eliciting: bool,
-        largest_newly_acked: int,
-        latest_rtt: float,
-        ack_delay_encoded: int,
+        self, space: QuicPacketSpace, ack_rangeset: RangeSet, ack_delay_encoded: int
     ) -> None:
         """
         Update metrics as the result of an ACK being received.
         """
-        if largest_newly_acked > space.largest_acked_packet:
-            space.largest_acked_packet = largest_newly_acked
+        ack_time = self._get_time()
 
-        if is_ack_eliciting:
+        is_ack_eliciting = False
+        largest_acked = ack_rangeset.bounds().stop - 1
+        largest_newly_acked = None
+        largest_sent_time = None
+
+        if largest_acked > space.largest_acked_packet:
+            space.largest_acked_packet = largest_acked
+
+        for packet_number in sorted(space.sent_packets.keys()):
+            if packet_number > largest_acked:
+                break
+            if packet_number in ack_rangeset:
+                # newly ack'd
+                packet = space.sent_packets.pop(packet_number)
+                if packet.in_flight:
+                    self.on_packet_acked(packet)
+
+                # trigger callbacks
+                for handler, args in packet.delivery_handlers:
+                    handler(QuicDeliveryState.ACKED, *args)
+                if packet.is_ack_eliciting:
+                    is_ack_eliciting = True
+                largest_newly_acked = packet_number
+                largest_sent_time = packet.sent_time
+
+        # nothing to do if there are no newly acked packets
+        if largest_newly_acked is None:
+            return
+
+        if largest_acked == largest_newly_acked and is_ack_eliciting:
+            latest_rtt = ack_time - largest_sent_time
+
             # decode ACK delay into seconds
             ack_delay = max(
                 (ack_delay_encoded << self.ack_delay_exponent) / 1000000,
@@ -155,7 +183,7 @@ class QuicPacketLoss:
             )
 
             # update RTT estimate, which cannot be < 1 ms
-            self._rtt_latest = max(latest_rtt, 0.001)
+            self._rtt_latest = max(ack_time - largest_sent_time, 0.001)
             if self._rtt_latest < self._rtt_min:
                 self._rtt_min = self._rtt_latest
             if self._rtt_latest > self._rtt_min + ack_delay:
@@ -178,51 +206,57 @@ class QuicPacketLoss:
         self._crypto_count = 0
         self._pto_count = 0
 
-    def on_loss_timeout(self) -> None:
-        self._logger.info("Loss timeout triggered")
+    def on_loss_detection_timeout(self) -> None:
+        self._logger.info("Loss detection timeout triggered")
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             self.detect_loss(loss_space)
+            # re-arm timer!
         else:
+            # sending the probe will re-arm the timer
             self._pto_count += 1
             self._send_probe()
 
     def on_packet_acked(self, packet: QuicSentPacket) -> None:
-        self._bytes_in_flight -= packet.sent_bytes
+        self.bytes_in_flight -= packet.sent_bytes
 
         # don't increase window in congestion recovery
         if packet.sent_time <= self._congestion_recovery_start_time:
             return
 
-        if self._congestion_window < self._ssthresh:
+        if self.congestion_window < self._ssthresh:
             # slow start
-            self._congestion_window += packet.sent_bytes
+            self.congestion_window += packet.sent_bytes
         else:
             # congestion avoidance
-            self._congestion_window += (
-                K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self._congestion_window
+            self.congestion_window += (
+                K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self.congestion_window
             )
 
-    def on_packet_sent(self, packet: QuicSentPacket) -> None:
-        if packet.is_crypto_packet:
-            self._time_of_last_sent_crypto_packet = packet.sent_time
-        if packet.is_ack_eliciting:
-            self._time_of_last_sent_ack_eliciting_packet = packet.sent_time
+    def on_packet_sent(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
+        packet.sent_time = self._get_time()
+        space.sent_packets[packet.packet_number] = packet
 
-        # add packet to bytes in flight
-        self._bytes_in_flight += packet.sent_bytes
+        if packet.in_flight:
+            if packet.is_crypto_packet:
+                self._time_of_last_sent_crypto_packet = packet.sent_time
+            if packet.is_ack_eliciting:
+                self._time_of_last_sent_ack_eliciting_packet = packet.sent_time
+
+            # add packet to bytes in flight
+            self.bytes_in_flight += packet.sent_bytes
 
     def on_packets_lost(self, lost_bytes: int, lost_largest_time: float) -> None:
         # remove lost packets from bytes in flight
-        self._bytes_in_flight -= lost_bytes
+        self.bytes_in_flight -= lost_bytes
 
         # start a new congestion event if packet was sent after the
         # start of the previous congestion recovery period.
         if lost_largest_time > self._congestion_recovery_start_time:
             self._congestion_recovery_start_time = self._get_time()
-            self._congestion_window = max(
-                int(self._congestion_window * K_LOSS_REDUCTION_FACTOR), K_MINIMUM_WINDOW
+            self.congestion_window = max(
+                int(self.congestion_window * K_LOSS_REDUCTION_FACTOR), K_MINIMUM_WINDOW
             )
-            self._ssthresh = self._congestion_window
+            self._ssthresh = self.congestion_window
 
         # TODO : collapse congestion window if persistent congestion

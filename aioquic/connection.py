@@ -31,7 +31,6 @@ from .buffer import (
     push_uint16,
 )
 from .crypto import CryptoError, CryptoPair
-from .loss import QuicPacketLoss, QuicPacketSpace
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_TYPE_HANDSHAKE,
@@ -64,6 +63,7 @@ from .packet import (
     quic_uint_length,
 )
 from .packet_builder import QuicDeliveryState, QuicPacketBuilder
+from .recovery import QuicPacketRecovery, QuicPacketSpace
 from .stream import QuicStream
 
 logger = logging.getLogger("quic")
@@ -358,7 +358,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._logger = QuicConnectionAdapter(
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
-        self._loss = QuicPacketLoss(
+        self._loss = QuicPacketRecovery(
             logger=self._logger, get_time=self._loop.time, send_probe=self._send_probe
         )
         self._loss_timer: Optional[asyncio.TimerHandle] = None
@@ -908,51 +908,20 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle an ACK frame.
         """
-        ack_time = self._loop.time()
-        space = self.spaces[context.epoch]
-
-        rangeset, ack_delay_encoded = pull_ack_frame(buf)
+        ack_rangeset, ack_delay_encoded = pull_ack_frame(buf)
         if frame_type == QuicFrameType.ACK_ECN:
             pull_uint_var(buf)
             pull_uint_var(buf)
             pull_uint_var(buf)
 
-        is_ack_eliciting = False
-        largest_acked = rangeset.bounds().stop - 1
-        largest_newly_acked = None
-        largest_sent_time = None
+        self._loss.on_ack_received(
+            space=self.spaces[context.epoch],
+            ack_rangeset=ack_rangeset,
+            ack_delay_encoded=ack_delay_encoded,
+        )
 
-        # NOTE: this iteration explicitly counts on dict being ordered
-        for packet_number, packet in list(space.sent_packets.items()):
-            if packet_number > largest_acked:
-                break
-            if packet_number in rangeset:
-                # newly ack'd
-                if packet.in_flight:
-                    self._loss.on_packet_acked(packet)
-
-                # trigger callbacks
-                for handler, args in packet.delivery_handlers:
-                    handler(QuicDeliveryState.ACKED, *args)
-                if packet.is_ack_eliciting:
-                    is_ack_eliciting = True
-                largest_newly_acked = packet_number
-                largest_sent_time = packet.sent_time
-
-                del space.sent_packets[packet_number]
-
-        # update RTT estimate
-        if largest_newly_acked is not None:
-            self._loss.on_ack_received(
-                space=space,
-                is_ack_eliciting=is_ack_eliciting,
-                largest_newly_acked=largest_newly_acked,
-                latest_rtt=ack_time - largest_sent_time,
-                ack_delay_encoded=ack_delay_encoded,
-            )
-
-            # arm loss timer
-            self._set_loss_timer()
+        # arm loss timer
+        self._set_loss_timer()
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1444,13 +1413,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                 network_path.bytes_sent += len(datagram)
 
             # register packets
-            now = self._loop.time()
             for packet in packets:
-                packet.sent_time = now
-
-                self.spaces[packet.epoch].sent_packets[packet.packet_number] = packet
-                if packet.in_flight:
-                    self._loss.on_packet_sent(packet)
+                self._loss.on_packet_sent(
+                    packet=packet, space=self.spaces[packet.epoch]
+                )
 
             # arm loss timer
             self._set_loss_timer()
@@ -1540,7 +1506,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             loss_time = self._loss.get_loss_detection_time()
             if loss_time is not None:
                 self._loss_timer = self._loop.call_at(
-                    loss_time, self._loss.on_loss_timeout
+                    loss_time, self._loss.on_loss_detection_timeout
                 )
 
     def _set_state(self, state: QuicConnectionState) -> None:
@@ -1601,8 +1567,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         buf = builder.buffer
 
         while (
-            builder.flight_bytes + self._loss._bytes_in_flight
-            < self._loss._congestion_window
+            builder.flight_bytes + self._loss.bytes_in_flight
+            < self._loss.congestion_window
         ) or self._probe_pending:
             # write header
             builder.start_packet(packet_type, crypto)
@@ -1712,8 +1678,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         buf = builder.buffer
 
         while (
-            builder.flight_bytes + self._loss._bytes_in_flight
-            < self._loss._congestion_window
+            builder.flight_bytes + self._loss.bytes_in_flight
+            < self._loss.congestion_window
         ):
             if epoch == tls.Epoch.INITIAL:
                 packet_type = PACKET_TYPE_INITIAL
