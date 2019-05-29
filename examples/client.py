@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import pickle
+import time
 
 import aioquic
 
@@ -24,8 +25,16 @@ async def run(host, port, path, **kwargs):
         writer.write(("GET %s\r\n" % path).encode("utf8"))
         writer.write_eof()
 
+        start = time.time()
         response = await reader.read()
+        elapsed = time.time() - start
         print(response.decode("utf8"))
+
+        octets = len(response)
+        print(
+            "received %d bytes in %.1f s (%.3f Mbps)"
+            % (octets, elapsed, octets * 8 / elapsed / 1000000)
+        )
 
 
 if __name__ == "__main__":
