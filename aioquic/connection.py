@@ -451,15 +451,15 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Close the connection.
         """
-        self.__close = {
-            "error_code": error_code,
-            "frame_type": frame_type,
-            "reason_phrase": reason_phrase,
-        }
         if self.__state not in [
             QuicConnectionState.CLOSING,
             QuicConnectionState.DRAINING,
         ]:
+            self.__close = {
+                "error_code": error_code,
+                "frame_type": frame_type,
+                "reason_phrase": reason_phrase,
+            }
             self._set_state(QuicConnectionState.CLOSING)
             self.connection_lost(
                 maybe_connection_error(
@@ -468,7 +468,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     reason_phrase=reason_phrase,
                 )
             )
-        self._send_pending()
+            self._send_pending()
 
     async def connect(
         self, addr: NetworkAddress, protocol_version: Optional[int] = None
@@ -1528,20 +1528,24 @@ class QuicConnection(asyncio.DatagramProtocol):
         return buf.data
 
     def _set_loss_timer(self) -> None:
-        loss_time = self._loss.get_loss_detection_time()
+        # stop timer
         if self._loss_timer is not None:
             self._loss_timer.cancel()
-        if loss_time is not None:
-            self._loss_timer = self._loop.call_at(loss_time, self._loss.on_loss_timeout)
-        else:
             self._loss_timer = None
+
+        # re-arm timer
+        if self.__state not in [
+            QuicConnectionState.CLOSING,
+            QuicConnectionState.DRAINING,
+        ]:
+            loss_time = self._loss.get_loss_detection_time()
+            if loss_time is not None:
+                self._loss_timer = self._loop.call_at(
+                    loss_time, self._loss.on_loss_timeout
+                )
 
     def _set_state(self, state: QuicConnectionState) -> None:
         self._logger.info("%s -> %s", self.__state, state)
-        if state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
-            if self._loss_timer is not None:
-                self._loss_timer.cancel()
-                self._loss_timer = None
         self.__state = state
 
     def _stream_can_receive(self, stream_id: int) -> bool:
