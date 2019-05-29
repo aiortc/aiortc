@@ -919,24 +919,28 @@ class QuicConnection(asyncio.DatagramProtocol):
             pull_uint_var(buf)
 
         is_ack_eliciting = False
+        largest_acked = rangeset.bounds().stop - 1
         largest_newly_acked = None
         largest_sent_time = None
-        for packet_range in rangeset:
-            for packet_number in packet_range:
-                packet = space.sent_packets.pop(packet_number, None)
-                if packet is not None:
-                    # newly ack'd
-                    self._logger.debug("Packet %d ACK'd", packet_number)
-                    if packet.in_flight:
-                        self._loss.on_packet_acked(packet)
 
-                    # trigger callbacks
-                    for handler, args in packet.delivery_handlers:
-                        handler(QuicDeliveryState.ACKED, *args)
-                    if packet.is_ack_eliciting:
-                        is_ack_eliciting = True
-                    largest_newly_acked = packet_number
-                    largest_sent_time = packet.sent_time
+        # NOTE: this iteration explicitly counts on dict being ordered
+        for packet_number, packet in list(space.sent_packets.items()):
+            if packet_number > largest_acked:
+                break
+            if packet_number in rangeset:
+                # newly ack'd
+                if packet.in_flight:
+                    self._loss.on_packet_acked(packet)
+
+                # trigger callbacks
+                for handler, args in packet.delivery_handlers:
+                    handler(QuicDeliveryState.ACKED, *args)
+                if packet.is_ack_eliciting:
+                    is_ack_eliciting = True
+                largest_newly_acked = packet_number
+                largest_sent_time = packet.sent_time
+
+                del space.sent_packets[packet_number]
 
         # update RTT estimate
         if largest_newly_acked is not None:
