@@ -44,6 +44,7 @@ class CryptoContext:
         self.aead: Optional[Any]
         self.cipher_suite: Optional[CipherSuite]
         self.hp: Optional[bytes]
+        self.hp_encryptor: Optional[Any] = None
         self.iv: Optional[bytes]
         self.key_phase = key_phase
         self.secret: Optional[bytes]
@@ -140,22 +141,17 @@ class CryptoContext:
         return bytes(packet)
 
     def header_protection_mask(self, sample: bytes) -> bytes:
+        buf = bytearray(31)
         if self.cipher_suite == CipherSuite.CHACHA20_POLY1305_SHA256:
             encryptor = Cipher(
                 algorithms.ChaCha20(key=self.hp, nonce=sample),
                 mode=None,
                 backend=default_backend(),
             ).encryptor()
-            buf = bytearray(5)
             encryptor.update_into(bytes(5), buf)
-            return bytes(buf)
         else:
-            encryptor = Cipher(
-                algorithms.AES(self.hp), mode=modes.ECB(), backend=default_backend()
-            ).encryptor()
-            buf = bytearray(31)
-            encryptor.update_into(sample, buf)
-            return buf[:5]
+            self.hp_encryptor.update_into(sample, buf)
+        return buf[:5]
 
     def is_valid(self) -> bool:
         return self.aead is not None
@@ -182,6 +178,13 @@ class CryptoContext:
         self.aead = cipher_suite_aead(cipher_suite, key)
         self.cipher_suite = cipher_suite
         self.secret = secret
+
+        if self.cipher_suite == CipherSuite.CHACHA20_POLY1305_SHA256:
+            self.hp_encryptor = None
+        else:
+            self.hp_encryptor = Cipher(
+                algorithms.AES(self.hp), mode=modes.ECB(), backend=default_backend()
+            ).encryptor()
 
     def teardown(self) -> None:
         self.aead = None
