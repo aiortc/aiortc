@@ -674,7 +674,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             context = QuicReceiveContext(
                 epoch=epoch, host_cid=header.destination_cid, network_path=network_path
             )
-            self._logger.debug("[%s] handling packet %d", context, packet_number)
             try:
                 is_ack_eliciting, is_probing = self._payload_received(
                     context, plain_payload
@@ -1447,9 +1446,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             # register packets
             now = self._loop.time()
             for packet in packets:
-                self._logger.debug(
-                    "[%s] sending packet %d", packet.epoch.name, packet.packet_number
-                )
                 packet.sent_time = now
 
                 self.spaces[packet.epoch].sent_packets[packet.packet_number] = packet
