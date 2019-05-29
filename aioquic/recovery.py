@@ -29,6 +29,10 @@ class QuicPacketSpace:
         self.loss_time: Optional[float] = None
         self.sent_packets: Dict[int, QuicSentPacket] = {}
 
+    def teardown(self) -> None:
+        self.loss_time = None
+        self.sent_packets.clear()
+
 
 class QuicPacketRecovery:
     """

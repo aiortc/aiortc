@@ -649,9 +649,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             if packet_number > space.expected_packet_number:
                 space.expected_packet_number = packet_number + 1
 
-            # discard initial keys
+            # discard initial keys and packet space
             if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
                 self.cryptos[tls.Epoch.INITIAL].teardown()
+                self.spaces[tls.Epoch.INITIAL].teardown()
 
             # update state
             if self._peer_cid_seq is None:
@@ -1699,9 +1700,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             if not builder.end_packet():
                 break
 
-            # discard initial keys
+            # discard initial keys and packet space
             if self.is_client and epoch == tls.Epoch.HANDSHAKE:
                 self.cryptos[tls.Epoch.INITIAL].teardown()
+                self.spaces[tls.Epoch.INITIAL].teardown()
 
     def _write_connection_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace
