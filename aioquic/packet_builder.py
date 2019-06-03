@@ -197,7 +197,7 @@ class QuicPacketBuilder:
                 push_uint_var(buf, len(self._peer_token))
                 push_bytes(buf, self._peer_token)
             push_uint16(buf, 0)  # length
-            push_packet_number(buf, 0)  # packet number
+            push_packet_number(buf, self._packet_number)
         else:
             push_uint8(
                 buf,
@@ -246,7 +246,6 @@ class QuicPacketBuilder:
                     + self._crypto.aead_tag_size
                 )
                 push_uint16(buf, length | 0x4000)
-                push_packet_number(buf, self._packet_number)
                 buf.seek(packet_size)
             else:
                 # check whether we need padding
