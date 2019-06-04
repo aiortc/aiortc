@@ -188,18 +188,23 @@ class QuicStreamTest(TestCase):
 
     def test_send_data(self):
         stream = QuicStream()
+        self.assertTrue(stream.can_write_eof())
 
         # nothing to send yet
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
 
-        # write data, send a chunk
+        # write data
         stream.write(b"0123456789012345")
+        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [range(0, 16)])
+
+        # send a chunk
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
         self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 0)
+        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [range(8, 16)])
 
         # send another chunk
@@ -207,12 +212,22 @@ class QuicStreamTest(TestCase):
         self.assertEqual(frame.data, b"89012345")
         self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 8)
+        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [])
 
         # nothing more to send
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
+        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [])
+
+        # first chunk gets acknowledged
+        stream.on_data_delivery(QuicDeliveryState.ACKED, 0, 8)
+        self.assertEqual(stream.get_write_buffer_size(), 8)
+
+        # second chunk gets acknowledged
+        stream.on_data_delivery(QuicDeliveryState.ACKED, 8, 16)
+        self.assertEqual(stream.get_write_buffer_size(), 0)
 
     def test_send_data_and_fin(self):
         stream = QuicStream()
@@ -405,3 +420,31 @@ class QuicStreamTest(TestCase):
         # nothing more to send
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
+
+    def test_send_data_using_writelines(self):
+        stream = QuicStream()
+
+        # nothing to send yet
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+
+        # write data, send a chunk
+        stream.writelines([b"01234567", b"89012345"])
+        self.assertEqual(list(stream._send_pending), [range(0, 16)])
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"01234567")
+        self.assertFalse(frame.fin)
+        self.assertEqual(frame.offset, 0)
+        self.assertEqual(list(stream._send_pending), [range(8, 16)])
+
+        # send another chunk
+        frame = stream.get_frame(8)
+        self.assertEqual(frame.data, b"89012345")
+        self.assertFalse(frame.fin)
+        self.assertEqual(frame.offset, 8)
+        self.assertEqual(list(stream._send_pending), [])
+
+        # nothing more to send
+        frame = stream.get_frame(8)
+        self.assertIsNone(frame)
+        self.assertEqual(list(stream._send_pending), [])

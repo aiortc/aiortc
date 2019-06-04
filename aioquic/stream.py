@@ -6,7 +6,7 @@ from .packet_builder import QuicDeliveryState
 from .rangeset import RangeSet
 
 
-class QuicStream(asyncio.BaseTransport):
+class QuicStream(asyncio.Transport):
     def __init__(
         self,
         stream_id: Optional[int] = None,
@@ -196,16 +196,28 @@ class QuicStream(asyncio.BaseTransport):
 
     # asyncio.Transport
 
+    def can_write_eof(self) -> bool:
+        return True
+
     def get_extra_info(self, name: str, default: Any = None) -> Any:
         """
-        Returns information about the underlying QUIC stream.
+        Get information about the underlying QUIC stream.
         """
         if name == "connection":
             return self._connection
         elif name == "stream_id":
             return self.stream_id
 
+    def get_write_buffer_size(self) -> int:
+        """
+        Return the current size of the write buffer.
+        """
+        return self._send_buffer_stop - self._send_buffer_start
+
     def write(self, data: bytes) -> None:
+        """
+        Write some data bytes to the QUIC stream.
+        """
         assert self._send_buffer_fin is None, "cannot call write() after FIN"
         size = len(data)
 
