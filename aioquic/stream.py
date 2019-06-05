@@ -136,17 +136,17 @@ class QuicStream(asyncio.Transport):
         """
         Get a frame of data to send.
         """
-        # check there is something to send
-        if not (self._send_pending or self._send_pending_eof):
+        # get the first pending data range
+        try:
+            r = self._send_pending[0]
+        except IndexError:
+            if self._send_pending_eof:
+                # FIN only
+                self._send_pending_eof = False
+                return QuicStreamFrame(fin=True, offset=self._send_buffer_stop)
             return None
 
-        # FIN only
-        if not self._send_pending:
-            self._send_pending_eof = False
-            return QuicStreamFrame(fin=True, offset=self._send_buffer_stop)
-
         # apply flow control
-        r = self._send_pending[0]
         start = r.start
         stop = min(r.stop, start + max_size)
         if max_offset is not None and stop > max_offset:
