@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import (
-    Any,
     Callable,
     Dict,
     Generator,
@@ -23,7 +22,6 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25519
-from cryptography.hazmat.primitives.ciphers import aead
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -863,9 +861,9 @@ class KeyScheduleProxy:
 
 
 CIPHER_SUITES = {
-    CipherSuite.AES_128_GCM_SHA256: (aead.AESGCM, hashes.SHA256),
-    CipherSuite.AES_256_GCM_SHA384: (aead.AESGCM, hashes.SHA384),
-    CipherSuite.CHACHA20_POLY1305_SHA256: (aead.ChaCha20Poly1305, hashes.SHA256),
+    CipherSuite.AES_128_GCM_SHA256: hashes.SHA256,
+    CipherSuite.AES_256_GCM_SHA384: hashes.SHA384,
+    CipherSuite.CHACHA20_POLY1305_SHA256: hashes.SHA256,
 }
 
 SIGNATURE_ALGORITHMS = {
@@ -889,12 +887,8 @@ GROUP_TO_CURVE = {
 CURVE_TO_GROUP = dict((v, k) for k, v in GROUP_TO_CURVE.items())
 
 
-def cipher_suite_aead(cipher_suite: CipherSuite, key: bytes) -> Any:
-    return CIPHER_SUITES[cipher_suite][0](key)
-
-
 def cipher_suite_hash(cipher_suite: CipherSuite) -> hashes.HashAlgorithm:
-    return CIPHER_SUITES[cipher_suite][1]()
+    return CIPHER_SUITES[cipher_suite]()
 
 
 def decode_public_key(

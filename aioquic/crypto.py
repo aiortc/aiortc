@@ -5,16 +5,11 @@ from typing import Any, Optional, Tuple
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.backends.openssl.backend import backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .packet import PACKET_NUMBER_MAX_SIZE, decode_packet_number, is_long_header
-from .tls import (
-    CipherSuite,
-    cipher_suite_aead,
-    cipher_suite_hash,
-    hkdf_expand_label,
-    hkdf_extract,
-)
+from .tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
 
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
 INITIAL_SALT = binascii.unhexlify("ef4fb0abb47470c41befcf8031334fae485e09a0")
@@ -37,6 +32,129 @@ def derive_key_iv_hp(
         hkdf_expand_label(algorithm, secret, b"quic iv", b"", 12),
         hkdf_expand_label(algorithm, secret, b"quic hp", b"", key_size),
     )
+
+
+class AEAD:
+    def __init__(self, cipher_suite: CipherSuite, key: bytes):
+        if cipher_suite == CipherSuite.AES_128_GCM_SHA256:
+            self._cipher_name = b"aes-128-gcm"
+        elif cipher_suite == CipherSuite.AES_256_GCM_SHA384:
+            self._cipher_name = b"aes-256-gcm"
+        else:
+            self._cipher_name = b"chacha20-poly1305"
+        self._decrypt_ctx = None
+        self._encrypt_ctx = None
+        self._key_length = len(key)
+        self._key_ptr = backend._ffi.from_buffer(key)
+
+    def decrypt(self, nonce: bytes, data: bytes, associated_data: bytes) -> bytes:
+        global backend
+
+        if self._decrypt_ctx is None:
+            self._decrypt_ctx = self._create_ctx(len(nonce), 0)
+        ctx = self._decrypt_ctx
+
+        outlen = backend._ffi.new("int *")
+        tag_length = 16
+        if len(data) < tag_length:
+            raise InvalidTag
+        tag = data[-tag_length:]
+        data = data[:-tag_length]
+
+        res = backend._lib.EVP_CIPHER_CTX_ctrl(
+            ctx, backend._lib.EVP_CTRL_AEAD_SET_TAG, tag_length, tag
+        )
+        backend.openssl_assert(res != 0)
+
+        res = backend._lib.EVP_CipherInit_ex(
+            ctx,
+            backend._ffi.NULL,
+            backend._ffi.NULL,
+            self._key_ptr,
+            backend._ffi.from_buffer(nonce),
+            0,
+        )
+        backend.openssl_assert(res != 0)
+
+        res = backend._lib.EVP_CipherUpdate(
+            ctx, backend._ffi.NULL, outlen, associated_data, len(associated_data)
+        )
+        backend.openssl_assert(res != 0)
+
+        buf = backend._ffi.new("unsigned char[]", len(data))
+        res = backend._lib.EVP_CipherUpdate(ctx, buf, outlen, data, len(data))
+        backend.openssl_assert(res != 0)
+        processed_data = backend._ffi.buffer(buf, outlen[0])[:]
+
+        res = backend._lib.EVP_CipherFinal_ex(ctx, backend._ffi.NULL, outlen)
+        if res == 0:
+            backend._consume_errors()
+            raise InvalidTag
+
+        return processed_data
+
+    def encrypt(self, nonce: bytes, data: bytes, associated_data: bytes) -> bytes:
+        global backend
+
+        if self._encrypt_ctx is None:
+            self._encrypt_ctx = self._create_ctx(len(nonce), 1)
+        ctx = self._encrypt_ctx
+
+        outlen = backend._ffi.new("int *")
+        tag_length = 16
+        res = backend._lib.EVP_CipherInit_ex(
+            ctx,
+            backend._ffi.NULL,
+            backend._ffi.NULL,
+            self._key_ptr,
+            backend._ffi.from_buffer(nonce),
+            1,
+        )
+        backend.openssl_assert(res != 0)
+
+        res = backend._lib.EVP_CipherUpdate(
+            ctx, backend._ffi.NULL, outlen, associated_data, len(associated_data)
+        )
+        backend.openssl_assert(res != 0)
+
+        buf = backend._ffi.new("unsigned char[]", len(data))
+        res = backend._lib.EVP_CipherUpdate(ctx, buf, outlen, data, len(data))
+        backend.openssl_assert(res != 0)
+        processed_data = backend._ffi.buffer(buf, outlen[0])[:]
+
+        res = backend._lib.EVP_CipherFinal_ex(ctx, backend._ffi.NULL, outlen)
+        backend.openssl_assert(res != 0)
+        backend.openssl_assert(outlen[0] == 0)
+        tag_buf = backend._ffi.new("unsigned char[]", tag_length)
+        res = backend._lib.EVP_CIPHER_CTX_ctrl(
+            ctx, backend._lib.EVP_CTRL_AEAD_GET_TAG, tag_length, tag_buf
+        )
+        backend.openssl_assert(res != 0)
+        tag = backend._ffi.buffer(tag_buf)[:]
+
+        return processed_data + tag
+
+    def _create_ctx(self, nonce_length: int, operation: int) -> Any:
+        evp_cipher = backend._lib.EVP_get_cipherbyname(self._cipher_name)
+        backend.openssl_assert(evp_cipher != backend._ffi.NULL)
+        ctx = backend._lib.EVP_CIPHER_CTX_new()
+        ctx = backend._ffi.gc(ctx, backend._lib.EVP_CIPHER_CTX_free)
+        res = backend._lib.EVP_CipherInit_ex(
+            ctx,
+            evp_cipher,
+            backend._ffi.NULL,
+            backend._ffi.NULL,
+            backend._ffi.NULL,
+            operation,
+        )
+        backend.openssl_assert(res != 0)
+        res = backend._lib.EVP_CIPHER_CTX_set_key_length(ctx, self._key_length)
+        backend.openssl_assert(res != 0)
+        res = backend._lib.EVP_CIPHER_CTX_ctrl(
+            ctx, backend._lib.EVP_CTRL_AEAD_SET_IVLEN, nonce_length, backend._ffi.NULL
+        )
+        backend.openssl_assert(res != 0)
+        return ctx
 
 
 class CryptoContext:
@@ -175,7 +293,7 @@ class CryptoContext:
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ], "unsupported cipher suite"
         key, self.iv, self.hp = derive_key_iv_hp(cipher_suite, secret)
-        self.aead = cipher_suite_aead(cipher_suite, key)
+        self.aead = AEAD(cipher_suite, key)
         self.cipher_suite = cipher_suite
         self.secret = secret
 
