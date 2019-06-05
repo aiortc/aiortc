@@ -142,6 +142,13 @@ class QuicPacketRecovery:
             ) * (2 ** self._pto_count)
         return self._time_of_last_sent_ack_eliciting_packet + timeout
 
+    def get_probe_timeout(self) -> float:
+        return (
+            self._rtt_smoothed
+            + max(4 * self._rtt_variance, K_GRANULARITY)
+            + self.max_ack_delay / 1000
+        )
+
     def on_ack_received(
         self, space: QuicPacketSpace, ack_rangeset: RangeSet, ack_delay_encoded: int
     ) -> None:

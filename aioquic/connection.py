@@ -335,6 +335,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._loop = asyncio.get_event_loop()
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
+        self._discard_handhake_at: Optional[float] = None
+        self._discard_handhake_done = False
         self.__epoch = tls.Epoch.INITIAL
         self._host_cids = [
             QuicConnectionId(
@@ -651,6 +653,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # discard initial keys and packet space
             if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
+                self._logger.debug("Discarding initial keys")
                 self.cryptos[tls.Epoch.INITIAL].teardown()
                 self.spaces[tls.Epoch.INITIAL].teardown()
 
@@ -923,6 +926,15 @@ class QuicConnection(asyncio.DatagramProtocol):
             ack_rangeset=ack_rangeset,
             ack_delay_encoded=ack_delay_encoded,
         )
+
+        # if all handshake data is acked, discard handshake space in 3 PTO
+        if context.epoch == tls.Epoch.HANDSHAKE:
+            space = self.spaces[context.epoch]
+            stream = self.streams[context.epoch]
+            if not space.sent_packets and not stream._send_pending:
+                self._discard_handhake_at = (
+                    self._loop.time() + 3 * self._loss.get_probe_timeout()
+                )
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1400,8 +1412,20 @@ class QuicConnection(asyncio.DatagramProtocol):
                     self.__close = None
                     break
         else:
-            for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
-                self._write_handshake(builder, epoch)
+            # check if we can discard handshake keys
+            if (
+                self._discard_handhake_at is not None
+                and self._loop.time() > self._discard_handhake_at
+            ):
+                self._logger.debug("Discarding handshake keys")
+                self.cryptos[tls.Epoch.HANDSHAKE].teardown()
+                self.spaces[tls.Epoch.HANDSHAKE].teardown()
+                self._discard_handhake_at = None
+                self._discard_handhake_done = True
+            if not self._discard_handhake_done:
+                for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
+                    self._write_handshake(builder, epoch)
+
             self._write_application(builder, network_path)
         datagrams, packets = builder.flush()
 
@@ -1672,11 +1696,11 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _write_handshake(self, builder: QuicPacketBuilder, epoch: tls.Epoch) -> None:
         crypto = self.cryptos[epoch]
-        space = self.spaces[epoch]
         if not crypto.send.is_valid():
             return
 
         buf = builder.buffer
+        space = self.spaces[epoch]
 
         while (
             builder.flight_bytes + self._loss.bytes_in_flight
@@ -1702,6 +1726,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # discard initial keys and packet space
             if self.is_client and epoch == tls.Epoch.HANDSHAKE:
+                self._logger.debug("Discarding initial keys")
                 self.cryptos[tls.Epoch.INITIAL].teardown()
                 self.spaces[tls.Epoch.INITIAL].teardown()
 
