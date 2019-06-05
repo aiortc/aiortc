@@ -5,17 +5,16 @@ from typing import List, Optional, Tuple
 
 from .buffer import (
     Buffer,
-    BufferReadError,
     pull_bytes,
     pull_uint8,
     pull_uint16,
     pull_uint32,
-    pull_uint64,
+    pull_uint_var,
     push_bytes,
     push_uint8,
     push_uint16,
     push_uint32,
-    push_uint64,
+    push_uint_var,
 )
 from .rangeset import RangeSet
 from .tls import pull_block, push_block
@@ -32,13 +31,6 @@ PACKET_TYPE_ONE_RTT = PACKET_FIXED_BIT
 PACKET_TYPE_MASK = 0xF0
 
 PACKET_NUMBER_MAX_SIZE = 4
-
-UINT_VAR_FORMATS = [
-    (pull_uint8, push_uint8, 0x3F),
-    (pull_uint16, push_uint16, 0x3FFF),
-    (pull_uint32, push_uint32, 0x3FFFFFFF),
-    (pull_uint64, push_uint64, 0x3FFFFFFFFFFFFFFF),
-]
 
 
 class QuicErrorCode(IntEnum):
@@ -111,42 +103,6 @@ def get_spin_bit(first_byte: int) -> bool:
 
 def is_long_header(first_byte: int) -> bool:
     return bool(first_byte & PACKET_LONG_HEADER)
-
-
-def quic_uint_length(value: int) -> int:
-    """
-    Returns the number of bytes required to encode the given value
-    as a QUIC variable-length unsigned integer.
-    """
-    for i, (_, _, mask) in enumerate(UINT_VAR_FORMATS):
-        if value <= mask:
-            return 2 ** i
-    raise ValueError("Integer is too big for a variable-length integer")
-
-
-def pull_uint_var(buf: Buffer) -> int:
-    """
-    Pull a QUIC variable-length unsigned integer.
-    """
-    try:
-        kind = buf._data[buf._pos] // 64
-    except IndexError:
-        raise BufferReadError
-    pull, push, mask = UINT_VAR_FORMATS[kind]
-    return pull(buf) & mask
-
-
-def push_uint_var(buf: Buffer, value: int) -> None:
-    """
-    Push a QUIC variable-length unsigned integer.
-    """
-    for i, (pull, push, mask) in enumerate(UINT_VAR_FORMATS):
-        if value <= mask:
-            start = buf._pos
-            push(buf, value)
-            buf._data[start] |= i * 64
-            return
-    raise ValueError("Integer is too big for a variable-length integer")
 
 
 def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> QuicHeader:

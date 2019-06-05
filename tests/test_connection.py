@@ -6,7 +6,7 @@ import random
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.buffer import Buffer, push_bytes
+from aioquic.buffer import Buffer, push_bytes, push_uint_var
 from aioquic.connection import (
     QuicConnection,
     QuicConnectionError,
@@ -22,7 +22,6 @@ from aioquic.packet import (
     QuicStreamFlag,
     encode_quic_retry,
     encode_quic_version_negotiation,
-    push_uint_var,
 )
 from aioquic.packet_builder import QuicPacketBuilder
 

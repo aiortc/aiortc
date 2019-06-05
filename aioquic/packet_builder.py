@@ -2,7 +2,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
-from .buffer import Buffer, push_bytes, push_uint8, push_uint16, push_uint32
+from .buffer import (
+    Buffer,
+    push_bytes,
+    push_uint8,
+    push_uint16,
+    push_uint32,
+    push_uint_var,
+)
 from .crypto import CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -13,7 +20,6 @@ from .packet import (
     QuicFrameType,
     encode_cid_length,
     is_long_header,
-    push_uint_var,
 )
 from .tls import Epoch
 

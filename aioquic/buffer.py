@@ -149,3 +149,66 @@ def push_uint64(buf: Buffer, v: int) -> None:
     """
     pack_into("!Q", buf._data, buf._pos, v)
     buf._pos += 8
+
+
+def pull_uint_var(buf: Buffer) -> int:
+    """
+    Pull a QUIC variable-length unsigned integer.
+    """
+    try:
+        kind = buf._data[buf._pos] // 64
+        if kind == 0:
+            value = buf._data[buf._pos]
+            buf._pos += 1
+            return value
+        elif kind == 1:
+            value, = unpack_from("!H", buf._data, buf._pos)
+            buf._pos += 2
+            return value & 0x3FFF
+        elif kind == 2:
+            value, = unpack_from("!L", buf._data, buf._pos)
+            buf._pos += 4
+            return value & 0x3FFFFFFF
+        else:
+            value, = unpack_from("!Q", buf._data, buf._pos)
+            buf._pos += 8
+            return value & 0x3FFFFFFFFFFFFFFF
+    except (IndexError, struct.error):
+        raise BufferReadError
+
+
+def push_uint_var(buf: Buffer, value: int) -> None:
+    """
+    Push a QUIC variable-length unsigned integer.
+    """
+    if value <= 0x3F:
+        buf._data[buf._pos] = value
+        buf._pos += 1
+    elif value <= 0x3FFF:
+        pack_into("!H", buf._data, buf._pos, value | 0x4000)
+        buf._pos += 2
+    elif value <= 0x3FFFFFFF:
+        pack_into("!L", buf._data, buf._pos, value | 0x80000000)
+        buf._pos += 4
+    elif value <= 0x3FFFFFFFFFFFFFFF:
+        pack_into("!Q", buf._data, buf._pos, value | 0xC000000000000000)
+        buf._pos += 8
+    else:
+        raise ValueError("Integer is too big for a variable-length integer")
+
+
+def size_uint_var(value: int) -> int:
+    """
+    Returns the number of bytes required to encode the given value
+    as a QUIC variable-length unsigned integer.
+    """
+    if value <= 0x3F:
+        return 1
+    elif value <= 0x3FFF:
+        return 2
+    elif value <= 0x3FFFFFFF:
+        return 4
+    elif value <= 0x3FFFFFFFFFFFFFFF:
+        return 8
+    else:
+        raise ValueError("Integer is too big for a variable-length integer")

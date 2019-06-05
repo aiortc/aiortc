@@ -27,8 +27,11 @@ from .buffer import (
     pull_bytes,
     pull_uint16,
     pull_uint32,
+    pull_uint_var,
     push_bytes,
     push_uint16,
+    push_uint_var,
+    size_uint_var,
 )
 from .crypto import CryptoError, CryptoPair
 from .packet import (
@@ -55,12 +58,9 @@ from .packet import (
     pull_quic_header,
     pull_quic_transport_parameters,
     pull_transport_close_frame,
-    pull_uint_var,
     push_ack_frame,
     push_new_connection_id_frame,
     push_quic_transport_parameters,
-    push_uint_var,
-    quic_uint_length,
 )
 from .packet_builder import QuicDeliveryState, QuicPacketBuilder
 from .recovery import QuicPacketRecovery, QuicPacketSpace
@@ -149,7 +149,7 @@ def write_close_frame(
 def write_crypto_frame(
     builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
 ) -> None:
-    frame_overhead = 3 + quic_uint_length(stream.next_send_offset)
+    frame_overhead = 3 + size_uint_var(stream.next_send_offset)
     frame = stream.get_frame(builder.remaining_space - frame_overhead)
     if frame is not None:
         builder.start_frame(
@@ -174,8 +174,8 @@ def write_stream_frame(
     # the space available in the current packet
     frame_overhead = (
         3
-        + quic_uint_length(stream.stream_id)
-        + (quic_uint_length(stream.next_send_offset) if stream.next_send_offset else 0)
+        + size_uint_var(stream.stream_id)
+        + (size_uint_var(stream.next_send_offset) if stream.next_send_offset else 0)
     )
     previous_send_highest = stream._send_highest
     frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)

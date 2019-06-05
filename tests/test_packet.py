@@ -12,68 +12,10 @@ from aioquic.packet import (
     encode_quic_version_negotiation,
     pull_quic_header,
     pull_quic_transport_parameters,
-    pull_uint_var,
     push_quic_transport_parameters,
-    push_uint_var,
-    quic_uint_length,
 )
 
 from .utils import load
-
-
-class UintTest(TestCase):
-    def roundtrip(self, data, value):
-        buf = Buffer(data=data)
-        self.assertEqual(pull_uint_var(buf), value)
-        self.assertEqual(buf.tell(), len(data))
-
-        buf = Buffer(capacity=8)
-        push_uint_var(buf, value)
-        self.assertEqual(buf.data, data)
-
-    def test_uint_var(self):
-        # 1 byte
-        self.roundtrip(b"\x00", 0)
-        self.roundtrip(b"\x01", 1)
-        self.roundtrip(b"\x25", 37)
-        self.roundtrip(b"\x3f", 63)
-
-        # 2 bytes
-        self.roundtrip(b"\x7b\xbd", 15293)
-        self.roundtrip(b"\x7f\xff", 16383)
-
-        # 4 bytes
-        self.roundtrip(b"\x9d\x7f\x3e\x7d", 494878333)
-        self.roundtrip(b"\xbf\xff\xff\xff", 1073741823)
-
-        # 8 bytes
-        self.roundtrip(b"\xc2\x19\x7c\x5e\xff\x14\xe8\x8c", 151288809941952652)
-        self.roundtrip(b"\xff\xff\xff\xff\xff\xff\xff\xff", 4611686018427387903)
-
-    def test_uint_var_length(self):
-        self.assertEqual(quic_uint_length(63), 1)
-        self.assertEqual(quic_uint_length(16383), 2)
-        self.assertEqual(quic_uint_length(1073741823), 4)
-        self.assertEqual(quic_uint_length(4611686018427387903), 8)
-
-        with self.assertRaises(ValueError) as cm:
-            quic_uint_length(4611686018427387904)
-        self.assertEqual(
-            str(cm.exception), "Integer is too big for a variable-length integer"
-        )
-
-    def test_pull_uint_var_truncated(self):
-        buf = Buffer(capacity=0)
-        with self.assertRaises(BufferReadError):
-            pull_uint_var(buf)
-
-    def test_push_uint_var_too_big(self):
-        buf = Buffer(capacity=8)
-        with self.assertRaises(ValueError) as cm:
-            push_uint_var(buf, 4611686018427387904)
-        self.assertEqual(
-            str(cm.exception), "Integer is too big for a variable-length integer"
-        )
 
 
 class PacketTest(TestCase):
