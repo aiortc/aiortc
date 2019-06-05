@@ -29,6 +29,12 @@ setuptools.setup(
     ],
     ext_modules=[
         setuptools.Extension(
+            'aioquic._buffer',
+            sources=[
+                'src/_buffer.c',
+            ],
+        ),
+        setuptools.Extension(
             'aioquic._crypto',
             libraries=['crypto'],
             sources=[
