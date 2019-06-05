@@ -1338,9 +1338,6 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # handle the frame
             if frame_type != QuicFrameType.PADDING:
-                self._logger.debug(
-                    "[%s] handling frame %s", context, frame_type_name(frame_type)
-                )
                 try:
                     frame_handler(context, frame_type, buf)
                 except BufferReadError:
