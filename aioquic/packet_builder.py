@@ -9,6 +9,7 @@ from .buffer import (
     push_uint16,
     push_uint32,
     push_uint_var,
+    size_uint_var,
 )
 from .crypto import CryptoPair
 from .packet import (
@@ -96,9 +97,10 @@ class QuicPacketBuilder:
         self._total_bytes = 0
 
         # current packet
-        self._crypto: Optional[CryptoPair] = None
         self._header_size = 0
         self._packet: Optional[QuicSentPacket] = None
+        self._packet_crypto: Optional[CryptoPair] = None
+        self._packet_epoch: Optional[Epoch] = None
         self._packet_number = packet_number
         self._packet_start = 0
         self._packet_type = 0
@@ -129,7 +131,11 @@ class QuicPacketBuilder:
         Returns the remaining number of bytes which can be used in
         the current packet.
         """
-        return self.buffer.capacity - self.buffer.tell() - self._crypto.aead_tag_size
+        return (
+            self.buffer.capacity
+            - self.buffer.tell()
+            - self._packet_crypto.aead_tag_size
+        )
 
     def flush(self) -> Tuple[List[bytes], List[QuicSentPacket]]:
         """
@@ -186,38 +192,21 @@ class QuicPacketBuilder:
             is_crypto_packet=False,
             packet_number=self._packet_number,
         )
+        self._packet_crypto = crypto
+        self._packet_epoch = epoch
         self._packet_start = buf.tell()
-
-        # write header
-        if is_long_header(packet_type):
-            push_uint8(buf, packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
-            push_uint32(buf, self._version)
-            push_uint8(
-                buf,
-                (encode_cid_length(len(self._peer_cid)) << 4)
-                | encode_cid_length(len(self._host_cid)),
-            )
-            push_bytes(buf, self._peer_cid)
-            push_bytes(buf, self._host_cid)
-            if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
-                push_uint_var(buf, len(self._peer_token))
-                push_bytes(buf, self._peer_token)
-            push_uint16(buf, 0)  # length
-            push_packet_number(buf, self._packet_number)
-        else:
-            push_uint8(
-                buf,
-                packet_type
-                | (self._spin_bit << 5)
-                | (crypto.key_phase << 2)
-                | (PACKET_NUMBER_SEND_SIZE - 1),
-            )
-            push_bytes(buf, self._peer_cid)
-            push_packet_number(buf, self._packet_number)
-
-        self._crypto = crypto
-        self._header_size = buf.tell() - self._packet_start
         self._packet_type = packet_type
+
+        # calculate header size
+        if is_long_header(packet_type):
+            self._header_size = 10 + len(self._peer_cid) + len(self._host_cid)
+            if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
+                token_length = len(self._peer_token)
+                self._header_size += size_uint_var(token_length) + token_length
+        else:
+            self._header_size = 3 + len(self._peer_cid)
+
+        buf.seek(self._packet_start + self._header_size)
 
     def end_packet(self) -> bool:
         """
@@ -237,23 +226,42 @@ class QuicPacketBuilder:
                 packet_size = buf.tell() - self._packet_start
                 self._pad_first_datagram = False
 
+            # write header
             if is_long_header(self._packet_type):
-                # finalize length
-                buf.seek(
-                    self._packet_start
-                    + self._header_size
-                    - PACKET_NUMBER_SEND_SIZE
-                    - PACKET_LENGTH_SEND_SIZE
-                )
                 length = (
                     packet_size
                     - self._header_size
                     + PACKET_NUMBER_SEND_SIZE
-                    + self._crypto.aead_tag_size
+                    + self._packet_crypto.aead_tag_size
                 )
+
+                buf.seek(self._packet_start)
+                push_uint8(buf, self._packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
+                push_uint32(buf, self._version)
+                push_uint8(
+                    buf,
+                    (encode_cid_length(len(self._peer_cid)) << 4)
+                    | encode_cid_length(len(self._host_cid)),
+                )
+                push_bytes(buf, self._peer_cid)
+                push_bytes(buf, self._host_cid)
+                if (self._packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
+                    push_uint_var(buf, len(self._peer_token))
+                    push_bytes(buf, self._peer_token)
                 push_uint16(buf, length | 0x4000)
-                buf.seek(packet_size)
+                push_packet_number(buf, self._packet_number)
             else:
+                buf.seek(self._packet_start)
+                push_uint8(
+                    buf,
+                    self._packet_type
+                    | (self._spin_bit << 5)
+                    | (self._packet_crypto.key_phase << 2)
+                    | (PACKET_NUMBER_SEND_SIZE - 1),
+                )
+                push_bytes(buf, self._peer_cid)
+                push_packet_number(buf, self._packet_number)
+
                 # check whether we need padding
                 padding_size = (
                     PACKET_NUMBER_MAX_SIZE
@@ -262,6 +270,7 @@ class QuicPacketBuilder:
                     - packet_size
                 )
                 if padding_size > 0:
+                    buf.seek(self._packet_start + packet_size)
                     push_bytes(buf, bytes(padding_size))
                     packet_size += padding_size
 
@@ -270,7 +279,7 @@ class QuicPacketBuilder:
             buf.seek(self._packet_start)
             push_bytes(
                 buf,
-                self._crypto.encrypt_packet(
+                self._packet_crypto.encrypt_packet(
                     plain[0 : self._header_size], plain[self._header_size : packet_size]
                 ),
             )
@@ -286,7 +295,6 @@ class QuicPacketBuilder:
             # "cancel" the packet
             buf.seek(self._packet_start)
 
-        self._crypto = None
         self._packet = None
 
         return not empty
