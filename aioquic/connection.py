@@ -45,7 +45,6 @@ from .packet import (
     QuicErrorCode,
     QuicFrameType,
     QuicProtocolVersion,
-    QuicStreamFlag,
     QuicStreamFrame,
     QuicTransportParameters,
     get_spin_bit,
@@ -181,13 +180,13 @@ def write_stream_frame(
     frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)
 
     if frame is not None:
-        flags = QuicStreamFlag.LEN
+        frame_type = QuicFrameType.STREAM_BASE | 2  # length
         if frame.offset:
-            flags |= QuicStreamFlag.OFF
+            frame_type |= 4
         if frame.fin:
-            flags |= QuicStreamFlag.FIN
+            frame_type |= 1
         builder.start_frame(
-            QuicFrameType.STREAM_BASE | flags,
+            frame_type,
             stream.on_data_delivery,
             (frame.offset, frame.offset + len(frame.data)),
         )
@@ -1205,20 +1204,17 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a STREAM frame.
         """
-        flags = frame_type & STREAM_FLAGS
         stream_id = pull_uint_var(buf)
-        if flags & QuicStreamFlag.OFF:
+        if frame_type & 4:
             offset = pull_uint_var(buf)
         else:
             offset = 0
-        if flags & QuicStreamFlag.LEN:
+        if frame_type & 2:
             length = pull_uint_var(buf)
         else:
             length = buf.capacity - buf.tell()
         frame = QuicStreamFrame(
-            offset=offset,
-            data=pull_bytes(buf, length),
-            fin=bool(flags & QuicStreamFlag.FIN),
+            offset=offset, data=pull_bytes(buf, length), fin=bool(frame_type & 1)
         )
 
         # check stream direction

@@ -19,7 +19,6 @@ from aioquic.packet import (
     QuicErrorCode,
     QuicFrameType,
     QuicProtocolVersion,
-    QuicStreamFlag,
     encode_quic_retry,
     encode_quic_version_negotiation,
 )
@@ -654,7 +653,7 @@ class QuicConnectionTest(TestCase):
             client._local_max_data_used = client._local_max_data
 
             # client receives STREAM frame
-            frame_type = QuicFrameType.STREAM_BASE | QuicStreamFlag.OFF
+            frame_type = QuicFrameType.STREAM_BASE | 4
             stream_id = 1
             with self.assertRaises(QuicConnectionError) as cm:
                 client._handle_stream_frame(
@@ -669,7 +668,7 @@ class QuicConnectionTest(TestCase):
     def test_handle_stream_frame_over_max_stream_data(self):
         with client_and_server() as (client, server):
             # client receives STREAM frame
-            frame_type = QuicFrameType.STREAM_BASE | QuicStreamFlag.OFF
+            frame_type = QuicFrameType.STREAM_BASE | 4
             stream_id = 1
             with self.assertRaises(QuicConnectionError) as cm:
                 client._handle_stream_frame(

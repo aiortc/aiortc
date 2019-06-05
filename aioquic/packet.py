@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass, field
-from enum import IntEnum, IntFlag
+from enum import IntEnum
 from typing import List, Optional, Tuple
 
 from .buffer import (
@@ -381,12 +381,6 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
         push_uint_var(buf, start - r.stop - 1)
         push_uint_var(buf, r.stop - r.start - 1)
         start = r.start
-
-
-class QuicStreamFlag(IntFlag):
-    FIN = 0x01
-    LEN = 0x02
-    OFF = 0x04
 
 
 @dataclass
