@@ -21,18 +21,7 @@ from typing import (
 )
 
 from . import tls
-from .buffer import (
-    Buffer,
-    BufferReadError,
-    pull_bytes,
-    pull_uint16,
-    pull_uint32,
-    pull_uint_var,
-    push_bytes,
-    push_uint16,
-    push_uint_var,
-    size_uint_var,
-)
+from .buffer import Buffer, BufferReadError, size_uint_var
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -123,20 +112,22 @@ def write_close_frame(
 
     if frame_type is None:
         builder.start_frame(QuicFrameType.APPLICATION_CLOSE)
-        push_uint16(buf, error_code)
-        push_uint_var(buf, len(reason_bytes))
-        push_bytes(buf, reason_bytes)
+        buf.push_uint16(error_code)
+        buf.push_uint_var(len(reason_bytes))
+        buf.push_bytes(reason_bytes)
     else:
         builder.start_frame(QuicFrameType.TRANSPORT_CLOSE)
-        push_uint16(buf, error_code)
-        push_uint_var(buf, frame_type)
-        push_uint_var(buf, len(reason_bytes))
-        push_bytes(buf, reason_bytes)
+        buf.push_uint16(error_code)
+        buf.push_uint_var(frame_type)
+        buf.push_uint_var(len(reason_bytes))
+        buf.push_bytes(reason_bytes)
 
 
 def write_crypto_frame(
     builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
 ) -> None:
+    buf = builder.buffer
+
     frame_overhead = 3 + size_uint_var(stream.next_send_offset)
     frame = stream.get_frame(builder.remaining_space - frame_overhead)
     if frame is not None:
@@ -145,9 +136,9 @@ def write_crypto_frame(
             stream.on_data_delivery,
             (frame.offset, frame.offset + len(frame.data)),
         )
-        push_uint_var(builder.buffer, frame.offset)
-        push_uint16(builder.buffer, len(frame.data) | 0x4000)
-        push_bytes(builder.buffer, frame.data)
+        buf.push_uint_var(frame.offset)
+        buf.push_uint16(len(frame.data) | 0x4000)
+        buf.push_bytes(frame.data)
 
 
 def write_stream_frame(
@@ -179,11 +170,11 @@ def write_stream_frame(
             stream.on_data_delivery,
             (frame.offset, frame.offset + len(frame.data)),
         )
-        push_uint_var(buf, stream.stream_id)
+        buf.push_uint_var(stream.stream_id)
         if frame.offset:
-            push_uint_var(buf, frame.offset)
-        push_uint16(buf, len(frame.data) | 0x4000)
-        push_bytes(buf, frame.data)
+            buf.push_uint_var(frame.offset)
+        buf.push_uint16(len(frame.data) | 0x4000)
+        buf.push_bytes(frame.data)
         return stream._send_highest - previous_send_highest
     else:
         return 0
@@ -582,7 +573,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 # version negotiation
                 versions = []
                 while not buf.eof():
-                    versions.append(pull_uint32(buf))
+                    versions.append(buf.pull_uint32())
                 common = set(self.supported_versions).intersection(versions)
                 if not common:
                     self._logger.error("Could not find a common protocol version")
@@ -643,7 +634,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # decrypt packet
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
-            pull_bytes(buf, header.rest_length)
+            buf.pull_bytes(header.rest_length)
 
             try:
                 plain_header, plain_payload, packet_number = crypto.decrypt_packet(
@@ -944,9 +935,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         ack_rangeset, ack_delay_encoded = pull_ack_frame(buf)
         if frame_type == QuicFrameType.ACK_ECN:
-            pull_uint_var(buf)
-            pull_uint_var(buf)
-            pull_uint_var(buf)
+            buf.pull_uint_var()
+            buf.pull_uint_var()
+            buf.pull_uint_var()
 
         self._loss.on_ack_received(
             space=self._spaces[context.epoch],
@@ -1040,7 +1031,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a DATA_BLOCKED frame.
         """
-        pull_uint_var(buf)  # limit
+        buf.pull_uint_var()  # limit
 
     def _handle_max_data_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1050,7 +1041,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         This adjusts the total amount of we can send to the peer.
         """
-        max_data = pull_uint_var(buf)
+        max_data = buf.pull_uint_var()
         if max_data > self._remote_max_data:
             self._logger.info("Remote max_data raised to %d", max_data)
             self._remote_max_data = max_data
@@ -1063,8 +1054,8 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         This adjusts the amount of data we can send on a specific stream.
         """
-        stream_id = pull_uint_var(buf)
-        max_stream_data = pull_uint_var(buf)
+        stream_id = buf.pull_uint_var()
+        max_stream_data = buf.pull_uint_var()
 
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
@@ -1086,7 +1077,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         This raises number of bidirectional streams we can initiate to the peer.
         """
-        max_streams = pull_uint_var(buf)
+        max_streams = buf.pull_uint_var()
         if max_streams > self._remote_max_streams_bidi:
             self._logger.info("Remote max_streams_bidi raised to %d", max_streams)
             self._remote_max_streams_bidi = max_streams
@@ -1099,7 +1090,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         This raises number of unidirectional streams we can initiate to the peer.
         """
-        max_streams = pull_uint_var(buf)
+        max_streams = buf.pull_uint_var()
         if max_streams > self._remote_max_streams_uni:
             self._logger.info("Remote max_streams_uni raised to %d", max_streams)
             self._remote_max_streams_uni = max_streams
@@ -1144,7 +1135,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a PATH_CHALLENGE frame.
         """
-        data = pull_bytes(buf, 8)
+        data = buf.pull_bytes(8)
         context.network_path.remote_challenge = data
 
     def _handle_path_response_frame(
@@ -1153,7 +1144,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a PATH_RESPONSE frame.
         """
-        data = pull_bytes(buf, 8)
+        data = buf.pull_bytes(8)
         if data != context.network_path.local_challenge:
             raise QuicConnectionError(
                 error_code=QuicErrorCode.PROTOCOL_VIOLATION,
@@ -1171,9 +1162,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a RESET_STREAM frame.
         """
-        stream_id = pull_uint_var(buf)
-        error_code = pull_uint16(buf)
-        final_size = pull_uint_var(buf)
+        stream_id = buf.pull_uint_var()
+        error_code = buf.pull_uint16()
+        final_size = buf.pull_uint_var()
 
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
@@ -1193,7 +1184,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a RETIRE_CONNECTION_ID frame.
         """
-        sequence_number = pull_uint_var(buf)
+        sequence_number = buf.pull_uint_var()
 
         # find the connection ID by sequence number
         for index, connection_id in enumerate(self._host_cids):
@@ -1217,8 +1208,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a STOP_SENDING frame.
         """
-        stream_id = pull_uint_var(buf)
-        pull_uint16(buf)  # application error code
+        stream_id = buf.pull_uint_var()
+        buf.pull_uint16()  # application error code
 
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
@@ -1231,17 +1222,17 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a STREAM frame.
         """
-        stream_id = pull_uint_var(buf)
+        stream_id = buf.pull_uint_var()
         if frame_type & 4:
-            offset = pull_uint_var(buf)
+            offset = buf.pull_uint_var()
         else:
             offset = 0
         if frame_type & 2:
-            length = pull_uint_var(buf)
+            length = buf.pull_uint_var()
         else:
             length = buf.capacity - buf.tell()
         frame = QuicStreamFrame(
-            offset=offset, data=pull_bytes(buf, length), fin=bool(frame_type & 1)
+            offset=offset, data=buf.pull_bytes(length), fin=bool(frame_type & 1)
         )
 
         # check stream direction
@@ -1272,8 +1263,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a STREAM_DATA_BLOCKED frame.
         """
-        stream_id = pull_uint_var(buf)
-        pull_uint_var(buf)  # limit
+        stream_id = buf.pull_uint_var()
+        buf.pull_uint_var()  # limit
 
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
@@ -1286,7 +1277,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a STREAMS_BLOCKED frame.
         """
-        pull_uint_var(buf)  # limit
+        buf.pull_uint_var()  # limit
 
     def _on_ack_delivery(
         self, delivery: QuicDeliveryState, space: QuicPacketSpace, highest_acked: int
@@ -1359,7 +1350,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         is_ack_eliciting = False
         is_probing = None
         while not buf.eof():
-            frame_type = pull_uint_var(buf)
+            frame_type = buf.pull_uint_var()
 
             # check frame type is known
             try:
@@ -1660,12 +1651,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                     )
                     network_path.local_challenge = os.urandom(8)
                     builder.start_frame(QuicFrameType.PATH_CHALLENGE)
-                    push_bytes(buf, network_path.local_challenge)
+                    buf.push_bytes(network_path.local_challenge)
 
                 # PATH RESPONSE
                 if network_path.remote_challenge is not None:
                     builder.start_frame(QuicFrameType.PATH_RESPONSE)
-                    push_bytes(buf, network_path.remote_challenge)
+                    buf.push_bytes(network_path.remote_challenge)
                     network_path.remote_challenge = None
 
                 # NEW_CONNECTION_ID
@@ -1693,7 +1684,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                         self._on_retire_connection_id_delivery,
                         (sequence_number,),
                     )
-                    push_uint_var(buf, sequence_number)
+                    buf.push_uint_var(sequence_number)
 
                 # connection-level limits
                 self._write_connection_limits(builder=builder, space=space)
@@ -1776,7 +1767,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._logger.info("Local max_data raised to %d", self._local_max_data)
         if self._local_max_data_sent != self._local_max_data:
             builder.start_frame(QuicFrameType.MAX_DATA, self._on_max_data_delivery)
-            push_uint_var(builder.buffer, self._local_max_data)
+            builder.buffer.push_uint_var(self._local_max_data)
             self._local_max_data_sent = self._local_max_data
 
     def _write_stream_limits(
@@ -1796,6 +1787,6 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._on_max_stream_data_delivery,
                 (stream,),
             )
-            push_uint_var(builder.buffer, stream.stream_id)
-            push_uint_var(builder.buffer, stream.max_stream_data_local)
+            builder.buffer.push_uint_var(stream.stream_id)
+            builder.buffer.push_uint_var(stream.max_stream_data_local)
             stream.max_stream_data_local_sent = stream.max_stream_data_local

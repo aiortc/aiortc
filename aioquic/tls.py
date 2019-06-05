@@ -5,6 +5,7 @@ import struct
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
+from functools import partial
 from typing import (
     Callable,
     Dict,
@@ -25,17 +26,7 @@ from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from .buffer import (
-    Buffer,
-    pull_bytes,
-    pull_uint8,
-    pull_uint16,
-    pull_uint32,
-    push_bytes,
-    push_uint8,
-    push_uint16,
-    push_uint32,
-)
+from .buffer import Buffer
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
@@ -241,30 +232,23 @@ class SignatureAlgorithm(IntEnum):
 
 
 def pull_cipher_suite(buf: Buffer) -> CipherSuite:
-    return CipherSuite(pull_uint16(buf))
+    return CipherSuite(buf.pull_uint16())
 
 
 def pull_compression_method(buf: Buffer) -> CompressionMethod:
-    return CompressionMethod(pull_uint8(buf))
+    return CompressionMethod(buf.pull_uint8())
 
 
 def pull_key_exchange_mode(buf: Buffer) -> KeyExchangeMode:
-    return KeyExchangeMode(pull_uint8(buf))
+    return KeyExchangeMode(buf.pull_uint8())
 
 
 def pull_group(buf: Buffer) -> Group:
-    return Group(pull_uint16(buf))
+    return Group(buf.pull_uint16())
 
 
 def pull_signature_algorithm(buf: Buffer) -> SignatureAlgorithm:
-    return SignatureAlgorithm(pull_uint16(buf))
-
-
-push_cipher_suite = push_uint16
-push_compression_method = push_uint8
-push_group = push_uint16
-push_key_exchange_mode = push_uint8
-push_signature_algorithm = push_uint16
+    return SignatureAlgorithm(buf.pull_uint16())
 
 
 # BLOCKS
@@ -273,11 +257,11 @@ push_signature_algorithm = push_uint16
 @contextmanager
 def pull_block(buf: Buffer, capacity: int) -> Generator:
     length = 0
-    for b in pull_bytes(buf, capacity):
+    for b in buf.pull_bytes(capacity):
         length = (length << 8) | b
-    end = buf._pos + length
+    end = buf.tell() + length
     yield length
-    assert buf._pos == end
+    assert buf.tell() == end
 
 
 @contextmanager
@@ -286,39 +270,42 @@ def push_block(buf: Buffer, capacity: int) -> Generator:
     Context manager to push a variable-length block, with `capacity` bytes
     to write the length.
     """
-    buf._pos += capacity
-    start = buf._pos
+    start = buf.tell() + capacity
+    buf.seek(start)
     yield
-    length = buf._pos - start
+    end = buf.tell()
+    length = end - start
     while capacity:
-        buf._data[start - capacity] = (length >> (8 * (capacity - 1))) & 0xFF
+        buf.seek(start - capacity)
+        buf.push_uint8((length >> (8 * (capacity - 1))) & 0xFF)
         capacity -= 1
+    buf.seek(end)
 
 
 # LISTS
 
 
-def pull_list(buf: Buffer, capacity: int, func: Callable[[Buffer], T]) -> List[T]:
+def pull_list(buf: Buffer, capacity: int, func: Callable[[], T]) -> List[T]:
     """
     Pull a list of items.
     """
     items = []
     with pull_block(buf, capacity) as length:
-        end = buf._pos + length
-        while buf._pos < end:
-            items.append(func(buf))
+        end = buf.tell() + length
+        while buf.tell() < end:
+            items.append(func())
     return items
 
 
 def push_list(
-    buf: Buffer, capacity: int, func: Callable[[Buffer, T], None], values: Sequence[T]
+    buf: Buffer, capacity: int, func: Callable[[T], None], values: Sequence[T]
 ) -> None:
     """
     Push a list of items.
     """
     with push_block(buf, capacity):
         for value in values:
-            func(buf, value)
+            func(value)
 
 
 def pull_opaque(buf: Buffer, capacity: int) -> bytes:
@@ -326,7 +313,7 @@ def pull_opaque(buf: Buffer, capacity: int) -> bytes:
     Pull an opaque value prefixed by a length.
     """
     with pull_block(buf, capacity) as length:
-        return pull_bytes(buf, length)
+        return buf.pull_bytes(length)
 
 
 def push_opaque(buf: Buffer, capacity: int, value: bytes) -> None:
@@ -334,12 +321,12 @@ def push_opaque(buf: Buffer, capacity: int, value: bytes) -> None:
     Push an opaque value prefix by a length.
     """
     with push_block(buf, capacity):
-        push_bytes(buf, value)
+        buf.push_bytes(value)
 
 
 @contextmanager
 def push_extension(buf: Buffer, extension_type: int) -> Generator:
-    push_uint16(buf, extension_type)
+    buf.push_uint16(extension_type)
     with push_block(buf, 2):
         yield
 
@@ -357,7 +344,7 @@ def pull_key_share(buf: Buffer) -> KeyShareEntry:
 
 
 def push_key_share(buf: Buffer, value: KeyShareEntry) -> None:
-    push_group(buf, value[0])
+    buf.push_uint16(value[0])
     push_opaque(buf, 2, value[1])
 
 
@@ -379,13 +366,13 @@ PskIdentity = Tuple[bytes, int]
 
 def pull_psk_identity(buf: Buffer) -> PskIdentity:
     identity = pull_opaque(buf, 2)
-    obfuscated_ticket_age = pull_uint32(buf)
+    obfuscated_ticket_age = buf.pull_uint32()
     return (identity, obfuscated_ticket_age)
 
 
 def push_psk_identity(buf: Buffer, entry: PskIdentity) -> None:
     push_opaque(buf, 2, entry[0])
-    push_uint32(buf, entry[1])
+    buf.push_uint32(entry[1])
 
 
 def pull_psk_binder(buf: Buffer) -> bytes:
@@ -429,55 +416,63 @@ class ClientHello:
 
 
 def pull_client_hello(buf: Buffer) -> ClientHello:
-    assert pull_uint8(buf) == HandshakeType.CLIENT_HELLO
+    assert buf.pull_uint8() == HandshakeType.CLIENT_HELLO
     with pull_block(buf, 3):
-        assert pull_uint16(buf) == TLS_VERSION_1_2
-        client_random = pull_bytes(buf, 32)
+        assert buf.pull_uint16() == TLS_VERSION_1_2
+        client_random = buf.pull_bytes(32)
 
         hello = ClientHello(
             random=client_random,
             session_id=pull_opaque(buf, 1),
-            cipher_suites=pull_list(buf, 2, pull_cipher_suite),
-            compression_methods=pull_list(buf, 1, pull_compression_method),
+            cipher_suites=pull_list(buf, 2, partial(pull_cipher_suite, buf)),
+            compression_methods=pull_list(
+                buf, 1, partial(pull_compression_method, buf)
+            ),
         )
 
         # extensions
         after_psk = False
 
-        def pull_extension(buf: Buffer) -> None:
+        def pull_extension() -> None:
             # pre_shared_key MUST be last
             nonlocal after_psk
             assert not after_psk
 
-            extension_type = pull_uint16(buf)
-            extension_length = pull_uint16(buf)
+            extension_type = buf.pull_uint16()
+            extension_length = buf.pull_uint16()
             if extension_type == ExtensionType.KEY_SHARE:
-                hello.key_share = pull_list(buf, 2, pull_key_share)
+                hello.key_share = pull_list(buf, 2, partial(pull_key_share, buf))
             elif extension_type == ExtensionType.SUPPORTED_VERSIONS:
-                hello.supported_versions = pull_list(buf, 1, pull_uint16)
+                hello.supported_versions = pull_list(buf, 1, buf.pull_uint16)
             elif extension_type == ExtensionType.SIGNATURE_ALGORITHMS:
-                hello.signature_algorithms = pull_list(buf, 2, pull_signature_algorithm)
+                hello.signature_algorithms = pull_list(
+                    buf, 2, partial(pull_signature_algorithm, buf)
+                )
             elif extension_type == ExtensionType.SUPPORTED_GROUPS:
-                hello.supported_groups = pull_list(buf, 2, pull_group)
+                hello.supported_groups = pull_list(buf, 2, partial(pull_group, buf))
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
-                hello.key_exchange_modes = pull_list(buf, 1, pull_key_exchange_mode)
+                hello.key_exchange_modes = pull_list(
+                    buf, 1, partial(pull_key_exchange_mode, buf)
+                )
             elif extension_type == ExtensionType.SERVER_NAME:
                 with pull_block(buf, 2):
-                    assert pull_uint8(buf) == 0
+                    assert buf.pull_uint8() == 0
                     hello.server_name = pull_opaque(buf, 2).decode("ascii")
             elif extension_type == ExtensionType.ALPN:
-                hello.alpn_protocols = pull_list(buf, 2, pull_alpn_protocol)
+                hello.alpn_protocols = pull_list(
+                    buf, 2, partial(pull_alpn_protocol, buf)
+                )
             elif extension_type == ExtensionType.EARLY_DATA:
                 hello.early_data = True
             elif extension_type == ExtensionType.PRE_SHARED_KEY:
                 hello.pre_shared_key = OfferedPsks(
-                    identities=pull_list(buf, 2, pull_psk_identity),
-                    binders=pull_list(buf, 2, pull_psk_binder),
+                    identities=pull_list(buf, 2, partial(pull_psk_identity, buf)),
+                    binders=pull_list(buf, 2, partial(pull_psk_binder, buf)),
                 )
                 after_psk = True
             else:
                 hello.other_extensions.append(
-                    (extension_type, pull_bytes(buf, extension_length))
+                    (extension_type, buf.pull_bytes(extension_length))
                 )
 
         pull_list(buf, 2, pull_extension)
@@ -486,44 +481,46 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
 
 
 def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
-    push_uint8(buf, HandshakeType.CLIENT_HELLO)
+    buf.push_uint8(HandshakeType.CLIENT_HELLO)
     with push_block(buf, 3):
-        push_uint16(buf, TLS_VERSION_1_2)
-        push_bytes(buf, hello.random)
+        buf.push_uint16(TLS_VERSION_1_2)
+        buf.push_bytes(hello.random)
         push_opaque(buf, 1, hello.session_id)
-        push_list(buf, 2, push_cipher_suite, hello.cipher_suites)
-        push_list(buf, 1, push_compression_method, hello.compression_methods)
+        push_list(buf, 2, buf.push_uint16, hello.cipher_suites)
+        push_list(buf, 1, buf.push_uint8, hello.compression_methods)
 
         # extensions
         with push_block(buf, 2):
             with push_extension(buf, ExtensionType.KEY_SHARE):
-                push_list(buf, 2, push_key_share, hello.key_share)
+                push_list(buf, 2, partial(push_key_share, buf), hello.key_share)
 
             with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
-                push_list(buf, 1, push_uint16, hello.supported_versions)
+                push_list(buf, 1, buf.push_uint16, hello.supported_versions)
 
             with push_extension(buf, ExtensionType.SIGNATURE_ALGORITHMS):
-                push_list(buf, 2, push_signature_algorithm, hello.signature_algorithms)
+                push_list(buf, 2, buf.push_uint16, hello.signature_algorithms)
 
             with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
-                push_list(buf, 2, push_group, hello.supported_groups)
+                push_list(buf, 2, buf.push_uint16, hello.supported_groups)
 
             with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
-                push_list(buf, 1, push_key_exchange_mode, hello.key_exchange_modes)
+                push_list(buf, 1, buf.push_uint8, hello.key_exchange_modes)
 
             if hello.server_name is not None:
                 with push_extension(buf, ExtensionType.SERVER_NAME):
                     with push_block(buf, 2):
-                        push_uint8(buf, 0)
+                        buf.push_uint8(0)
                         push_opaque(buf, 2, hello.server_name.encode("ascii"))
 
             if hello.alpn_protocols is not None:
                 with push_extension(buf, ExtensionType.ALPN):
-                    push_list(buf, 2, push_alpn_protocol, hello.alpn_protocols)
+                    push_list(
+                        buf, 2, partial(push_alpn_protocol, buf), hello.alpn_protocols
+                    )
 
             for extension_type, extension_value in hello.other_extensions:
                 with push_extension(buf, extension_type):
-                    push_bytes(buf, extension_value)
+                    buf.push_bytes(extension_value)
 
             if hello.early_data:
                 with push_extension(buf, ExtensionType.EARLY_DATA):
@@ -533,9 +530,17 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
             if hello.pre_shared_key is not None:
                 with push_extension(buf, ExtensionType.PRE_SHARED_KEY):
                     push_list(
-                        buf, 2, push_psk_identity, hello.pre_shared_key.identities
+                        buf,
+                        2,
+                        partial(push_psk_identity, buf),
+                        hello.pre_shared_key.identities,
                     )
-                    push_list(buf, 2, push_psk_binder, hello.pre_shared_key.binders)
+                    push_list(
+                        buf,
+                        2,
+                        partial(push_psk_binder, buf),
+                        hello.pre_shared_key.binders,
+                    )
 
 
 @dataclass
@@ -552,10 +557,10 @@ class ServerHello:
 
 
 def pull_server_hello(buf: Buffer) -> ServerHello:
-    assert pull_uint8(buf) == HandshakeType.SERVER_HELLO
+    assert buf.pull_uint8() == HandshakeType.SERVER_HELLO
     with pull_block(buf, 3):
-        assert pull_uint16(buf) == TLS_VERSION_1_2
-        server_random = pull_bytes(buf, 32)
+        assert buf.pull_uint16() == TLS_VERSION_1_2
+        server_random = buf.pull_bytes(32)
 
         hello = ServerHello(
             random=server_random,
@@ -565,17 +570,17 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
         )
 
         # extensions
-        def pull_extension(buf: Buffer) -> None:
-            extension_type = pull_uint16(buf)
-            extension_length = pull_uint16(buf)
+        def pull_extension() -> None:
+            extension_type = buf.pull_uint16()
+            extension_length = buf.pull_uint16()
             if extension_type == ExtensionType.SUPPORTED_VERSIONS:
-                hello.supported_version = pull_uint16(buf)
+                hello.supported_version = buf.pull_uint16()
             elif extension_type == ExtensionType.KEY_SHARE:
                 hello.key_share = pull_key_share(buf)
             elif extension_type == ExtensionType.PRE_SHARED_KEY:
-                hello.pre_shared_key = pull_uint16(buf)
+                hello.pre_shared_key = buf.pull_uint16()
             else:
-                pull_bytes(buf, extension_length)
+                buf.pull_bytes(extension_length)
 
         pull_list(buf, 2, pull_extension)
 
@@ -583,20 +588,20 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
 
 
 def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
-    push_uint8(buf, HandshakeType.SERVER_HELLO)
+    buf.push_uint8(HandshakeType.SERVER_HELLO)
     with push_block(buf, 3):
-        push_uint16(buf, TLS_VERSION_1_2)
-        push_bytes(buf, hello.random)
+        buf.push_uint16(TLS_VERSION_1_2)
+        buf.push_bytes(hello.random)
 
         push_opaque(buf, 1, hello.session_id)
-        push_cipher_suite(buf, hello.cipher_suite)
-        push_compression_method(buf, hello.compression_method)
+        buf.push_uint16(hello.cipher_suite)
+        buf.push_uint8(hello.compression_method)
 
         # extensions
         with push_block(buf, 2):
             if hello.supported_version is not None:
                 with push_extension(buf, ExtensionType.SUPPORTED_VERSIONS):
-                    push_uint16(buf, hello.supported_version)
+                    buf.push_uint16(hello.supported_version)
 
             if hello.key_share is not None:
                 with push_extension(buf, ExtensionType.KEY_SHARE):
@@ -604,7 +609,7 @@ def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
 
             if hello.pre_shared_key is not None:
                 with push_extension(buf, ExtensionType.PRE_SHARED_KEY):
-                    push_uint16(buf, hello.pre_shared_key)
+                    buf.push_uint16(hello.pre_shared_key)
 
 
 @dataclass
@@ -621,20 +626,20 @@ class NewSessionTicket:
 def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
     new_session_ticket = NewSessionTicket()
 
-    assert pull_uint8(buf) == HandshakeType.NEW_SESSION_TICKET
+    assert buf.pull_uint8() == HandshakeType.NEW_SESSION_TICKET
     with pull_block(buf, 3):
-        new_session_ticket.ticket_lifetime = pull_uint32(buf)
-        new_session_ticket.ticket_age_add = pull_uint32(buf)
+        new_session_ticket.ticket_lifetime = buf.pull_uint32()
+        new_session_ticket.ticket_age_add = buf.pull_uint32()
         new_session_ticket.ticket_nonce = pull_opaque(buf, 1)
         new_session_ticket.ticket = pull_opaque(buf, 2)
 
-        def pull_extension(buf: Buffer) -> None:
-            extension_type = pull_uint16(buf)
-            extension_length = pull_uint16(buf)
+        def pull_extension() -> None:
+            extension_type = buf.pull_uint16()
+            extension_length = buf.pull_uint16()
             if extension_type == ExtensionType.EARLY_DATA:
-                new_session_ticket.max_early_data_size = pull_uint32(buf)
+                new_session_ticket.max_early_data_size = buf.pull_uint32()
             else:
-                pull_bytes(buf, extension_length)
+                buf.pull_bytes(extension_length)
 
         pull_list(buf, 2, pull_extension)
 
@@ -642,17 +647,17 @@ def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
 
 
 def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -> None:
-    push_uint8(buf, HandshakeType.NEW_SESSION_TICKET)
+    buf.push_uint8(HandshakeType.NEW_SESSION_TICKET)
     with push_block(buf, 3):
-        push_uint32(buf, new_session_ticket.ticket_lifetime)
-        push_uint32(buf, new_session_ticket.ticket_age_add)
+        buf.push_uint32(new_session_ticket.ticket_lifetime)
+        buf.push_uint32(new_session_ticket.ticket_age_add)
         push_opaque(buf, 1, new_session_ticket.ticket_nonce)
         push_opaque(buf, 2, new_session_ticket.ticket)
 
         with push_block(buf, 2):
             if new_session_ticket.max_early_data_size is not None:
                 with push_extension(buf, ExtensionType.EARLY_DATA):
-                    push_uint32(buf, new_session_ticket.max_early_data_size)
+                    buf.push_uint32(new_session_ticket.max_early_data_size)
 
 
 @dataclass
@@ -666,19 +671,21 @@ class EncryptedExtensions:
 def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
     extensions = EncryptedExtensions()
 
-    assert pull_uint8(buf) == HandshakeType.ENCRYPTED_EXTENSIONS
+    assert buf.pull_uint8() == HandshakeType.ENCRYPTED_EXTENSIONS
     with pull_block(buf, 3):
 
-        def pull_extension(buf: Buffer) -> None:
-            extension_type = pull_uint16(buf)
-            extension_length = pull_uint16(buf)
+        def pull_extension() -> None:
+            extension_type = buf.pull_uint16()
+            extension_length = buf.pull_uint16()
             if extension_type == ExtensionType.ALPN:
-                extensions.alpn_protocol = pull_list(buf, 2, pull_alpn_protocol)[0]
+                extensions.alpn_protocol = pull_list(
+                    buf, 2, partial(pull_alpn_protocol, buf)
+                )[0]
             elif extension_type == ExtensionType.EARLY_DATA:
                 extensions.early_data = True
             else:
                 extensions.other_extensions.append(
-                    (extension_type, pull_bytes(buf, extension_length))
+                    (extension_type, buf.pull_bytes(extension_length))
                 )
 
         pull_list(buf, 2, pull_extension)
@@ -687,12 +694,17 @@ def pull_encrypted_extensions(buf: Buffer) -> EncryptedExtensions:
 
 
 def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> None:
-    push_uint8(buf, HandshakeType.ENCRYPTED_EXTENSIONS)
+    buf.push_uint8(HandshakeType.ENCRYPTED_EXTENSIONS)
     with push_block(buf, 3):
         with push_block(buf, 2):
             if extensions.alpn_protocol is not None:
                 with push_extension(buf, ExtensionType.ALPN):
-                    push_list(buf, 2, push_alpn_protocol, [extensions.alpn_protocol])
+                    push_list(
+                        buf,
+                        2,
+                        partial(push_alpn_protocol, buf),
+                        [extensions.alpn_protocol],
+                    )
 
             if extensions.early_data:
                 with push_extension(buf, ExtensionType.EARLY_DATA):
@@ -700,7 +712,7 @@ def push_encrypted_extensions(buf: Buffer, extensions: EncryptedExtensions) -> N
 
             for extension_type, extension_value in extensions.other_extensions:
                 with push_extension(buf, extension_type):
-                    push_bytes(buf, extension_value)
+                    buf.push_bytes(extension_value)
 
 
 CertificateEntry = Tuple[bytes, bytes]
@@ -715,7 +727,7 @@ class Certificate:
 def pull_certificate(buf: Buffer) -> Certificate:
     certificate = Certificate()
 
-    assert pull_uint8(buf) == HandshakeType.CERTIFICATE
+    assert buf.pull_uint8() == HandshakeType.CERTIFICATE
     with pull_block(buf, 3):
         certificate.request_context = pull_opaque(buf, 1)
 
@@ -724,13 +736,15 @@ def pull_certificate(buf: Buffer) -> Certificate:
             extensions = pull_opaque(buf, 2)
             return (data, extensions)
 
-        certificate.certificates = pull_list(buf, 3, pull_certificate_entry)
+        certificate.certificates = pull_list(
+            buf, 3, partial(pull_certificate_entry, buf)
+        )
 
     return certificate
 
 
 def push_certificate(buf: Buffer, certificate: Certificate) -> None:
-    push_uint8(buf, HandshakeType.CERTIFICATE)
+    buf.push_uint8(HandshakeType.CERTIFICATE)
     with push_block(buf, 3):
         push_opaque(buf, 1, certificate.request_context)
 
@@ -738,7 +752,9 @@ def push_certificate(buf: Buffer, certificate: Certificate) -> None:
             push_opaque(buf, 3, entry[0])
             push_opaque(buf, 2, entry[1])
 
-        push_list(buf, 3, push_certificate_entry, certificate.certificates)
+        push_list(
+            buf, 3, partial(push_certificate_entry, buf), certificate.certificates
+        )
 
 
 @dataclass
@@ -748,7 +764,7 @@ class CertificateVerify:
 
 
 def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
-    assert pull_uint8(buf) == HandshakeType.CERTIFICATE_VERIFY
+    assert buf.pull_uint8() == HandshakeType.CERTIFICATE_VERIFY
     with pull_block(buf, 3):
         algorithm = pull_signature_algorithm(buf)
         signature = pull_opaque(buf, 2)
@@ -757,9 +773,9 @@ def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
 
 
 def push_certificate_verify(buf: Buffer, verify: CertificateVerify) -> None:
-    push_uint8(buf, HandshakeType.CERTIFICATE_VERIFY)
+    buf.push_uint8(HandshakeType.CERTIFICATE_VERIFY)
     with push_block(buf, 3):
-        push_signature_algorithm(buf, verify.algorithm)
+        buf.push_uint16(verify.algorithm)
         push_opaque(buf, 2, verify.signature)
 
 
@@ -771,14 +787,14 @@ class Finished:
 def pull_finished(buf: Buffer) -> Finished:
     finished = Finished()
 
-    assert pull_uint8(buf) == HandshakeType.FINISHED
+    assert buf.pull_uint8() == HandshakeType.FINISHED
     finished.verify_data = pull_opaque(buf, 3)
 
     return finished
 
 
 def push_finished(buf: Buffer, finished: Finished) -> None:
-    push_uint8(buf, HandshakeType.FINISHED)
+    buf.push_uint8(HandshakeType.FINISHED)
     push_opaque(buf, 3, finished.verify_data)
 
 

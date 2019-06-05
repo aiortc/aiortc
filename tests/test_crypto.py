@@ -2,7 +2,7 @@ import binascii
 import os
 from unittest import TestCase, skipIf
 
-from aioquic.buffer import Buffer, push_bytes, push_uint8, push_uint16
+from aioquic.buffer import Buffer
 from aioquic.crypto import (
     INITIAL_CIPHER_SUITE,
     CryptoError,
@@ -257,9 +257,9 @@ class CryptoTest(TestCase):
 
         def create_packet(key_phase, packet_number=0):
             buf = Buffer(capacity=100)
-            push_uint8(buf, PACKET_FIXED_BIT | key_phase << 2 | 1)
-            push_bytes(buf, binascii.unhexlify("8394c8f03e515708"))
-            push_uint16(buf, packet_number)
+            buf.push_uint8(PACKET_FIXED_BIT | key_phase << 2 | 1)
+            buf.push_bytes(binascii.unhexlify("8394c8f03e515708"))
+            buf.push_uint16(packet_number)
             return buf.data, b"\x00\x01\x02\x03"
 
         def send(sender, receiver):

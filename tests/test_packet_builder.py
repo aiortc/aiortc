@@ -7,7 +7,6 @@ from aioquic.packet import (
     PACKET_TYPE_ONE_RTT,
     QuicFrameType,
     QuicProtocolVersion,
-    push_bytes,
 )
 from aioquic.packet_builder import QuicPacketBuilder, QuicSentPacket
 from aioquic.tls import Epoch
@@ -55,7 +54,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(100))
+        builder.buffer.push_bytes(bytes(100))
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 1280)
 
@@ -93,7 +92,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(builder.remaining_space))
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 1280)
 
@@ -101,7 +100,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
         builder.start_frame(QuicFrameType.STREAM_BASE)
-        push_bytes(builder.buffer, bytes(builder.remaining_space))
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 0)
 
@@ -148,7 +147,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1237)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(199))
+        builder.buffer.push_bytes(bytes(199))
         self.assertEqual(builder.buffer.tell(), 227)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 243)
@@ -158,7 +157,7 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(builder.buffer.tell(), 269)
         self.assertEqual(builder.remaining_space, 995)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(299))
+        builder.buffer.push_bytes(bytes(299))
         self.assertEqual(builder.buffer.tell(), 569)
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 585)
@@ -167,7 +166,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 668)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(299))
+        builder.buffer.push_bytes(bytes(299))
         self.assertTrue(builder.end_packet())
         self.assertEqual(builder.buffer.tell(), 0)
 
@@ -246,7 +245,7 @@ class QuicPacketBuilderTest(TestCase):
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
         builder.start_frame(QuicFrameType.CRYPTO)
-        push_bytes(builder.buffer, bytes(builder.remaining_space))
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
 
         # check builder

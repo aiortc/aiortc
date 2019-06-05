@@ -2,15 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
-from .buffer import (
-    Buffer,
-    push_bytes,
-    push_uint8,
-    push_uint16,
-    push_uint32,
-    push_uint_var,
-    size_uint_var,
-)
+from .buffer import Buffer, size_uint_var
 from .crypto import CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -27,16 +19,6 @@ from .tls import Epoch
 PACKET_MAX_SIZE = 1280
 PACKET_LENGTH_SEND_SIZE = 2
 PACKET_NUMBER_SEND_SIZE = 2
-
-
-def push_packet_number(buf: Buffer, packet_number: int) -> None:
-    """
-    Packet numbers are truncated and encoded using 1, 2 or 4 bytes.
-
-    We choose to use 2 bytes which provides a good tradeoff between encoded
-    size and the "window" of packets we can represent.
-    """
-    push_uint16(buf, packet_number & 0xFFFF)
 
 
 QuicDeliveryHandler = Callable[..., None]
@@ -153,7 +135,7 @@ class QuicPacketBuilder:
         """
         Starts a new frame.
         """
-        push_uint_var(self.buffer, frame_type)
+        self.buffer.push_uint_var(frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
             # FIXME: in_flight != is_ack_eliciting
             self._packet.in_flight = True
@@ -221,7 +203,7 @@ class QuicPacketBuilder:
 
             # pad initial datagram
             if self._pad_first_datagram:
-                push_bytes(buf, bytes(self.remaining_space))
+                buf.push_bytes(bytes(self.remaining_space))
                 packet_size = buf.tell() - self._packet_start
                 self._pad_first_datagram = False
 
@@ -235,31 +217,29 @@ class QuicPacketBuilder:
                 )
 
                 buf.seek(self._packet_start)
-                push_uint8(buf, self._packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
-                push_uint32(buf, self._version)
-                push_uint8(
-                    buf,
+                buf.push_uint8(self._packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
+                buf.push_uint32(self._version)
+                buf.push_uint8(
                     (encode_cid_length(len(self._peer_cid)) << 4)
-                    | encode_cid_length(len(self._host_cid)),
+                    | encode_cid_length(len(self._host_cid))
                 )
-                push_bytes(buf, self._peer_cid)
-                push_bytes(buf, self._host_cid)
+                buf.push_bytes(self._peer_cid)
+                buf.push_bytes(self._host_cid)
                 if (self._packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
-                    push_uint_var(buf, len(self._peer_token))
-                    push_bytes(buf, self._peer_token)
-                push_uint16(buf, length | 0x4000)
-                push_packet_number(buf, self._packet_number)
+                    buf.push_uint_var(len(self._peer_token))
+                    buf.push_bytes(self._peer_token)
+                buf.push_uint16(length | 0x4000)
+                buf.push_uint16(self._packet_number & 0xFFFF)
             else:
                 buf.seek(self._packet_start)
-                push_uint8(
-                    buf,
+                buf.push_uint8(
                     self._packet_type
                     | (self._spin_bit << 5)
                     | (self._packet_crypto.key_phase << 2)
-                    | (PACKET_NUMBER_SEND_SIZE - 1),
+                    | (PACKET_NUMBER_SEND_SIZE - 1)
                 )
-                push_bytes(buf, self._peer_cid)
-                push_packet_number(buf, self._packet_number)
+                buf.push_bytes(self._peer_cid)
+                buf.push_uint16(self._packet_number & 0xFFFF)
 
                 # check whether we need padding
                 padding_size = (
@@ -270,17 +250,16 @@ class QuicPacketBuilder:
                 )
                 if padding_size > 0:
                     buf.seek(self._packet_start + packet_size)
-                    push_bytes(buf, bytes(padding_size))
+                    buf.push_bytes(bytes(padding_size))
                     packet_size += padding_size
 
             # encrypt in place
             plain = buf.data_slice(self._packet_start, self._packet_start + packet_size)
             buf.seek(self._packet_start)
-            push_bytes(
-                buf,
+            buf.push_bytes(
                 self._packet_crypto.encrypt_packet(
                     plain[0 : self._header_size], plain[self._header_size : packet_size]
-                ),
+                )
             )
             self._packet.sent_bytes = buf.tell() - self._packet_start
             self._packets.append(self._packet)

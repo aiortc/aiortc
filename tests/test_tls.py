@@ -2,7 +2,7 @@ import binascii
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.buffer import Buffer, BufferReadError, push_uint8
+from aioquic.buffer import Buffer, BufferReadError
 from aioquic.tls import (
     Certificate,
     CertificateVerify,
@@ -520,7 +520,7 @@ class ContextTest(TestCase):
             # tamper with pre_share_key index
             buf = server_buf[tls.Epoch.INITIAL]
             buf.seek(buf.tell() - 1)
-            push_uint8(buf, 1)
+            buf.push_uint8(1)
             client_input = merge_buffers(server_buf)
             self.assertEqual(len(client_input), 307)
             reset_buffers(server_buf)

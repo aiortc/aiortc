@@ -6,7 +6,7 @@ import random
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.buffer import Buffer, push_bytes, push_uint_var
+from aioquic.buffer import Buffer
 from aioquic.connection import (
     QuicConnection,
     QuicConnectionError,
@@ -33,7 +33,7 @@ SERVER_ADDR = ("2.3.4.5", 4433)
 
 def encode_uint_var(v):
     buf = Buffer(capacity=8)
-    push_uint_var(buf, v)
+    buf.push_uint_var(v)
     return buf.data
 
 
@@ -362,7 +362,7 @@ class QuicConnectionTest(TestCase):
         crypto = CryptoPair()
         crypto.setup_initial(client.host_cid, is_client=False)
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        push_bytes(builder.buffer, bytes(1200))
+        builder.buffer.push_bytes(bytes(1200))
         builder.end_packet()
 
         for datagram in builder.flush()[0]:

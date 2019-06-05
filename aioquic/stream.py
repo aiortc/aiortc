@@ -159,9 +159,11 @@ class QuicStream(asyncio.Transport):
 
         # create frame
         frame = QuicStreamFrame(
-            data=self._send_buffer[
-                start - self._send_buffer_start : stop - self._send_buffer_start
-            ],
+            data=bytes(
+                self._send_buffer[
+                    start - self._send_buffer_start : stop - self._send_buffer_start
+                ]
+            ),
             offset=start,
         )
         self._send_pending.subtract(start, stop)
