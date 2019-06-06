@@ -128,24 +128,21 @@ class QuicPacketRecovery:
         return loss_space
 
     def get_loss_detection_time(self) -> float:
+        # loss timer
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             return loss_space.loss_time
 
-        # check there are ACK-eliciting packets in flight
-        if not sum(space.ack_eliciting_in_flight for space in self.spaces):
-            return None
-
-        # PTO
-        if not self._rtt_initialized:
-            timeout = K_INITIAL_RTT
-        else:
+        # packet timer
+        if sum(space.ack_eliciting_in_flight for space in self.spaces):
             timeout = (
                 self._rtt_smoothed
                 + max(4 * self._rtt_variance, K_GRANULARITY)
                 + self.max_ack_delay / 1000
             ) * (2 ** self._pto_count)
-        return self._time_of_last_sent_ack_eliciting_packet + timeout
+            return self._time_of_last_sent_ack_eliciting_packet + timeout
+
+        return None
 
     def get_probe_timeout(self) -> float:
         return (
