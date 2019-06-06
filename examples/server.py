@@ -73,13 +73,47 @@ class SessionTicketStore:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC server")
-    parser.add_argument("--certificate", type=str, required=True)
-    parser.add_argument("--host", type=str, default="::")
-    parser.add_argument("--port", type=int, default=4433)
-    parser.add_argument("--private-key", type=str, required=True)
-    parser.add_argument("--secrets-log-file", type=str)
-    parser.add_argument("--stateless-retry", action="store_true")
-    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument(
+        "-c",
+        "--certificate",
+        type=str,
+        required=True,
+        help="load the TLS certificate from the specified file",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="::",
+        help="listen on the specified address (defaults to ::)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=4433,
+        help="listen on the specified port (defaults to 4433)",
+    )
+    parser.add_argument(
+        "-k",
+        "--private-key",
+        type=str,
+        required=True,
+        help="load the TLS private key from the specified file",
+    )
+    parser.add_argument(
+        "-l",
+        "--secrets-log",
+        type=str,
+        help="log secrets to a file, for use with Wireshark",
+    )
+    parser.add_argument(
+        "-r",
+        "--stateless-retry",
+        action="store_true",
+        help="send a stateless retry for new connections",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="increase logging verbosity"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -96,8 +130,8 @@ if __name__ == "__main__":
             fp.read(), password=None, backend=default_backend()
         )
 
-    if args.secrets_log_file:
-        secrets_log_file = open(args.secrets_log_file, "a")
+    if args.secrets_log:
+        secrets_log_file = open(args.secrets_log, "a")
     else:
         secrets_log_file = None
 
