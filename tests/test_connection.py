@@ -123,9 +123,27 @@ def sequence_numbers(connection_ids):
 
 class QuicConnectionTest(TestCase):
     def _test_connect_with_version(self, client_versions, server_versions):
+        async def serve_request(reader, writer):
+            # check request
+            request = await reader.read(1024)
+            self.assertEqual(request, b"ping")
+
+            # send response
+            writer.write(b"pong")
+            await asyncio.sleep(0)
+
+            # receives EOF
+            request = await reader.read()
+            self.assertEqual(request, b"")
+
         with client_and_server(
             client_options={"supported_versions": client_versions},
-            server_options={"supported_versions": server_versions},
+            server_options={
+                "stream_handler": lambda reader, writer: asyncio.ensure_future(
+                    serve_request(reader, writer)
+                ),
+                "supported_versions": server_versions,
+            },
         ) as (client, server):
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
@@ -138,23 +156,9 @@ class QuicConnectionTest(TestCase):
                 sequence_numbers(server._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
-            # send data over stream
+            # clients sends data over stream
             client_reader, client_writer = run(client.create_stream())
             client_writer.write(b"ping")
-            run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 5)
-            self.assertEqual(server._transport.sent, 4)
-
-            # FIXME: needs an API
-            server_reader, server_writer = (
-                server.streams[0].reader,
-                server.streams[0].writer,
-            )
-            self.assertEqual(run(server_reader.read(1024)), b"ping")
-            server_writer.write(b"pong")
-            run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 6)
-            self.assertEqual(server._transport.sent, 5)
 
             # client receives pong
             self.assertEqual(run(client_reader.read(1024)), b"pong")
@@ -164,9 +168,6 @@ class QuicConnectionTest(TestCase):
             run(asyncio.sleep(0))
             self.assertEqual(client._transport.sent, 7)
             self.assertEqual(server._transport.sent, 6)
-
-            # server receives EOF
-            self.assertEqual(run(server_reader.read()), b"")
 
     def test_connect_draft_19(self):
         self._test_connect_with_version(
@@ -857,26 +858,40 @@ class QuicConnectionTest(TestCase):
         )
         self.assertEqual(client_transport.sent, 2)
 
-    def test_with_packet_loss(self):
-        with client_and_server() as (client, server):
-            # create stream
-            client_reader, client_writer = run(client.create_stream())
-            client_writer.write(b"ping")
-            run(asyncio.sleep(0))
-            server_reader = server.streams[0].reader
-            self.assertEqual(run(server_reader.read(4)), b"ping")
+    def test_with_packet_loss_during_app_data(self):
+        """
+        This test ensures stream data is successfully sent and received
+        in the presence of packet loss (randomized 25% in each direction).
 
+        This tests *only* exercises loss in the 1-RTT epoch, no loss occurs
+        during the handshake phase.
+        """
+        client_data = b"C" * 50000
+        server_data = b"S" * 50000
+
+        async def serve_request(reader, writer):
+            self.assertEqual(await reader.read(), client_data)
+            writer.write(server_data)
+            writer.write_eof()
+
+        with client_and_server(
+            server_options={
+                "stream_handler": lambda reader, writer: asyncio.ensure_future(
+                    serve_request(reader, writer)
+                )
+            }
+        ) as (client, server):
             # cause packet loss in both directions
-            client._transport.loss = 0.2
-            server._transport.loss = 0.2
+            client._transport.loss = 0.25
+            server._transport.loss = 0.25
 
-            # send data over stream
-            sent_data = b"Z" * 1000000
-            client_writer.write(sent_data)
+            # create stream and send data
+            client_reader, client_writer = run(client.create_stream())
+            client_writer.write(client_data)
             client_writer.write_eof()
 
-            # wait for the data to be received
-            self.assertEqual(run(server_reader.read()), sent_data)
+            # check response
+            self.assertEqual(run(client_reader.read()), server_data)
 
 
 class QuicNetworkPathTest(TestCase):
