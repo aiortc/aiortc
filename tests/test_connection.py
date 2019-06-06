@@ -38,12 +38,12 @@ def encode_uint_var(v):
 
 
 class FakeTransport:
-    loss = 0
     sent = 0
     target = None
 
-    def __init__(self, local_addr):
+    def __init__(self, local_addr, loss=0):
         self.local_addr = local_addr
+        self.loss = loss
 
     def sendto(self, data, addr):
         self.sent += 1
@@ -59,7 +59,7 @@ def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
 
 def create_standalone_client():
     client = QuicConnection(is_client=True)
-    client_transport = FakeTransport(CLIENT_ADDR)
+    client_transport = FakeTransport(CLIENT_ADDR, loss=0)
     client.connection_made(client_transport)
 
     # like connect() but without waiting
@@ -70,11 +70,11 @@ def create_standalone_client():
     return client, client_transport
 
 
-def create_transport(client, server):
-    client_transport = FakeTransport(CLIENT_ADDR)
+def create_transport(client, server, loss=0):
+    client_transport = FakeTransport(CLIENT_ADDR, loss=loss)
     client_transport.target = server
 
-    server_transport = FakeTransport(SERVER_ADDR)
+    server_transport = FakeTransport(SERVER_ADDR, loss=loss)
     server_transport.target = client
 
     server.connection_made(server_transport)
@@ -89,16 +89,30 @@ def create_transport(client, server):
 
 
 @contextlib.contextmanager
-def client_and_server():
-    client = QuicConnection(is_client=True)
+def client_and_server(
+    client_options={},
+    client_patch=lambda x: None,
+    server_options={},
+    server_patch=lambda x: None,
+    transport_options={},
+):
+    client = QuicConnection(is_client=True, **client_options)
+    client_patch(client)
+
     server = QuicConnection(
-        is_client=False, certificate=SERVER_CERTIFICATE, private_key=SERVER_PRIVATE_KEY
+        is_client=False,
+        certificate=SERVER_CERTIFICATE,
+        private_key=SERVER_PRIVATE_KEY,
+        **server_options
     )
+    server_patch(server)
 
     # perform handshake
-    create_transport(client, server)
+    create_transport(client, server, **transport_options)
 
     yield client, server
+
+    # close
     client.close()
     server.close()
 
@@ -109,58 +123,50 @@ def sequence_numbers(connection_ids):
 
 class QuicConnectionTest(TestCase):
     def _test_connect_with_version(self, client_versions, server_versions):
-        client = QuicConnection(is_client=True)
-        client.supported_versions = client_versions
+        with client_and_server(
+            client_options={"supported_versions": client_versions},
+            server_options={"supported_versions": server_versions},
+        ) as (client, server):
+            self.assertEqual(client._transport.sent, 4)
+            self.assertEqual(server._transport.sent, 3)
 
-        server = QuicConnection(
-            is_client=False,
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-        )
-        server.supported_versions = server_versions
+            # check each endpoint has available connection IDs for the peer
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+            )
+            self.assertEqual(
+                sequence_numbers(server._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+            )
 
-        # perform handshake
-        client_transport, server_transport = create_transport(client, server)
-        self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
+            # send data over stream
+            client_reader, client_writer = run(client.create_stream())
+            client_writer.write(b"ping")
+            run(asyncio.sleep(0))
+            self.assertEqual(client._transport.sent, 5)
+            self.assertEqual(server._transport.sent, 4)
 
-        # check each endpoint has available connection IDs for the peer
-        self.assertEqual(
-            sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
-        )
-        self.assertEqual(
-            sequence_numbers(server._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
-        )
+            # FIXME: needs an API
+            server_reader, server_writer = (
+                server.streams[0].reader,
+                server.streams[0].writer,
+            )
+            self.assertEqual(run(server_reader.read(1024)), b"ping")
+            server_writer.write(b"pong")
+            run(asyncio.sleep(0))
+            self.assertEqual(client._transport.sent, 6)
+            self.assertEqual(server._transport.sent, 5)
 
-        # send data over stream
-        client_reader, client_writer = run(client.create_stream())
-        client_writer.write(b"ping")
-        run(asyncio.sleep(0))
-        self.assertEqual(client_transport.sent, 5)
-        self.assertEqual(server_transport.sent, 4)
+            # client receives pong
+            self.assertEqual(run(client_reader.read(1024)), b"pong")
 
-        # FIXME: needs an API
-        server_reader, server_writer = (
-            server.streams[0].reader,
-            server.streams[0].writer,
-        )
-        self.assertEqual(run(server_reader.read(1024)), b"ping")
-        server_writer.write(b"pong")
-        run(asyncio.sleep(0))
-        self.assertEqual(client_transport.sent, 6)
-        self.assertEqual(server_transport.sent, 5)
+            # client writes EOF
+            client_writer.write_eof()
+            run(asyncio.sleep(0))
+            self.assertEqual(client._transport.sent, 7)
+            self.assertEqual(server._transport.sent, 6)
 
-        # client receives pong
-        self.assertEqual(run(client_reader.read(1024)), b"pong")
-
-        # client writes EOF
-        client_writer.write_eof()
-        run(asyncio.sleep(0))
-        self.assertEqual(client_transport.sent, 7)
-        self.assertEqual(server_transport.sent, 6)
-
-        # server receives EOF
-        self.assertEqual(run(server_reader.read()), b"")
+            # server receives EOF
+            self.assertEqual(run(server_reader.read()), b"")
 
     def test_connect_draft_19(self):
         self._test_connect_with_version(
@@ -176,36 +182,30 @@ class QuicConnectionTest(TestCase):
 
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
-        client = QuicConnection(is_client=True, secrets_log_file=client_log_file)
         server_log_file = io.StringIO()
-        server = QuicConnection(
-            is_client=False,
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-            secrets_log_file=server_log_file,
-        )
+        with client_and_server(
+            client_options={"secrets_log_file": client_log_file},
+            server_options={"secrets_log_file": server_log_file},
+        ) as (client, server):
+            self.assertEqual(client._transport.sent, 4)
+            self.assertEqual(server._transport.sent, 3)
 
-        # perform handshake
-        client_transport, server_transport = create_transport(client, server)
-        self.assertEqual(client_transport.sent, 4)
-        self.assertEqual(server_transport.sent, 3)
-
-        # check secrets were logged
-        client_log = client_log_file.getvalue()
-        server_log = server_log_file.getvalue()
-        self.assertEqual(client_log, server_log)
-        labels = []
-        for line in client_log.splitlines():
-            labels.append(line.split()[0])
-        self.assertEqual(
-            labels,
-            [
-                "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET",
-                "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET",
-                "QUIC_SERVER_TRAFFIC_SECRET_0",
-                "QUIC_CLIENT_TRAFFIC_SECRET_0",
-            ],
-        )
+            # check secrets were logged
+            client_log = client_log_file.getvalue()
+            server_log = server_log_file.getvalue()
+            self.assertEqual(client_log, server_log)
+            labels = []
+            for line in client_log.splitlines():
+                labels.append(line.split()[0])
+            self.assertEqual(
+                labels,
+                [
+                    "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET",
+                    "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+                    "QUIC_SERVER_TRAFFIC_SECRET_0",
+                    "QUIC_CLIENT_TRAFFIC_SECRET_0",
+                ],
+            )
 
     def test_connection_lost(self):
         with client_and_server() as (client, server):
@@ -321,25 +321,19 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(server._transport.sent, 4)
 
     def test_tls_error(self):
-        client = QuicConnection(is_client=True)
-        real_initialize = client._initialize
+        def patch(client):
+            real_initialize = client._initialize
 
-        def patched_initialize(peer_cid: bytes):
-            real_initialize(peer_cid)
-            client.tls._supported_versions = [tls.TLS_VERSION_1_3_DRAFT_28]
+            def patched_initialize(peer_cid: bytes):
+                real_initialize(peer_cid)
+                client.tls._supported_versions = [tls.TLS_VERSION_1_3_DRAFT_28]
 
-        client._initialize = patched_initialize
+            client._initialize = patched_initialize
 
-        server = QuicConnection(
-            is_client=False,
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-        )
-
-        # fail handshake
-        client_transport, server_transport = create_transport(client, server)
-        self.assertEqual(client_transport.sent, 1)
-        self.assertEqual(server_transport.sent, 1)
+        # handshake fails
+        with client_and_server(client_patch=patch) as (client, server):
+            self.assertEqual(client._transport.sent, 1)
+            self.assertEqual(server._transport.sent, 1)
 
     def test_datagram_received_wrong_version(self):
         client, client_transport = create_standalone_client()

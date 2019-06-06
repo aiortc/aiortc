@@ -305,6 +305,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         session_ticket: Optional[tls.SessionTicket] = None,
         session_ticket_fetcher: Optional[tls.SessionTicketFetcher] = None,
         session_ticket_handler: Optional[tls.SessionTicketHandler] = None,
+        supported_versions: Optional[List[QuicProtocolVersion]] = None,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         if is_client:
@@ -326,6 +327,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.secrets_log_file = secrets_log_file
         self.server_name = server_name
         self.streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
+        if supported_versions is not None:
+            self.supported_versions = supported_versions
 
         # counters for debugging
         self._stateless_retry_count = 0
