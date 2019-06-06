@@ -68,6 +68,7 @@ class QuicPacketBuilderTest(TestCase):
             [
                 QuicSentPacket(
                     epoch=Epoch.INITIAL,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
@@ -114,6 +115,7 @@ class QuicPacketBuilderTest(TestCase):
             [
                 QuicSentPacket(
                     epoch=Epoch.INITIAL,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
@@ -121,6 +123,7 @@ class QuicPacketBuilderTest(TestCase):
                 ),
                 QuicSentPacket(
                     epoch=Epoch.ONE_RTT,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=False,
                     packet_number=1,
@@ -177,6 +180,7 @@ class QuicPacketBuilderTest(TestCase):
             [
                 QuicSentPacket(
                     epoch=Epoch.INITIAL,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
@@ -184,6 +188,7 @@ class QuicPacketBuilderTest(TestCase):
                 ),
                 QuicSentPacket(
                     epoch=Epoch.HANDSHAKE,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=1,
@@ -191,6 +196,7 @@ class QuicPacketBuilderTest(TestCase):
                 ),
                 QuicSentPacket(
                     epoch=Epoch.ONE_RTT,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=2,
@@ -256,6 +262,7 @@ class QuicPacketBuilderTest(TestCase):
             [
                 QuicSentPacket(
                     epoch=Epoch.ONE_RTT,
+                    in_flight=True,
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,

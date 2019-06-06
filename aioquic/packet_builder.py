@@ -51,6 +51,7 @@ class QuicDeliveryState(Enum):
 @dataclass
 class QuicSentPacket:
     epoch: Epoch
+    in_flight: bool
     is_ack_eliciting: bool
     is_crypto_packet: bool
     packet_number: int
@@ -60,11 +61,6 @@ class QuicSentPacket:
     delivery_handlers: List[Tuple[QuicDeliveryHandler, Any]] = field(
         default_factory=list
     )
-
-    @property
-    def in_flight(self) -> bool:
-        # FIXME: in_flight and is_ack_eliciting are not exact synonyms!
-        return self.is_ack_eliciting
 
 
 class QuicPacketBuilder:
@@ -159,6 +155,8 @@ class QuicPacketBuilder:
         """
         push_uint_var(self.buffer, frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
+            # FIXME: in_flight != is_ack_eliciting
+            self._packet.in_flight = True
             self._packet.is_ack_eliciting = True
             self._ack_eliciting = True
         if frame_type == QuicFrameType.CRYPTO:
@@ -188,6 +186,7 @@ class QuicPacketBuilder:
 
         self._packet = QuicSentPacket(
             epoch=epoch,
+            in_flight=False,
             is_ack_eliciting=False,
             is_crypto_packet=False,
             packet_number=self._packet_number,

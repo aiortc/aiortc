@@ -25,11 +25,13 @@ class QuicPacketSpace:
         self.expected_packet_number = 0
 
         # sent packets and loss
+        self.ack_eliciting_in_flight = 0
         self.largest_acked_packet = 0
         self.loss_time: Optional[float] = None
         self.sent_packets: Dict[int, QuicSentPacket] = {}
 
     def teardown(self) -> None:
+        self.ack_eliciting_in_flight = 0
         self.loss_time = None
         self.sent_packets.clear()
 
@@ -93,12 +95,17 @@ class QuicPacketRecovery:
                 break
 
             if packet_number <= packet_threshold or packet.sent_time < time_threshold:
-                for handler, args in packet.delivery_handlers:
-                    handler(QuicDeliveryState.LOST, *args)
+                # remove packet and update counters
                 del space.sent_packets[packet_number]
+                if packet.is_ack_eliciting:
+                    space.ack_eliciting_in_flight -= 1
                 if packet.in_flight:
                     lost_bytes += packet.sent_bytes
                     lost_largest_time = packet.sent_time
+
+                # trigger callbacks
+                for handler, args in packet.delivery_handlers:
+                    handler(QuicDeliveryState.LOST, *args)
             else:
                 packet_loss_time = packet.sent_time + loss_delay
                 if space.loss_time is None or space.loss_time > packet_loss_time:
@@ -122,13 +129,9 @@ class QuicPacketRecovery:
             return loss_space.loss_time
 
         # check there are ACK-eliciting packets in flight
-        ack_eliciting_in_flight = False
-        for space in self.spaces:
-            for packet in space.sent_packets.values():
-                if packet.is_ack_eliciting:
-                    ack_eliciting_in_flight = True
-                    break
-        if not ack_eliciting_in_flight:
+        if not next(
+            (True for space in self.spaces if space.ack_eliciting_in_flight), False
+        ):
             return None
 
         # PTO
@@ -169,18 +172,19 @@ class QuicPacketRecovery:
             if packet_number > largest_acked:
                 break
             if packet_number in ack_rangeset:
-                # newly ack'd
+                # remove packet and update counters
                 packet = space.sent_packets.pop(packet_number)
+                if packet.is_ack_eliciting:
+                    is_ack_eliciting = True
+                    space.ack_eliciting_in_flight -= 1
                 if packet.in_flight:
                     self.on_packet_acked(packet)
+                largest_newly_acked = packet_number
+                largest_sent_time = packet.sent_time
 
                 # trigger callbacks
                 for handler, args in packet.delivery_handlers:
                     handler(QuicDeliveryState.ACKED, *args)
-                if packet.is_ack_eliciting:
-                    is_ack_eliciting = True
-                largest_newly_acked = packet_number
-                largest_sent_time = packet.sent_time
 
         # nothing to do if there are no newly acked packets
         if largest_newly_acked is None:
@@ -254,6 +258,8 @@ class QuicPacketRecovery:
         packet.sent_time = self._get_time()
         space.sent_packets[packet.packet_number] = packet
 
+        if packet.is_ack_eliciting:
+            space.ack_eliciting_in_flight += 1
         if packet.in_flight:
             if packet.is_crypto_packet:
                 self._time_of_last_sent_crypto_packet = packet.sent_time
