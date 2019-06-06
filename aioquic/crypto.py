@@ -207,9 +207,9 @@ class CryptoContext:
                 crypto = self.next_key_phase()
 
         # payload protection
-        nonce = bytearray(len(crypto.iv) - pn_length) + bytearray(pn)
-        for i in range(len(crypto.iv)):
-            nonce[i] ^= crypto.iv[i]
+        nonce = crypto.iv[:-pn_length] + bytes(
+            crypto.iv[i - pn_length] ^ pn[i] for i in range(pn_length)
+        )
         try:
             payload = crypto.aead.decrypt(
                 nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
@@ -235,9 +235,9 @@ class CryptoContext:
         pn = plain_header[pn_offset : pn_offset + pn_length]
 
         # payload protection
-        nonce = bytearray(len(self.iv) - pn_length) + bytearray(pn)
-        for i in range(len(self.iv)):
-            nonce[i] ^= self.iv[i]
+        nonce = self.iv[:-pn_length] + bytes(
+            self.iv[i - pn_length] ^ pn[i] for i in range(pn_length)
+        )
         protected_payload = self.aead.encrypt(nonce, plain_payload, plain_header)
 
         # header protection
