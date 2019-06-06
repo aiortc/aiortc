@@ -59,6 +59,7 @@ class QuicProtocolVersion(IntEnum):
 
 @dataclass
 class QuicHeader:
+    is_long_header: bool
     version: Optional[int]
     packet_type: int
     destination_cid: bytes
@@ -66,10 +67,6 @@ class QuicHeader:
     original_destination_cid: bytes = b""
     token: bytes = b""
     rest_length: int = 0
-
-    @property
-    def is_long_header(self) -> bool:
-        return self.packet_type is None or is_long_header(self.packet_type)
 
 
 def decode_cid_length(length: int) -> int:
@@ -145,6 +142,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
                 rest_length = pull_uint_var(buf)
 
         return QuicHeader(
+            is_long_header=True,
             version=version,
             packet_type=packet_type,
             destination_cid=destination_cid,
@@ -161,6 +159,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
         packet_type = first_byte & PACKET_TYPE_MASK
         destination_cid = pull_bytes(buf, host_cid_length)
         return QuicHeader(
+            is_long_header=False,
             version=None,
             packet_type=packet_type,
             destination_cid=destination_cid,

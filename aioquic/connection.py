@@ -48,7 +48,6 @@ from .packet import (
     QuicStreamFrame,
     QuicTransportParameters,
     get_spin_bit,
-    is_long_header,
     pull_ack_frame,
     pull_application_close_frame,
     pull_crypto_frame,
@@ -668,10 +667,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._set_state(QuicConnectionState.CONNECTED)
 
             # update spin bit
-            if (
-                not is_long_header(plain_header[0])
-                and packet_number > self._spin_highest_pn
-            ):
+            if not header.is_long_header and packet_number > self._spin_highest_pn:
                 self._spin_bit_peer = get_spin_bit(plain_header[0])
                 if self.is_client:
                     self._spin_bit = not self._spin_bit_peer
