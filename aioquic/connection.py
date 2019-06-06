@@ -334,8 +334,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._loop = asyncio.get_event_loop()
         self.__close: Optional[Dict] = None
         self.__connected = asyncio.Event()
-        self._discard_handhake_at: Optional[float] = None
-        self._discard_handhake_done = False
+        self._discard_handshake_at: Optional[float] = None
+        self._discard_handshake_done = False
         self.__epoch = tls.Epoch.INITIAL
         self._host_cids = [
             QuicConnectionId(
@@ -930,8 +930,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         if context.epoch == tls.Epoch.HANDSHAKE:
             space = self.spaces[context.epoch]
             stream = self.streams[context.epoch]
-            if not space.sent_packets and not stream._send_pending:
-                self._discard_handhake_at = (
+            if not space.ack_eliciting_in_flight and not stream._send_pending:
+                self._discard_handshake_at = (
                     self._loop.time() + 3 * self._loss.get_probe_timeout()
                 )
 
@@ -1407,15 +1407,15 @@ class QuicConnection(asyncio.DatagramProtocol):
         else:
             # check if we can discard handshake keys
             if (
-                self._discard_handhake_at is not None
-                and self._loop.time() > self._discard_handhake_at
+                self._discard_handshake_at is not None
+                and self._loop.time() > self._discard_handshake_at
             ):
                 self._logger.debug("Discarding handshake keys")
                 self.cryptos[tls.Epoch.HANDSHAKE].teardown()
                 self.spaces[tls.Epoch.HANDSHAKE].teardown()
-                self._discard_handhake_at = None
-                self._discard_handhake_done = True
-            if not self._discard_handhake_done:
+                self._discard_handshake_at = None
+                self._discard_handshake_done = True
+            if not self._discard_handshake_done:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
                     self._write_handshake(builder, epoch)
 
