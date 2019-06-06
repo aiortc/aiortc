@@ -26,12 +26,14 @@ class QuicPacketSpace:
 
         # sent packets and loss
         self.ack_eliciting_in_flight = 0
+        self.crypto_packet_in_flight = 0
         self.largest_acked_packet = 0
         self.loss_time: Optional[float] = None
         self.sent_packets: Dict[int, QuicSentPacket] = {}
 
     def teardown(self) -> None:
         self.ack_eliciting_in_flight = 0
+        self.crypto_packet_in_flight = 0
         self.loss_time = None
         self.sent_packets.clear()
 
@@ -94,11 +96,13 @@ class QuicPacketRecovery:
             if packet_number > space.largest_acked_packet:
                 break
 
-            if packet_number <= packet_threshold or packet.sent_time < time_threshold:
+            if packet_number <= packet_threshold or packet.sent_time <= time_threshold:
                 # remove packet and update counters
                 del space.sent_packets[packet_number]
                 if packet.is_ack_eliciting:
                     space.ack_eliciting_in_flight -= 1
+                if packet.is_crypto_packet:
+                    space.crypto_packet_in_flight -= 1
                 if packet.in_flight:
                     lost_bytes += packet.sent_bytes
                     lost_largest_time = packet.sent_time
@@ -129,9 +133,7 @@ class QuicPacketRecovery:
             return loss_space.loss_time
 
         # check there are ACK-eliciting packets in flight
-        if not next(
-            (True for space in self.spaces if space.ack_eliciting_in_flight), False
-        ):
+        if not sum(space.ack_eliciting_in_flight for space in self.spaces):
             return None
 
         # PTO
@@ -177,6 +179,8 @@ class QuicPacketRecovery:
                 if packet.is_ack_eliciting:
                     is_ack_eliciting = True
                     space.ack_eliciting_in_flight -= 1
+                if packet.is_crypto_packet:
+                    space.crypto_packet_in_flight -= 1
                 if packet.in_flight:
                     self.on_packet_acked(packet)
                 largest_newly_acked = packet_number
@@ -260,6 +264,8 @@ class QuicPacketRecovery:
 
         if packet.is_ack_eliciting:
             space.ack_eliciting_in_flight += 1
+        if packet.is_crypto_packet:
+            space.crypto_packet_in_flight += 1
         if packet.in_flight:
             if packet.is_crypto_packet:
                 self._time_of_last_sent_crypto_packet = packet.sent_time
