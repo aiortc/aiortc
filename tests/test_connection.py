@@ -325,6 +325,7 @@ class QuicConnectionTest(TestCase):
             server.close(error_code=QuicErrorCode.NO_ERROR)
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 4)
+            run(asyncio.sleep(0))
 
     def test_tls_error(self):
         def patch(client):
@@ -880,8 +881,8 @@ class QuicConnectionTest(TestCase):
         This tests *only* exercises loss in the 1-RTT epoch, no loss occurs
         during the handshake phase.
         """
-        client_data = b"C" * 50000
-        server_data = b"S" * 50000
+        client_data = b"C" * 100000
+        server_data = b"S" * 100000
 
         async def serve_request(reader, writer):
             self.assertEqual(await reader.read(), client_data)
