@@ -473,6 +473,8 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
             )
             self._send_pending()
+            for epoch, space in self.spaces.items():
+                self._discard_epoch(epoch)
 
     def connect(
         self, addr: NetworkAddress, protocol_version: Optional[int] = None
@@ -663,9 +665,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # discard initial keys and packet space
             if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
-                self._logger.debug("Discarding initial keys")
-                self.cryptos[tls.Epoch.INITIAL].teardown()
-                self.spaces[tls.Epoch.INITIAL].teardown()
+                self._discard_epoch(tls.Epoch.INITIAL)
 
             # update state
             if self._peer_cid_seq is None:
@@ -794,6 +794,11 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._logger.info(
                 "Migrating to %s (%d)", dump_cid(self.peer_cid), self._peer_cid_seq
             )
+
+    def _discard_epoch(self, epoch: tls.Epoch) -> None:
+        self._logger.debug("Discarding epoch %s", epoch)
+        self.cryptos[epoch].teardown()
+        self._loss.discard_space(self.spaces[epoch])
 
     def _find_network_path(self, addr: NetworkAddress) -> QuicNetworkPath:
         # check existing network paths
@@ -1423,9 +1428,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._discard_handshake_at is not None
                 and self._loop.time() > self._discard_handshake_at
             ):
-                self._logger.debug("Discarding handshake keys")
-                self.cryptos[tls.Epoch.HANDSHAKE].teardown()
-                self.spaces[tls.Epoch.HANDSHAKE].teardown()
+                self._discard_epoch(tls.Epoch.HANDSHAKE)
                 self._discard_handshake_at = None
                 self._discard_handshake_done = True
             if not self._discard_handshake_done:
@@ -1731,9 +1734,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # discard initial keys and packet space
             if self.is_client and epoch == tls.Epoch.HANDSHAKE:
-                self._logger.debug("Discarding initial keys")
-                self.cryptos[tls.Epoch.INITIAL].teardown()
-                self.spaces[tls.Epoch.INITIAL].teardown()
+                self._discard_epoch(tls.Epoch.INITIAL)
 
     def _write_connection_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace

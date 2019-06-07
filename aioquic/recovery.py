@@ -31,12 +31,6 @@ class QuicPacketSpace:
         self.loss_time: Optional[float] = None
         self.sent_packets: Dict[int, QuicSentPacket] = {}
 
-    def teardown(self) -> None:
-        self.ack_eliciting_in_flight = 0
-        self.crypto_packet_in_flight = 0
-        self.loss_time = None
-        self.sent_packets.clear()
-
 
 class QuicPacketRecovery:
     """
@@ -115,6 +109,20 @@ class QuicPacketRecovery:
 
         if lost_bytes:
             self.on_packets_lost(lost_bytes, lost_largest_time)
+
+    def discard_space(self, space: QuicPacketSpace) -> None:
+        assert space in self.spaces
+
+        for packet in space.sent_packets.values():
+            if packet.is_crypto_packet:
+                space.crypto_packet_in_flight -= 1
+            if packet.in_flight:
+                self.on_packet_expired(packet)
+        space.sent_packets.clear()
+
+        space.ack_eliciting_in_flight = 0
+        space.crypto_packet_in_flight = 0
+        space.loss_time = None
 
     def get_earliest_loss_time(self) -> Optional[QuicPacketSpace]:
         loss_space = None
@@ -246,6 +254,9 @@ class QuicPacketRecovery:
             self.congestion_window += (
                 K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self.congestion_window
             )
+
+    def on_packet_expired(self, packet: QuicSentPacket) -> None:
+        self.bytes_in_flight -= packet.sent_bytes
 
     def on_packet_sent(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
         packet.sent_time = self._get_time()
