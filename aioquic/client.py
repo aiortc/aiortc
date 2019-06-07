@@ -71,7 +71,8 @@ async def connect(
         local_addr=("::", 0),
     )
     protocol = cast(QuicConnection, protocol)
-    await protocol.connect(addr, protocol_version=protocol_version)
+    protocol.connect(addr, protocol_version=protocol_version)
+    await protocol.wait_connected()
     try:
         yield protocol
     finally:

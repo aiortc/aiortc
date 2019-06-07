@@ -335,7 +335,8 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         self._loop = asyncio.get_event_loop()
         self.__close: Optional[Dict] = None
-        self.__connected = asyncio.Event()
+        self._connect_called = False
+        self._connected = asyncio.Event()
         self._discard_handshake_at: Optional[float] = None
         self._discard_handshake_done = False
         self.__epoch = tls.Epoch.INITIAL
@@ -473,20 +474,25 @@ class QuicConnection(asyncio.DatagramProtocol):
             )
             self._send_pending()
 
-    async def connect(
+    def connect(
         self, addr: NetworkAddress, protocol_version: Optional[int] = None
     ) -> None:
         """
-        Initiate the TLS handshake and wait for it to complete.
+        Initiate the TLS handshake.
+
+        This method can only be called for clients and a single time.
         """
-        assert self.is_client
+        assert (
+            self.is_client and not self._connect_called
+        ), "connect() can only be called for clients and a single time"
+        self._connect_called = True
+
         self._network_paths = [QuicNetworkPath(addr, is_validated=True)]
         if protocol_version is not None:
             self._version = protocol_version
         else:
             self._version = max(self.supported_versions)
         self._connect()
-        await self.__connected.wait()
 
     async def create_stream(
         self, is_unidirectional: bool = False
@@ -543,6 +549,12 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         if self.__epoch == tls.Epoch.ONE_RTT:
             self.cryptos[tls.Epoch.ONE_RTT].update_key()
+
+    async def wait_connected(self) -> None:
+        """
+        Wait for the TLS handshake to complete.
+        """
+        await self._connected.wait()
 
     # asyncio.DatagramProtocol
 
@@ -998,8 +1010,8 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._replenish_connection_ids()
                 self.__epoch = tls.Epoch.ONE_RTT
                 # wakeup waiter
-                if not self.__connected.is_set():
-                    self.__connected.set()
+                if not self._connected.is_set():
+                    self._connected.set()
             elif self.__epoch == tls.Epoch.INITIAL:
                 self.__epoch = tls.Epoch.HANDSHAKE
 

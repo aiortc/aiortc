@@ -60,12 +60,10 @@ def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
 def create_standalone_client():
     client = QuicConnection(is_client=True)
     client_transport = FakeTransport(CLIENT_ADDR, loss=0)
-    client.connection_made(client_transport)
 
-    # like connect() but without waiting
-    client._network_paths = [QuicNetworkPath(SERVER_ADDR, is_validated=True)]
-    client._version = max(client.supported_versions)
-    client._connect()
+    # kick-off handshake
+    client.connection_made(client_transport)
+    client.connect(SERVER_ADDR)
 
     return client, client_transport
 
@@ -77,13 +75,10 @@ def create_transport(client, server, loss=0):
     server_transport = FakeTransport(SERVER_ADDR, loss=loss)
     server_transport.target = client
 
+    # kick-off handshake
     server.connection_made(server_transport)
     client.connection_made(client_transport)
-
-    # like connect() but without waiting
-    client._network_paths = [QuicNetworkPath(SERVER_ADDR, is_validated=True)]
-    client._version = max(client.supported_versions)
-    client._connect()
+    client.connect(SERVER_ADDR)
 
     return client_transport, server_transport
 
