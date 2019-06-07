@@ -337,7 +337,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__close: Optional[Dict] = None
         self._connect_called = False
         self._connected = asyncio.Event()
-        self.__epoch = tls.Epoch.INITIAL
         self._handshake_complete = False
         self._handshake_confirmed = False
         self._host_cids = [
@@ -539,7 +538,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Pings the remote host and waits for the response.
         """
-        assert self._ping_waiter is None
+        assert self._ping_waiter is None, "already await a ping"
         self._ping_pending = True
         self._ping_waiter = self._loop.create_future()
         self._send_soon()
@@ -549,8 +548,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Request an update of the encryption keys.
         """
-        if self.__epoch == tls.Epoch.ONE_RTT:
-            self.cryptos[tls.Epoch.ONE_RTT].update_key()
+        assert self._handshake_complete, "cannot change key before handshake completes"
+        self.cryptos[tls.Epoch.ONE_RTT].update_key()
 
     async def wait_connected(self) -> None:
         """
@@ -1006,18 +1005,15 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._logger.info("ALPN negotiated protocol %s", self.alpn_protocol)
 
             # update current epoch
-            if self.__epoch == tls.Epoch.HANDSHAKE and self.tls.state in [
+            if not self._handshake_complete and self.tls.state in [
                 tls.State.CLIENT_POST_HANDSHAKE,
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
                 self._handshake_complete = True
                 self._replenish_connection_ids()
-                self.__epoch = tls.Epoch.ONE_RTT
                 # wakeup waiter
                 if not self._connected.is_set():
                     self._connected.set()
-            elif self.__epoch == tls.Epoch.INITIAL:
-                self.__epoch = tls.Epoch.HANDSHAKE
 
     def _handle_data_blocked_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1401,13 +1397,14 @@ class QuicConnection(asyncio.DatagramProtocol):
         builder = QuicPacketBuilder(
             host_cid=self.host_cid,
             packet_number=self._packet_number,
-            pad_first_datagram=(self.__epoch == tls.Epoch.INITIAL and self.is_client),
+            pad_first_datagram=(
+                self.is_client and self.__state == QuicConnectionState.FIRSTFLIGHT
+            ),
             peer_cid=self.peer_cid,
             peer_token=self.peer_token,
             spin_bit=self._spin_bit,
             version=self._version,
         )
-
         if self.__close:
             for epoch, packet_type in (
                 (tls.Epoch.ONE_RTT, PACKET_TYPE_ONE_RTT),
@@ -1425,10 +1422,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             if not self._handshake_confirmed:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
                     self._write_handshake(builder, epoch)
-
             self._write_application(builder, network_path)
         datagrams, packets = builder.flush()
-        sent_handshake = False
 
         if datagrams:
             self._packet_number = builder.packet_number
@@ -1439,6 +1434,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 network_path.bytes_sent += len(datagram)
 
             # register packets
+            sent_handshake = False
             for packet in packets:
                 self._loss.on_packet_sent(
                     packet=packet, space=self.spaces[packet.epoch]
@@ -1593,7 +1589,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         else:
             return
         space = self.spaces[tls.Epoch.ONE_RTT]
-        is_one_rtt = self.__epoch == tls.Epoch.ONE_RTT
 
         buf = builder.buffer
 
@@ -1604,7 +1599,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # write header
             builder.start_packet(packet_type, crypto)
 
-            if is_one_rtt:
+            if self._handshake_complete:
                 # ACK
                 if space.ack_required and space.ack_queue:
                     builder.start_frame(QuicFrameType.ACK)
