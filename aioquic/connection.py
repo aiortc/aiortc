@@ -337,9 +337,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         self.__close: Optional[Dict] = None
         self._connect_called = False
         self._connected = asyncio.Event()
-        self._discard_handshake_at: Optional[float] = None
-        self._discard_handshake_done = False
         self.__epoch = tls.Epoch.INITIAL
+        self._handshake_complete = False
+        self._handshake_confirmed = False
         self._host_cids = [
             QuicConnectionId(
                 cid=os.urandom(8),
@@ -937,14 +937,14 @@ class QuicConnection(asyncio.DatagramProtocol):
             ack_delay_encoded=ack_delay_encoded,
         )
 
-        # if all handshake data is acked, discard handshake space in 3 PTO
-        if context.epoch == tls.Epoch.HANDSHAKE:
-            space = self.spaces[context.epoch]
-            stream = self.streams[context.epoch]
-            if not space.ack_eliciting_in_flight and not stream._send_pending:
-                self._discard_handshake_at = (
-                    self._loop.time() + 3 * self._loss.get_probe_timeout()
-                )
+        # check if we can discard handshake keys
+        if (
+            not self._handshake_confirmed
+            and self._handshake_complete
+            and context.epoch == tls.Epoch.ONE_RTT
+        ):
+            self._discard_epoch(tls.Epoch.HANDSHAKE)
+            self._handshake_confirmed = True
 
     def _handle_connection_close_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1010,6 +1010,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 tls.State.CLIENT_POST_HANDSHAKE,
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
+                self._handshake_complete = True
                 self._replenish_connection_ids()
                 self.__epoch = tls.Epoch.ONE_RTT
                 # wakeup waiter
@@ -1421,15 +1422,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     self.__close = None
                     break
         else:
-            # check if we can discard handshake keys
-            if (
-                self._discard_handshake_at is not None
-                and self._loop.time() > self._discard_handshake_at
-            ):
-                self._discard_epoch(tls.Epoch.HANDSHAKE)
-                self._discard_handshake_at = None
-                self._discard_handshake_done = True
-            if not self._discard_handshake_done:
+            if not self._handshake_confirmed:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
                     self._write_handshake(builder, epoch)
 
@@ -1453,9 +1446,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 if packet.epoch == tls.Epoch.HANDSHAKE:
                     sent_handshake = True
 
-        # discard initial keys and packet space
-        if sent_handshake and self.is_client:
-            self._discard_epoch(tls.Epoch.INITIAL)
+            # check if we can discard initial keys
+            if sent_handshake and self.is_client:
+                self._discard_epoch(tls.Epoch.INITIAL)
 
         # arm loss timer
         self._set_loss_detection_timer()

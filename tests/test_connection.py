@@ -3,7 +3,7 @@ import binascii
 import contextlib
 import io
 import random
-from unittest import TestCase, skip
+from unittest import TestCase
 
 from aioquic import tls
 from aioquic.buffer import Buffer, push_bytes, push_uint_var
@@ -911,7 +911,6 @@ class QuicConnectionTest(TestCase):
             # check response
             self.assertEqual(run(client_reader.read()), server_data)
 
-    @skip("not ready yet")
     def test_with_packet_loss_during_handshake(self):
         """
         This test ensures handshake success and stream data is successfully sent
