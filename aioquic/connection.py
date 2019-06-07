@@ -362,10 +362,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
         self._loss = QuicPacketRecovery(
-            logger=self._logger,
-            get_time=self._loop.time,
-            send_probe=self._send_probe,
-            set_loss_detection_timer=self._set_loss_detection_timer,
+            logger=self._logger, get_time=self._loop.time, send_probe=self._send_probe
         )
         self._loss_timer: Optional[asyncio.TimerHandle] = None
         self._network_paths: List[QuicNetworkPath] = []
@@ -1270,6 +1267,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         if delivery != QuicDeliveryState.ACKED:
             stream.max_stream_data_local_sent = 0
 
+    def _on_loss_detection_timeout(self) -> None:
+        self._loss_timer = None
+        self._loss.on_loss_detection_timeout()
+        self._send_pending()
+
     def _on_new_connection_id_delivery(
         self, delivery: QuicDeliveryState, connection_id: QuicConnectionId
     ) -> None:
@@ -1435,12 +1437,11 @@ class QuicConnection(asyncio.DatagramProtocol):
                     packet=packet, space=self.spaces[packet.epoch]
                 )
 
-            # arm loss timer
-            self._set_loss_detection_timer()
+        # arm loss timer
+        self._set_loss_detection_timer()
 
     def _send_probe(self) -> None:
         self._probe_pending = True
-        self._send_pending()
 
     def _send_soon(self) -> None:
         if self.__send_pending_task is None:
@@ -1523,7 +1524,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             loss_time = self._loss.get_loss_detection_time()
             if loss_time is not None:
                 self._loss_timer = self._loop.call_at(
-                    loss_time, self._loss.on_loss_detection_timeout
+                    loss_time, self._on_loss_detection_timeout
                 )
 
     def _set_state(self, state: QuicConnectionState) -> None:
