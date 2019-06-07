@@ -143,7 +143,7 @@ class QuicStream(asyncio.Transport):
             if self._send_pending_eof:
                 # FIN only
                 self._send_pending_eof = False
-                return QuicStreamFrame(fin=True, offset=self._send_buffer_stop)
+                return QuicStreamFrame(fin=True, offset=self._send_buffer_fin)
             return None
 
         # apply flow control
@@ -180,8 +180,8 @@ class QuicStream(asyncio.Transport):
         """
         Callback when sent data is ACK'd.
         """
-        if stop - start:
-            if delivery == QuicDeliveryState.ACKED:
+        if delivery == QuicDeliveryState.ACKED:
+            if stop > start:
                 self._send_acked.add(start, stop)
                 first_range = self._send_acked[0]
                 if first_range.start == self._send_buffer_start:
@@ -189,10 +189,11 @@ class QuicStream(asyncio.Transport):
                     self._send_acked.shift()
                     self._send_buffer_start += size
                     del self._send_buffer[:size]
-            else:
+        else:
+            if stop > start:
                 self._send_pending.add(start, stop)
-                if stop == self._send_buffer_fin:
-                    self._send_pending_eof = True
+            if stop == self._send_buffer_fin:
+                self._send_pending_eof = True
 
     # asyncio.Transport
 
