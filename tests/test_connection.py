@@ -3,7 +3,7 @@ import binascii
 import contextlib
 import io
 import random
-from unittest import TestCase
+from unittest import TestCase, skip
 
 from aioquic import tls
 from aioquic.buffer import Buffer, push_bytes, push_uint_var
@@ -901,6 +901,39 @@ class QuicConnectionTest(TestCase):
             # cause packet loss in both directions
             client._transport.loss = 0.25
             server._transport.loss = 0.25
+
+            # create stream and send data
+            client_reader, client_writer = run(client.create_stream())
+            client_writer.write(client_data)
+            client_writer.write_eof()
+
+            # check response
+            self.assertEqual(run(client_reader.read()), server_data)
+
+    @skip("not ready yet")
+    def test_with_packet_loss_during_handshake(self):
+        """
+        This test ensures handshake success and stream data is successfully sent
+        and received in the presence of packet loss (randomized 25% in each direction).
+        """
+        client_data = b"C" * 50000
+        server_data = b"S" * 50000
+
+        async def serve_request(reader, writer):
+            self.assertEqual(await reader.read(), client_data)
+            writer.write(server_data)
+            writer.write_eof()
+
+        with client_and_server(
+            server_options={
+                "stream_handler": lambda reader, writer: asyncio.ensure_future(
+                    serve_request(reader, writer)
+                )
+            },
+            transport_options={"loss": 0.25},
+        ) as (client, server):
+            # complete handshake
+            run(client.wait_connected())
 
             # create stream and send data
             client_reader, client_writer = run(client.create_stream())

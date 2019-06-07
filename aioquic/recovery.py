@@ -114,8 +114,6 @@ class QuicPacketRecovery:
         assert space in self.spaces
 
         for packet in space.sent_packets.values():
-            if packet.is_crypto_packet:
-                space.crypto_packet_in_flight -= 1
             if packet.in_flight:
                 self.on_packet_expired(packet)
         space.sent_packets.clear()
@@ -138,6 +136,14 @@ class QuicPacketRecovery:
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             return loss_space.loss_time
+
+        # crypto timer
+        if sum(space.crypto_packet_in_flight for space in self.spaces):
+            timeout = max(
+                2 * (self._rtt_smoothed if self._rtt_initialized else K_INITIAL_RTT),
+                K_GRANULARITY,
+            ) * (2 ** self._crypto_count)
+            return self._time_of_last_sent_crypto_packet + timeout
 
         # packet timer
         if sum(space.ack_eliciting_in_flight for space in self.spaces):
@@ -235,6 +241,23 @@ class QuicPacketRecovery:
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             self.detect_loss(loss_space)
+        elif sum(space.crypto_packet_in_flight for space in self.spaces):
+            # reschedule crypto packets
+            for space in self.spaces:
+                for packet_number, packet in list(
+                    filter(lambda i: i[1].is_crypto_packet, space.sent_packets.items())
+                ):
+                    # remove packet and update counters
+                    del space.sent_packets[packet_number]
+                    space.ack_eliciting_in_flight -= 1
+                    space.crypto_packet_in_flight -= 1
+                    if packet.in_flight:
+                        self.bytes_in_flight -= packet.sent_bytes
+
+                    # trigger callbacks
+                    for handler, args in packet.delivery_handlers:
+                        handler(QuicDeliveryState.LOST, *args)
+            self._crypto_count += 1
         else:
             self._pto_count += 1
             self._send_probe()
