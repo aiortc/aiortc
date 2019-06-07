@@ -43,12 +43,13 @@ class FakeTransport:
 
     def __init__(self, local_addr, loss=0):
         self.local_addr = local_addr
+        self.loop = asyncio.get_event_loop()
         self.loss = loss
 
     def sendto(self, data, addr):
         self.sent += 1
         if self.target is not None and random.random() >= self.loss:
-            self.target.datagram_received(data, self.local_addr)
+            self.loop.call_soon(self.target.datagram_received, data, self.local_addr)
 
 
 def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
@@ -79,6 +80,7 @@ def create_transport(client, server, loss=0):
     server.connection_made(server_transport)
     client.connection_made(client_transport)
     client.connect(SERVER_ADDR)
+    run(asyncio.sleep(0))
 
     return client_transport, server_transport
 
@@ -140,6 +142,7 @@ class QuicConnectionTest(TestCase):
                 "supported_versions": server_versions,
             },
         ) as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -183,6 +186,7 @@ class QuicConnectionTest(TestCase):
             client_options={"secrets_log_file": client_log_file},
             server_options={"secrets_log_file": server_log_file},
         ) as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -205,6 +209,7 @@ class QuicConnectionTest(TestCase):
 
     def test_connection_lost(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -221,6 +226,7 @@ class QuicConnectionTest(TestCase):
 
     def test_connection_lost_with_exception(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -240,18 +246,20 @@ class QuicConnectionTest(TestCase):
 
     def test_consume_connection_id(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
             # change connection ID
             client._consume_connection_id()
+            client._send_pending()
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
             )
 
             # the server provides a new connection ID
-            client._send_pending()
+            run(asyncio.sleep(0))
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
             )
@@ -287,6 +295,7 @@ class QuicConnectionTest(TestCase):
 
     def test_create_stream_over_max_streams(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -303,6 +312,7 @@ class QuicConnectionTest(TestCase):
 
     def test_decryption_error(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(client._transport.sent, 4)
             self.assertEqual(server._transport.sent, 3)
 
@@ -328,6 +338,7 @@ class QuicConnectionTest(TestCase):
 
         # handshake fails
         with client_and_server(client_patch=patch) as (client, server):
+            run(asyncio.sleep(0))
             self.assertEqual(client._transport.sent, 1)
             self.assertEqual(server._transport.sent, 1)
 
@@ -397,12 +408,14 @@ class QuicConnectionTest(TestCase):
 
     def test_handle_connection_close_frame(self):
         with client_and_server() as (client, server):
+            run(server.wait_connected())
             server.close(
                 error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
             )
 
     def test_handle_connection_close_frame_app(self):
         with client_and_server() as (client, server):
+            run(server.wait_connected())
             server.close(error_code=QuicErrorCode.NO_ERROR)
 
     def test_handle_data_blocked_frame(self):
@@ -575,6 +588,7 @@ class QuicConnectionTest(TestCase):
 
     def test_handle_retire_connection_id_frame(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
             self.assertEqual(
                 sequence_numbers(client._host_cids), [0, 1, 2, 3, 4, 5, 6, 7]
             )
@@ -591,6 +605,11 @@ class QuicConnectionTest(TestCase):
 
     def test_handle_retire_connection_id_frame_current_cid(self):
         with client_and_server() as (client, server):
+            run(client.wait_connected())
+            self.assertEqual(
+                sequence_numbers(client._host_cids), [0, 1, 2, 3, 4, 5, 6, 7]
+            )
+
             # client receives RETIRE_CONNECTION_ID for the current CID
             with self.assertRaises(QuicConnectionError) as cm:
                 client._handle_retire_connection_id_frame(
@@ -876,6 +895,9 @@ class QuicConnectionTest(TestCase):
                 )
             }
         ) as (client, server):
+            # complete handshake
+            run(client.wait_connected())
+
             # cause packet loss in both directions
             client._transport.loss = 0.25
             server._transport.loss = 0.25
