@@ -933,7 +933,7 @@ class QuicConnectionTest(TestCase):
             transport_options={"loss": 0.25},
         ) as (client, server):
             # complete handshake
-            run(client.wait_connected())
+            run(asyncio.gather(client.wait_connected(), server.wait_connected()))
 
             # create stream and send data
             client_reader, client_writer = run(client.create_stream())
