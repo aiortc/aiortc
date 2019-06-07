@@ -18,11 +18,11 @@ class SessionTicketStore:
         return self.tickets.pop(label, None)
 
 
-async def run_client(host, **kwargs):
+async def run_client(host, request=b"ping", **kwargs):
     async with connect(host, 4433, **kwargs) as client:
         reader, writer = await client.create_stream()
 
-        writer.write(b"ping")
+        writer.write(request)
         writer.write_eof()
 
         return await reader.read()
@@ -50,10 +50,18 @@ async def run_server(**kwargs):
 
 class HighLevelTest(TestCase):
     def test_connect_and_serve(self):
-        _, response = run(
-            asyncio.gather(run_server(stateless_retry=False), run_client("127.0.0.1"))
-        )
+        _, response = run(asyncio.gather(run_server(), run_client("127.0.0.1")))
         self.assertEqual(response, b"gnip")
+
+    def test_connect_and_serve_large(self):
+        """
+        Transfer enough data to require raising MAX_DATA and MAX_STREAM_DATA.
+        """
+        data = b"Z" * 2097152
+        _, response = run(
+            asyncio.gather(run_server(), run_client("127.0.0.1", request=data))
+        )
+        self.assertEqual(response, data)
 
     def test_connect_and_serve_with_session_ticket(self):
         client_ticket = None
@@ -84,9 +92,7 @@ class HighLevelTest(TestCase):
         self.assertEqual(response, b"gnip")
 
     def test_connect_and_serve_with_sni(self):
-        _, response = run(
-            asyncio.gather(run_server(stateless_retry=False), run_client("localhost"))
-        )
+        _, response = run(asyncio.gather(run_server(), run_client("localhost")))
         self.assertEqual(response, b"gnip")
 
     def test_connect_and_serve_with_stateless_retry(self):
@@ -98,8 +104,7 @@ class HighLevelTest(TestCase):
     def test_connect_and_serve_with_version_negotiation(self):
         _, response = run(
             asyncio.gather(
-                run_server(stateless_retry=False),
-                run_client("127.0.0.1", protocol_version=0x1A2A3A4A),
+                run_server(), run_client("127.0.0.1", protocol_version=0x1A2A3A4A)
             )
         )
         self.assertEqual(response, b"gnip")
