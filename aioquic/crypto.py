@@ -178,7 +178,8 @@ class CryptoContext:
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int, expected_packet_number: int
     ) -> Tuple[bytes, bytes, int, bool]:
-        assert self.is_valid(), "Decryption key is not available"
+        if self.aead is None:
+            raise CryptoError("Decryption key is not available")
 
         # header protection
         packet = bytearray(packet)

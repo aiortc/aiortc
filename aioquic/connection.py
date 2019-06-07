@@ -473,7 +473,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
             )
             self._send_pending()
-            for epoch, space in self.spaces.items():
+            for epoch in self.spaces.keys():
                 self._discard_epoch(epoch)
 
     def connect(
@@ -651,14 +651,12 @@ class QuicConnection(asyncio.DatagramProtocol):
             end_off = buf.tell() + header.rest_length
             pull_bytes(buf, header.rest_length)
 
-            if not crypto.recv.is_valid():
-                continue
             try:
                 plain_header, plain_payload, packet_number = crypto.decrypt_packet(
                     data[start_off:end_off], encrypted_off, space.expected_packet_number
                 )
             except CryptoError as exc:
-                self._logger.warning(exc)
+                self._logger.debug(exc)
                 continue
             if packet_number > space.expected_packet_number:
                 space.expected_packet_number = packet_number + 1
@@ -1437,6 +1435,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             self._write_application(builder, network_path)
         datagrams, packets = builder.flush()
+        sent_handshake = False
 
         if datagrams:
             self._packet_number = builder.packet_number
@@ -1451,6 +1450,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._loss.on_packet_sent(
                     packet=packet, space=self.spaces[packet.epoch]
                 )
+                if packet.epoch == tls.Epoch.HANDSHAKE:
+                    sent_handshake = True
+
+        # discard initial keys and packet space
+        if sent_handshake and self.is_client:
+            self._discard_epoch(tls.Epoch.INITIAL)
 
         # arm loss timer
         self._set_loss_detection_timer()
@@ -1731,10 +1736,6 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             if not builder.end_packet():
                 break
-
-            # discard initial keys and packet space
-            if self.is_client and epoch == tls.Epoch.HANDSHAKE:
-                self._discard_epoch(tls.Epoch.INITIAL)
 
     def _write_connection_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace
