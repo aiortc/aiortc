@@ -264,6 +264,7 @@ class QuicReceiveContext:
     epoch: tls.Epoch
     host_cid: bytes
     network_path: QuicNetworkPath
+    time: float
 
     def __str__(self) -> str:
         return self.epoch.name
@@ -349,7 +350,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
-        self._local_idle_timeout = 60000  # milliseconds
+        self._idle_timeout_at: Optional[float] = None
+        self._local_idle_timeout = 60.0  # seconds
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
         self._local_max_data_used = 0
@@ -362,16 +364,16 @@ class QuicConnection(asyncio.DatagramProtocol):
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
         self._loss = QuicPacketRecovery(
-            logger=self._logger, get_time=self._loop.time, send_probe=self._send_probe
+            logger=self._logger, send_probe=self._send_probe
         )
-        self._loss_timer: Optional[asyncio.TimerHandle] = None
+        self._loss_detection_at: Optional[float] = None
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
         self._packet_number = 0
         self._parameters_available = asyncio.Event()
         self._parameters_received = False
         self._ping_waiter: Optional[asyncio.Future[None]] = None
-        self._remote_idle_timeout = 0  # milliseconds
+        self._remote_idle_timeout = 0.0  # seconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
         self._remote_max_stream_data_bidi_local = 0
@@ -385,6 +387,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._spin_highest_pn = 0
         self.__send_pending_task: Optional[asyncio.Handle] = None
         self.__state = QuicConnectionState.FIRSTFLIGHT
+        self._timer: Optional[asyncio.TimerHandle] = None
+        self._timer_at: Optional[float] = None
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._version: Optional[int] = None
 
@@ -576,6 +580,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         data = cast(bytes, data)
         buf = Buffer(data=data)
+        now = self._loop.time()
         while not buf.eof():
             start_off = buf.tell()
             header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
@@ -683,7 +688,10 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # handle payload
             context = QuicReceiveContext(
-                epoch=epoch, host_cid=header.destination_cid, network_path=network_path
+                epoch=epoch,
+                host_cid=header.destination_cid,
+                network_path=network_path,
+                time=now,
             )
             try:
                 is_ack_eliciting, is_probing = self._payload_received(
@@ -697,6 +705,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     reason_phrase=exc.reason_phrase,
                 )
                 return
+            self._idle_timeout_at = now + self._local_idle_timeout
 
             # handle migration
             if (
@@ -769,6 +778,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         assert self.is_client
 
+        self._idle_timeout_at = self._loop.time() + self._local_idle_timeout
         self._initialize(self.peer_cid)
 
         self.tls.handle_message(b"", self.send_buffer)
@@ -934,6 +944,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             space=self.spaces[context.epoch],
             ack_rangeset=ack_rangeset,
             ack_delay_encoded=ack_delay_encoded,
+            now=context.time,
         )
 
         # check if we can discard handshake keys
@@ -1279,11 +1290,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         if delivery != QuicDeliveryState.ACKED:
             stream.max_stream_data_local_sent = 0
 
-    def _on_loss_detection_timeout(self) -> None:
-        self._loss_timer = None
-        self._loss.on_loss_detection_timeout()
-        self._send_pending()
-
     def _on_new_connection_id_delivery(
         self, delivery: QuicDeliveryState, connection_id: QuicConnectionId
     ) -> None:
@@ -1313,6 +1319,23 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         if delivery != QuicDeliveryState.ACKED:
             self._retire_connection_ids.append(sequence_number)
+
+    def _on_timeout(self) -> None:
+        self._timer = None
+        self._timer_at = None
+
+        # idle timeout
+        if self._loop.time() >= self._idle_timeout_at:
+            self._logger.info("Idle timeout expired")
+            self._set_state(QuicConnectionState.DRAINING)
+            self.connection_lost(None)
+            for epoch in self.spaces.keys():
+                self._discard_epoch(epoch)
+            return
+
+        # loss detection timeout
+        self._loss.on_loss_detection_timeout(now=self._loop.time())
+        self._send_pending()
 
     def _payload_received(
         self, context: QuicReceiveContext, plain: bytes
@@ -1434,8 +1457,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                 network_path.bytes_sent += len(datagram)
 
             # register packets
+            now = self._loop.time()
             sent_handshake = False
             for packet in packets:
+                packet.sent_time = now
                 self._loss.on_packet_sent(
                     packet=packet, space=self.spaces[packet.epoch]
                 )
@@ -1446,8 +1471,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             if sent_handshake and self.is_client:
                 self._discard_epoch(tls.Epoch.INITIAL)
 
-        # arm loss timer
-        self._set_loss_detection_timer()
+        # arm timer
+        self._set_timer()
 
     def _send_probe(self) -> None:
         self._probe_pending = True
@@ -1478,7 +1503,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # store remote parameters
         if quic_transport_parameters.idle_timeout is not None:
-            self._remote_idle_timeout = quic_transport_parameters.idle_timeout
+            self._remote_idle_timeout = quic_transport_parameters.idle_timeout / 1000.0
         for param in ["ack_delay_exponent", "max_ack_delay"]:
             value = getattr(quic_transport_parameters, param)
             if value is not None:
@@ -1501,7 +1526,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
-            idle_timeout=self._local_idle_timeout,
+            idle_timeout=int(self._local_idle_timeout * 1000),
             initial_max_data=self._local_max_data,
             initial_max_stream_data_bidi_local=self._local_max_stream_data_bidi_local,
             initial_max_stream_data_bidi_remote=self._local_max_stream_data_bidi_remote,
@@ -1519,26 +1544,30 @@ class QuicConnection(asyncio.DatagramProtocol):
         push_quic_transport_parameters(buf, quic_transport_parameters)
         return buf.data
 
-    def _set_loss_detection_timer(self) -> None:
-        # stop timer
-        if self._loss_timer is not None:
-            self._loss_timer.cancel()
-            self._loss_timer = None
+    def _set_state(self, state: QuicConnectionState) -> None:
+        self._logger.info("%s -> %s", self.__state, state)
+        self.__state = state
 
-        # re-arm timer
+    def _set_timer(self) -> None:
+        # determine earliest timeout
         if self.__state not in [
             QuicConnectionState.CLOSING,
             QuicConnectionState.DRAINING,
         ]:
-            loss_time = self._loss.get_loss_detection_time()
-            if loss_time is not None:
-                self._loss_timer = self._loop.call_at(
-                    loss_time, self._on_loss_detection_timeout
-                )
+            timer_at = self._idle_timeout_at
+            loss_at = self._loss.get_loss_detection_time()
+            if loss_at is not None and loss_at < timer_at:
+                timer_at = loss_at
+        else:
+            timer_at = None
 
-    def _set_state(self, state: QuicConnectionState) -> None:
-        self._logger.info("%s -> %s", self.__state, state)
-        self.__state = state
+        # re-arm timer
+        if self._timer is not None and self._timer_at != timer_at:
+            self._timer.cancel()
+            self._timer = None
+        if self._timer is None and timer_at is not None:
+            self._timer = self._loop.call_at(timer_at, self._on_timeout)
+        self._timer_at = timer_at
 
     def _stream_can_receive(self, stream_id: int) -> bool:
         return stream_is_client_initiated(
