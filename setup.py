@@ -9,7 +9,7 @@ with open(readme_file, encoding='utf-8') as f:
 
 setuptools.setup(
     name='aioquic',
-    version='0.0.1',
+    version='0.1.0',
     description='An implementation of QUIC',
     long_description=long_description,
     url='https://github.com/aiortc/aioquic',
@@ -17,15 +17,13 @@ setuptools.setup(
     author_email='jeremy.laine@m4x.org',
     license='BSD',
     classifiers=[
-        'Development Status :: 1 - Planning',
+        'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
     packages=['aioquic'],
