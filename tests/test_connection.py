@@ -320,7 +320,7 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(server._transport.sent, 3)
 
             # mess with encryption key
-            server.cryptos[tls.Epoch.ONE_RTT].send.setup(
+            server._cryptos[tls.Epoch.ONE_RTT].send.setup(
                 tls.CipherSuite.AES_128_GCM_SHA256, bytes(48)
             )
 
@@ -351,7 +351,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
         builder = QuicPacketBuilder(
-            host_cid=client.peer_cid,
+            host_cid=client._peer_cid,
             peer_cid=client.host_cid,
             version=0xFF000011,  # DRAFT_16
         )
@@ -374,7 +374,7 @@ class QuicConnectionTest(TestCase):
                 version=QuicProtocolVersion.DRAFT_20,
                 source_cid=binascii.unhexlify("85abb547bf28be97"),
                 destination_cid=client.host_cid,
-                original_destination_cid=client.peer_cid,
+                original_destination_cid=client._peer_cid,
                 retry_token=bytes(16),
             ),
             SERVER_ADDR,
@@ -390,7 +390,7 @@ class QuicConnectionTest(TestCase):
                 version=QuicProtocolVersion.DRAFT_20,
                 source_cid=binascii.unhexlify("85abb547bf28be97"),
                 destination_cid=binascii.unhexlify("c98343fe8f5f0ff4"),
-                original_destination_cid=client.peer_cid,
+                original_destination_cid=client._peer_cid,
                 retry_token=bytes(16),
             ),
             SERVER_ADDR,
@@ -853,7 +853,7 @@ class QuicConnectionTest(TestCase):
         # no common version, no retry
         client.datagram_received(
             encode_quic_version_negotiation(
-                source_cid=client.peer_cid,
+                source_cid=client._peer_cid,
                 destination_cid=client.host_cid,
                 supported_versions=[0xFF000011],  # DRAFT_16
             ),
@@ -868,7 +868,7 @@ class QuicConnectionTest(TestCase):
         # found a common version, retry
         client.datagram_received(
             encode_quic_version_negotiation(
-                source_cid=client.peer_cid,
+                source_cid=client._peer_cid,
                 destination_cid=client.host_cid,
                 supported_versions=[QuicProtocolVersion.DRAFT_19],
             ),

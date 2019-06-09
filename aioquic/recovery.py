@@ -1,4 +1,3 @@
-import logging
 import math
 from typing import Callable, Dict, List, Optional
 
@@ -37,15 +36,12 @@ class QuicPacketRecovery:
     Packet loss and congestion controller.
     """
 
-    def __init__(
-        self, logger: logging.LoggerAdapter, send_probe: Callable[[], None]
-    ) -> None:
+    def __init__(self, send_probe: Callable[[], None]) -> None:
         self.ack_delay_exponent = 3
         self.max_ack_delay = 25  # ms
         self.spaces: List[QuicPacketSpace] = []
 
         # callbacks
-        self._logger = logger
         self._send_probe = send_probe
 
         # loss detection
@@ -235,7 +231,6 @@ class QuicPacketRecovery:
         self._pto_count = 0
 
     def on_loss_detection_timeout(self, now: float) -> None:
-        self._logger.info("Loss detection timeout triggered")
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             self.detect_loss(loss_space, now=now)
