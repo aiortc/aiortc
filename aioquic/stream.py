@@ -18,6 +18,7 @@ class QuicStream(asyncio.Transport):
         self.max_stream_data_local = max_stream_data_local
         self.max_stream_data_local_sent = max_stream_data_local
         self.max_stream_data_remote = max_stream_data_remote
+        self.send_buffer_is_empty = True
 
         if stream_id is not None:
             self.reader = asyncio.StreamReader()
@@ -144,6 +145,8 @@ class QuicStream(asyncio.Transport):
                 # FIN only
                 self._send_pending_eof = False
                 return QuicStreamFrame(fin=True, offset=self._send_buffer_fin)
+
+            self.send_buffer_is_empty = True
             return None
 
         # apply flow control
@@ -180,6 +183,7 @@ class QuicStream(asyncio.Transport):
         """
         Callback when sent data is ACK'd.
         """
+        self.send_buffer_is_empty = False
         if delivery == QuicDeliveryState.ACKED:
             if stop > start:
                 self._send_acked.add(start, stop)
@@ -223,6 +227,7 @@ class QuicStream(asyncio.Transport):
         size = len(data)
 
         if size:
+            self.send_buffer_is_empty = False
             self._send_pending.add(
                 self._send_buffer_stop, self._send_buffer_stop + size
             )
@@ -234,6 +239,7 @@ class QuicStream(asyncio.Transport):
     def write_eof(self) -> None:
         assert self._send_buffer_fin is None, "cannot call write_eof() after FIN"
 
+        self.send_buffer_is_empty = False
         self._send_buffer_fin = self._send_buffer_stop
         self._send_pending_eof = True
         if self._connection is not None:

@@ -1715,22 +1715,23 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._probe_pending = False
 
             # CRYPTO
-            if crypto_stream is not None:
+            if crypto_stream is not None and not crypto_stream.send_buffer_is_empty:
                 write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
 
             for stream in self._streams.values():
                 # STREAM
-                self._remote_max_data_used += write_stream_frame(
-                    builder=builder,
-                    space=space,
-                    stream=stream,
-                    max_offset=min(
-                        stream._send_highest
-                        + self._remote_max_data
-                        - self._remote_max_data_used,
-                        stream.max_stream_data_remote,
-                    ),
-                )
+                if not stream.send_buffer_is_empty:
+                    self._remote_max_data_used += write_stream_frame(
+                        builder=builder,
+                        space=space,
+                        stream=stream,
+                        max_offset=min(
+                            stream._send_highest
+                            + self._remote_max_data
+                            - self._remote_max_data_used,
+                            stream.max_stream_data_remote,
+                        ),
+                    )
 
             if not builder.end_packet():
                 break
@@ -1743,6 +1744,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             return
 
         buf = builder.buffer
+        crypto_stream = self._crypto_streams[epoch]
         space = self._spaces[epoch]
 
         while builder.flight_bytes < max_bytes:
@@ -1759,9 +1761,8 @@ class QuicConnection(asyncio.DatagramProtocol):
                 space.ack_required = False
 
             # CRYPTO
-            write_crypto_frame(
-                builder=builder, space=space, stream=self._crypto_streams[epoch]
-            )
+            if not crypto_stream.send_buffer_is_empty:
+                write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
 
             if not builder.end_packet():
                 break
