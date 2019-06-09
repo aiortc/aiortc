@@ -22,6 +22,7 @@ class QuicPacketSpace:
         self.ack_queue = RangeSet()
         self.ack_required = False
         self.expected_packet_number = 0
+        self.largest_received_packet = 0
 
         # sent packets and loss
         self.ack_eliciting_in_flight = 0

@@ -729,6 +729,8 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._network_paths.insert(0, network_path)
 
             # record packet as received
+            if packet_number > space.largest_received_packet:
+                space.largest_received_packet = packet_number
             space.ack_queue.add(packet_number)
             if len(space.ack_queue) > 63:
                 space.ack_queue.shift()
@@ -1282,6 +1284,12 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         pull_uint_var(buf)  # limit
 
+    def _on_ack_delivery(
+        self, delivery: QuicDeliveryState, space: QuicPacketSpace, highest_acked: int
+    ) -> None:
+        if delivery == QuicDeliveryState.ACKED:
+            space.ack_queue.subtract(0, highest_acked + 1)
+
     def _on_max_data_delivery(self, delivery: QuicDeliveryState) -> None:
         if delivery != QuicDeliveryState.ACKED:
             self._local_max_data_sent = 0
@@ -1633,7 +1641,11 @@ class QuicConnection(asyncio.DatagramProtocol):
             if self._handshake_complete:
                 # ACK
                 if space.ack_required:
-                    builder.start_frame(QuicFrameType.ACK)
+                    builder.start_frame(
+                        QuicFrameType.ACK,
+                        self._on_ack_delivery,
+                        (space, space.largest_received_packet),
+                    )
                     push_ack_frame(buf, space.ack_queue, 0)
                     space.ack_required = False
 
