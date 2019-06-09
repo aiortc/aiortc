@@ -313,7 +313,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._closed = asyncio.Event()
         self._connect_called = False
         self._connected_waiter = loop.create_future()
-        self._cryptos: Dict[Union[tls.Epoch, int], CryptoPair] = {}
+        self._cryptos: Dict[tls.Epoch, CryptoPair] = {}
+        self._crypto_buffers: Dict[tls.Epoch, Buffer] = {}
+        self._crypto_streams: Dict[tls.Epoch, QuicStream] = {}
         self._handshake_complete = False
         self._handshake_confirmed = False
         self._host_cids = [
@@ -365,7 +367,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._spin_bit_peer = False
         self._spin_highest_pn = 0
         self._state = QuicConnectionState.FIRSTFLIGHT
-        self._streams: Dict[Union[tls.Epoch, int], QuicStream] = {}
+        self._streams: Dict[int, QuicStream] = {}
         self._timer: Optional[asyncio.TimerHandle] = None
         self._timer_at: Optional[float] = None
         self._transport: Optional[asyncio.DatagramTransport] = None
@@ -781,7 +783,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._close_at = self._loop.time() + self._local_idle_timeout
         self._initialize(self._peer_cid)
 
-        self.tls.handle_message(b"", self.send_buffer)
+        self.tls.handle_message(b"", self._crypto_buffers)
         self._push_crypto_data()
         self._send_pending()
 
@@ -907,19 +909,21 @@ class QuicConnection(asyncio.DatagramProtocol):
             tls.Epoch.HANDSHAKE: CryptoPair(),
             tls.Epoch.ONE_RTT: CryptoPair(),
         }
-        self.send_buffer = {
+        self._crypto_buffers = {
             tls.Epoch.INITIAL: Buffer(capacity=4096),
             tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
             tls.Epoch.ONE_RTT: Buffer(capacity=4096),
+        }
+        self._crypto_streams = {
+            tls.Epoch.INITIAL: QuicStream(),
+            tls.Epoch.HANDSHAKE: QuicStream(),
+            tls.Epoch.ONE_RTT: QuicStream(),
         }
         self._spaces = {
             tls.Epoch.INITIAL: QuicPacketSpace(),
             tls.Epoch.HANDSHAKE: QuicPacketSpace(),
             tls.Epoch.ONE_RTT: QuicPacketSpace(),
         }
-        self._streams[tls.Epoch.INITIAL] = QuicStream()
-        self._streams[tls.Epoch.HANDSHAKE] = QuicStream()
-        self._streams[tls.Epoch.ONE_RTT] = QuicStream()
 
         self._cryptos[tls.Epoch.INITIAL].setup_initial(
             cid=peer_cid, is_client=self.is_client
@@ -984,13 +988,13 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Handle a CRYPTO frame.
         """
-        stream = self._streams[context.epoch]
+        stream = self._crypto_streams[context.epoch]
         stream.add_frame(pull_crypto_frame(buf))
         data = stream.pull_data()
         if data:
             # pass data to TLS layer
             try:
-                self.tls.handle_message(data, self.send_buffer)
+                self.tls.handle_message(data, self._crypto_buffers)
                 self._push_crypto_data()
             except tls.Alert as exc:
                 raise QuicConnectionError(
@@ -1400,8 +1404,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._host_cid_seq += 1
 
     def _push_crypto_data(self) -> None:
-        for epoch, buf in self.send_buffer.items():
-            self._streams[epoch].write(buf.data)
+        for epoch, buf in self._crypto_buffers.items():
+            self._crypto_streams[epoch].write(buf.data)
             buf.seek(0)
 
     def _send_pending(self) -> None:
@@ -1608,10 +1612,10 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _write_application(
         self, builder: QuicPacketBuilder, max_bytes: int, network_path: QuicNetworkPath
     ) -> None:
-        crypto_stream_id: Optional[tls.Epoch] = None
+        crypto_stream: Optional[QuicStream] = None
         if self._cryptos[tls.Epoch.ONE_RTT].send.is_valid():
             crypto = self._cryptos[tls.Epoch.ONE_RTT]
-            crypto_stream_id = tls.Epoch.ONE_RTT
+            crypto_stream = self._crypto_streams[tls.Epoch.ONE_RTT]
             packet_type = PACKET_TYPE_ONE_RTT
         elif self._cryptos[tls.Epoch.ZERO_RTT].send.is_valid():
             crypto = self._cryptos[tls.Epoch.ZERO_RTT]
@@ -1682,11 +1686,8 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._write_connection_limits(builder=builder, space=space)
 
             # stream-level limits
-            for stream_id, stream in self._streams.items():
-                if isinstance(stream_id, int):
-                    self._write_stream_limits(
-                        builder=builder, space=space, stream=stream
-                    )
+            for stream in self._streams.values():
+                self._write_stream_limits(builder=builder, space=space, stream=stream)
 
             # PING (user-request)
             if self._ping_pending:
@@ -1700,24 +1701,23 @@ class QuicConnection(asyncio.DatagramProtocol):
                 builder.start_frame(QuicFrameType.PING)
                 self._probe_pending = False
 
-            for stream_id, stream in self._streams.items():
-                # CRYPTO
-                if stream_id == crypto_stream_id:
-                    write_crypto_frame(builder=builder, space=space, stream=stream)
+            # CRYPTO
+            if crypto_stream is not None:
+                write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
 
+            for stream in self._streams.values():
                 # STREAM
-                elif isinstance(stream_id, int):
-                    self._remote_max_data_used += write_stream_frame(
-                        builder=builder,
-                        space=space,
-                        stream=stream,
-                        max_offset=min(
-                            stream._send_highest
-                            + self._remote_max_data
-                            - self._remote_max_data_used,
-                            stream.max_stream_data_remote,
-                        ),
-                    )
+                self._remote_max_data_used += write_stream_frame(
+                    builder=builder,
+                    space=space,
+                    stream=stream,
+                    max_offset=min(
+                        stream._send_highest
+                        + self._remote_max_data
+                        - self._remote_max_data_used,
+                        stream.max_stream_data_remote,
+                    ),
+                )
 
             if not builder.end_packet():
                 break
@@ -1747,7 +1747,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             # CRYPTO
             write_crypto_frame(
-                builder=builder, space=space, stream=self._streams[epoch]
+                builder=builder, space=space, stream=self._crypto_streams[epoch]
             )
 
             if not builder.end_packet():
