@@ -77,3 +77,4 @@ async def connect(
         yield protocol
     finally:
         protocol.close()
+    await protocol.wait_closed()

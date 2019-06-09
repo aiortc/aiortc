@@ -270,17 +270,6 @@ class QuicReceiveContext:
         return self.epoch.name
 
 
-def maybe_connection_error(
-    error_code: int, frame_type: Optional[int], reason_phrase: str
-) -> Optional[QuicConnectionError]:
-    if error_code != QuicErrorCode.NO_ERROR:
-        return QuicConnectionError(
-            error_code=error_code, frame_type=frame_type, reason_phrase=reason_phrase
-        )
-    else:
-        return None
-
-
 QuicConnectionIdHandler = Callable[[bytes], None]
 QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
 
@@ -316,6 +305,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             assert certificate is not None, "SSL certificate is required for a server"
             assert private_key is not None, "SSL private key is required for a server"
 
+        loop = asyncio.get_event_loop()
         self.is_client = is_client
         if supported_versions is not None:
             self.supported_versions = supported_versions
@@ -331,8 +321,11 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._secrets_log_file = secrets_log_file
         self._server_name = server_name
 
+        self._close_at: Optional[float] = None
+        self._close_exception: Optional[Exception] = None
+        self._closed = asyncio.Event()
         self._connect_called = False
-        self._connected = asyncio.Event()
+        self._connected_waiter = loop.create_future()
         self._cryptos: Dict[Union[tls.Epoch, int], CryptoPair] = {}
         self._handshake_complete = False
         self._handshake_confirmed = False
@@ -346,7 +339,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
-        self._idle_timeout_at: Optional[float] = None
         self._local_idle_timeout = 60.0  # seconds
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
@@ -356,7 +348,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._local_max_stream_data_uni = MAX_DATA_WINDOW
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
-        self._loop = asyncio.get_event_loop()
+        self._loop = loop
         self._logger = QuicConnectionAdapter(
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
@@ -468,17 +460,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 "frame_type": frame_type,
                 "reason_phrase": reason_phrase,
             }
-            self._set_state(QuicConnectionState.CLOSING)
-            self.connection_lost(
-                maybe_connection_error(
-                    error_code=error_code,
-                    frame_type=frame_type,
-                    reason_phrase=reason_phrase,
-                )
-            )
             self._send_pending()
-            for epoch in self._spaces.keys():
-                self._discard_epoch(epoch)
 
     def connect(
         self, addr: NetworkAddress, protocol_version: Optional[int] = None
@@ -556,17 +538,29 @@ class QuicConnection(asyncio.DatagramProtocol):
         assert self._handshake_complete, "cannot change key before handshake completes"
         self._cryptos[tls.Epoch.ONE_RTT].update_key()
 
+    async def wait_closed(self) -> None:
+        """
+        Wait for the connection to be closed.
+        """
+        await self._closed.wait()
+
     async def wait_connected(self) -> None:
         """
         Wait for the TLS handshake to complete.
         """
-        await self._connected.wait()
+        await asyncio.shield(self._connected_waiter)
 
     # asyncio.DatagramProtocol
 
     def connection_lost(self, exc: Exception) -> None:
+        self._logger.info("Connection closed")
+        for epoch in self._spaces.keys():
+            self._discard_epoch(epoch)
         for stream in self._streams.values():
             stream.connection_lost(exc)
+        if not self._connected_waiter.done():
+            self._connected_waiter.set_exception(exc)
+        self._closed.set()
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self._transport = cast(asyncio.DatagramTransport, transport)
@@ -604,6 +598,13 @@ class QuicConnection(asyncio.DatagramProtocol):
                 common = set(self.supported_versions).intersection(versions)
                 if not common:
                     self._logger.error("Could not find a common protocol version")
+                    self.connection_lost(
+                        QuicConnectionError(
+                            error_code=QuicErrorCode.INTERNAL_ERROR,
+                            frame_type=None,
+                            reason_phrase="Could not find a common protocol version",
+                        )
+                    )
                     return
                 self._version = QuicProtocolVersion(max(common))
                 self._version_negotiation_count += 1
@@ -700,13 +701,14 @@ class QuicConnection(asyncio.DatagramProtocol):
                 )
             except QuicConnectionError as exc:
                 self._logger.warning(exc)
+                self._close_exception = exc
                 self.close(
                     error_code=exc.error_code,
                     frame_type=exc.frame_type,
                     reason_phrase=exc.reason_phrase,
                 )
                 return
-            self._idle_timeout_at = now + self._local_idle_timeout
+            self._close_at = now + self._local_idle_timeout
 
             # handle migration
             if (
@@ -773,13 +775,23 @@ class QuicConnection(asyncio.DatagramProtocol):
                 reason_phrase="Stream is receive-only",
             )
 
+    def _close(self, is_initiator: bool) -> None:
+        """
+        Start the close procedure.
+        """
+        self._close_at = self._loop.time() + 3 * self._loss.get_probe_timeout()
+        if is_initiator:
+            self._set_state(QuicConnectionState.CLOSING)
+        else:
+            self._set_state(QuicConnectionState.DRAINING)
+
     def _connect(self) -> None:
         """
         Start the client handshake.
         """
         assert self.is_client
 
-        self._idle_timeout_at = self._loop.time() + self._local_idle_timeout
+        self._close_at = self._loop.time() + self._local_idle_timeout
         self._initialize(self._peer_cid)
 
         self.tls.handle_message(b"", self.send_buffer)
@@ -971,14 +983,13 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._logger.info(
             "Connection close code 0x%X, reason %s", error_code, reason_phrase
         )
-        self._set_state(QuicConnectionState.DRAINING)
-        self.connection_lost(
-            maybe_connection_error(
+        if error_code != QuicErrorCode.NO_ERROR:
+            self._close_exception = QuicConnectionError(
                 error_code=error_code,
                 frame_type=frame_type,
                 reason_phrase=reason_phrase,
             )
-        )
+        self._close(is_initiator=False)
 
     def _handle_crypto_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1024,8 +1035,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 self._handshake_complete = True
                 self._replenish_connection_ids()
                 # wakeup waiter
-                if not self._connected.is_set():
-                    self._connected.set()
+                self._connected_waiter.set_result(None)
 
     def _handle_data_blocked_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1326,12 +1336,8 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._timer_at = None
 
         # idle timeout
-        if self._loop.time() >= self._idle_timeout_at:
-            self._logger.info("Idle timeout expired")
-            self._set_state(QuicConnectionState.DRAINING)
-            self.connection_lost(None)
-            for epoch in self._spaces.keys():
-                self._discard_epoch(epoch)
+        if self._loop.time() >= self._close_at:
+            self.connection_lost(self._close_exception)
             return
 
         # loss detection timeout
@@ -1415,7 +1421,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         network_path = self._network_paths[0]
 
         self._send_task = None
-        if self._state == QuicConnectionState.DRAINING:
+        if self._state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
             return
 
         # build datagrams
@@ -1443,6 +1449,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     builder.end_packet()
                     self._close_pending = None
                     break
+            self._close(is_initiator=True)
         else:
             if not self._handshake_confirmed:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
@@ -1552,16 +1559,14 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _set_timer(self) -> None:
         # determine earliest timeout
+        timer_at = self._close_at
         if self._state not in [
             QuicConnectionState.CLOSING,
             QuicConnectionState.DRAINING,
         ]:
-            timer_at = self._idle_timeout_at
             loss_at = self._loss.get_loss_detection_time()
             if loss_at is not None and loss_at < timer_at:
                 timer_at = loss_at
-        else:
-            timer_at = None
 
         # re-arm timer
         if self._timer is not None and self._timer_at != timer_at:

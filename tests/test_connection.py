@@ -342,9 +342,13 @@ class QuicConnectionTest(TestCase):
 
         # handshake fails
         with client_and_server(client_patch=patch) as (client, server):
-            run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 1)
-            self.assertEqual(server._transport.sent, 1)
+            with self.assertRaises(QuicConnectionError) as cm:
+                run(server.wait_connected())
+            self.assertEqual(cm.exception.error_code, 326)
+            self.assertEqual(cm.exception.frame_type, QuicFrameType.CRYPTO)
+            self.assertEqual(
+                cm.exception.reason_phrase, "No supported protocol version"
+            )
 
     def test_datagram_received_wrong_version(self):
         client, client_transport = create_standalone_client()
@@ -860,6 +864,14 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
         )
         self.assertEqual(client_transport.sent, 1)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            run(client.wait_connected())
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.INTERNAL_ERROR)
+        self.assertEqual(cm.exception.frame_type, None)
+        self.assertEqual(
+            cm.exception.reason_phrase, "Could not find a common protocol version"
+        )
 
     def test_version_negotiation_ok(self):
         client, client_transport = create_standalone_client()
