@@ -260,6 +260,8 @@ class QuicReceiveContext:
 QuicConnectionIdHandler = Callable[[bytes], None]
 QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
 
+END_STATES = set([QuicConnectionState.CLOSING, QuicConnectionState.DRAINING])
+
 
 class QuicConnection(asyncio.DatagramProtocol):
     """
@@ -440,10 +442,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Close the connection.
         """
-        if self._state not in [
-            QuicConnectionState.CLOSING,
-            QuicConnectionState.DRAINING,
-        ]:
+        if self._state not in END_STATES:
             self._close_pending = {
                 "error_code": error_code,
                 "frame_type": frame_type,
@@ -559,7 +558,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle an incoming datagram.
         """
         # stop handling packets when closing
-        if self._state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
+        if self._state in END_STATES:
             return
 
         data = cast(bytes, data)
@@ -696,7 +695,10 @@ class QuicConnection(asyncio.DatagramProtocol):
                     frame_type=exc.frame_type,
                     reason_phrase=exc.reason_phrase,
                 )
+            if self._state in END_STATES:
                 return
+
+            # update idle timeout
             self._close_at = now + self._local_idle_timeout
 
             # handle migration
@@ -982,7 +984,9 @@ class QuicConnection(asyncio.DatagramProtocol):
                 frame_type=frame_type,
                 reason_phrase=reason_phrase,
             )
+
         self._close(is_initiator=False)
+        self._set_timer()
 
     def _handle_crypto_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1420,7 +1424,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         network_path = self._network_paths[0]
 
         self._send_task = None
-        if self._state in [QuicConnectionState.CLOSING, QuicConnectionState.DRAINING]:
+        if self._state in END_STATES:
             return
 
         # build datagrams
@@ -1566,10 +1570,7 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _set_timer(self) -> None:
         # determine earliest timeout
         timer_at = self._close_at
-        if self._state not in [
-            QuicConnectionState.CLOSING,
-            QuicConnectionState.DRAINING,
-        ]:
+        if self._state not in END_STATES:
             loss_at = self._loss.get_loss_detection_time()
             if loss_at is not None and loss_at < timer_at:
                 timer_at = loss_at

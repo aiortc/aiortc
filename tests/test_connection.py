@@ -343,7 +343,7 @@ class QuicConnectionTest(TestCase):
         # handshake fails
         with client_and_server(client_patch=patch) as (client, server):
             with self.assertRaises(QuicConnectionError) as cm:
-                run(server.wait_connected())
+                run(asyncio.gather(client.wait_connected(), server.wait_connected()))
             self.assertEqual(cm.exception.error_code, 326)
             self.assertEqual(cm.exception.frame_type, QuicFrameType.CRYPTO)
             self.assertEqual(
