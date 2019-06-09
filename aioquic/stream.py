@@ -27,19 +27,19 @@ class QuicStream(asyncio.Transport):
             self.writer = None
 
         self._recv_buffer = bytearray()
-        self._recv_fin = False
+        self._recv_buffer_fin: Optional[int] = None
+        self._recv_buffer_start = 0  # the offset for the start of the buffer
         self._recv_highest = 0  # the highest offset ever seen
-        self._recv_start = 0  # the offset for the start of the buffer
         self._recv_ranges = RangeSet()
 
         self._send_acked = RangeSet()
         self._send_buffer = bytearray()
         self._send_buffer_fin: Optional[int] = None
+        self._send_buffer_start = 0  # the offset for the start of the buffer
+        self._send_buffer_stop = 0  # the offset for the stop of the buffer
         self._send_highest = 0
         self._send_pending = RangeSet()
         self._send_pending_eof = False
-        self._send_buffer_start = 0  # the offset for the start of the buffer
-        self._send_buffer_stop = 0  # the offset for the stop of the buffer
 
         self.__stream_id = stream_id
 
@@ -60,12 +60,12 @@ class QuicStream(asyncio.Transport):
         """
         Add a frame of received data.
         """
-        pos = frame.offset - self._recv_start
+        pos = frame.offset - self._recv_buffer_start
         count = len(frame.data)
         frame_end = frame.offset + count
 
         # we should receive no more data beyond FIN!
-        if self._recv_fin and frame_end > self._recv_highest:
+        if self._recv_buffer_fin is not None and frame_end > self._recv_buffer_fin:
             raise Exception("Data received beyond FIN")
 
         if pos + count > 0:
@@ -89,31 +89,31 @@ class QuicStream(asyncio.Transport):
             self._recv_buffer[pos : pos + count] = frame.data
 
         if frame.fin:
-            self._recv_fin = True
+            self._recv_buffer_fin = frame_end
 
         if self.reader:
-            if self.has_data_to_read():
-                self.reader.feed_data(self.pull_data())
-            if self._recv_fin and not self._recv_ranges:
+            data = self.pull_data()
+            if data:
+                self.reader.feed_data(data)
+            if self._recv_buffer_start == self._recv_buffer_fin:
                 self.reader.feed_eof()
-
-    def has_data_to_read(self) -> bool:
-        return (
-            bool(self._recv_ranges) and self._recv_ranges[0].start == self._recv_start
-        )
 
     def pull_data(self) -> bytes:
         """
         Pull received data.
         """
-        if not self.has_data_to_read():
+        try:
+            has_data_to_read = self._recv_ranges[0].start == self._recv_buffer_start
+        except IndexError:
+            has_data_to_read = False
+        if not has_data_to_read:
             return b""
 
         r = self._recv_ranges.shift()
         pos = r.stop - r.start
         data = self._recv_buffer[:pos]
         self._recv_buffer = self._recv_buffer[pos:]
-        self._recv_start = r.stop
+        self._recv_buffer_start = r.stop
         return data
 
     # writer
