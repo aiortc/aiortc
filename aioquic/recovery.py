@@ -75,29 +75,33 @@ class QuicPacketRecovery:
 
         lost_bytes = 0
         lost_largest_time = None
+        lost_packets = []
         space.loss_time = None
-        for packet_number, packet in list(space.sent_packets.items()):
+        for packet_number, packet in space.sent_packets.items():
             if packet_number > space.largest_acked_packet:
                 break
 
             if packet_number <= packet_threshold or packet.sent_time <= time_threshold:
-                # remove packet and update counters
-                del space.sent_packets[packet_number]
-                if packet.is_ack_eliciting:
-                    space.ack_eliciting_in_flight -= 1
-                if packet.is_crypto_packet:
-                    space.crypto_packet_in_flight -= 1
-                if packet.in_flight:
-                    lost_bytes += packet.sent_bytes
-                    lost_largest_time = packet.sent_time
-
-                # trigger callbacks
-                for handler, args in packet.delivery_handlers:
-                    handler(QuicDeliveryState.LOST, *args)
+                lost_packets.append(packet)
             else:
                 packet_loss_time = packet.sent_time + loss_delay
                 if space.loss_time is None or space.loss_time > packet_loss_time:
                     space.loss_time = packet_loss_time
+
+        for packet in lost_packets:
+            # remove packet and update counters
+            del space.sent_packets[packet.packet_number]
+            if packet.is_ack_eliciting:
+                space.ack_eliciting_in_flight -= 1
+            if packet.is_crypto_packet:
+                space.crypto_packet_in_flight -= 1
+            if packet.in_flight:
+                lost_bytes += packet.sent_bytes
+                lost_largest_time = packet.sent_time
+
+            # trigger callbacks
+            for handler, args in packet.delivery_handlers:
+                handler(QuicDeliveryState.LOST, *args)
 
         if lost_bytes:
             self.on_packets_lost(lost_bytes, lost_largest_time, now=now)
