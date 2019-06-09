@@ -180,11 +180,8 @@ class RangeSetTest(TestCase):
         self.assertEqual(list(rangeset), [range(0, 2), range(5, 10)])
 
     def test_bool(self):
-        rangeset = RangeSet()
-        self.assertFalse(bool(rangeset))
-
-        rangeset = RangeSet([range(0, 1)])
-        self.assertTrue(bool(rangeset))
+        with self.assertRaises(NotImplementedError):
+            bool(RangeSet())
 
     def test_contains(self):
         rangeset = RangeSet()

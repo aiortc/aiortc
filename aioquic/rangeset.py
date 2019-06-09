@@ -76,7 +76,13 @@ class RangeSet(Sequence):
             i += 1
 
     def __bool__(self) -> bool:
-        return bool(self.__ranges)
+        raise NotImplementedError
+
+    def __contains__(self, val: Any) -> bool:
+        for r in self.__ranges:
+            if val in r:
+                return True
+        return False
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, RangeSet):
@@ -86,12 +92,6 @@ class RangeSet(Sequence):
 
     def __getitem__(self, key: Any) -> range:
         return self.__ranges[key]
-
-    def __contains__(self, val: Any) -> bool:
-        for r in self.__ranges:
-            if val in r:
-                return True
-        return False
 
     def __len__(self) -> int:
         return len(self.__ranges)

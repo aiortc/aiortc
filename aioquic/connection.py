@@ -1632,7 +1632,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             if self._handshake_complete:
                 # ACK
-                if space.ack_required and space.ack_queue:
+                if space.ack_required:
                     builder.start_frame(QuicFrameType.ACK)
                     push_ack_frame(buf, space.ack_queue, 0)
                     space.ack_required = False
@@ -1740,7 +1740,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             builder.start_packet(packet_type, crypto)
 
             # ACK
-            if space.ack_required and space.ack_queue:
+            if space.ack_required:
                 builder.start_frame(QuicFrameType.ACK)
                 push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_required = False
