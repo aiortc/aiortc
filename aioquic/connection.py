@@ -1438,10 +1438,17 @@ class QuicConnection(asyncio.DatagramProtocol):
                     break
             self._close(is_initiator=True)
         else:
+            # data is limited by congestion control and whether the network path is validated
+            max_bytes = self._loss.congestion_window - self._loss.bytes_in_flight
+            if not network_path.is_validated:
+                max_bytes = min(
+                    max_bytes, network_path.bytes_received * 3 - network_path.bytes_sent
+                )
+
             if not self._handshake_confirmed:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
-                    self._write_handshake(builder, epoch)
-            self._write_application(builder, network_path)
+                    self._write_handshake(builder, epoch, max_bytes)
+            self._write_application(builder, max_bytes, network_path)
         datagrams, packets = builder.flush()
 
         if datagrams:
@@ -1599,7 +1606,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             crypto.recv.setup(cipher_suite, secret)
 
     def _write_application(
-        self, builder: QuicPacketBuilder, network_path: QuicNetworkPath
+        self, builder: QuicPacketBuilder, max_bytes: int, network_path: QuicNetworkPath
     ) -> None:
         crypto_stream_id: Optional[tls.Epoch] = None
         if self._cryptos[tls.Epoch.ONE_RTT].send.is_valid():
@@ -1615,10 +1622,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         buf = builder.buffer
 
-        while (
-            builder.flight_bytes + self._loss.bytes_in_flight
-            < self._loss.congestion_window
-        ) or self._probe_pending:
+        while builder.flight_bytes < max_bytes or self._probe_pending:
             # write header
             builder.start_packet(packet_type, crypto)
 
@@ -1718,7 +1722,9 @@ class QuicConnection(asyncio.DatagramProtocol):
             if not builder.end_packet():
                 break
 
-    def _write_handshake(self, builder: QuicPacketBuilder, epoch: tls.Epoch) -> None:
+    def _write_handshake(
+        self, builder: QuicPacketBuilder, epoch: tls.Epoch, max_bytes: int
+    ) -> None:
         crypto = self._cryptos[epoch]
         if not crypto.send.is_valid():
             return
@@ -1726,10 +1732,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         buf = builder.buffer
         space = self._spaces[epoch]
 
-        while (
-            builder.flight_bytes + self._loss.bytes_in_flight
-            < self._loss.congestion_window
-        ):
+        while builder.flight_bytes < max_bytes:
             if epoch == tls.Epoch.INITIAL:
                 packet_type = PACKET_TYPE_INITIAL
             else:
