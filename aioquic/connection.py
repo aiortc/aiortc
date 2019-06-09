@@ -111,16 +111,6 @@ def get_epoch(packet_type: int) -> tls.Epoch:
         return tls.Epoch.ONE_RTT
 
 
-def frame_type_name(frame_type: int) -> str:
-    if (
-        frame_type >= QuicFrameType.STREAM_BASE
-        and frame_type < QuicFrameType.STREAM_BASE + 16
-    ):
-        return "STREAM"
-    else:
-        return QuicFrameType(frame_type).name
-
-
 def write_close_frame(
     builder: QuicPacketBuilder,
     error_code: int,
@@ -265,9 +255,6 @@ class QuicReceiveContext:
     host_cid: bytes
     network_path: QuicNetworkPath
     time: float
-
-    def __str__(self) -> str:
-        return self.epoch.name
 
 
 QuicConnectionIdHandler = Callable[[bytes], None]
