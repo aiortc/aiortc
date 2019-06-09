@@ -50,14 +50,14 @@ class AEAD:
     def decrypt(self, nonce: bytes, data: bytes, associated_data: bytes) -> bytes:
         global backend
 
+        tag_length = 16
+        assert len(data) >= tag_length
+
         if self._decrypt_ctx is None:
             self._decrypt_ctx = self._create_ctx(len(nonce), 0)
         ctx = self._decrypt_ctx
 
         outlen = backend._ffi.new("int *")
-        tag_length = 16
-        if len(data) < tag_length:
-            raise InvalidTag
         tag = data[-tag_length:]
         data = data[:-tag_length]
 

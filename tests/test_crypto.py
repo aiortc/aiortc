@@ -2,7 +2,12 @@ import binascii
 from unittest import TestCase
 
 from aioquic.buffer import Buffer, push_bytes, push_uint8, push_uint16
-from aioquic.crypto import INITIAL_CIPHER_SUITE, CryptoPair, derive_key_iv_hp
+from aioquic.crypto import (
+    INITIAL_CIPHER_SUITE,
+    CryptoError,
+    CryptoPair,
+    derive_key_iv_hp,
+)
 from aioquic.packet import PACKET_FIXED_BIT
 from aioquic.tls import CipherSuite
 
@@ -177,6 +182,11 @@ class CryptoTest(TestCase):
         self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, 1)
+
+    def test_decrypt_no_key(self):
+        pair = CryptoPair()
+        with self.assertRaises(CryptoError):
+            pair.decrypt_packet(LONG_SERVER_ENCRYPTED_PACKET, 17, 0)
 
     def test_decrypt_short_server(self):
         pair = CryptoPair()
