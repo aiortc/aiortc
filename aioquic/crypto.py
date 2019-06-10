@@ -4,7 +4,7 @@ import binascii
 from typing import Optional, Tuple
 
 from ._crypto import AEAD, CryptoError, HeaderProtection
-from .packet import PACKET_NUMBER_MAX_SIZE, decode_packet_number, is_long_header
+from .packet import decode_packet_number, is_long_header
 from .tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
 
 CIPHER_SUITES = {
@@ -59,43 +59,26 @@ class CryptoContext:
             raise CryptoError("Decryption key is not available")
 
         # header protection
-        sample_offset = encrypted_offset + PACKET_NUMBER_MAX_SIZE
-        sample = packet[sample_offset : sample_offset + SAMPLE_SIZE]
-        mask = self.hp.mask(sample)
-        packet = bytearray(packet)
-
-        if is_long_header(packet[0]):
-            # long header
-            packet[0] ^= mask[0] & 0x0F
-        else:
-            # short header
-            packet[0] ^= mask[0] & 0x1F
-
-        pn_length = (packet[0] & 0x03) + 1
-        for i in range(pn_length):
-            packet[encrypted_offset + i] ^= mask[1 + i]
-        pn = packet[encrypted_offset : encrypted_offset + pn_length]
-        plain_header = bytes(packet[: encrypted_offset + pn_length])
+        plain_header = self.hp.remove(packet, encrypted_offset)
+        first_byte = plain_header[0]
 
         # detect key phase change
         crypto = self
-        if not is_long_header(packet[0]):
-            key_phase = (packet[0] & 4) >> 2
+        if not is_long_header(first_byte):
+            key_phase = (first_byte & 4) >> 2
             if key_phase != self.key_phase:
                 crypto = self.next_key_phase()
 
         # payload protection
-        nonce = crypto.iv[:-pn_length] + bytes(
-            crypto.iv[i - pn_length] ^ pn[i] for i in range(pn_length)
-        )
         payload = crypto.aead.decrypt(
-            nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
+            crypto.iv, packet[len(plain_header) :], plain_header
         )
 
         # packet number
         packet_number = 0
+        pn_length = (first_byte & 0x03) + 1
         for i in range(pn_length):
-            packet_number = (packet_number << 8) | pn[i]
+            packet_number = (packet_number << 8) | plain_header[encrypted_offset + i]
         packet_number = decode_packet_number(
             packet_number, pn_length * 8, expected_packet_number
         )
@@ -105,33 +88,11 @@ class CryptoContext:
     def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
         assert self.is_valid(), "Encryption key is not available"
 
-        pn_length = (plain_header[0] & 0x03) + 1
-        pn_offset = len(plain_header) - pn_length
-        pn = plain_header[pn_offset : pn_offset + pn_length]
-
         # payload protection
-        nonce = self.iv[:-pn_length] + bytes(
-            self.iv[i - pn_length] ^ pn[i] for i in range(pn_length)
-        )
-        protected_payload = self.aead.encrypt(nonce, plain_payload, plain_header)
+        protected_payload = self.aead.encrypt(self.iv, plain_payload, plain_header)
 
         # header protection
-        sample_offset = PACKET_NUMBER_MAX_SIZE - pn_length
-        sample = protected_payload[sample_offset : sample_offset + SAMPLE_SIZE]
-        mask = self.hp.mask(sample)
-
-        packet = bytearray(plain_header + protected_payload)
-        if is_long_header(packet[0]):
-            # long header
-            packet[0] ^= mask[0] & 0x0F
-        else:
-            # short header
-            packet[0] ^= mask[0] & 0x1F
-
-        for i in range(pn_length):
-            packet[pn_offset + i] ^= mask[1 + i]
-
-        return bytes(packet)
+        return self.hp.apply(plain_header, protected_payload)
 
     def is_valid(self) -> bool:
         return self.aead is not None

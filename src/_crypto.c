@@ -7,6 +7,10 @@
 #define AEAD_NONCE_LENGTH 12
 #define AEAD_TAG_LENGTH 16
 
+#define PACKET_LENGTH_MAX 1500
+#define PACKET_NUMBER_LENGTH_MAX 4
+#define SAMPLE_LENGTH 16
+
 #define CHECK_RESULT(expr) \
     if (!expr) { \
         PyErr_SetString(PyExc_Exception, "OpenSSL call failed"); \
@@ -27,8 +31,9 @@ typedef struct {
     PyObject_HEAD
     EVP_CIPHER_CTX *decrypt_ctx;
     EVP_CIPHER_CTX *encrypt_ctx;
-    unsigned char buffer[1500];
+    unsigned char buffer[PACKET_LENGTH_MAX];
     unsigned char key[AEAD_KEY_LENGTH_MAX];
+    unsigned char nonce[AEAD_NONCE_LENGTH];
 } AEADObject;
 
 static EVP_CIPHER_CTX *
@@ -86,19 +91,25 @@ AEAD_dealloc(AEADObject *self)
 static PyObject*
 AEAD_decrypt(AEADObject *self, PyObject *args)
 {
-    const unsigned char *nonce, *data, *associated;
-    int nonce_len, data_len, associated_len, outlen, outlen2, res;
+    const unsigned char *iv, *data, *associated;
+    int pn_len, iv_len, data_len, associated_len, outlen, outlen2, res;
 
-    if (!PyArg_ParseTuple(args, "y#y#y#", &nonce, &nonce_len, &data, &data_len, &associated, &associated_len))
+    if (!PyArg_ParseTuple(args, "y#y#y#", &iv, &iv_len, &data, &data_len, &associated, &associated_len))
         return NULL;
 
-    assert(nonce_len == AEAD_NONCE_LENGTH);
+    assert(iv_len >= AEAD_NONCE_LENGTH);
     assert(data_len >= AEAD_TAG_LENGTH);
+
+    pn_len = (associated[0] & 0x03) + 1;
+    memcpy(self->nonce, iv, AEAD_NONCE_LENGTH);
+    for (int i = 1; i <= pn_len; ++i) {
+        self->nonce[AEAD_NONCE_LENGTH - i] ^= associated[associated_len - i];
+    }
 
     res = EVP_CIPHER_CTX_ctrl(self->decrypt_ctx, EVP_CTRL_CCM_SET_TAG, AEAD_TAG_LENGTH, (void*)data + (data_len - AEAD_TAG_LENGTH));
     CHECK_RESULT(res != 0);
 
-    res = EVP_CipherInit_ex(self->decrypt_ctx, NULL, NULL, self->key, nonce, 0);
+    res = EVP_CipherInit_ex(self->decrypt_ctx, NULL, NULL, self->key, self->nonce, 0);
     CHECK_RESULT(res != 0);
 
     res = EVP_CipherUpdate(self->decrypt_ctx, NULL, &outlen, associated, associated_len);
@@ -119,13 +130,21 @@ AEAD_decrypt(AEADObject *self, PyObject *args)
 static PyObject*
 AEAD_encrypt(AEADObject *self, PyObject *args)
 {
-    const unsigned char *nonce, *data, *associated;
-    int nonce_len, data_len, associated_len, outlen, outlen2, res;
+    const unsigned char *iv, *data, *associated;
+    int pn_len, iv_len, data_len, associated_len, outlen, outlen2, res;
 
-    if (!PyArg_ParseTuple(args, "y#y#y#", &nonce, &nonce_len, &data, &data_len, &associated, &associated_len))
+    if (!PyArg_ParseTuple(args, "y#y#y#", &iv, &iv_len, &data, &data_len, &associated, &associated_len))
         return NULL;
 
-    res = EVP_CipherInit_ex(self->encrypt_ctx, NULL, NULL, self->key, nonce, 1);
+    assert(iv_len >= AEAD_NONCE_LENGTH);
+
+    pn_len = (associated[0] & 0x03) + 1;
+    memcpy(self->nonce, iv, AEAD_NONCE_LENGTH);
+    for (int i = 1; i <= pn_len; ++i) {
+        self->nonce[AEAD_NONCE_LENGTH - i] ^= associated[associated_len - i];
+    }
+
+    res = EVP_CipherInit_ex(self->encrypt_ctx, NULL, NULL, self->key, self->nonce, 1);
     CHECK_RESULT(res != 0);
 
     res = EVP_CipherUpdate(self->encrypt_ctx, NULL, &outlen, associated, associated_len);
@@ -196,7 +215,8 @@ typedef struct {
     PyObject_HEAD
     EVP_CIPHER_CTX *ctx;
     int is_chacha20;
-    unsigned char buffer[31];
+    unsigned char buffer[PACKET_LENGTH_MAX];
+    unsigned char mask[31];
     unsigned char zero[5];
 } HeaderProtectionObject;
 
@@ -210,7 +230,7 @@ HeaderProtection_init(HeaderProtectionObject *self, PyObject *args, PyObject *kw
     if (!PyArg_ParseTuple(args, "y#y#", &cipher_name, &cipher_name_len, &key, &key_len))
         return -1;
 
-    memset(self->buffer, 0, sizeof(self->buffer));
+    memset(self->mask, 0, sizeof(self->mask));
     memset(self->zero, 0, sizeof(self->zero));
     self->is_chacha20 = cipher_name_len == 8 && memcmp(cipher_name, "chacha20", 8) == 0;
 
@@ -238,32 +258,79 @@ HeaderProtection_dealloc(HeaderProtectionObject *self)
     EVP_CIPHER_CTX_free(self->ctx);
 }
 
-static PyObject*
-HeaderProtection_mask(HeaderProtectionObject *self, PyObject *args) {
+static int HeaderProtection_mask(HeaderProtectionObject *self, const unsigned char* sample)
+{
     int outlen;
-    int res;
+    if (self->is_chacha20) {
+        return EVP_CipherInit_ex(self->ctx, NULL, NULL, NULL, sample, 1) &&
+               EVP_CipherUpdate(self->ctx, self->mask, &outlen, self->zero, sizeof(self->zero));
+    } else {
+        return EVP_CipherUpdate(self->ctx, self->mask, &outlen, sample, SAMPLE_LENGTH);
+    }
+}
 
-    const unsigned char *sample;
-    int sample_len;
-    if (!PyArg_ParseTuple(args, "y#", &sample, &sample_len))
+static PyObject*
+HeaderProtection_apply(HeaderProtectionObject *self, PyObject *args)
+{
+    const unsigned char *header, *payload;
+    int header_len, payload_len, res;
+
+    if (!PyArg_ParseTuple(args, "y#y#", &header, &header_len, &payload, &payload_len))
         return NULL;
 
-    if (self->is_chacha20) {
-        res = EVP_CipherInit_ex(self->ctx, NULL, NULL, NULL, sample, 1);
-        CHECK_RESULT(res != 0);
+    int pn_length = (header[0] & 0x03) + 1;
+    int pn_offset = header_len - pn_length;
 
-        res = EVP_CipherUpdate(self->ctx, self->buffer, &outlen, self->zero, sizeof(self->zero));
-        CHECK_RESULT(res != 0);
+    res = HeaderProtection_mask(self, payload + PACKET_NUMBER_LENGTH_MAX - pn_length);
+    CHECK_RESULT(res != 0);
+
+    memcpy(self->buffer, header, header_len);
+    memcpy(self->buffer + header_len, payload, payload_len);
+
+    if (self->buffer[0] & 0x80) {
+        self->buffer[0] ^= self->mask[0] & 0x0F;
     } else {
-        res = EVP_CipherUpdate(self->ctx, self->buffer, &outlen, sample, sample_len);
-        CHECK_RESULT(res != 0);
+        self->buffer[0] ^= self->mask[0] & 0x1F;
     }
 
-    return PyBytes_FromStringAndSize((const char*)self->buffer, 5);
+    for (int i = 0; i < pn_length; ++i) {
+        self->buffer[pn_offset + i] ^= self->mask[1 + i];
+    }
+
+    return PyBytes_FromStringAndSize((const char*)self->buffer, header_len + payload_len);
+}
+
+static PyObject*
+HeaderProtection_remove(HeaderProtectionObject *self, PyObject *args)
+{
+    const unsigned char *packet;
+    int pn_offset, packet_len, res;
+
+    if (!PyArg_ParseTuple(args, "y#I", &packet, &packet_len, &pn_offset))
+        return NULL;
+
+    res = HeaderProtection_mask(self, packet + pn_offset + PACKET_NUMBER_LENGTH_MAX);
+    CHECK_RESULT(res != 0);
+
+    memcpy(self->buffer, packet, pn_offset + PACKET_NUMBER_LENGTH_MAX);
+
+    if (self->buffer[0] & 0x80) {
+        self->buffer[0] ^= self->mask[0] & 0x0F;
+    } else {
+        self->buffer[0] ^= self->mask[0] & 0x1F;
+    }
+
+    int pn_length = (self->buffer[0] & 0x03) + 1;
+    for (int i = 0; i < pn_length; ++i) {
+        self->buffer[pn_offset + i] ^= self->mask[1 + i];
+    }
+
+    return PyBytes_FromStringAndSize((const char*)self->buffer, pn_offset + pn_length);
 }
 
 static PyMethodDef HeaderProtection_methods[] = {
-    {"mask", (PyCFunction)HeaderProtection_mask, METH_VARARGS, ""},
+    {"apply", (PyCFunction)HeaderProtection_apply, METH_VARARGS, ""},
+    {"remove", (PyCFunction)HeaderProtection_remove, METH_VARARGS, ""},
     {NULL}
 };
 
@@ -295,7 +362,7 @@ static PyTypeObject HeaderProtectionType = {
     0,                                  /* tp_weaklistoffset */
     0,                                  /* tp_iter */
     0,                                  /* tp_iternext */
-    HeaderProtection_methods,                     /* tp_methods */
+    HeaderProtection_methods,           /* tp_methods */
     0,                                  /* tp_members */
     0,                                  /* tp_getset */
     0,                                  /* tp_base */
