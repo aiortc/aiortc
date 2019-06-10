@@ -26,6 +26,15 @@ setuptools.setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
     ],
+    ext_modules=[
+        setuptools.Extension(
+            'aioquic._crypto',
+            libraries=['crypto'],
+            sources=[
+                'src/_crypto.c',
+            ],
+        )
+    ],
     packages=['aioquic'],
     install_requires=['cryptography'],
 )

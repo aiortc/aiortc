@@ -1,5 +1,6 @@
 import binascii
-from unittest import TestCase
+import os
+from unittest import TestCase, skipIf
 
 from aioquic.buffer import Buffer, push_bytes, push_uint8, push_uint16
 from aioquic.crypto import (
@@ -147,6 +148,7 @@ class CryptoTest(TestCase):
         self.assertEqual(iv, binascii.unhexlify("0a82086d32205ba22241d8dc"))
         self.assertEqual(hp, binascii.unhexlify("94b9452d2b3c7c7f6da7fdd8593537fd"))
 
+    @skipIf(os.environ.get("TRAVIS") == "true", "travis lacks a modern OpenSSL")
     def test_decrypt_chacha20(self):
         pair = CryptoPair()
         pair.recv.setup(
@@ -204,6 +206,7 @@ class CryptoTest(TestCase):
         self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, 3)
 
+    @skipIf(os.environ.get("TRAVIS") == "true", "travis lacks a modern OpenSSL")
     def test_encrypt_chacha20(self):
         pair = CryptoPair()
         pair.send.setup(

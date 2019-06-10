@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import binascii
-from typing import Any, Optional, Tuple
+from typing import Optional, Tuple
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.backends.openssl.backend import backend
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
+from ._crypto import AEAD, CryptoError, HeaderProtection
 from .packet import PACKET_NUMBER_MAX_SIZE, decode_packet_number, is_long_header
 from .tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
 
+CIPHER_SUITES = {
+    CipherSuite.AES_128_GCM_SHA256: (b"aes-128-ecb", b"aes-128-gcm"),
+    CipherSuite.AES_256_GCM_SHA384: (b"aes-256-ecb", b"aes-256-gcm"),
+    CipherSuite.CHACHA20_POLY1305_SHA256: (b"chacha20", b"chacha20-poly1305"),
+}
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
 INITIAL_SALT = binascii.unhexlify("ef4fb0abb47470c41befcf8031334fae485e09a0")
 SAMPLE_SIZE = 16
@@ -34,135 +35,11 @@ def derive_key_iv_hp(
     )
 
 
-class AEAD:
-    def __init__(self, cipher_suite: CipherSuite, key: bytes):
-        if cipher_suite == CipherSuite.AES_128_GCM_SHA256:
-            self._cipher_name = b"aes-128-gcm"
-        elif cipher_suite == CipherSuite.AES_256_GCM_SHA384:
-            self._cipher_name = b"aes-256-gcm"
-        else:
-            self._cipher_name = b"chacha20-poly1305"
-        self._decrypt_ctx = None
-        self._encrypt_ctx = None
-        self._key_length = len(key)
-        self._key_ptr = backend._ffi.from_buffer(key)
-
-    def decrypt(self, nonce: bytes, data: bytes, associated_data: bytes) -> bytes:
-        global backend
-
-        tag_length = 16
-        assert len(data) >= tag_length
-
-        if self._decrypt_ctx is None:
-            self._decrypt_ctx = self._create_ctx(len(nonce), 0)
-        ctx = self._decrypt_ctx
-
-        outlen = backend._ffi.new("int *")
-        tag = data[-tag_length:]
-        data = data[:-tag_length]
-
-        res = backend._lib.EVP_CIPHER_CTX_ctrl(
-            ctx, backend._lib.EVP_CTRL_AEAD_SET_TAG, tag_length, tag
-        )
-        backend.openssl_assert(res != 0)
-
-        res = backend._lib.EVP_CipherInit_ex(
-            ctx,
-            backend._ffi.NULL,
-            backend._ffi.NULL,
-            self._key_ptr,
-            backend._ffi.from_buffer(nonce),
-            0,
-        )
-        backend.openssl_assert(res != 0)
-
-        res = backend._lib.EVP_CipherUpdate(
-            ctx, backend._ffi.NULL, outlen, associated_data, len(associated_data)
-        )
-        backend.openssl_assert(res != 0)
-
-        buf = backend._ffi.new("unsigned char[]", len(data))
-        res = backend._lib.EVP_CipherUpdate(ctx, buf, outlen, data, len(data))
-        backend.openssl_assert(res != 0)
-        processed_data = backend._ffi.buffer(buf, outlen[0])[:]
-
-        res = backend._lib.EVP_CipherFinal_ex(ctx, backend._ffi.NULL, outlen)
-        if res == 0:
-            backend._consume_errors()
-            raise InvalidTag
-
-        return processed_data
-
-    def encrypt(self, nonce: bytes, data: bytes, associated_data: bytes) -> bytes:
-        global backend
-
-        if self._encrypt_ctx is None:
-            self._encrypt_ctx = self._create_ctx(len(nonce), 1)
-        ctx = self._encrypt_ctx
-
-        outlen = backend._ffi.new("int *")
-        tag_length = 16
-        res = backend._lib.EVP_CipherInit_ex(
-            ctx,
-            backend._ffi.NULL,
-            backend._ffi.NULL,
-            self._key_ptr,
-            backend._ffi.from_buffer(nonce),
-            1,
-        )
-        backend.openssl_assert(res != 0)
-
-        res = backend._lib.EVP_CipherUpdate(
-            ctx, backend._ffi.NULL, outlen, associated_data, len(associated_data)
-        )
-        backend.openssl_assert(res != 0)
-
-        buf = backend._ffi.new("unsigned char[]", len(data))
-        res = backend._lib.EVP_CipherUpdate(ctx, buf, outlen, data, len(data))
-        backend.openssl_assert(res != 0)
-        processed_data = backend._ffi.buffer(buf, outlen[0])[:]
-
-        res = backend._lib.EVP_CipherFinal_ex(ctx, backend._ffi.NULL, outlen)
-        backend.openssl_assert(res != 0)
-        backend.openssl_assert(outlen[0] == 0)
-        tag_buf = backend._ffi.new("unsigned char[]", tag_length)
-        res = backend._lib.EVP_CIPHER_CTX_ctrl(
-            ctx, backend._lib.EVP_CTRL_AEAD_GET_TAG, tag_length, tag_buf
-        )
-        backend.openssl_assert(res != 0)
-        tag = backend._ffi.buffer(tag_buf)[:]
-
-        return processed_data + tag
-
-    def _create_ctx(self, nonce_length: int, operation: int) -> Any:
-        evp_cipher = backend._lib.EVP_get_cipherbyname(self._cipher_name)
-        backend.openssl_assert(evp_cipher != backend._ffi.NULL)
-        ctx = backend._lib.EVP_CIPHER_CTX_new()
-        ctx = backend._ffi.gc(ctx, backend._lib.EVP_CIPHER_CTX_free)
-        res = backend._lib.EVP_CipherInit_ex(
-            ctx,
-            evp_cipher,
-            backend._ffi.NULL,
-            backend._ffi.NULL,
-            backend._ffi.NULL,
-            operation,
-        )
-        backend.openssl_assert(res != 0)
-        res = backend._lib.EVP_CIPHER_CTX_set_key_length(ctx, self._key_length)
-        backend.openssl_assert(res != 0)
-        res = backend._lib.EVP_CIPHER_CTX_ctrl(
-            ctx, backend._lib.EVP_CTRL_AEAD_SET_IVLEN, nonce_length, backend._ffi.NULL
-        )
-        backend.openssl_assert(res != 0)
-        return ctx
-
-
 class CryptoContext:
     def __init__(self, key_phase: int = 0) -> None:
-        self.aead: Optional[Any]
+        self.aead: Optional[AEAD]
         self.cipher_suite: Optional[CipherSuite]
-        self.hp: Optional[bytes]
-        self.hp_encryptor: Optional[Any] = None
+        self.hp: Optional[HeaderProtection]
         self.iv: Optional[bytes]
         self.key_phase = key_phase
         self.secret: Optional[bytes]
@@ -182,10 +59,10 @@ class CryptoContext:
             raise CryptoError("Decryption key is not available")
 
         # header protection
-        packet = bytearray(packet)
         sample_offset = encrypted_offset + PACKET_NUMBER_MAX_SIZE
         sample = packet[sample_offset : sample_offset + SAMPLE_SIZE]
-        mask = self.header_protection_mask(sample)
+        mask = self.hp.mask(sample)
+        packet = bytearray(packet)
 
         if is_long_header(packet[0]):
             # long header
@@ -211,12 +88,9 @@ class CryptoContext:
         nonce = crypto.iv[:-pn_length] + bytes(
             crypto.iv[i - pn_length] ^ pn[i] for i in range(pn_length)
         )
-        try:
-            payload = crypto.aead.decrypt(
-                nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
-            )
-        except InvalidTag:
-            raise CryptoError("Payload decryption failed")
+        payload = crypto.aead.decrypt(
+            nonce, bytes(packet[encrypted_offset + pn_length :]), plain_header
+        )
 
         # packet number
         packet_number = 0
@@ -244,7 +118,7 @@ class CryptoContext:
         # header protection
         sample_offset = PACKET_NUMBER_MAX_SIZE - pn_length
         sample = protected_payload[sample_offset : sample_offset + SAMPLE_SIZE]
-        mask = self.header_protection_mask(sample)
+        mask = self.hp.mask(sample)
 
         packet = bytearray(plain_header + protected_payload)
         if is_long_header(packet[0]):
@@ -258,19 +132,6 @@ class CryptoContext:
             packet[pn_offset + i] ^= mask[1 + i]
 
         return bytes(packet)
-
-    def header_protection_mask(self, sample: bytes) -> bytes:
-        buf = bytearray(31)
-        if self.cipher_suite == CipherSuite.CHACHA20_POLY1305_SHA256:
-            encryptor = Cipher(
-                algorithms.ChaCha20(key=self.hp, nonce=sample),
-                mode=None,
-                backend=default_backend(),
-            ).encryptor()
-            encryptor.update_into(bytes(5), buf)
-        else:
-            self.hp_encryptor.update_into(sample, buf)
-        return buf[:5]
 
     def is_valid(self) -> bool:
         return self.aead is not None
@@ -288,22 +149,13 @@ class CryptoContext:
         return crypto
 
     def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
-        assert cipher_suite in [
-            CipherSuite.AES_128_GCM_SHA256,
-            CipherSuite.AES_256_GCM_SHA384,
-            CipherSuite.CHACHA20_POLY1305_SHA256,
-        ], "unsupported cipher suite"
-        key, self.iv, self.hp = derive_key_iv_hp(cipher_suite, secret)
-        self.aead = AEAD(cipher_suite, key)
-        self.cipher_suite = cipher_suite
-        self.secret = secret
+        hp_cipher_name, aead_cipher_name = CIPHER_SUITES[cipher_suite]
 
-        if self.cipher_suite == CipherSuite.CHACHA20_POLY1305_SHA256:
-            self.hp_encryptor = None
-        else:
-            self.hp_encryptor = Cipher(
-                algorithms.AES(self.hp), mode=modes.ECB(), backend=default_backend()
-            ).encryptor()
+        key, self.iv, hp = derive_key_iv_hp(cipher_suite, secret)
+        self.aead = AEAD(aead_cipher_name, key)
+        self.cipher_suite = cipher_suite
+        self.hp = HeaderProtection(hp_cipher_name, hp)
+        self.secret = secret
 
     def teardown(self) -> None:
         self.aead = None
@@ -311,10 +163,6 @@ class CryptoContext:
         self.hp = None
         self.iv = None
         self.secret = None
-
-
-class CryptoError(Exception):
-    pass
 
 
 class CryptoPair:
