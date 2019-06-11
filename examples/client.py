@@ -6,6 +6,12 @@ import time
 
 import aioquic
 
+try:
+    import uvloop
+except ImportError:
+    uvloop = None
+
+
 logger = logging.getLogger("client")
 
 
@@ -86,6 +92,8 @@ if __name__ == "__main__":
         except FileNotFoundError:
             pass
 
+    if uvloop is not None:
+        uvloop.install()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
         run(

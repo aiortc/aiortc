@@ -9,6 +9,12 @@ from cryptography.hazmat.primitives import serialization
 
 import aioquic
 
+try:
+    import uvloop
+except ImportError:
+    uvloop = None
+
+
 TEMPLATE = """<!DOCTYPE html>
 <html>
     <head>
@@ -138,6 +144,8 @@ if __name__ == "__main__":
     # session tickets
     ticket_store = SessionTicketStore()
 
+    if uvloop is not None:
+        uvloop.install()
     loop = asyncio.get_event_loop()
     protocol = loop.run_until_complete(
         aioquic.serve(
