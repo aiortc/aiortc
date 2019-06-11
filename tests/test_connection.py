@@ -26,6 +26,8 @@ from aioquic.packet_builder import QuicPacketBuilder
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
+RTT = 0.005
+
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
 SERVER_ADDR = ("2.3.4.5", 4433)
@@ -249,8 +251,10 @@ class QuicConnectionTest(TestCase):
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
             )
 
+            # wait one RTT
+            run(asyncio.sleep(RTT))
+
             # the server provides a new connection ID
-            run(asyncio.sleep(0))
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
             )
@@ -521,7 +525,9 @@ class QuicConnectionTest(TestCase):
             client._transport.local_addr = ("1.2.3.4", 2345)
             reader, writer = run(client.create_stream())
             writer.write(b"01234567")
-            run(asyncio.sleep(0))
+
+            # wait one RTT
+            run(asyncio.sleep(RTT))
 
             # server sends PATH_CHALLENGE and receives PATH_RESPONSE
             self.assertEqual(len(server._network_paths), 2)

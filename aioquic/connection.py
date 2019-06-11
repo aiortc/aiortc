@@ -723,8 +723,8 @@ class QuicConnection(asyncio.DatagramProtocol):
             if packet_number > space.largest_received_packet:
                 space.largest_received_packet = packet_number
             space.ack_queue.add(packet_number)
-            if is_ack_eliciting:
-                space.ack_required = True
+            if is_ack_eliciting and space.ack_at is None:
+                space.ack_at = now + K_GRANULARITY
 
         self._send_pending()
 
@@ -1322,18 +1322,19 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._retire_connection_ids.append(sequence_number)
 
     def _on_timeout(self) -> None:
-        now = self._loop.time()
+        now = self._loop.time() + K_GRANULARITY
         self._timer = None
         self._timer_at = None
 
         # idle timeout
-        if now + K_GRANULARITY >= self._close_at:
+        if now >= self._close_at:
             self.connection_lost(self._close_exception)
             return
 
         # loss detection timeout
-        self._logger.info("Loss detection triggered")
-        self._loss.on_loss_detection_timeout(now=now)
+        if self._loss_at is not None and now >= self._loss_at:
+            self._logger.info("Loss detection triggered")
+            self._loss.on_loss_detection_timeout(now=now)
         self._send_pending()
 
     def _payload_received(
@@ -1452,7 +1453,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             if not self._handshake_confirmed:
                 for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
                     self._write_handshake(builder, epoch, max_bytes)
-            self._write_application(builder, max_bytes, network_path)
+            self._write_application(builder, max_bytes, network_path, self._loop.time())
         datagrams, packets = builder.flush()
 
         if datagrams:
@@ -1559,9 +1560,15 @@ class QuicConnection(asyncio.DatagramProtocol):
         # determine earliest timeout
         timer_at = self._close_at
         if self._state not in END_STATES:
-            loss_at = self._loss.get_loss_detection_time()
-            if loss_at is not None and loss_at < timer_at:
-                timer_at = loss_at
+            # ack timer
+            for space in self._loss.spaces:
+                if space.ack_at is not None and space.ack_at < timer_at:
+                    timer_at = space.ack_at
+
+            # loss detection timer
+            self._loss_at = self._loss.get_loss_detection_time()
+            if self._loss_at is not None and self._loss_at < timer_at:
+                timer_at = self._loss_at
 
         # re-arm timer
         if self._timer is not None and self._timer_at != timer_at:
@@ -1607,7 +1614,11 @@ class QuicConnection(asyncio.DatagramProtocol):
             crypto.recv.setup(cipher_suite, secret)
 
     def _write_application(
-        self, builder: QuicPacketBuilder, max_bytes: int, network_path: QuicNetworkPath
+        self,
+        builder: QuicPacketBuilder,
+        max_bytes: int,
+        network_path: QuicNetworkPath,
+        now: float,
     ) -> None:
         crypto_stream: Optional[QuicStream] = None
         if self._cryptos[tls.Epoch.ONE_RTT].send.is_valid():
@@ -1629,14 +1640,14 @@ class QuicConnection(asyncio.DatagramProtocol):
 
             if self._handshake_complete:
                 # ACK
-                if space.ack_required:
+                if space.ack_at is not None and space.ack_at <= now:
                     builder.start_frame(
                         QuicFrameType.ACK,
                         self._on_ack_delivery,
                         (space, space.largest_received_packet),
                     )
                     push_ack_frame(buf, space.ack_queue, 0)
-                    space.ack_required = False
+                    space.ack_at = None
 
                 # PATH CHALLENGE
                 if (
@@ -1743,10 +1754,10 @@ class QuicConnection(asyncio.DatagramProtocol):
             builder.start_packet(packet_type, crypto)
 
             # ACK
-            if space.ack_required:
+            if space.ack_at is not None:
                 builder.start_frame(QuicFrameType.ACK)
                 push_ack_frame(buf, space.ack_queue, 0)
-                space.ack_required = False
+                space.ack_at = None
 
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:

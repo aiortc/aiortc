@@ -19,8 +19,8 @@ K_LOSS_REDUCTION_FACTOR = 0.5
 
 class QuicPacketSpace:
     def __init__(self) -> None:
+        self.ack_at: Optional[float] = None
         self.ack_queue = RangeSet()
-        self.ack_required = False
         self.expected_packet_number = 0
         self.largest_received_packet = 0
 
@@ -115,6 +115,7 @@ class QuicPacketRecovery:
                 self.on_packet_expired(packet)
         space.sent_packets.clear()
 
+        space.ack_at = None
         space.ack_eliciting_in_flight = 0
         space.crypto_packet_in_flight = 0
         space.loss_time = None
