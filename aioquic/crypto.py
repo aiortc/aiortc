@@ -48,14 +48,11 @@ class CryptoContext:
             raise CryptoError("Decryption key is not available")
 
         # header protection
-        plain_header = self.hp.remove(packet, encrypted_offset)
+        plain_header, packet_number = self.hp.remove(packet, encrypted_offset)
         first_byte = plain_header[0]
 
         # packet number
-        packet_number = 0
         pn_length = (first_byte & 0x03) + 1
-        for i in range(pn_length):
-            packet_number = (packet_number << 8) | plain_header[encrypted_offset + i]
         packet_number = decode_packet_number(
             packet_number, pn_length * 8, expected_packet_number
         )

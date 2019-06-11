@@ -342,11 +342,13 @@ HeaderProtection_remove(HeaderProtectionObject *self, PyObject *args)
     }
 
     int pn_length = (self->buffer[0] & 0x03) + 1;
+    uint32_t pn_truncated = 0;
     for (int i = 0; i < pn_length; ++i) {
         self->buffer[pn_offset + i] ^= self->mask[1 + i];
+        pn_truncated = self->buffer[pn_offset + i] | (pn_truncated << 8);
     }
 
-    return PyBytes_FromStringAndSize((const char*)self->buffer, pn_offset + pn_length);
+    return Py_BuildValue("y#i", self->buffer, pn_offset + pn_length, pn_truncated);
 }
 
 static PyMethodDef HeaderProtection_methods[] = {
