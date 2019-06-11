@@ -30,13 +30,22 @@ class Buffer:
         return bytes(self._data[: self._pos])
 
     def data_slice(self, start: int, end: int) -> bytes:
+        if (
+            start < 0
+            or start > self._length
+            or end < 0
+            or end > self._length
+            or end < start
+        ):
+            raise BufferReadError
         return bytes(self._data[start:end])
 
     def eof(self) -> bool:
         return self._pos == self._length
 
     def seek(self, pos: int) -> None:
-        assert pos <= self._length
+        if pos < 0 or pos > self._length:
+            raise BufferReadError
         self._pos = pos
 
     def tell(self) -> int:
@@ -47,7 +56,7 @@ class Buffer:
         Pull bytes.
         """
         end = self._pos + length
-        if end > self._length:
+        if length < 0 or end > self._length:
             raise BufferReadError
         v = bytes(self._data[self._pos : end])
         self._pos = end

@@ -6,17 +6,34 @@ from aioquic.buffer import Buffer, BufferReadError, BufferWriteError, size_uint_
 class BufferTest(TestCase):
     def test_data_slice(self):
         buf = Buffer(data=b"\x08\x07\x06\x05\x04\x03\x02\x01")
+        self.assertEqual(buf.data_slice(0, 8), b"\x08\x07\x06\x05\x04\x03\x02\x01")
         self.assertEqual(buf.data_slice(1, 3), b"\x07\x06")
+
+        with self.assertRaises(BufferReadError):
+            buf.data_slice(-1, 3)
+        with self.assertRaises(BufferReadError):
+            buf.data_slice(0, 9)
+        with self.assertRaises(BufferReadError):
+            buf.data_slice(1, 0)
 
     def test_pull_bytes(self):
         buf = Buffer(data=b"\x08\x07\x06\x05\x04\x03\x02\x01")
         self.assertEqual(buf.pull_bytes(3), b"\x08\x07\x06")
+
+    def test_pull_bytes_negative(self):
+        buf = Buffer(data=b"\x08\x07\x06\x05\x04\x03\x02\x01")
+        with self.assertRaises(BufferReadError):
+            buf.pull_bytes(-1)
 
     def test_pull_bytes_truncated(self):
         buf = Buffer(capacity=0)
         with self.assertRaises(BufferReadError):
             buf.pull_bytes(2)
         self.assertEqual(buf.tell(), 0)
+
+    def test_pull_bytes_zero(self):
+        buf = Buffer(data=b"\x08\x07\x06\x05\x04\x03\x02\x01")
+        self.assertEqual(buf.pull_bytes(0), b"")
 
     def test_pull_uint8(self):
         buf = Buffer(data=b"\x08\x07\x06\x05\x04\x03\x02\x01")
@@ -74,6 +91,12 @@ class BufferTest(TestCase):
             buf.push_bytes(b"\x08\x07\x06\x05")
         self.assertEqual(buf.tell(), 0)
 
+    def test_push_bytes_zero(self):
+        buf = Buffer(capacity=3)
+        buf.push_bytes(b"")
+        self.assertEqual(buf.data, b"")
+        self.assertEqual(buf.tell(), 0)
+
     def test_push_uint8(self):
         buf = Buffer(capacity=1)
         buf.push_uint8(0x08)
@@ -109,6 +132,13 @@ class BufferTest(TestCase):
 
         buf.seek(8)
         self.assertTrue(buf.eof())
+        self.assertEqual(buf.tell(), 8)
+
+        with self.assertRaises(BufferReadError):
+            buf.seek(-1)
+        self.assertEqual(buf.tell(), 8)
+        with self.assertRaises(BufferReadError):
+            buf.seek(9)
         self.assertEqual(buf.tell(), 8)
 
 
