@@ -38,7 +38,6 @@ class CryptoContext:
         self.aead: Optional[AEAD] = None
         self.cipher_suite: Optional[CipherSuite] = None
         self.hp: Optional[HeaderProtection] = None
-        self.iv: Optional[bytes] = None
         self.key_phase = key_phase
         self.secret: Optional[bytes] = None
 
@@ -52,18 +51,6 @@ class CryptoContext:
         plain_header = self.hp.remove(packet, encrypted_offset)
         first_byte = plain_header[0]
 
-        # detect key phase change
-        crypto = self
-        if not is_long_header(first_byte):
-            key_phase = (first_byte & 4) >> 2
-            if key_phase != self.key_phase:
-                crypto = next_key_phase(self)
-
-        # payload protection
-        payload = crypto.aead.decrypt(
-            crypto.iv, packet[len(plain_header) :], plain_header
-        )
-
         # packet number
         packet_number = 0
         pn_length = (first_byte & 0x03) + 1
@@ -73,13 +60,29 @@ class CryptoContext:
             packet_number, pn_length * 8, expected_packet_number
         )
 
+        # detect key phase change
+        crypto = self
+        if not is_long_header(first_byte):
+            key_phase = (first_byte & 4) >> 2
+            if key_phase != self.key_phase:
+                crypto = next_key_phase(self)
+
+        # payload protection
+        payload = crypto.aead.decrypt(
+            packet[len(plain_header) :], plain_header, packet_number
+        )
+
         return plain_header, payload, packet_number, crypto != self
 
-    def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
+    def encrypt_packet(
+        self, plain_header: bytes, plain_payload: bytes, packet_number: int
+    ) -> bytes:
         assert self.is_valid(), "Encryption key is not available"
 
         # payload protection
-        protected_payload = self.aead.encrypt(self.iv, plain_payload, plain_header)
+        protected_payload = self.aead.encrypt(
+            plain_payload, plain_header, packet_number
+        )
 
         # header protection
         return self.hp.apply(plain_header, protected_payload)
@@ -90,8 +93,8 @@ class CryptoContext:
     def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
         hp_cipher_name, aead_cipher_name = CIPHER_SUITES[cipher_suite]
 
-        key, self.iv, hp = derive_key_iv_hp(cipher_suite, secret)
-        self.aead = AEAD(aead_cipher_name, key)
+        key, iv, hp = derive_key_iv_hp(cipher_suite, secret)
+        self.aead = AEAD(aead_cipher_name, key, iv)
         self.cipher_suite = cipher_suite
         self.hp = HeaderProtection(hp_cipher_name, hp)
         self.secret = secret
@@ -100,13 +103,11 @@ class CryptoContext:
         self.aead = None
         self.cipher_suite = None
         self.hp = None
-        self.iv = None
         self.secret = None
 
 
 def apply_key_phase(self: CryptoContext, crypto: CryptoContext) -> None:
     self.aead = crypto.aead
-    self.iv = crypto.iv
     self.key_phase = crypto.key_phase
     self.secret = crypto.secret
 
@@ -141,10 +142,12 @@ class CryptoPair:
             self._update_key()
         return plain_header, payload, packet_number
 
-    def encrypt_packet(self, plain_header: bytes, plain_payload: bytes) -> bytes:
+    def encrypt_packet(
+        self, plain_header: bytes, plain_payload: bytes, packet_number: int
+    ) -> bytes:
         if self._update_key_requested:
             self._update_key()
-        return self.send.encrypt_packet(plain_header, plain_payload)
+        return self.send.encrypt_packet(plain_header, plain_payload, packet_number)
 
     def setup_initial(self, cid: bytes, is_client: bool) -> None:
         if is_client:

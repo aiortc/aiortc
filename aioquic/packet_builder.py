@@ -258,7 +258,9 @@ class QuicPacketBuilder:
             buf.seek(self._packet_start)
             buf.push_bytes(
                 self._packet_crypto.encrypt_packet(
-                    plain[0 : self._header_size], plain[self._header_size : packet_size]
+                    plain[0 : self._header_size],
+                    plain[self._header_size : packet_size],
+                    self._packet_number,
                 )
             )
             self._packet.sent_bytes = buf.tell() - self._packet_start

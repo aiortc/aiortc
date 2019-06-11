@@ -12,15 +12,17 @@ from aioquic.crypto import (
 from aioquic.packet import PACKET_FIXED_BIT
 from aioquic.tls import CipherSuite
 
-CHACHA20_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
-    "e7ff000014f5b06e20f064d8783dfab56c61e5e16e8024c0e1d6ddc2a43565a240175554"
-    "c9ead500f378c5b1dd3eebab26c089128698919bee"
-)
+CHACHA20_CLIENT_PACKET_NUMBER = 2
 CHACHA20_CLIENT_PLAIN_HEADER = binascii.unhexlify(
     "e1ff000014f5b06e20f064d8783dfab56c61e5e16e8024c0e1d6ddc2a43565a240170002"
 )
 CHACHA20_CLIENT_PLAIN_PAYLOAD = binascii.unhexlify("0200000000")
+CHACHA20_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
+    "e7ff000014f5b06e20f064d8783dfab56c61e5e16e8024c0e1d6ddc2a43565a240175554"
+    "c9ead500f378c5b1dd3eebab26c089128698919bee"
+)
 
+LONG_CLIENT_PACKET_NUMBER = 2
 LONG_CLIENT_PLAIN_HEADER = binascii.unhexlify(
     "c3ff000012508394c8f03e51570800449f00000002"
 )
@@ -74,6 +76,7 @@ LONG_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
     "ca1e31bf63200df41cdf41c10b912bec"
 )
 
+LONG_SERVER_PACKET_NUMBER = 1
 LONG_SERVER_PLAIN_HEADER = binascii.unhexlify("c1ff00001205f067a5502a4262b50040740001")
 LONG_SERVER_PLAIN_PAYLOAD = binascii.unhexlify(
     "0d0000000018410a020000560303eefce7f7b37ba1d1632e96677825ddf73988"
@@ -89,6 +92,7 @@ LONG_SERVER_ENCRYPTED_PACKET = binascii.unhexlify(
     "cb54df7884"
 )
 
+SHORT_SERVER_PACKET_NUMBER = 3
 SHORT_SERVER_PLAIN_HEADER = binascii.unhexlify("41b01fd24a586a9cf30003")
 SHORT_SERVER_PLAIN_PAYLOAD = binascii.unhexlify(
     "06003904000035000151805a4bebf5000020b098c8dc4183e4c182572e10ac3e"
@@ -113,20 +117,6 @@ class CryptoTest(TestCase):
         pair.setup_initial(
             cid=binascii.unhexlify("8394c8f03e515708"), is_client=is_client
         )
-        if is_client:
-            self.assertEqual(
-                pair.send.iv, binascii.unhexlify("19e94387805eb0b46c03a788")
-            )
-            self.assertEqual(
-                pair.recv.iv, binascii.unhexlify("0a82086d32205ba22241d8dc")
-            )
-        else:
-            self.assertEqual(
-                pair.send.iv, binascii.unhexlify("0a82086d32205ba22241d8dc")
-            )
-            self.assertEqual(
-                pair.recv.iv, binascii.unhexlify("19e94387805eb0b46c03a788")
-            )
         return pair
 
     def test_derive_key_iv_hp(self):
@@ -163,7 +153,7 @@ class CryptoTest(TestCase):
         )
         self.assertEqual(plain_header, CHACHA20_CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, CHACHA20_CLIENT_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, 2)
+        self.assertEqual(packet_number, CHACHA20_CLIENT_PACKET_NUMBER)
 
     def test_decrypt_long_client(self):
         pair = self.create_crypto(is_client=False)
@@ -173,7 +163,7 @@ class CryptoTest(TestCase):
         )
         self.assertEqual(plain_header, LONG_CLIENT_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, 2)
+        self.assertEqual(packet_number, LONG_CLIENT_PACKET_NUMBER)
 
     def test_decrypt_long_server(self):
         pair = self.create_crypto(is_client=True)
@@ -183,7 +173,7 @@ class CryptoTest(TestCase):
         )
         self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, 1)
+        self.assertEqual(packet_number, LONG_SERVER_PACKET_NUMBER)
 
     def test_decrypt_no_key(self):
         pair = CryptoPair()
@@ -204,7 +194,7 @@ class CryptoTest(TestCase):
         )
         self.assertEqual(plain_header, SHORT_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, SHORT_SERVER_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, 3)
+        self.assertEqual(packet_number, SHORT_SERVER_PACKET_NUMBER)
 
     @skipIf(os.environ.get("TRAVIS") == "true", "travis lacks a modern OpenSSL")
     def test_encrypt_chacha20(self):
@@ -217,7 +207,9 @@ class CryptoTest(TestCase):
         )
 
         packet = pair.encrypt_packet(
-            CHACHA20_CLIENT_PLAIN_HEADER, CHACHA20_CLIENT_PLAIN_PAYLOAD
+            CHACHA20_CLIENT_PLAIN_HEADER,
+            CHACHA20_CLIENT_PLAIN_PAYLOAD,
+            CHACHA20_CLIENT_PACKET_NUMBER,
         )
         self.assertEqual(packet, CHACHA20_CLIENT_ENCRYPTED_PACKET)
 
@@ -225,7 +217,9 @@ class CryptoTest(TestCase):
         pair = self.create_crypto(is_client=True)
 
         packet = pair.encrypt_packet(
-            LONG_CLIENT_PLAIN_HEADER, LONG_CLIENT_PLAIN_PAYLOAD
+            LONG_CLIENT_PLAIN_HEADER,
+            LONG_CLIENT_PLAIN_PAYLOAD,
+            LONG_CLIENT_PACKET_NUMBER,
         )
         self.assertEqual(packet, LONG_CLIENT_ENCRYPTED_PACKET)
 
@@ -233,7 +227,9 @@ class CryptoTest(TestCase):
         pair = self.create_crypto(is_client=False)
 
         packet = pair.encrypt_packet(
-            LONG_SERVER_PLAIN_HEADER, LONG_SERVER_PLAIN_PAYLOAD
+            LONG_SERVER_PLAIN_HEADER,
+            LONG_SERVER_PLAIN_PAYLOAD,
+            LONG_SERVER_PACKET_NUMBER,
         )
         self.assertEqual(packet, LONG_SERVER_ENCRYPTED_PACKET)
 
@@ -247,7 +243,9 @@ class CryptoTest(TestCase):
         )
 
         packet = pair.encrypt_packet(
-            SHORT_SERVER_PLAIN_HEADER, SHORT_SERVER_PLAIN_PAYLOAD
+            SHORT_SERVER_PLAIN_HEADER,
+            SHORT_SERVER_PLAIN_PAYLOAD,
+            SHORT_SERVER_PACKET_NUMBER,
         )
         self.assertEqual(packet, SHORT_SERVER_ENCRYPTED_PACKET)
 
@@ -255,25 +253,30 @@ class CryptoTest(TestCase):
         pair1 = self.create_crypto(is_client=True)
         pair2 = self.create_crypto(is_client=False)
 
-        def create_packet(key_phase, packet_number=0):
+        def create_packet(key_phase, packet_number):
             buf = Buffer(capacity=100)
             buf.push_uint8(PACKET_FIXED_BIT | key_phase << 2 | 1)
             buf.push_bytes(binascii.unhexlify("8394c8f03e515708"))
             buf.push_uint16(packet_number)
             return buf.data, b"\x00\x01\x02\x03"
 
-        def send(sender, receiver):
-            plain_header, plain_payload = create_packet(key_phase=sender.key_phase)
-            encrypted = sender.encrypt_packet(plain_header, plain_payload)
-            recov_header, recov_payload, _ = receiver.decrypt_packet(
+        def send(sender, receiver, packet_number=0):
+            plain_header, plain_payload = create_packet(
+                key_phase=sender.key_phase, packet_number=packet_number
+            )
+            encrypted = sender.encrypt_packet(
+                plain_header, plain_payload, packet_number
+            )
+            recov_header, recov_payload, recov_packet_number = receiver.decrypt_packet(
                 encrypted, len(plain_header) - 2, 0
             )
             self.assertEqual(recov_header, plain_header)
             self.assertEqual(recov_payload, plain_payload)
+            self.assertEqual(recov_packet_number, packet_number)
 
         # roundtrip
-        send(pair1, pair2)
-        send(pair2, pair1)
+        send(pair1, pair2, 0)
+        send(pair2, pair1, 0)
         self.assertEqual(pair1.key_phase, 0)
         self.assertEqual(pair2.key_phase, 0)
 
@@ -281,8 +284,8 @@ class CryptoTest(TestCase):
         pair1.update_key()
 
         # roundtrip
-        send(pair1, pair2)
-        send(pair2, pair1)
+        send(pair1, pair2, 1)
+        send(pair2, pair1, 1)
         self.assertEqual(pair1.key_phase, 1)
         self.assertEqual(pair2.key_phase, 1)
 
@@ -290,8 +293,8 @@ class CryptoTest(TestCase):
         pair2.update_key()
 
         # roundtrip
-        send(pair2, pair1)
-        send(pair1, pair2)
+        send(pair2, pair1, 2)
+        send(pair1, pair2, 2)
         self.assertEqual(pair1.key_phase, 0)
         self.assertEqual(pair2.key_phase, 0)
 
@@ -299,7 +302,7 @@ class CryptoTest(TestCase):
         pair1.update_key()
 
         # roundtrip
-        send(pair2, pair1)
-        send(pair1, pair2)
+        send(pair2, pair1, 3)
+        send(pair1, pair2, 3)
         self.assertEqual(pair1.key_phase, 1)
         self.assertEqual(pair2.key_phase, 1)

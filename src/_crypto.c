@@ -13,13 +13,13 @@
 
 #define CHECK_RESULT(expr) \
     if (!expr) { \
-        PyErr_SetString(PyExc_Exception, "OpenSSL call failed"); \
+        PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return NULL; \
     }
 
 #define CHECK_RESULT_CTOR(expr) \
     if (!expr) { \
-        PyErr_SetString(PyExc_Exception, "OpenSSL call failed"); \
+        PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return -1; \
     }
 
@@ -33,6 +33,7 @@ typedef struct {
     EVP_CIPHER_CTX *encrypt_ctx;
     unsigned char buffer[PACKET_LENGTH_MAX];
     unsigned char key[AEAD_KEY_LENGTH_MAX];
+    unsigned char iv[AEAD_NONCE_LENGTH];
     unsigned char nonce[AEAD_NONCE_LENGTH];
 } AEADObject;
 
@@ -61,22 +62,34 @@ static int
 AEAD_init(AEADObject *self, PyObject *args, PyObject *kwargs)
 {
     const char *cipher_name;
-    const unsigned char *key;
-    int cipher_name_len, key_len;
+    const unsigned char *key, *iv;
+    int cipher_name_len, key_len, iv_len;
 
-    if (!PyArg_ParseTuple(args, "y#y#", &cipher_name, &cipher_name_len, &key, &key_len))
+    if (!PyArg_ParseTuple(args, "y#y#y#", &cipher_name, &cipher_name_len, &key, &key_len, &iv, &iv_len))
         return -1;
-    assert(key_len <= AEAD_KEY_LENGTH_MAX);
-    memcpy(self->key, key, key_len);
 
     const EVP_CIPHER *evp_cipher = EVP_get_cipherbyname(cipher_name);
-    CHECK_RESULT_CTOR(evp_cipher != 0);
+    if (evp_cipher == 0) {
+        PyErr_SetString(CryptoError, "Invalid cipher name");
+        return -1;
+    }
+    if (key_len > AEAD_KEY_LENGTH_MAX) {
+        PyErr_SetString(CryptoError, "Invalid key length");
+        return -1;
+    }
+    if (iv_len > AEAD_NONCE_LENGTH) {
+        PyErr_SetString(CryptoError, "Invalid iv length");
+        return -1;
+    }
+
+    memcpy(self->key, key, key_len);
+    memcpy(self->iv, iv, iv_len);
 
     self->decrypt_ctx = create_ctx(evp_cipher, key_len, 0);
-    if (self->decrypt_ctx == 0) return -1;
+    CHECK_RESULT_CTOR(self->decrypt_ctx != 0);
 
     self->encrypt_ctx = create_ctx(evp_cipher, key_len, 1);
-    if (self->decrypt_ctx == 0) return -1;
+    CHECK_RESULT_CTOR(self->encrypt_ctx != 0);
 
     return 0;
 }
@@ -91,19 +104,21 @@ AEAD_dealloc(AEADObject *self)
 static PyObject*
 AEAD_decrypt(AEADObject *self, PyObject *args)
 {
-    const unsigned char *iv, *data, *associated;
-    int pn_len, iv_len, data_len, associated_len, outlen, outlen2, res;
+    const unsigned char *data, *associated;
+    int data_len, associated_len, outlen, outlen2, res;
+    uint64_t pn;
 
-    if (!PyArg_ParseTuple(args, "y#y#y#", &iv, &iv_len, &data, &data_len, &associated, &associated_len))
+    if (!PyArg_ParseTuple(args, "y#y#K", &data, &data_len, &associated, &associated_len, &pn))
         return NULL;
 
-    assert(iv_len >= AEAD_NONCE_LENGTH);
-    assert(data_len >= AEAD_TAG_LENGTH);
+    if (data_len < AEAD_TAG_LENGTH || data_len > PACKET_LENGTH_MAX) {
+        PyErr_SetString(CryptoError, "Invalid payload length");
+        return NULL;
+    }
 
-    pn_len = (associated[0] & 0x03) + 1;
-    memcpy(self->nonce, iv, AEAD_NONCE_LENGTH);
-    for (int i = 1; i <= pn_len; ++i) {
-        self->nonce[AEAD_NONCE_LENGTH - i] ^= associated[associated_len - i];
+    memcpy(self->nonce, self->iv, AEAD_NONCE_LENGTH);
+    for (int i = 0; i < 8; ++i) {
+        self->nonce[AEAD_NONCE_LENGTH - 1 - i] ^= (uint8_t)(pn >> 8 * i);
     }
 
     res = EVP_CIPHER_CTX_ctrl(self->decrypt_ctx, EVP_CTRL_CCM_SET_TAG, AEAD_TAG_LENGTH, (void*)data + (data_len - AEAD_TAG_LENGTH));
@@ -130,18 +145,21 @@ AEAD_decrypt(AEADObject *self, PyObject *args)
 static PyObject*
 AEAD_encrypt(AEADObject *self, PyObject *args)
 {
-    const unsigned char *iv, *data, *associated;
-    int pn_len, iv_len, data_len, associated_len, outlen, outlen2, res;
+    const unsigned char *data, *associated;
+    int data_len, associated_len, outlen, outlen2, res;
+    uint64_t pn;
 
-    if (!PyArg_ParseTuple(args, "y#y#y#", &iv, &iv_len, &data, &data_len, &associated, &associated_len))
+    if (!PyArg_ParseTuple(args, "y#y#K", &data, &data_len, &associated, &associated_len, &pn))
         return NULL;
 
-    assert(iv_len >= AEAD_NONCE_LENGTH);
+    if (data_len > PACKET_LENGTH_MAX) {
+        PyErr_SetString(CryptoError, "Invalid payload length");
+        return NULL;
+    }
 
-    pn_len = (associated[0] & 0x03) + 1;
-    memcpy(self->nonce, iv, AEAD_NONCE_LENGTH);
-    for (int i = 1; i <= pn_len; ++i) {
-        self->nonce[AEAD_NONCE_LENGTH - i] ^= associated[associated_len - i];
+    memcpy(self->nonce, self->iv, AEAD_NONCE_LENGTH);
+    for (int i = 0; i < 8; ++i) {
+        self->nonce[AEAD_NONCE_LENGTH - 1 - i] ^= (uint8_t)(pn >> 8 * i);
     }
 
     res = EVP_CipherInit_ex(self->encrypt_ctx, NULL, NULL, self->key, self->nonce, 1);
@@ -230,12 +248,15 @@ HeaderProtection_init(HeaderProtectionObject *self, PyObject *args, PyObject *kw
     if (!PyArg_ParseTuple(args, "y#y#", &cipher_name, &cipher_name_len, &key, &key_len))
         return -1;
 
+    const EVP_CIPHER *evp_cipher = EVP_get_cipherbyname(cipher_name);
+    if (evp_cipher == 0) {
+        PyErr_SetString(CryptoError, "Invalid cipher name");
+        return -1;
+    }
+
     memset(self->mask, 0, sizeof(self->mask));
     memset(self->zero, 0, sizeof(self->zero));
     self->is_chacha20 = cipher_name_len == 8 && memcmp(cipher_name, "chacha20", 8) == 0;
-
-    const EVP_CIPHER *evp_cipher = EVP_get_cipherbyname(cipher_name);
-    CHECK_RESULT_CTOR(evp_cipher != 0);
 
     self->ctx = EVP_CIPHER_CTX_new();
     CHECK_RESULT_CTOR(self->ctx != 0);
