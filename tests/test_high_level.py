@@ -18,8 +18,8 @@ class SessionTicketStore:
         return self.tickets.pop(label, None)
 
 
-async def run_client(host, request=b"ping", **kwargs):
-    async with connect(host, 4433, **kwargs) as client:
+async def run_client(host, port=4433, request=b"ping", **kwargs):
+    async with connect(host, port, **kwargs) as client:
         reader, writer = await client.create_stream()
 
         writer.write(request)
@@ -108,6 +108,10 @@ class HighLevelTest(TestCase):
             )
         )
         self.assertEqual(response, b"gnip")
+
+    def test_connect_timeout(self):
+        with self.assertRaises(ConnectionError):
+            run(run_client("127.0.0.1", port=4400, idle_timeout=5))
 
     def test_key_update(self):
         async def run_client_key_update(host, **kwargs):

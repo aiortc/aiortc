@@ -262,6 +262,7 @@ class QuicConnection(asyncio.DatagramProtocol):
     def __init__(
         self,
         *,
+        idle_timeout: Optional[float] = None,
         is_client: bool = True,
         certificate: Any = None,
         private_key: Any = None,
@@ -319,7 +320,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
-        self._local_idle_timeout = 60.0  # seconds
+        self._local_idle_timeout = idle_timeout or 60.0  # seconds
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
         self._local_max_data_used = 0
@@ -536,7 +537,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         for stream in self._streams.values():
             stream.connection_lost(exc)
         if not self._connected_waiter.done():
-            self._connected_waiter.set_exception(exc)
+            self._connected_waiter.set_exception(exc or ConnectionError)
         self._closed.set()
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:

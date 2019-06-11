@@ -34,6 +34,7 @@ class QuicServer(asyncio.DatagramProtocol):
         private_key: Any,
         alpn_protocols: Optional[List[str]] = None,
         connection_handler: Optional[QuicConnectionHandler] = None,
+        idle_timeout: Optional[float] = None,
         secrets_log_file: Optional[TextIO] = None,
         session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
         session_ticket_handler: Optional[SessionTicketHandler] = None,
@@ -43,6 +44,7 @@ class QuicServer(asyncio.DatagramProtocol):
         self._alpn_protocols = alpn_protocols
         self._certificate = certificate
         self._connections: Dict[bytes, QuicConnection] = {}
+        self._idle_timeout = idle_timeout
         self._private_key = private_key
         self._secrets_log_file = secrets_log_file
         self._session_ticket_fetcher = session_ticket_fetcher
@@ -134,6 +136,7 @@ class QuicServer(asyncio.DatagramProtocol):
             connection = QuicConnection(
                 alpn_protocols=self._alpn_protocols,
                 certificate=self._certificate,
+                idle_timeout=self._idle_timeout,
                 is_client=False,
                 original_connection_id=original_connection_id,
                 private_key=self._private_key,

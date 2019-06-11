@@ -16,6 +16,7 @@ async def connect(
     port: int,
     *,
     alpn_protocols: Optional[List[str]] = None,
+    idle_timeout: Optional[float] = None,
     protocol_version: Optional[int] = None,
     secrets_log_file: Optional[TextIO] = None,
     session_ticket: Optional[SessionTicket] = None,
@@ -61,6 +62,7 @@ async def connect(
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicConnection(
             alpn_protocols=alpn_protocols,
+            idle_timeout=idle_timeout,
             is_client=True,
             secrets_log_file=secrets_log_file,
             server_name=server_name,
