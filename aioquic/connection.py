@@ -249,7 +249,7 @@ class QuicReceiveContext:
 QuicConnectionIdHandler = Callable[[bytes], None]
 QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
 
-END_STATES = set([QuicConnectionState.CLOSING, QuicConnectionState.DRAINING])
+END_STATES = frozenset([QuicConnectionState.CLOSING, QuicConnectionState.DRAINING])
 
 
 class QuicConnection(asyncio.DatagramProtocol):
@@ -632,7 +632,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # decrypt packet
             encrypted_off = buf.tell() - start_off
             end_off = buf.tell() + header.rest_length
-            buf.pull_bytes(header.rest_length)
+            buf.seek(end_off)
 
             try:
                 plain_header, plain_payload, packet_number = crypto.decrypt_packet(
@@ -710,7 +710,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     "Network path %s validated by handshake", network_path.addr
                 )
                 network_path.is_validated = True
-            network_path.bytes_received += buf.tell() - start_off
+            network_path.bytes_received += end_off - start_off
             if network_path not in self._network_paths:
                 self._network_paths.append(network_path)
             idx = self._network_paths.index(network_path)
@@ -723,8 +723,6 @@ class QuicConnection(asyncio.DatagramProtocol):
             if packet_number > space.largest_received_packet:
                 space.largest_received_packet = packet_number
             space.ack_queue.add(packet_number)
-            if len(space.ack_queue) > 63:
-                space.ack_queue.shift()
             if is_ack_eliciting:
                 space.ack_required = True
 
