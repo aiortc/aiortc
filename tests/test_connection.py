@@ -130,11 +130,14 @@ class QuicConnectionTest(TestCase):
 
             # send response
             writer.write(b"pong")
-            await asyncio.sleep(0)
 
             # receives EOF
             request = await reader.read()
             self.assertEqual(request, b"")
+
+            # sends EOF
+            writer.write(b"done")
+            writer.write_eof()
 
         with client_and_server(
             client_options={"supported_versions": client_versions},
@@ -145,16 +148,11 @@ class QuicConnectionTest(TestCase):
                 "supported_versions": server_versions,
             },
         ) as (client, server):
-            run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
+            run(asyncio.gather(client.wait_connected(), server.wait_connected()))
 
             # check each endpoint has available connection IDs for the peer
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
-            )
-            self.assertEqual(
-                sequence_numbers(server._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
             # clients sends data over stream
@@ -166,9 +164,9 @@ class QuicConnectionTest(TestCase):
 
             # client writes EOF
             client_writer.write_eof()
-            run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 7)
-            self.assertEqual(server._transport.sent, 6)
+
+            # client receives EOF
+            self.assertEqual(run(client_reader.read()), b"done")
 
     def test_connect_draft_19(self):
         self._test_connect_with_version(
@@ -190,8 +188,6 @@ class QuicConnectionTest(TestCase):
             server_options={"secrets_log_file": server_log_file},
         ) as (client, server):
             run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # check secrets were logged
             client_log = client_log_file.getvalue()
@@ -213,15 +209,11 @@ class QuicConnectionTest(TestCase):
     def test_connection_lost(self):
         with client_and_server() as (client, server):
             run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # send data over stream
             client_reader, client_writer = run(client.create_stream())
             client_writer.write(b"ping")
             run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 5)
-            self.assertEqual(server._transport.sent, 4)
 
             # break connection
             client.connection_lost(None)
@@ -230,15 +222,11 @@ class QuicConnectionTest(TestCase):
     def test_connection_lost_with_exception(self):
         with client_and_server() as (client, server):
             run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # send data over stream
             client_reader, client_writer = run(client.create_stream())
             client_writer.write(b"ping")
             run(asyncio.sleep(0))
-            self.assertEqual(client._transport.sent, 5)
-            self.assertEqual(server._transport.sent, 4)
 
             # break connection
             exc = Exception("some error")
@@ -299,14 +287,10 @@ class QuicConnectionTest(TestCase):
     def test_create_stream_over_max_streams(self):
         with client_and_server() as (client, server):
             run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # create streams
             for i in range(128):
                 client_reader, client_writer = run(client.create_stream())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # create one too many
             with self.assertRaises(ValueError) as cm:
@@ -316,8 +300,6 @@ class QuicConnectionTest(TestCase):
     def test_decryption_error(self):
         with client_and_server() as (client, server):
             run(client.wait_connected())
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 3)
 
             # mess with encryption key
             server._cryptos[tls.Epoch.ONE_RTT].send.setup(
@@ -326,9 +308,7 @@ class QuicConnectionTest(TestCase):
 
             # close
             server.close(error_code=QuicErrorCode.NO_ERROR)
-            self.assertEqual(client._transport.sent, 4)
-            self.assertEqual(server._transport.sent, 4)
-            run(asyncio.sleep(0))
+            run(server.wait_closed())
 
     def test_tls_error(self):
         def patch(client):
