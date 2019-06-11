@@ -38,7 +38,7 @@ Status
 Running the examples
 --------------------
 
-``aioquic`` requires Python 3.7 or better. After checking out the code using
+``aioquic`` requires Python 3.6 or better. After checking out the code using
 git you can run:
 
 .. code-block:: console

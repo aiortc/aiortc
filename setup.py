@@ -24,6 +24,7 @@ setuptools.setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
     ext_modules=[
@@ -36,5 +37,5 @@ setuptools.setup(
         )
     ],
     packages=['aioquic'],
-    install_requires=['cryptography'],
+    install_requires=['cryptography', 'dataclasses; python_version < "3.7"'],
 )

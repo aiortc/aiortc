@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import binascii
 from typing import Optional, Tuple
 
@@ -37,20 +35,12 @@ def derive_key_iv_hp(
 
 class CryptoContext:
     def __init__(self, key_phase: int = 0) -> None:
-        self.aead: Optional[AEAD]
-        self.cipher_suite: Optional[CipherSuite]
-        self.hp: Optional[HeaderProtection]
-        self.iv: Optional[bytes]
+        self.aead: Optional[AEAD] = None
+        self.cipher_suite: Optional[CipherSuite] = None
+        self.hp: Optional[HeaderProtection] = None
+        self.iv: Optional[bytes] = None
         self.key_phase = key_phase
-        self.secret: Optional[bytes]
-
-        self.teardown()
-
-    def apply_key_phase(self, crypto: CryptoContext) -> None:
-        self.aead = crypto.aead
-        self.iv = crypto.iv
-        self.key_phase = crypto.key_phase
-        self.secret = crypto.secret
+        self.secret: Optional[bytes] = None
 
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int, expected_packet_number: int
@@ -67,7 +57,7 @@ class CryptoContext:
         if not is_long_header(first_byte):
             key_phase = (first_byte & 4) >> 2
             if key_phase != self.key_phase:
-                crypto = self.next_key_phase()
+                crypto = next_key_phase(self)
 
         # payload protection
         payload = crypto.aead.decrypt(
@@ -97,18 +87,6 @@ class CryptoContext:
     def is_valid(self) -> bool:
         return self.aead is not None
 
-    def next_key_phase(self) -> CryptoContext:
-        algorithm = cipher_suite_hash(self.cipher_suite)
-
-        crypto = CryptoContext(key_phase=int(not self.key_phase))
-        crypto.setup(
-            self.cipher_suite,
-            hkdf_expand_label(
-                algorithm, self.secret, b"traffic upd", b"", algorithm.digest_size
-            ),
-        )
-        return crypto
-
     def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
         hp_cipher_name, aead_cipher_name = CIPHER_SUITES[cipher_suite]
 
@@ -124,6 +102,26 @@ class CryptoContext:
         self.hp = None
         self.iv = None
         self.secret = None
+
+
+def apply_key_phase(self: CryptoContext, crypto: CryptoContext) -> None:
+    self.aead = crypto.aead
+    self.iv = crypto.iv
+    self.key_phase = crypto.key_phase
+    self.secret = crypto.secret
+
+
+def next_key_phase(self: CryptoContext) -> CryptoContext:
+    algorithm = cipher_suite_hash(self.cipher_suite)
+
+    crypto = CryptoContext(key_phase=int(not self.key_phase))
+    crypto.setup(
+        self.cipher_suite,
+        hkdf_expand_label(
+            algorithm, self.secret, b"traffic upd", b"", algorithm.digest_size
+        ),
+    )
+    return crypto
 
 
 class CryptoPair:
@@ -184,6 +182,6 @@ class CryptoPair:
             return self.recv.key_phase
 
     def _update_key(self) -> None:
-        self.recv.apply_key_phase(self.recv.next_key_phase())
-        self.send.apply_key_phase(self.send.next_key_phase())
+        apply_key_phase(self.recv, next_key_phase(self.recv))
+        apply_key_phase(self.send, next_key_phase(self.send))
         self._update_key_requested = False

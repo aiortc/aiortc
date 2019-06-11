@@ -1,9 +1,9 @@
 import asyncio
 import ipaddress
 import socket
-from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
+from .compat import asynccontextmanager
 from .connection import QuicConnection, QuicStreamHandler
 from .tls import SessionTicket, SessionTicketHandler
 

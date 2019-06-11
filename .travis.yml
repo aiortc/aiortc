@@ -6,6 +6,8 @@ matrix:
   - env: BUILD=lint
     install: pip install black flake8 isort mypy
   - env: BUILD=test
+  - env: BUILD=test
+    python: "3.6"
   - env: BUILD=sdist
     install: pip install twine
 python: "3.7"
