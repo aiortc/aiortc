@@ -48,7 +48,7 @@ from .packet import (
     push_quic_transport_parameters,
 )
 from .packet_builder import QuicDeliveryState, QuicPacketBuilder
-from .recovery import QuicPacketRecovery, QuicPacketSpace
+from .recovery import K_GRANULARITY, QuicPacketRecovery, QuicPacketSpace
 from .stream import QuicStream
 
 logger = logging.getLogger("quic")
@@ -1322,17 +1322,18 @@ class QuicConnection(asyncio.DatagramProtocol):
             self._retire_connection_ids.append(sequence_number)
 
     def _on_timeout(self) -> None:
+        now = self._loop.time()
         self._timer = None
         self._timer_at = None
 
         # idle timeout
-        if self._loop.time() >= self._close_at:
+        if now + K_GRANULARITY >= self._close_at:
             self.connection_lost(self._close_exception)
             return
 
         # loss detection timeout
         self._logger.info("Loss detection triggered")
-        self._loss.on_loss_detection_timeout(now=self._loop.time())
+        self._loss.on_loss_detection_timeout(now=now)
         self._send_pending()
 
     def _payload_received(
