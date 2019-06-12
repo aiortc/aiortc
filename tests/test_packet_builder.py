@@ -8,8 +8,23 @@ from aioquic.packet import (
     QuicFrameType,
     QuicProtocolVersion,
 )
-from aioquic.packet_builder import QuicPacketBuilder, QuicSentPacket
+from aioquic.packet_builder import (
+    QuicPacketBuilder,
+    QuicPacketBuilderStop,
+    QuicSentPacket,
+)
 from aioquic.tls import Epoch
+
+
+def create_builder():
+    return QuicPacketBuilder(
+        host_cid=bytes(8),
+        packet_number=0,
+        peer_cid=bytes(8),
+        peer_token=b"",
+        spin_bit=False,
+        version=QuicProtocolVersion.DRAFT_20,
+    )
 
 
 class QuicPacketBuilderTest(TestCase):
@@ -269,3 +284,54 @@ class QuicPacketBuilderTest(TestCase):
                 )
             ],
         )
+
+    def test_short_header_max_total_bytes_1(self):
+        """
+        max_total_bytes doesn't allow any packets.
+        """
+        builder = create_builder()
+        builder.max_total_bytes = 11
+
+        crypto = CryptoPair()
+        crypto.setup_initial(bytes(8), is_client=True)
+
+        with self.assertRaises(QuicPacketBuilderStop):
+            builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+
+    def test_short_header_max_total_bytes_2(self):
+        """
+        max_total_bytes allows a short packet.
+        """
+        builder = create_builder()
+        builder.max_total_bytes = 800
+
+        crypto = CryptoPair()
+        crypto.setup_initial(bytes(8), is_client=True)
+
+        builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+        self.assertEqual(builder.remaining_space, 773)
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
+        self.assertTrue(builder.end_packet())
+
+        with self.assertRaises(QuicPacketBuilderStop):
+            builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+
+    def test_short_header_max_total_bytes_3(self):
+        builder = create_builder()
+        builder.max_total_bytes = 2000
+
+        crypto = CryptoPair()
+        crypto.setup_initial(bytes(8), is_client=True)
+
+        builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+        self.assertEqual(builder.remaining_space, 1253)
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
+        self.assertTrue(builder.end_packet())
+
+        builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+        self.assertEqual(builder.remaining_space, 693)
+        builder.buffer.push_bytes(bytes(builder.remaining_space))
+        self.assertTrue(builder.end_packet())
+
+        with self.assertRaises(QuicPacketBuilderStop):
+            builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)

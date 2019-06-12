@@ -45,6 +45,10 @@ class QuicSentPacket:
     )
 
 
+class QuicPacketBuilderStop(Exception):
+    pass
+
+
 class QuicPacketBuilder:
     """
     Helper for building QUIC packets.
@@ -61,6 +65,9 @@ class QuicPacketBuilder:
         peer_token: bytes = b"",
         spin_bit: bool = False,
     ):
+        self.max_flight_bytes: Optional[int] = None
+        self.max_total_bytes: Optional[int] = None
+
         self._host_cid = host_cid
         self._pad_first_datagram = pad_first_datagram
         self._peer_cid = peer_cid
@@ -71,30 +78,22 @@ class QuicPacketBuilder:
         # assembled datagrams and packets
         self._ack_eliciting = False
         self._datagrams: List[bytes] = []
+        self._datagram_init = True
         self._packets: List[QuicSentPacket] = []
+        self._flight_bytes = 0
         self._total_bytes = 0
 
         # current packet
         self._header_size = 0
         self._packet: Optional[QuicSentPacket] = None
         self._packet_crypto: Optional[CryptoPair] = None
-        self._packet_epoch: Optional[Epoch] = None
+        self._packet_long_header = False
         self._packet_number = packet_number
         self._packet_start = 0
         self._packet_type = 0
 
         self.buffer = Buffer(PACKET_MAX_SIZE)
-
-    @property
-    def flight_bytes(self) -> int:
-        """
-        Returns the total number of bytes which will count towards
-        congestion control.
-        """
-        total = self._total_bytes
-        if self._ack_eliciting:
-            total += self.buffer.tell()
-        return total
+        self._buffer_capacity = PACKET_MAX_SIZE
 
     @property
     def packet_number(self) -> int:
@@ -110,7 +109,7 @@ class QuicPacketBuilder:
         the current packet.
         """
         return (
-            self.buffer.capacity
+            self._buffer_capacity
             - self.buffer.tell()
             - self._packet_crypto.aead_tag_size
         )
@@ -146,7 +145,9 @@ class QuicPacketBuilder:
         if handler is not None:
             self._packet.delivery_handlers.append((handler, args))
 
-    def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
+    def start_packet(
+        self, packet_type: int, crypto: CryptoPair, is_probe=False
+    ) -> None:
         """
         Starts a new packet.
         """
@@ -155,8 +156,36 @@ class QuicPacketBuilder:
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
-        if buf.capacity - buf.tell() < 128:
+        packet_start = buf.tell()
+        if self._buffer_capacity - packet_start < 128:
             self._flush_current_datagram()
+            packet_start = 0
+
+        # initialize datagram if needed
+        if self._datagram_init:
+            if self.max_flight_bytes is not None and not is_probe:
+                remaining_flight_bytes = self.max_flight_bytes - self._flight_bytes
+                if remaining_flight_bytes < self._buffer_capacity:
+                    self._buffer_capacity = remaining_flight_bytes
+            if self.max_total_bytes is not None:
+                remaining_total_bytes = self.max_total_bytes - self._total_bytes
+                if remaining_total_bytes < self._buffer_capacity:
+                    self._buffer_capacity = remaining_total_bytes
+            self._datagram_init = False
+
+        # calculate header size
+        packet_long_header = is_long_header(packet_type)
+        if packet_long_header:
+            header_size = 10 + len(self._peer_cid) + len(self._host_cid)
+            if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
+                token_length = len(self._peer_token)
+                header_size += size_uint_var(token_length) + token_length
+        else:
+            header_size = 3 + len(self._peer_cid)
+
+        # check we have enough space
+        if packet_start + header_size >= self._buffer_capacity:
+            raise QuicPacketBuilderStop
 
         # determine ack epoch
         if packet_type == PACKET_TYPE_INITIAL:
@@ -166,6 +195,7 @@ class QuicPacketBuilder:
         else:
             epoch = Epoch.ONE_RTT
 
+        self._header_size = header_size
         self._packet = QuicSentPacket(
             epoch=epoch,
             in_flight=False,
@@ -174,18 +204,9 @@ class QuicPacketBuilder:
             packet_number=self._packet_number,
         )
         self._packet_crypto = crypto
-        self._packet_epoch = epoch
-        self._packet_start = buf.tell()
+        self._packet_long_header = packet_long_header
+        self._packet_start = packet_start
         self._packet_type = packet_type
-
-        # calculate header size
-        if is_long_header(packet_type):
-            self._header_size = 10 + len(self._peer_cid) + len(self._host_cid)
-            if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
-                token_length = len(self._peer_token)
-                self._header_size += size_uint_var(token_length) + token_length
-        else:
-            self._header_size = 3 + len(self._peer_cid)
 
         buf.seek(self._packet_start + self._header_size)
 
@@ -208,7 +229,7 @@ class QuicPacketBuilder:
                 self._pad_first_datagram = False
 
             # write header
-            if is_long_header(self._packet_type):
+            if self._packet_long_header:
                 length = (
                     packet_size
                     - self._header_size
@@ -267,7 +288,7 @@ class QuicPacketBuilder:
             self._packets.append(self._packet)
 
             # short header packets cannot be coallesced, we need a new datagram
-            if not is_long_header(self._packet_type):
+            if not self._packet_long_header:
                 self._flush_current_datagram()
 
             self._packet_number += 1
@@ -280,8 +301,11 @@ class QuicPacketBuilder:
         return not empty
 
     def _flush_current_datagram(self) -> None:
-        if self.buffer.tell():
+        datagram_bytes = self.buffer.tell()
+        if datagram_bytes:
             self._datagrams.append(self.buffer.data)
+            self._datagram_init = True
             if self._ack_eliciting:
-                self._total_bytes += self.buffer.tell()
+                self._flight_bytes += datagram_bytes
+            self._total_bytes += datagram_bytes
             self.buffer.seek(0)
