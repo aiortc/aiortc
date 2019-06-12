@@ -1040,7 +1040,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_data = buf.pull_uint_var()
         if max_data > self._remote_max_data:
-            self._logger.info("Remote max_data raised to %d", max_data)
+            self._logger.debug("Remote max_data raised to %d", max_data)
             self._remote_max_data = max_data
 
     def _handle_max_stream_data_frame(
@@ -1059,7 +1059,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         stream = self._get_or_create_stream(frame_type, stream_id)
         if max_stream_data > stream.max_stream_data_remote:
-            self._logger.info(
+            self._logger.debug(
                 "Stream %d remote max_stream_data raised to %d",
                 stream_id,
                 max_stream_data,
@@ -1076,7 +1076,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_streams = buf.pull_uint_var()
         if max_streams > self._remote_max_streams_bidi:
-            self._logger.info("Remote max_streams_bidi raised to %d", max_streams)
+            self._logger.debug("Remote max_streams_bidi raised to %d", max_streams)
             self._remote_max_streams_bidi = max_streams
 
     def _handle_max_streams_uni_frame(
@@ -1089,7 +1089,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         max_streams = buf.pull_uint_var()
         if max_streams > self._remote_max_streams_uni:
-            self._logger.info("Remote max_streams_uni raised to %d", max_streams)
+            self._logger.debug("Remote max_streams_uni raised to %d", max_streams)
             self._remote_max_streams_uni = max_streams
 
     def _handle_new_connection_id_frame(
@@ -1099,7 +1099,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         Handle a NEW_CONNECTION_ID frame.
         """
         sequence_number, cid, stateless_reset_token = pull_new_connection_id_frame(buf)
-        self._logger.info(
+        self._logger.debug(
             "New connection ID received %d %s", sequence_number, dump_cid(cid)
         )
         self._peer_cid_available.append(
@@ -1334,7 +1334,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # loss detection timeout
         if self._loss_at is not None and now >= self._loss_at:
-            self._logger.info("Loss detection triggered")
+            self._logger.debug("Loss detection triggered")
             self._loss.on_loss_detection_timeout(now=now)
         self._send_pending()
 
@@ -1561,7 +1561,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         return buf.data
 
     def _set_state(self, state: QuicConnectionState) -> None:
-        self._logger.info("%s -> %s", self._state, state)
+        self._logger.debug("%s -> %s", self._state, state)
         self._state = state
 
     def _set_timer(self) -> None:
@@ -1774,7 +1774,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         # raise MAX_DATA if needed
         if self._local_max_data_used > self._local_max_data * 0.75:
             self._local_max_data *= 2
-            self._logger.info("Local max_data raised to %d", self._local_max_data)
+            self._logger.debug("Local max_data raised to %d", self._local_max_data)
         if self._local_max_data_sent != self._local_max_data:
             builder.start_frame(QuicFrameType.MAX_DATA, self._on_max_data_delivery)
             builder.buffer.push_uint_var(self._local_max_data)
@@ -1786,7 +1786,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         # raise MAX_STREAM_DATA if needed
         if stream._recv_highest > stream.max_stream_data_local * 0.75:
             stream.max_stream_data_local *= 2
-            self._logger.info(
+            self._logger.debug(
                 "Stream %d local max_stream_data raised to %d",
                 stream.stream_id,
                 stream.max_stream_data_local,
