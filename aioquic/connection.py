@@ -12,7 +12,6 @@ from typing import (
     List,
     Optional,
     Text,
-    TextIO,
     Tuple,
     Union,
     cast,
@@ -20,6 +19,7 @@ from typing import (
 
 from . import tls
 from .buffer import Buffer, BufferReadError, size_uint_var
+from .configuration import QuicConfiguration
 from .crypto import CryptoError, CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -257,48 +257,36 @@ class QuicConnection(asyncio.DatagramProtocol):
     A QUIC connection.
     """
 
-    supported_versions = [QuicProtocolVersion.DRAFT_19, QuicProtocolVersion.DRAFT_20]
-
     def __init__(
         self,
         *,
-        idle_timeout: Optional[float] = None,
-        is_client: bool = True,
-        certificate: Any = None,
-        private_key: Any = None,
-        alpn_protocols: Optional[List[str]] = None,
+        configuration: QuicConfiguration,
         original_connection_id: Optional[bytes] = None,
-        secrets_log_file: TextIO = None,
-        server_name: Optional[str] = None,
-        session_ticket: Optional[tls.SessionTicket] = None,
         session_ticket_fetcher: Optional[tls.SessionTicketFetcher] = None,
         session_ticket_handler: Optional[tls.SessionTicketHandler] = None,
-        supported_versions: Optional[List[QuicProtocolVersion]] = None,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
-        if is_client:
+        if configuration.is_client:
             assert (
                 original_connection_id is None
             ), "Cannot set original_connection_id for a client"
         else:
-            assert certificate is not None, "SSL certificate is required for a server"
-            assert private_key is not None, "SSL private key is required for a server"
+            assert (
+                configuration.certificate is not None
+            ), "SSL certificate is required for a server"
+            assert (
+                configuration.private_key is not None
+            ), "SSL private key is required for a server"
 
         loop = asyncio.get_event_loop()
-        self.is_client = is_client
-        if supported_versions is not None:
-            self.supported_versions = supported_versions
 
         # counters for debugging
         self._stateless_retry_count = 0
         self._version_negotiation_count = 0
 
-        # TLS configuration
-        self._alpn_protocols = alpn_protocols
-        self._certificate = certificate
-        self._private_key = private_key
-        self._secrets_log_file = secrets_log_file
-        self._server_name = server_name
+        # configuration
+        self._configuration = configuration
+        self._is_client = configuration.is_client
 
         self._close_at: Optional[float] = None
         self._close_exception: Optional[Exception] = None
@@ -320,7 +308,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
-        self._local_idle_timeout = idle_timeout or 60.0  # seconds
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
         self._local_max_data_used = 0
@@ -353,7 +340,6 @@ class QuicConnection(asyncio.DatagramProtocol):
         self._remote_max_stream_data_uni = 0
         self._remote_max_streams_bidi = 0
         self._remote_max_streams_uni = 0
-        self._session_ticket = session_ticket
         self._spaces: Dict[tls.Epoch, QuicPacketSpace] = {}
         self._spin_bit = False
         self._spin_bit_peer = False
@@ -449,7 +435,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         This method can only be called for clients and a single time.
         """
         assert (
-            self.is_client and not self._connect_called
+            self._is_client and not self._connect_called
         ), "connect() can only be called for clients and a single time"
         self._connect_called = True
 
@@ -457,7 +443,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         if protocol_version is not None:
             self._version = protocol_version
         else:
-            self._version = max(self.supported_versions)
+            self._version = max(self._configuration.supported_versions)
         self._connect()
 
     async def create_stream(
@@ -471,7 +457,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         await self._parameters_available.wait()
 
-        stream_id = (int(is_unidirectional) << 1) | int(not self.is_client)
+        stream_id = (int(is_unidirectional) << 1) | int(not self._is_client)
         while stream_id in self._streams:
             stream_id += 4
 
@@ -564,16 +550,18 @@ class QuicConnection(asyncio.DatagramProtocol):
                 if header.destination_cid == connection_id.cid:
                     destination_cid_seq = connection_id.sequence_number
                     break
-            if self.is_client and destination_cid_seq is None:
+            if self._is_client and destination_cid_seq is None:
                 return
 
             # check protocol version
-            if self.is_client and header.version == QuicProtocolVersion.NEGOTIATION:
+            if self._is_client and header.version == QuicProtocolVersion.NEGOTIATION:
                 # version negotiation
                 versions = []
                 while not buf.eof():
                     versions.append(buf.pull_uint32())
-                common = set(self.supported_versions).intersection(versions)
+                common = set(self._configuration.supported_versions).intersection(
+                    versions
+                )
                 if not common:
                     self._logger.error("Could not find a common protocol version")
                     self.connection_lost(
@@ -591,12 +579,12 @@ class QuicConnection(asyncio.DatagramProtocol):
                 return
             elif (
                 header.version is not None
-                and header.version not in self.supported_versions
+                and header.version not in self._configuration.supported_versions
             ):
                 # unsupported version
                 return
 
-            if self.is_client and header.packet_type == PACKET_TYPE_RETRY:
+            if self._is_client and header.packet_type == PACKET_TYPE_RETRY:
                 # stateless retry
                 if (
                     header.destination_cid == self.host_cid
@@ -614,7 +602,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             network_path = self._find_network_path(addr)
 
             # server initialization
-            if not self.is_client and self._state == QuicConnectionState.FIRSTFLIGHT:
+            if not self._is_client and self._state == QuicConnectionState.FIRSTFLIGHT:
                 assert (
                     header.packet_type == PACKET_TYPE_INITIAL
                 ), "first packet must be INITIAL"
@@ -646,7 +634,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                 space.expected_packet_number = packet_number + 1
 
             # discard initial keys and packet space
-            if not self.is_client and epoch == tls.Epoch.HANDSHAKE:
+            if not self._is_client and epoch == tls.Epoch.HANDSHAKE:
                 self._discard_epoch(tls.Epoch.INITIAL)
 
             # update state
@@ -660,7 +648,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             # update spin bit
             if not header.is_long_header and packet_number > self._spin_highest_pn:
                 self._spin_bit_peer = get_spin_bit(plain_header[0])
-                if self.is_client:
+                if self._is_client:
                     self._spin_bit = not self._spin_bit_peer
                 else:
                     self._spin_bit = self._spin_bit_peer
@@ -689,11 +677,11 @@ class QuicConnection(asyncio.DatagramProtocol):
                 return
 
             # update idle timeout
-            self._close_at = now + self._local_idle_timeout
+            self._close_at = now + self._configuration.idle_timeout
 
             # handle migration
             if (
-                not self.is_client
+                not self._is_client
                 and context.host_cid != self.host_cid
                 and epoch == tls.Epoch.ONE_RTT
             ):
@@ -770,9 +758,9 @@ class QuicConnection(asyncio.DatagramProtocol):
         """
         Start the client handshake.
         """
-        assert self.is_client
+        assert self._is_client
 
-        self._close_at = self._loop.time() + self._local_idle_timeout
+        self._close_at = self._loop.time() + self._configuration.idle_timeout
         self._initialize(self._peer_cid)
 
         self.tls.handle_message(b"", self._crypto_buffers)
@@ -819,7 +807,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         stream = self._streams.get(stream_id, None)
         if stream is None:
             # check initiator
-            if stream_is_client_initiated(stream_id) == self.is_client:
+            if stream_is_client_initiated(stream_id) == self._is_client:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.STREAM_STATE_ERROR,
                     frame_type=frame_type,
@@ -857,30 +845,31 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _initialize(self, peer_cid: bytes) -> None:
         # TLS
-        self.tls = tls.Context(is_client=self.is_client, logger=self._logger)
-        self.tls.alpn_protocols = self._alpn_protocols
-        self.tls.certificate = self._certificate
-        self.tls.certificate_private_key = self._private_key
+        self.tls = tls.Context(is_client=self._is_client, logger=self._logger)
+        self.tls.alpn_protocols = self._configuration.alpn_protocols
+        self.tls.certificate = self._configuration.certificate
+        self.tls.certificate_private_key = self._configuration.private_key
         self.tls.handshake_extensions = [
             (
                 tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
                 self._serialize_transport_parameters(),
             )
         ]
-        self.tls.server_name = self._server_name
+        self.tls.server_name = self._configuration.server_name
 
         # TLS session resumption
+        session_ticket = self._configuration.session_ticket
         if (
-            self.is_client
-            and self._session_ticket is not None
-            and self._session_ticket.is_valid
-            and self._session_ticket.server_name == self._server_name
+            self._is_client
+            and session_ticket is not None
+            and session_ticket.is_valid
+            and session_ticket.server_name == self._configuration.server_name
         ):
-            self.tls.session_ticket = self._session_ticket
+            self.tls.session_ticket = self._configuration.session_ticket
 
             # parse saved QUIC transport parameters - for 0-RTT
-            if self._session_ticket.max_early_data_size == 0xFFFFFFFF:
-                for ext_type, ext_data in self._session_ticket.other_extensions:
+            if session_ticket.max_early_data_size == 0xFFFFFFFF:
+                for ext_type, ext_data in session_ticket.other_extensions:
                     if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
                         self._parse_transport_parameters(
                             ext_data, from_session_ticket=True
@@ -918,7 +907,7 @@ class QuicConnection(asyncio.DatagramProtocol):
         }
 
         self._cryptos[tls.Epoch.INITIAL].setup_initial(
-            cid=peer_cid, is_client=self.is_client
+            cid=peer_cid, is_client=self._is_client
         )
 
         self._loss.spaces = list(self._spaces.values())
@@ -1422,7 +1411,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             host_cid=self.host_cid,
             packet_number=self._packet_number,
             pad_first_datagram=(
-                self.is_client and self._state == QuicConnectionState.FIRSTFLIGHT
+                self._is_client and self._state == QuicConnectionState.FIRSTFLIGHT
             ),
             peer_cid=self._peer_cid,
             peer_token=self._peer_token,
@@ -1484,7 +1473,7 @@ class QuicConnection(asyncio.DatagramProtocol):
                     sent_handshake = True
 
             # check if we can discard initial keys
-            if sent_handshake and self.is_client:
+            if sent_handshake and self._is_client:
                 self._discard_epoch(tls.Epoch.INITIAL)
 
         # arm timer
@@ -1504,7 +1493,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
         # validate remote parameters
         if (
-            self.is_client
+            self._is_client
             and not from_session_ticket
             and (
                 quic_transport_parameters.original_connection_id
@@ -1542,7 +1531,7 @@ class QuicConnection(asyncio.DatagramProtocol):
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
-            idle_timeout=int(self._local_idle_timeout * 1000),
+            idle_timeout=int(self._configuration.idle_timeout * 1000),
             initial_max_data=self._local_max_data,
             initial_max_stream_data_bidi_local=self._local_max_stream_data_bidi_local,
             initial_max_stream_data_bidi_remote=self._local_max_stream_data_bidi_remote,
@@ -1551,7 +1540,7 @@ class QuicConnection(asyncio.DatagramProtocol):
             initial_max_streams_uni=self._local_max_streams_uni,
             ack_delay_exponent=10,
         )
-        if not self.is_client:
+        if not self._is_client:
             quic_transport_parameters.original_connection_id = (
                 self._original_connection_id
             )
@@ -1589,12 +1578,12 @@ class QuicConnection(asyncio.DatagramProtocol):
     def _stream_can_receive(self, stream_id: int) -> bool:
         return stream_is_client_initiated(
             stream_id
-        ) != self.is_client or not stream_is_unidirectional(stream_id)
+        ) != self._is_client or not stream_is_unidirectional(stream_id)
 
     def _stream_can_send(self, stream_id: int) -> bool:
         return stream_is_client_initiated(
             stream_id
-        ) == self.is_client or not stream_is_unidirectional(stream_id)
+        ) == self._is_client or not stream_is_unidirectional(stream_id)
 
     def _update_traffic_key(
         self,
@@ -1607,13 +1596,14 @@ class QuicConnection(asyncio.DatagramProtocol):
         Callback which is invoked by the TLS engine when new traffic keys are
         available.
         """
-        if self._secrets_log_file is not None:
-            label_row = self.is_client == (direction == tls.Direction.DECRYPT)
+        secrets_log_file = self._configuration.secrets_log_file
+        if secrets_log_file is not None:
+            label_row = self._is_client == (direction == tls.Direction.DECRYPT)
             label = SECRETS_LABELS[label_row][epoch.value]
-            self._secrets_log_file.write(
+            secrets_log_file.write(
                 "%s %s %s\n" % (label, self.tls.client_random.hex(), secret.hex())
             )
-            self._secrets_log_file.flush()
+            secrets_log_file.flush()
 
         crypto = self._cryptos[epoch]
         if direction == tls.Direction.ENCRYPT:

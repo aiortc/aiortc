@@ -7,6 +7,7 @@ from unittest import TestCase
 
 from aioquic import tls
 from aioquic.buffer import Buffer
+from aioquic.configuration import QuicConfiguration
 from aioquic.connection import (
     QuicConnection,
     QuicConnectionError,
@@ -64,7 +65,7 @@ def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
 
 
 def create_standalone_client():
-    client = QuicConnection(is_client=True)
+    client = QuicConnection(configuration=QuicConfiguration(is_client=True))
     client_transport = FakeTransport(CLIENT_ADDR, loss=0)
 
     # kick-off handshake
@@ -96,16 +97,22 @@ def client_and_server(
     client_patch=lambda x: None,
     server_options={},
     server_patch=lambda x: None,
+    server_stream_handler=None,
     transport_options={},
 ):
-    client = QuicConnection(is_client=True, **client_options)
+    client = QuicConnection(
+        configuration=QuicConfiguration(is_client=True, **client_options)
+    )
     client_patch(client)
 
     server = QuicConnection(
-        is_client=False,
-        certificate=SERVER_CERTIFICATE,
-        private_key=SERVER_PRIVATE_KEY,
-        **server_options
+        configuration=QuicConfiguration(
+            is_client=False,
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+            **server_options
+        ),
+        stream_handler=server_stream_handler,
     )
     server_patch(server)
 
@@ -143,12 +150,10 @@ class QuicConnectionTest(TestCase):
 
         with client_and_server(
             client_options={"supported_versions": client_versions},
-            server_options={
-                "stream_handler": lambda reader, writer: asyncio.ensure_future(
-                    serve_request(reader, writer)
-                ),
-                "supported_versions": server_versions,
-            },
+            server_options={"supported_versions": server_versions},
+            server_stream_handler=lambda reader, writer: asyncio.ensure_future(
+                serve_request(reader, writer)
+            ),
         ) as (client, server):
             run(asyncio.gather(client.wait_connected(), server.wait_connected()))
 
@@ -386,7 +391,7 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(client_transport.sent, 1)
 
     def test_error_received(self):
-        client = QuicConnection(is_client=True)
+        client, _ = create_standalone_client()
         client.error_received(OSError("foo"))
 
     def test_handle_ack_frame_ecn(self):
@@ -891,11 +896,9 @@ class QuicConnectionTest(TestCase):
             writer.write_eof()
 
         with client_and_server(
-            server_options={
-                "stream_handler": lambda reader, writer: asyncio.ensure_future(
-                    serve_request(reader, writer)
-                )
-            }
+            server_stream_handler=lambda reader, writer: asyncio.ensure_future(
+                serve_request(reader, writer)
+            )
         ) as (client, server):
             # complete handshake
             run(client.wait_connected())
@@ -926,11 +929,9 @@ class QuicConnectionTest(TestCase):
             writer.write_eof()
 
         with client_and_server(
-            server_options={
-                "stream_handler": lambda reader, writer: asyncio.ensure_future(
-                    serve_request(reader, writer)
-                )
-            },
+            server_stream_handler=lambda reader, writer: asyncio.ensure_future(
+                serve_request(reader, writer)
+            ),
             transport_options={"loss": 0.25},
         ) as (client, server):
             # complete handshake

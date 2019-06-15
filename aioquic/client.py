@@ -4,6 +4,7 @@ import socket
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
 from .compat import asynccontextmanager
+from .configuration import QuicConfiguration
 from .connection import QuicConnection, QuicStreamHandler
 from .tls import SessionTicket, SessionTicketHandler
 
@@ -58,15 +59,20 @@ async def connect(
     if len(addr) == 2:
         addr = ("::ffff:" + addr[0], addr[1], 0, 0)
 
+    configuration = QuicConfiguration(
+        alpn_protocols=alpn_protocols,
+        is_client=True,
+        secrets_log_file=secrets_log_file,
+        server_name=server_name,
+        session_ticket=session_ticket,
+    )
+    if idle_timeout is not None:
+        configuration.idle_timeout = idle_timeout
+
     # connect
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicConnection(
-            alpn_protocols=alpn_protocols,
-            idle_timeout=idle_timeout,
-            is_client=True,
-            secrets_log_file=secrets_log_file,
-            server_name=server_name,
-            session_ticket=session_ticket,
+            configuration=configuration,
             session_ticket_handler=session_ticket_handler,
             stream_handler=stream_handler,
         ),

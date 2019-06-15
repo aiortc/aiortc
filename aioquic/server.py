@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from .buffer import Buffer
+from .configuration import QuicConfiguration
 from .connection import NetworkAddress, QuicConnection, QuicStreamHandler
 from .packet import (
     PACKET_TYPE_INITIAL,
@@ -30,23 +31,15 @@ class QuicServer(asyncio.DatagramProtocol):
     def __init__(
         self,
         *,
-        certificate: Any,
-        private_key: Any,
-        alpn_protocols: Optional[List[str]] = None,
+        configuration: QuicConfiguration,
         connection_handler: Optional[QuicConnectionHandler] = None,
-        idle_timeout: Optional[float] = None,
-        secrets_log_file: Optional[TextIO] = None,
         session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
         session_ticket_handler: Optional[SessionTicketHandler] = None,
         stateless_retry: bool = False,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
-        self._alpn_protocols = alpn_protocols
-        self._certificate = certificate
+        self._configuration = configuration
         self._connections: Dict[bytes, QuicConnection] = {}
-        self._idle_timeout = idle_timeout
-        self._private_key = private_key
-        self._secrets_log_file = secrets_log_file
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
         self._transport: Optional[asyncio.DatagramTransport] = None
@@ -76,13 +69,13 @@ class QuicServer(asyncio.DatagramProtocol):
         # version negotiation
         if (
             header.version is not None
-            and header.version not in QuicConnection.supported_versions
+            and header.version not in self._configuration.supported_versions
         ):
             self._transport.sendto(
                 encode_quic_version_negotiation(
                     source_cid=header.destination_cid,
                     destination_cid=header.source_cid,
-                    supported_versions=QuicConnection.supported_versions,
+                    supported_versions=self._configuration.supported_versions,
                 ),
                 addr,
             )
@@ -134,13 +127,8 @@ class QuicServer(asyncio.DatagramProtocol):
 
             # create new connection
             connection = QuicConnection(
-                alpn_protocols=self._alpn_protocols,
-                certificate=self._certificate,
-                idle_timeout=self._idle_timeout,
-                is_client=False,
+                configuration=self._configuration,
                 original_connection_id=original_connection_id,
-                private_key=self._private_key,
-                secrets_log_file=self._secrets_log_file,
                 session_ticket_fetcher=self._session_ticket_fetcher,
                 session_ticket_handler=self._session_ticket_handler,
                 stream_handler=self._stream_handler,
@@ -205,13 +193,18 @@ async def serve(
 
     loop = asyncio.get_event_loop()
 
+    configuration = QuicConfiguration(
+        alpn_protocols=alpn_protocols,
+        certificate=certificate,
+        is_client=False,
+        private_key=private_key,
+        secrets_log_file=secrets_log_file,
+    )
+
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
-            alpn_protocols=alpn_protocols,
-            certificate=certificate,
+            configuration=configuration,
             connection_handler=connection_handler,
-            private_key=private_key,
-            secrets_log_file=secrets_log_file,
             session_ticket_fetcher=session_ticket_fetcher,
             session_ticket_handler=session_ticket_handler,
             stateless_retry=stateless_retry,
