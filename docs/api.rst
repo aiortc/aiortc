@@ -1,7 +1,7 @@
 API Reference
 =============
 
-.. automodule:: aioquic
+.. automodule:: aioquic.asyncio
 
 Client
 ------
@@ -16,7 +16,7 @@ Server
 Common
 ------
 
-     .. autoclass:: QuicConnection
+     .. autoclass:: QuicConnectionProtocol
 
           .. automethod:: close()
           .. automethod:: create_stream()

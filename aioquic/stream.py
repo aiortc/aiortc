@@ -1,12 +1,12 @@
-import asyncio
 from typing import Any, Optional
 
+from . import events
 from .packet import QuicStreamFrame
 from .packet_builder import QuicDeliveryState
 from .rangeset import RangeSet
 
 
-class QuicStream(asyncio.Transport):
+class QuicStream:
     def __init__(
         self,
         stream_id: Optional[int] = None,
@@ -19,13 +19,6 @@ class QuicStream(asyncio.Transport):
         self.max_stream_data_local_sent = max_stream_data_local
         self.max_stream_data_remote = max_stream_data_remote
         self.send_buffer_is_empty = True
-
-        if stream_id is not None:
-            self.reader = asyncio.StreamReader()
-            self.writer = asyncio.StreamWriter(self, None, self.reader, None)
-        else:
-            self.reader = None
-            self.writer = None
 
         self._recv_buffer = bytearray()
         self._recv_buffer_fin: Optional[int] = None
@@ -47,13 +40,6 @@ class QuicStream(asyncio.Transport):
     @property
     def stream_id(self) -> Optional[int]:
         return self.__stream_id
-
-    def connection_lost(self, exc: Exception) -> None:
-        if self.reader is not None:
-            if exc is None:
-                self.reader.feed_eof()
-            else:
-                self.reader.set_exception(exc)
 
     # reader
 
@@ -92,12 +78,15 @@ class QuicStream(asyncio.Transport):
         if frame.fin:
             self._recv_buffer_fin = frame_end
 
-        if self.reader:
+        if self._connection:
             data = self.pull_data()
-            if data:
-                self.reader.feed_data(data)
-            if self._recv_buffer_start == self._recv_buffer_fin:
-                self.reader.feed_eof()
+            self._connection._events.append(
+                events.StreamDataReceived(
+                    data=data,
+                    end_stream=(self._recv_buffer_start == self._recv_buffer_fin),
+                    stream_id=self.__stream_id,
+                )
+            )
 
     def pull_data(self) -> bytes:
         """
@@ -203,18 +192,6 @@ class QuicStream(asyncio.Transport):
 
     # asyncio.Transport
 
-    def can_write_eof(self) -> bool:
-        return True
-
-    def get_extra_info(self, name: str, default: Any = None) -> Any:
-        """
-        Get information about the underlying QUIC stream.
-        """
-        if name == "connection":
-            return self._connection
-        elif name == "stream_id":
-            return self.stream_id
-
     def get_write_buffer_size(self) -> int:
         """
         Return the current size of the write buffer.
@@ -235,8 +212,6 @@ class QuicStream(asyncio.Transport):
             )
             self._send_buffer += data
             self._send_buffer_stop += size
-            if self._connection is not None:
-                self._connection._send_soon()
 
     def write_eof(self) -> None:
         assert self._send_buffer_fin is None, "cannot call write_eof() after FIN"
@@ -244,5 +219,3 @@ class QuicStream(asyncio.Transport):
         self.send_buffer_is_empty = False
         self._send_buffer_fin = self._send_buffer_stop
         self._send_pending_eof = True
-        if self._connection is not None:
-            self._connection._send_soon()

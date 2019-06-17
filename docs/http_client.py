@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 import asyncio
-import aioquic
+from aioquic.asyncio import connect
 
 async def http_client(host, port):
-    async with aioquic.connect(host, port) as connection:
+    async with connect(host, port) as connection:
         reader, writer = await connection.create_stream()
         writer.write(b"GET /\r\n")
         writer.write_eof()

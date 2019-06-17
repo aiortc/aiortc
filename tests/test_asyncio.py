@@ -1,8 +1,8 @@
 import asyncio
 from unittest import TestCase
 
-from aioquic.client import connect
-from aioquic.server import serve
+from aioquic.asyncio.client import connect
+from aioquic.asyncio.server import serve
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
@@ -21,6 +21,7 @@ class SessionTicketStore:
 async def run_client(host, port=4433, request=b"ping", **kwargs):
     async with connect(host, port, **kwargs) as client:
         reader, writer = await client.create_stream()
+        assert writer.can_write_eof() is True
 
         writer.write(request)
         writer.write_eof()
@@ -62,6 +63,22 @@ class HighLevelTest(TestCase):
             asyncio.gather(run_server(), run_client("127.0.0.1", request=data))
         )
         self.assertEqual(response, data)
+
+    def test_connect_and_serve_writelines(self):
+        async def run_client_writelines(host, port=4433, **kwargs):
+            async with connect(host, port, **kwargs) as client:
+                reader, writer = await client.create_stream()
+                assert writer.can_write_eof() is True
+
+                writer.writelines([b"01234567", b"89012345"])
+                writer.write_eof()
+
+                return await reader.read()
+
+        _, response = run(
+            asyncio.gather(run_server(), run_client_writelines("127.0.0.1"))
+        )
+        self.assertEqual(response, b"5432109876543210")
 
     def test_connect_and_serve_with_session_ticket(self):
         client_ticket = None

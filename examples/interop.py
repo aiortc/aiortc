@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Flag
 
-import aioquic
+from aioquic.asyncio import connect
 
 
 class Result(Flag):
@@ -84,17 +84,17 @@ async def http_request(connection, path):
 
 
 async def test_version_negotiation(config, **kwargs):
-    async with aioquic.connect(
+    async with connect(
         config.host, config.port, protocol_version=0x1A2A3A4A, **kwargs
     ) as connection:
-        if connection._version_negotiation_count == 1:
+        if connection._connection._version_negotiation_count == 1:
             config.result |= Result.V
 
 
 async def test_handshake_and_close(config, **kwargs):
-    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+    async with connect(config.host, config.port, **kwargs) as connection:
         config.result |= Result.H
-        if connection._stateless_retry_count == 1:
+        if connection._connection._stateless_retry_count == 1:
             config.result |= Result.S
     config.result |= Result.C
 
@@ -103,7 +103,7 @@ async def test_data_transfer(config, **kwargs):
     if config.path is None:
         return
 
-    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+    async with connect(config.host, config.port, **kwargs) as connection:
         response1 = await http_request(connection, config.path)
         response2 = await http_request(connection, config.path)
 
@@ -119,7 +119,7 @@ async def test_session_resumption(config, **kwargs):
         saved_ticket = ticket
 
     # connect a first time, receive a ticket
-    async with aioquic.connect(
+    async with connect(
         config.host,
         config.port,
         session_ticket_handler=session_ticket_handler,
@@ -129,22 +129,22 @@ async def test_session_resumption(config, **kwargs):
 
     # connect a second time, with the ticket
     if saved_ticket is not None:
-        async with aioquic.connect(
+        async with connect(
             config.host, config.port, session_ticket=saved_ticket, **kwargs
         ) as connection:
             await connection.ping()
 
         # check session was resumed
-        if connection.tls.session_resumed:
+        if connection._connection.tls.session_resumed:
             config.result |= Result.R
 
         # check early data was accepted
-        if connection.tls.early_data_accepted:
+        if connection._connection.tls.early_data_accepted:
             config.result |= Result.Z
 
 
 async def test_key_update(config, **kwargs):
-    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+    async with connect(config.host, config.port, **kwargs) as connection:
         # cause some traffic
         await connection.ping()
 
@@ -158,11 +158,11 @@ async def test_key_update(config, **kwargs):
 
 
 async def test_spin_bit(config, **kwargs):
-    async with aioquic.connect(config.host, config.port, **kwargs) as connection:
+    async with connect(config.host, config.port, **kwargs) as connection:
         spin_bits = set()
         for i in range(5):
             await connection.ping()
-            spin_bits.add(connection._spin_bit_peer)
+            spin_bits.add(connection._connection._spin_bit_peer)
         if len(spin_bits) == 2:
             config.result |= Result.P
 
@@ -181,8 +181,8 @@ async def run(only=None, **kwargs):
             print("\n=== %s %s ===\n" % (config.name, test_name))
             try:
                 await asyncio.wait_for(test_func(config, **kwargs), timeout=5)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(exc)
         print("")
         print_result(config)
 

@@ -1,26 +1,28 @@
 import asyncio
 import ipaddress
 import os
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cast
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from .buffer import Buffer
-from .configuration import QuicConfiguration
-from .connection import NetworkAddress, QuicConnection, QuicStreamHandler
-from .packet import (
+from ..buffer import Buffer
+from ..configuration import QuicConfiguration
+from ..connection import NetworkAddress, QuicConnection
+from ..packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
     encode_quic_version_negotiation,
     pull_quic_header,
 )
-from .tls import SessionTicketFetcher, SessionTicketHandler
+from ..tls import SessionTicketFetcher, SessionTicketHandler
+from .protocol import QuicConnectionProtocol, QuicStreamHandler
 
 __all__ = ["serve"]
 
-QuicConnectionHandler = Callable[[QuicConnection], None]
+QuicConnectionHandler = Callable[[QuicConnectionProtocol], None]
 
 
 def encode_address(addr: NetworkAddress) -> bytes:
@@ -39,7 +41,8 @@ class QuicServer(asyncio.DatagramProtocol):
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         self._configuration = configuration
-        self._connections: Dict[bytes, QuicConnection] = {}
+        self._protocols: Dict[bytes, QuicConnectionProtocol] = {}
+        self._loop = asyncio.get_event_loop()
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
         self._transport: Optional[asyncio.DatagramTransport] = None
@@ -81,9 +84,9 @@ class QuicServer(asyncio.DatagramProtocol):
             )
             return
 
-        connection = self._connections.get(header.destination_cid, None)
+        protocol = self._protocols.get(header.destination_cid, None)
         original_connection_id: Optional[bytes] = None
-        if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
+        if protocol is None and header.packet_type == PACKET_TYPE_INITIAL:
             # stateless retry
             if self._retry_key is not None:
                 if not header.token:
@@ -131,25 +134,34 @@ class QuicServer(asyncio.DatagramProtocol):
                 original_connection_id=original_connection_id,
                 session_ticket_fetcher=self._session_ticket_fetcher,
                 session_ticket_handler=self._session_ticket_handler,
-                stream_handler=self._stream_handler,
             )
-            self._connections[header.destination_cid] = connection
+            protocol = QuicConnectionProtocol(
+                connection, stream_handler=self._stream_handler
+            )
+            protocol._connection_id_issued_handler = partial(
+                self._connection_id_issued, protocol=protocol
+            )
+            protocol._connection_id_retired_handler = partial(
+                self._connection_id_retired, protocol=protocol
+            )
 
-            def connection_id_issued(cid: bytes) -> None:
-                self._connections[cid] = connection
+            self._protocols[header.destination_cid] = protocol
+            protocol.connection_made(self._transport)
 
-            def connection_id_retired(cid: bytes) -> None:
-                del self._connections[cid]
+            self._protocols[connection.host_cid] = protocol
+            self._connection_handler(protocol)
 
-            connection._connection_id_issued_handler = connection_id_issued
-            connection._connection_id_retired_handler = connection_id_retired
-            connection.connection_made(self._transport)
+        if protocol is not None:
+            protocol.datagram_received(data, addr)
 
-            self._connections[connection.host_cid] = connection
-            self._connection_handler(connection)
+    def _connection_id_issued(self, cid: bytes, protocol: QuicConnectionProtocol):
+        self._protocols[cid] = protocol
 
-        if connection is not None:
-            connection.datagram_received(data, addr)
+    def _connection_id_retired(
+        self, cid: bytes, protocol: QuicConnectionProtocol
+    ) -> None:
+        assert self._protocols[cid] == protocol
+        del self._protocols[cid]
 
 
 async def serve(
@@ -181,7 +193,7 @@ async def serve(
 
     * ``connection_handler`` is a callback which is invoked whenever a
       connection is created. It must be a a function accepting a single
-      argument: a :class:`~aioquic.QuicConnection`.
+      argument: a :class:`~aioquic.asyncio.protocol.QuicConnectionProtocol`.
     * ``secrets_log_file`` is  a file-like object in which to log traffic
       secrets. This is useful to analyze traffic captures with Wireshark.
     * ``stateless_retry`` specifies whether a stateless retry should be

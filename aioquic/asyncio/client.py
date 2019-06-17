@@ -3,10 +3,11 @@ import ipaddress
 import socket
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
+from ..configuration import QuicConfiguration
+from ..connection import QuicConnection
+from ..tls import SessionTicket, SessionTicketHandler
 from .compat import asynccontextmanager
-from .configuration import QuicConfiguration
-from .connection import QuicConnection, QuicStreamHandler
-from .tls import SessionTicket, SessionTicketHandler
+from .protocol import QuicConnectionProtocol, QuicStreamHandler
 
 __all__ = ["connect"]
 
@@ -23,7 +24,7 @@ async def connect(
     session_ticket: Optional[SessionTicket] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
-) -> AsyncGenerator[QuicConnection, None]:
+) -> AsyncGenerator[QuicConnectionProtocol, None]:
     """
     Connect to a QUIC server at the given `host` and `port`.
 
@@ -69,20 +70,21 @@ async def connect(
     if idle_timeout is not None:
         configuration.idle_timeout = idle_timeout
 
+    connection = QuicConnection(
+        configuration=configuration, session_ticket_handler=session_ticket_handler
+    )
+
     # connect
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicConnection(
-            configuration=configuration,
-            session_ticket_handler=session_ticket_handler,
-            stream_handler=stream_handler,
-        ),
+        lambda: QuicConnectionProtocol(connection, stream_handler=stream_handler),
         local_addr=("::", 0),
     )
-    protocol = cast(QuicConnection, protocol)
-    protocol.connect(addr, protocol_version=protocol_version)
+    protocol = cast(QuicConnectionProtocol, protocol)
+    protocol.connect(addr, protocol_version)
     await protocol.wait_connected()
     try:
         yield protocol
     finally:
         protocol.close()
+        protocol._send_pending()
     await protocol.wait_closed()

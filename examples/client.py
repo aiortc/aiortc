@@ -4,7 +4,7 @@ import logging
 import pickle
 import time
 
-import aioquic
+from aioquic.asyncio import connect
 
 try:
     import uvloop
@@ -27,7 +27,7 @@ def save_session_ticket(ticket):
 
 
 async def run(host, port, path, **kwargs):
-    async with aioquic.connect(host, port, **kwargs) as connection:
+    async with connect(host, port, **kwargs) as connection:
         # perform HTTP/0.9 request
         reader, writer = await connection.create_stream()
         writer.write(("GET %s\r\n" % path).encode("utf8"))

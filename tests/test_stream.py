@@ -1,16 +1,8 @@
-import asyncio
 from unittest import TestCase
 
 from aioquic.packet import QuicStreamFrame
 from aioquic.packet_builder import QuicDeliveryState
 from aioquic.stream import QuicStream
-
-from .utils import run
-
-
-async def delay(coro):
-    await asyncio.sleep(0.1)
-    await coro()
 
 
 class QuicStreamTest(TestCase):
@@ -73,15 +65,6 @@ class QuicStreamTest(TestCase):
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 16)
-
-    def test_recv_ordered_3(self):
-        stream = QuicStream(stream_id=0)
-
-        async def add_frame():
-            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-
-        data, _ = run(asyncio.gather(stream.reader.read(1024), delay(add_frame)))
-        self.assertEqual(data, b"01234567")
 
     def test_recv_unordered(self):
         stream = QuicStream()
@@ -156,14 +139,14 @@ class QuicStreamTest(TestCase):
         stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
         stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
 
-        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+        self.assertEqual(stream.pull_data(), b"0123456789012345")
 
     def test_recv_fin_out_of_order(self):
         stream = QuicStream(stream_id=0)
         stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
         stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
 
-        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+        self.assertEqual(stream.pull_data(), b"0123456789012345")
 
     def test_recv_fin_then_data(self):
         stream = QuicStream(stream_id=0)
@@ -178,17 +161,16 @@ class QuicStreamTest(TestCase):
         stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
         stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
 
-        self.assertEqual(run(stream.reader.read()), b"0123456789012345")
+        self.assertEqual(stream.pull_data(), b"0123456789012345")
 
     def test_recv_fin_without_data(self):
         stream = QuicStream(stream_id=0)
         stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True))
 
-        self.assertEqual(run(stream.reader.read()), b"")
+        self.assertEqual(stream.pull_data(), b"")
 
     def test_send_data(self):
         stream = QuicStream()
-        self.assertTrue(stream.can_write_eof())
 
         # nothing to send yet
         frame = stream.get_frame(8)
@@ -420,31 +402,3 @@ class QuicStreamTest(TestCase):
         # nothing more to send
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
-
-    def test_send_data_using_writelines(self):
-        stream = QuicStream()
-
-        # nothing to send yet
-        frame = stream.get_frame(8)
-        self.assertIsNone(frame)
-
-        # write data, send a chunk
-        stream.writelines([b"01234567", b"89012345"])
-        self.assertEqual(list(stream._send_pending), [range(0, 16)])
-        frame = stream.get_frame(8)
-        self.assertEqual(frame.data, b"01234567")
-        self.assertFalse(frame.fin)
-        self.assertEqual(frame.offset, 0)
-        self.assertEqual(list(stream._send_pending), [range(8, 16)])
-
-        # send another chunk
-        frame = stream.get_frame(8)
-        self.assertEqual(frame.data, b"89012345")
-        self.assertFalse(frame.fin)
-        self.assertEqual(frame.offset, 8)
-        self.assertEqual(list(stream._send_pending), [])
-
-        # nothing more to send
-        frame = stream.get_frame(8)
-        self.assertIsNone(frame)
-        self.assertEqual(list(stream._send_pending), [])
