@@ -1092,7 +1092,9 @@ class QuicConnection:
             ]:
                 self._handshake_complete = True
                 self._replenish_connection_ids()
-                self._events.append(events.HandshakeCompleted())
+                self._events.append(
+                    events.HandshakeCompleted(alpn_protocol=self.tls.alpn_negotiated)
+                )
 
     def _handle_data_blocked_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer

@@ -120,12 +120,16 @@ class QuicConnectionTest(TestCase):
             server_options={"supported_versions": server_versions},
         ) as (client, server):
             # check handshake completed
-            self.assertEqual(type(client.next_event()), events.HandshakeCompleted)
+            event = client.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, None)
             for i in range(7):
                 self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(client.next_event())
 
-            self.assertEqual(type(server.next_event()), events.HandshakeCompleted)
+            event = server.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, None)
             for i in range(7):
                 self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(server.next_event())
@@ -171,6 +175,26 @@ class QuicConnectionTest(TestCase):
             client_versions=[QuicProtocolVersion.DRAFT_20],
             server_versions=[QuicProtocolVersion.DRAFT_20],
         )
+
+    def test_connect_with_alpn(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["hq-20", "h3-20"]},
+            server_options={"alpn_protocols": ["hq-20"]},
+        ) as (client, server):
+            # check handshake completed
+            event = client.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, "hq-20")
+            for i in range(7):
+                self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
+            self.assertIsNone(client.next_event())
+
+            event = server.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, "hq-20")
+            for i in range(7):
+                self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
+            self.assertIsNone(server.next_event())
 
     def test_connect_with_log(self):
         client_log_file = io.StringIO()
