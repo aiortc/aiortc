@@ -21,6 +21,21 @@ import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
 
+class MockBuffer:
+    Buffer = None
+    BufferReadError = None
+    BufferWriteError = None
+
+
+class MockCrypto:
+    AEAD = None
+    CryptoError = None
+    HeaderProtection = None
+
+
+sys.modules.update({"aioquic._buffer": MockBuffer()})
+sys.modules.update({"aioquic._crypto": MockCrypto()})
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
