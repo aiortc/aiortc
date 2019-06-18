@@ -3,7 +3,7 @@ import binascii
 import contextlib
 import io
 import time
-from unittest import TestCase, skip
+from unittest import TestCase
 
 from aioquic import events, tls
 from aioquic.buffer import Buffer
@@ -25,7 +25,7 @@ from aioquic.packet import (
 )
 from aioquic.packet_builder import QuicDeliveryState, QuicPacketBuilder
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
+from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY
 
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
@@ -874,74 +874,6 @@ class QuicConnectionTest(TestCase):
             now=time.time(),
         )
         self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
-
-    @skip
-    def test_with_packet_loss_during_app_data(self):
-        """
-        This test ensures stream data is successfully sent and received
-        in the presence of packet loss (randomized 25% in each direction).
-
-        This tests *only* exercises loss in the 1-RTT epoch, no loss occurs
-        during the handshake phase.
-        """
-        client_data = b"C" * 100000
-        server_data = b"S" * 100000
-
-        async def serve_request(reader, writer):
-            self.assertEqual(await reader.read(), client_data)
-            writer.write(server_data)
-            writer.write_eof()
-
-        with client_and_server(
-            server_stream_handler=lambda reader, writer: asyncio.ensure_future(
-                serve_request(reader, writer)
-            )
-        ) as (client, server):
-            # complete handshake
-            run(client.wait_connected())
-
-            # cause packet loss in both directions
-            client._transport.loss = 0.25
-            server._transport.loss = 0.25
-
-            # create stream and send data
-            client_reader, client_writer = client.create_stream()
-            client_writer.write(client_data)
-            client_writer.write_eof()
-
-            # check response
-            self.assertEqual(run(client_reader.read()), server_data)
-
-    @skip
-    def test_with_packet_loss_during_handshake(self):
-        """
-        This test ensures handshake success and stream data is successfully sent
-        and received in the presence of packet loss (randomized 25% in each direction).
-        """
-        client_data = b"C" * 50000
-        server_data = b"S" * 50000
-
-        async def serve_request(reader, writer):
-            self.assertEqual(await reader.read(), client_data)
-            writer.write(server_data)
-            writer.write_eof()
-
-        with client_and_server(
-            server_stream_handler=lambda reader, writer: asyncio.ensure_future(
-                serve_request(reader, writer)
-            ),
-            transport_options={"loss": 0.25},
-        ) as (client, server):
-            # complete handshake
-            run(asyncio.gather(client.wait_connected(), server.wait_connected()))
-
-            # create stream and send data
-            client_reader, client_writer = client.create_stream()
-            client_writer.write(client_data)
-            client_writer.write_eof()
-
-            # check response
-            self.assertEqual(run(client_reader.read()), server_data)
 
 
 class QuicNetworkPathTest(TestCase):

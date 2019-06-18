@@ -1,10 +1,23 @@
 import asyncio
+import random
+import socket
 from unittest import TestCase
+from unittest.mock import patch
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.server import serve
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
+
+real_sendto = socket.socket.sendto
+
+
+def sendto_with_loss(self, data, addr=None):
+    """
+    Simulate 25% packet loss.
+    """
+    if random.random() > 0.25:
+        real_sendto(self, data, addr)
 
 
 class SessionTicketStore:
@@ -80,6 +93,20 @@ class HighLevelTest(TestCase):
             asyncio.gather(run_server(), run_client_writelines("127.0.0.1"))
         )
         self.assertEqual(response, b"5432109876543210")
+
+    @patch("socket.socket.sendto", new_callable=lambda: sendto_with_loss)
+    def test_connect_and_serve_with_packet_loss(self, mock_sendto):
+        """
+        This test ensures handshake success and stream data is successfully sent
+        and received in the presence of packet loss (randomized 25% in each direction).
+        """
+        data = b"Z" * 65536
+        _, response = run(
+            asyncio.gather(
+                run_server(stateless_retry=True), run_client("127.0.0.1", request=data)
+            )
+        )
+        self.assertEqual(response, data)
 
     def test_connect_and_serve_with_session_ticket(self):
         client_ticket = None
