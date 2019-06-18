@@ -34,6 +34,8 @@ class HandshakeCompleted(Event):
     """
 
     alpn_protocol: Optional[str]
+    early_data_accepted: bool
+    session_resumed: bool
 
 
 @dataclass

@@ -123,6 +123,8 @@ class QuicConnectionTest(TestCase):
             event = client.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, None)
+            self.assertEqual(event.early_data_accepted, False)
+            self.assertEqual(event.session_resumed, False)
             for i in range(7):
                 self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(client.next_event())
@@ -130,6 +132,8 @@ class QuicConnectionTest(TestCase):
             event = server.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, None)
+            self.assertEqual(event.early_data_accepted, False)
+            self.assertEqual(event.session_resumed, False)
             for i in range(7):
                 self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(server.next_event())

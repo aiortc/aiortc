@@ -372,13 +372,6 @@ class QuicConnection:
             (self._handle_connection_close_frame, EPOCHS("ZO")),
         ]
 
-    @property
-    def alpn_protocol(self) -> Optional[str]:
-        """
-        The protocol which was negotiated via ALPN.
-        """
-        return self.tls.alpn_negotiated
-
     def close(
         self,
         error_code: int = QuicErrorCode.NO_ERROR,
@@ -1083,7 +1076,6 @@ class QuicConnection:
                 assert (
                     self._parameters_received
                 ), "No QUIC transport parameters received"
-                self._logger.info("ALPN negotiated protocol %s", self.alpn_protocol)
 
             # update current epoch
             if not self._handshake_complete and self.tls.state in [
@@ -1093,7 +1085,14 @@ class QuicConnection:
                 self._handshake_complete = True
                 self._replenish_connection_ids()
                 self._events.append(
-                    events.HandshakeCompleted(alpn_protocol=self.tls.alpn_negotiated)
+                    events.HandshakeCompleted(
+                        alpn_protocol=self.tls.alpn_negotiated,
+                        early_data_accepted=self.tls.early_data_accepted,
+                        session_resumed=self.tls.session_resumed,
+                    )
+                )
+                self._logger.info(
+                    "ALPN negotiated protocol %s", self.tls.alpn_negotiated
                 )
 
     def _handle_data_blocked_frame(
