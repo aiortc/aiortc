@@ -56,10 +56,11 @@ def consume_events(connection):
 
 def create_standalone_client(self):
     client = QuicConnection(configuration=QuicConfiguration(is_client=True))
+    client._ack_delay = 0
 
     # kick-off handshake
     client.connect(SERVER_ADDR, now=time.time())
-    self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
+    self.assertEqual(drop(client), 1)
 
     return client
 
@@ -91,8 +92,8 @@ def client_and_server(
 
     # perform handshake
     client.connect(SERVER_ADDR, now=time.time())
-    for i in range(4):
-        tick(client, server)
+    for i in range(3):
+        roundtrip(client, server)
 
     yield client, server
 
@@ -105,12 +106,30 @@ def sequence_numbers(connection_ids):
     return list(map(lambda x: x.sequence_number, connection_ids))
 
 
-def tick(client, server):
-    for data, addr in client.datagrams_to_send(now=time.time()):
-        server.receive_datagram(data, CLIENT_ADDR, now=time.time())
+def drop(sender):
+    """
+    Drop datagrams from `sender`.
+    """
+    return len(sender.datagrams_to_send(now=time.time()))
 
-    for data, addr in server.datagrams_to_send(now=time.time()):
-        client.receive_datagram(data, SERVER_ADDR, now=time.time())
+
+def roundtrip(sender, receiver):
+    """
+    Send datagrams from `sender` to `receiver` and back.
+    """
+    return (transfer(sender, receiver), transfer(receiver, sender))
+
+
+def transfer(sender, receiver):
+    """
+    Send datagrams from `sender` to `receiver`.
+    """
+    datagrams = 0
+    from_addr = CLIENT_ADDR if sender._is_client else SERVER_ADDR
+    for data, addr in sender.datagrams_to_send(now=time.time()):
+        datagrams += 1
+        receiver.receive_datagram(data, from_addr, now=time.time())
+    return datagrams
 
 
 class QuicConnectionTest(TestCase):
@@ -148,7 +167,7 @@ class QuicConnectionTest(TestCase):
 
             # client closes the connection
             client.close()
-            tick(client, server)
+            self.assertEqual(transfer(client, server), 1)
 
             # check connection closes on the client side
             client.handle_timer(client.get_timer())
@@ -232,15 +251,64 @@ class QuicConnectionTest(TestCase):
 
             # the client changes connection ID
             client._consume_connection_id()
-            for data, addr in client.datagrams_to_send(now=time.time()):
-                server.receive_datagram(data, CLIENT_ADDR, now=time.time())
+            self.assertEqual(transfer(client, server), 1)
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
             )
 
             # the server provides a new connection ID
-            for data, addr in server.datagrams_to_send(now=time.time()):
-                client.receive_datagram(data, SERVER_ADDR, now=time.time())
+            self.assertEqual(transfer(server, client), 1)
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
+            )
+
+    def test_consume_connection_id_retransmit_new_connection_id(self):
+        with client_and_server() as (client, server):
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+            )
+
+            # the client changes connection ID
+            client._consume_connection_id()
+            self.assertEqual(transfer(client, server), 1)
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
+            )
+
+            # the server provides a new connection ID, NEW_CONNECTION_ID is lost
+            self.assertEqual(drop(server), 1)
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
+            )
+
+            # NEW_CONNECTION_ID is retransmitted
+            server._on_new_connection_id_delivery(
+                QuicDeliveryState.LOST, server._host_cids[-1]
+            )
+            self.assertEqual(transfer(server, client), 1)
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
+            )
+
+    def test_consume_connection_id_retransmit_retire_connection_id(self):
+        with client_and_server() as (client, server):
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
+            )
+
+            # the client changes connection ID, RETIRE_CONNECTION_ID is lost
+            client._consume_connection_id()
+            self.assertEqual(drop(client), 1)
+            self.assertEqual(
+                sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
+            )
+
+            # RETIRE_CONNECTION_ID is retransmitted
+            client._on_retire_connection_id_delivery(QuicDeliveryState.LOST, 0)
+            self.assertEqual(transfer(client, server), 1)
+
+            # the server provides a new connection ID
+            self.assertEqual(transfer(server, client), 1)
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
             )
@@ -333,7 +401,7 @@ class QuicConnectionTest(TestCase):
 
         for datagram in builder.flush()[0]:
             client.receive_datagram(datagram, SERVER_ADDR, now=time.time())
-        self.assertEqual(len(client.datagrams_to_send(now=time.time())), 0)
+        self.assertEqual(drop(client), 0)
 
     def test_receive_datagram_retry(self):
         client = create_standalone_client(self)
@@ -349,7 +417,7 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
             now=time.time(),
         )
-        self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
+        self.assertEqual(drop(client), 1)
 
     def test_receive_datagram_retry_wrong_destination_cid(self):
         client = create_standalone_client(self)
@@ -365,7 +433,7 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
             now=time.time(),
         )
-        self.assertEqual(len(client.datagrams_to_send(now=time.time())), 0)
+        self.assertEqual(drop(client), 0)
 
     def test_handle_ack_frame_ecn(self):
         client = create_standalone_client(self)
@@ -381,12 +449,12 @@ class QuicConnectionTest(TestCase):
             server.close(
                 error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
             )
-            tick(server, client)
+            roundtrip(server, client)
 
     def test_handle_connection_close_frame_app(self):
         with client_and_server() as (client, server):
             server.close(error_code=QuicErrorCode.NO_ERROR)
-            tick(server, client)
+            roundtrip(server, client)
 
     def test_handle_data_blocked_frame(self):
         with client_and_server() as (client, server):
@@ -795,20 +863,29 @@ class QuicConnectionTest(TestCase):
 
             # client sends ping, server ACKs it
             client.send_ping(uid=12345)
-            tick(client, server)
+            roundtrip(client, server)
 
             # check event
             event = client.next_event()
             self.assertEqual(type(event), events.PongReceived)
             self.assertEqual(event.uid, 12345)
 
-            # client sends  another ping
-            client.send_ping(uid=23456)
-            self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
+    def test_send_ping_retransmit(self):
+        with client_and_server() as (client, server):
+            consume_events(client)
 
-            # ping is lost
-            client._on_ping_delivery(QuicDeliveryState.LOST, (23456,))
-            self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
+            # client sends another ping, PING is lost
+            client.send_ping(uid=12345)
+            self.assertEqual(drop(client), 1)
+
+            # PING is retransmitted and acked
+            client._on_ping_delivery(QuicDeliveryState.LOST, (12345,))
+            self.assertEqual(roundtrip(client, server), (1, 1))
+
+            # check event
+            event = client.next_event()
+            self.assertEqual(type(event), events.PongReceived)
+            self.assertEqual(event.uid, 12345)
 
     def test_stream_direction(self):
         with client_and_server() as (client, server):
@@ -850,7 +927,7 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
             now=time.time(),
         )
-        self.assertEqual(len(client.datagrams_to_send(now=time.time())), 0)
+        self.assertEqual(drop(client), 0)
 
         event = client.next_event()
         self.assertEqual(type(event), events.ConnectionTerminated)
@@ -873,7 +950,7 @@ class QuicConnectionTest(TestCase):
             SERVER_ADDR,
             now=time.time(),
         )
-        self.assertEqual(len(client.datagrams_to_send(now=time.time())), 1)
+        self.assertEqual(drop(client), 1)
 
 
 class QuicNetworkPathTest(TestCase):
