@@ -5,7 +5,8 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from aioquic.asyncio.client import connect
-from aioquic.asyncio.server import serve
+from aioquic.asyncio.server import QuicServer, serve
+from aioquic.configuration import QuicConfiguration
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
@@ -195,3 +196,32 @@ class HighLevelTest(TestCase):
                 run_server(stateless_retry=False), run_client_ping("127.0.0.1")
             )
         )
+
+
+class ServerTest(TestCase):
+    def test_retry_token(self):
+        addr = ("127.0.0.1", 1234)
+        cid = b"\x08\x07\x06\05\x04\x03\x02\x01"
+
+        server = QuicServer(
+            configuration=QuicConfiguration(is_client=False), stateless_retry=True
+        )
+
+        # create token
+        token = server._create_retry_token(addr, cid)
+        self.assertIsNotNone(token)
+
+        # validate token - ok
+        self.assertEqual(server._validate_retry_token(addr, token), cid)
+
+        # validate token - empty
+        with self.assertRaises(ValueError) as cm:
+            server._validate_retry_token(addr, b"")
+        self.assertEqual(
+            str(cm.exception), "Ciphertext length must be equal to key size."
+        )
+
+        # validate token - wrong address
+        with self.assertRaises(ValueError) as cm:
+            server._validate_retry_token(("1.2.3.4", 12345), token)
+        self.assertEqual(str(cm.exception), "Remote address does not match.")

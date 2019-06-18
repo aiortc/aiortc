@@ -90,41 +90,26 @@ class QuicServer(asyncio.DatagramProtocol):
             # stateless retry
             if self._retry_key is not None:
                 if not header.token:
-                    retry_message = encode_address(addr) + b"|" + header.destination_cid
-                    retry_token = self._retry_key.public_key().encrypt(
-                        retry_message,
-                        padding.OAEP(
-                            mgf=padding.MGF1(hashes.SHA256()),
-                            algorithm=hashes.SHA256(),
-                            label=None,
-                        ),
-                    )
+                    # create a retry token
                     self._transport.sendto(
                         encode_quic_retry(
                             version=header.version,
                             source_cid=os.urandom(8),
                             destination_cid=header.source_cid,
                             original_destination_cid=header.destination_cid,
-                            retry_token=retry_token,
+                            retry_token=self._create_retry_token(
+                                addr, header.destination_cid
+                            ),
                         ),
                         addr,
                     )
                     return
                 else:
+                    # validate retry token
                     try:
-                        retry_message = self._retry_key.decrypt(
-                            header.token,
-                            padding.OAEP(
-                                mgf=padding.MGF1(hashes.SHA256()),
-                                algorithm=hashes.SHA256(),
-                                label=None,
-                            ),
+                        original_connection_id = self._validate_retry_token(
+                            addr, header.token
                         )
-                        encoded_addr, original_connection_id = retry_message.split(
-                            b"|", maxsplit=1
-                        )
-                        if encoded_addr != encode_address(addr):
-                            return
                     except ValueError:
                         return
 
@@ -162,6 +147,27 @@ class QuicServer(asyncio.DatagramProtocol):
     ) -> None:
         assert self._protocols[cid] == protocol
         del self._protocols[cid]
+
+    def _create_retry_token(self, addr: bytes, destination_cid: bytes) -> bytes:
+        retry_message = encode_address(addr) + b"|" + destination_cid
+        return self._retry_key.public_key().encrypt(
+            retry_message,
+            padding.OAEP(
+                mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+            ),
+        )
+
+    def _validate_retry_token(self, addr: bytes, token: bytes) -> bytes:
+        retry_message = self._retry_key.decrypt(
+            token,
+            padding.OAEP(
+                mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+            ),
+        )
+        encoded_addr, original_connection_id = retry_message.split(b"|", maxsplit=1)
+        if encoded_addr != encode_address(addr):
+            raise ValueError("Remote address does not match.")
+        return original_connection_id
 
 
 async def serve(
