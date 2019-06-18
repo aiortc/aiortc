@@ -372,6 +372,23 @@ class QuicConnection:
             (self._handle_connection_close_frame, EPOCHS("ZO")),
         ]
 
+    def change_connection_id(self) -> None:
+        """
+        Switch to the next available connection ID and retire
+        the previous one.
+        """
+        if self._peer_cid_available:
+            # retire previous CID
+            self._retire_connection_ids.append(self._peer_cid_seq)
+
+            # assign new CID
+            connection_id = self._peer_cid_available.pop(0)
+            self._peer_cid_seq = connection_id.sequence_number
+            self._peer_cid = connection_id.cid
+            self._logger.info(
+                "Migrating to %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
+            )
+
     def close(
         self,
         error_code: int = QuicErrorCode.NO_ERROR,
@@ -740,7 +757,7 @@ class QuicConnection:
                     destination_cid_seq,
                 )
                 self.host_cid = context.host_cid
-                self._consume_connection_id()
+                self.change_connection_id()
 
             # update network path
             if not network_path.is_validated and epoch == tls.Epoch.HANDSHAKE:
@@ -849,23 +866,6 @@ class QuicConnection:
 
         self.tls.handle_message(b"", self._crypto_buffers)
         self._push_crypto_data()
-
-    def _consume_connection_id(self) -> None:
-        """
-        Switch to the next available connection ID and retire
-        the previous one.
-        """
-        if self._peer_cid_available:
-            # retire previous CID
-            self._retire_connection_ids.append(self._peer_cid_seq)
-
-            # assign new CID
-            connection_id = self._peer_cid_available.pop(0)
-            self._peer_cid_seq = connection_id.sequence_number
-            self._peer_cid = connection_id.cid
-            self._logger.info(
-                "Migrating to %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
-            )
 
     def _discard_epoch(self, epoch: tls.Epoch) -> None:
         self._logger.debug("Discarding epoch %s", epoch)

@@ -243,14 +243,14 @@ class QuicConnectionTest(TestCase):
                 ],
             )
 
-    def test_consume_connection_id(self):
+    def test_change_connection_id(self):
         with client_and_server() as (client, server):
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
             # the client changes connection ID
-            client._consume_connection_id()
+            client.change_connection_id()
             self.assertEqual(transfer(client, server), 1)
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
@@ -262,14 +262,14 @@ class QuicConnectionTest(TestCase):
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
             )
 
-    def test_consume_connection_id_retransmit_new_connection_id(self):
+    def test_change_connection_id_retransmit_new_connection_id(self):
         with client_and_server() as (client, server):
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
             # the client changes connection ID
-            client._consume_connection_id()
+            client.change_connection_id()
             self.assertEqual(transfer(client, server), 1)
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]
@@ -290,14 +290,14 @@ class QuicConnectionTest(TestCase):
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7, 8]
             )
 
-    def test_consume_connection_id_retransmit_retire_connection_id(self):
+    def test_change_connection_id_retransmit_retire_connection_id(self):
         with client_and_server() as (client, server):
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [1, 2, 3, 4, 5, 6, 7]
             )
 
             # the client changes connection ID, RETIRE_CONNECTION_ID is lost
-            client._consume_connection_id()
+            client.change_connection_id()
             self.assertEqual(drop(client), 1)
             self.assertEqual(
                 sequence_numbers(client._peer_cid_available), [2, 3, 4, 5, 6, 7]

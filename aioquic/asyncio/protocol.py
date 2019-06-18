@@ -23,6 +23,15 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         else:
             self._stream_handler = lambda r, w: None
 
+    def change_connection_id(self) -> None:
+        """
+        Change the connection ID used to communicate with the peer.
+
+        The previous connection ID will be retired.
+        """
+        self._connection.change_connection_id()
+        self._send_pending()
+
     def close(self) -> None:
         """
         Close the connection.

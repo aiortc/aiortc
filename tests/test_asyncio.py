@@ -158,6 +158,19 @@ class HighLevelTest(TestCase):
         with self.assertRaises(ConnectionError):
             run(run_client("127.0.0.1", port=4400, idle_timeout=5))
 
+    def test_change_connection_id(self):
+        async def run_client_key_update(host, **kwargs):
+            async with connect(host, 4433, **kwargs) as client:
+                await client.ping()
+                client.change_connection_id()
+                await client.ping()
+
+        run(
+            asyncio.gather(
+                run_server(stateless_retry=False), run_client_key_update("127.0.0.1")
+            )
+        )
+
     def test_key_update(self):
         async def run_client_key_update(host, **kwargs):
             async with connect(host, 4433, **kwargs) as client:
