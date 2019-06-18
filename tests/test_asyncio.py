@@ -22,6 +22,7 @@ async def run_client(host, port=4433, request=b"ping", **kwargs):
     async with connect(host, port, **kwargs) as client:
         reader, writer = await client.create_stream()
         assert writer.can_write_eof() is True
+        assert writer.get_extra_info("stream_id") == 0
 
         writer.write(request)
         writer.write_eof()

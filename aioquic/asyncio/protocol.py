@@ -24,10 +24,18 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
             self._stream_handler = lambda r, w: None
 
     def close(self) -> None:
+        """
+        Close the connection.
+        """
         self._connection.close()
         self._send_pending()
 
     def connect(self, addr: NetworkAddress, protocol_version: int) -> None:
+        """
+        Initiate the TLS handshake.
+
+        This method can only be called for clients and a single time.
+        """
         self._connection.connect(
             addr, now=self._loop.time(), protocol_version=protocol_version
         )
@@ -78,7 +86,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         assert self._ping_waiter is None, "already await a ping"
         self._ping_waiter = self._loop.create_future()
         self._connection.send_ping(id(self._ping_waiter))
-        self._send_soon()
+        self._send_pending()
         await asyncio.shield(self._ping_waiter)
 
     async def wait_closed(self) -> None:
@@ -175,9 +183,7 @@ class QuicStreamAdapter(asyncio.Transport):
         """
         Get information about the underlying QUIC stream.
         """
-        if name == "connection":
-            return self.protocol._connection
-        elif name == "stream_id":
+        if name == "stream_id":
             return self.stream_id
 
     def write(self, data):

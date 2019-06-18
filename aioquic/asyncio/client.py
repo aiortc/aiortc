@@ -29,7 +29,8 @@ async def connect(
     Connect to a QUIC server at the given `host` and `port`.
 
     :meth:`connect()` returns an awaitable. Awaiting it yields a
-    :class:`~aioquic.QuicConnection` which can be used to create streams.
+    :class:`~aioquic.asyncio.QuicConnectionProtocol` which can be used to
+    create streams.
 
     :func:`connect` also accepts the following optional arguments:
 
@@ -86,5 +87,4 @@ async def connect(
         yield protocol
     finally:
         protocol.close()
-        protocol._send_pending()
     await protocol.wait_closed()

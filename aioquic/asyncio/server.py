@@ -193,9 +193,15 @@ async def serve(
 
     * ``connection_handler`` is a callback which is invoked whenever a
       connection is created. It must be a a function accepting a single
-      argument: a :class:`~aioquic.asyncio.protocol.QuicConnectionProtocol`.
+      argument: a :class:`~aioquic.asyncio.QuicConnectionProtocol`.
     * ``secrets_log_file`` is  a file-like object in which to log traffic
       secrets. This is useful to analyze traffic captures with Wireshark.
+    * ``session_ticket_fetcher`` is a callback which is invoked by the TLS
+      engine when a session ticket is presented by the peer. It should return
+      the session ticket with the specified ID or `None` if it is not found.
+    * ``session_ticket_handler`` is a callback which is invoked by the TLS
+      engine when a new session ticket is issued. It should store the session
+      ticket for future lookup.
     * ``stateless_retry`` specifies whether a stateless retry should be
       performed prior to handling new connections.
     * ``stream_handler`` is a callback which is invoked whenever a stream is
