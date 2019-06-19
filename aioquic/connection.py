@@ -397,6 +397,11 @@ class QuicConnection:
     ) -> None:
         """
         Close the connection.
+
+        :param error_code: An error code indicating why the connection is
+                           being closed.
+        :param reason_phrase: A human-readable explanation of why the
+                              connection is being closed.
         """
         if self._state not in END_STATES:
             self._close_event = events.ConnectionTerminated(
@@ -420,6 +425,10 @@ class QuicConnection:
 
         After calling this method call :meth:`datagrams_to_send` to retrieve data
         which needs to be sent.
+
+        :param addr: The network address of the remote peer.
+        :param now: The current time.
+        :param protocol_version: An optional QUIC protocol version.
         """
         assert (
             self._is_client and not self._connect_called
@@ -570,6 +579,8 @@ class QuicConnection:
 
         After calling this method call :meth:`datagrams_to_send` to retrieve data
         which needs to be sent.
+
+        :param now: The current time.
         """
         # idle timeout
         if now >= self._close_at:
@@ -601,6 +612,10 @@ class QuicConnection:
     def receive_datagram(self, data: bytes, addr: NetworkAddress, now: float) -> None:
         """
         Handle an incoming datagram.
+
+        :param data: The datagram which was received.
+        :param addr: The network address from which the datagram was received.
+        :param now: The current time.
         """
         # stop handling packets when closing
         if self._state in END_STATES:
@@ -791,6 +806,8 @@ class QuicConnection:
     def send_ping(self, uid: int) -> None:
         """
         Send a PING frame to the peer.
+
+        :param uid: A unique ID for this PING.
         """
         self._ping_pending.append(uid)
 
@@ -800,7 +817,8 @@ class QuicConnection:
         """
         Send data on the specific stream.
 
-        If `end_stream` is `True`, the FIN bit will be set.
+        :param data: The data to be sent.
+        :param end_stream: If set to `True`, the FIN bit will be set.
         """
         try:
             stream = self._streams[stream_id]
@@ -1383,7 +1401,7 @@ class QuicConnection:
         if delivery == QuicDeliveryState.ACKED:
             self._logger.info("Received PING response")
             for uid in uids:
-                self._events.append(events.PongReceived(uid=uid))
+                self._events.append(events.PingAcknowledged(uid=uid))
         else:
             self._ping_pending.extend(uids)
 

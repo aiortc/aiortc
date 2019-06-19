@@ -867,7 +867,7 @@ class QuicConnectionTest(TestCase):
 
             # check event
             event = client.next_event()
-            self.assertEqual(type(event), events.PongReceived)
+            self.assertEqual(type(event), events.PingAcknowledged)
             self.assertEqual(event.uid, 12345)
 
     def test_send_ping_retransmit(self):
@@ -884,7 +884,7 @@ class QuicConnectionTest(TestCase):
 
             # check event
             event = client.next_event()
-            self.assertEqual(type(event), events.PongReceived)
+            self.assertEqual(type(event), events.PingAcknowledged)
             self.assertEqual(event.uid, 12345)
 
     def test_stream_direction(self):

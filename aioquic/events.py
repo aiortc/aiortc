@@ -3,6 +3,10 @@ from typing import Optional
 
 
 class Event:
+    """
+    Base class for QUIC events.
+    """
+
     pass
 
 
@@ -19,49 +23,67 @@ class ConnectionIdRetired(Event):
 @dataclass
 class ConnectionTerminated(Event):
     """
-    This event occurs when the QUIC connection is terminated.
+    The ConnectionTerminated event is fired when the QUIC connection is terminated.
     """
 
     error_code: int
-    frame_type: int
+    "The error code which was specified when closing the connection."
+
+    frame_type: Optional[int]
+    "The frame type which caused the connection to be closed, or `None`."
+
     reason_phrase: str
+    "The human-readable reason for which the connection was closed."
 
 
 @dataclass
 class HandshakeCompleted(Event):
     """
-    This event occurs when the TLS handshake completes.
+    The HandshakeCompleted event is fired when the TLS handshake completes.
     """
 
     alpn_protocol: Optional[str]
+    "The protocol which was negotiated using ALPN, or `None`."
+
     early_data_accepted: bool
+    "Whether early (0-RTT) data was accepted by the remote peer."
+
     session_resumed: bool
+    "Whether a TLS session was resumed."
 
 
 @dataclass
-class PongReceived(Event):
+class PingAcknowledged(Event):
     """
-    This event occurs when the response to a PING frame is received.
+    The PingAcknowledged event is fired when a PING frame is acknowledged.
     """
 
     uid: int
+    "The unique ID of the PING."
 
 
 @dataclass
 class StreamDataReceived(Event):
     """
-    This event ocurs when data is received on a stream.
+    The StreamDataReceived event is fired whenever data is received on a
+    stream.
     """
 
     data: bytes
+    "The data which was received."
+
     end_stream: bool
+    "Whether the STREAM frame had the FIN bit set."
+
     stream_id: int
+    "The ID of the stream the data was received for."
 
 
 @dataclass
 class StreamReset(Event):
     """
-    This event occurs when a stream is reset.
+    The StreamReset event is fired when the remote peer resets a stream.
     """
 
     stream_id: int
+    "The ID of the stream that was reset."

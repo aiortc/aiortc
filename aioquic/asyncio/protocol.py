@@ -50,25 +50,6 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         )
         self._send_pending()
 
-    def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        loop = asyncio.get_event_loop()
-
-        self._closed = asyncio.Event()
-        self._connected_waiter = loop.create_future()
-        self._loop = loop
-        self._ping_waiter: Optional[asyncio.Future[None]] = None
-        self._send_task: Optional[asyncio.Handle] = None
-        self._stream_readers: Dict[int, asyncio.StreamReader] = {}
-        self._timer: Optional[asyncio.TimerHandle] = None
-        self._timer_at: Optional[float] = None
-        self._transport = cast(asyncio.DatagramTransport, transport)
-
-    def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
-        self._connection.receive_datagram(
-            cast(bytes, data), addr, now=self._loop.time()
-        )
-        self._send_pending()
-
     async def create_stream(
         self, is_unidirectional: bool = False
     ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -110,6 +91,29 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         await asyncio.shield(self._connected_waiter)
 
+    # asyncio.Transport
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        loop = asyncio.get_event_loop()
+
+        self._closed = asyncio.Event()
+        self._connected_waiter = loop.create_future()
+        self._loop = loop
+        self._ping_waiter: Optional[asyncio.Future[None]] = None
+        self._send_task: Optional[asyncio.Handle] = None
+        self._stream_readers: Dict[int, asyncio.StreamReader] = {}
+        self._timer: Optional[asyncio.TimerHandle] = None
+        self._timer_at: Optional[float] = None
+        self._transport = cast(asyncio.DatagramTransport, transport)
+
+    def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
+        self._connection.receive_datagram(
+            cast(bytes, data), addr, now=self._loop.time()
+        )
+        self._send_pending()
+
+    # private
+
     def _create_stream(
         self, stream_id: int
     ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -147,7 +151,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
                 self._closed.set()
             elif isinstance(event, events.HandshakeCompleted):
                 self._connected_waiter.set_result(None)
-            elif isinstance(event, events.PongReceived):
+            elif isinstance(event, events.PingAcknowledged):
                 waiter = self._ping_waiter
                 self._ping_waiter = None
                 waiter.set_result(None)
