@@ -212,6 +212,7 @@ class QuicConnectionState(Enum):
     CONNECTED = 1
     CLOSING = 2
     DRAINING = 3
+    TERMINATED = 4
 
 
 @dataclass
@@ -235,7 +236,13 @@ class QuicReceiveContext:
     time: float
 
 
-END_STATES = frozenset([QuicConnectionState.CLOSING, QuicConnectionState.DRAINING])
+END_STATES = frozenset(
+    [
+        QuicConnectionState.CLOSING,
+        QuicConnectionState.DRAINING,
+        QuicConnectionState.TERMINATED,
+    ]
+)
 
 
 class QuicConnection:
@@ -329,7 +336,7 @@ class QuicConnection:
         self._version: Optional[int] = None
 
         # things to send
-        self._close_pending: Optional[Dict] = None
+        self._close_pending = False
         self._ping_pending: List[int] = []
         self._probe_pending = False
         self._retire_connection_ids: List[int] = []
@@ -409,11 +416,7 @@ class QuicConnection:
                 frame_type=frame_type,
                 reason_phrase=reason_phrase,
             )
-            self._close_pending = {
-                "error_code": error_code,
-                "frame_type": frame_type,
-                "reason_phrase": reason_phrase,
-            }
+            self._close_pending = True
 
     def connect(
         self, addr: NetworkAddress, now: float, protocol_version: Optional[int] = None
@@ -506,11 +509,16 @@ class QuicConnection:
                 crypto = self._cryptos[epoch]
                 if crypto.send.is_valid():
                     builder.start_packet(packet_type, crypto)
-                    write_close_frame(builder, **self._close_pending)
+                    write_close_frame(
+                        builder=builder,
+                        error_code=self._close_event.error_code,
+                        frame_type=self._close_event.frame_type,
+                        reason_phrase=self._close_event.reason_phrase,
+                    )
                     builder.end_packet()
-                    self._close_pending = None
+                    self._close_pending = False
                     break
-            self._close(is_initiator=True, now=now)
+            self._close_begin(is_initiator=True, now=now)
         else:
             # congestion control
             builder.max_flight_bytes = (
@@ -582,7 +590,7 @@ class QuicConnection:
 
         :param now: The current time.
         """
-        # idle timeout
+        # end of closing period or idle timeout
         if now >= self._close_at:
             if self._close_event is None:
                 self._close_event = events.ConnectionTerminated(
@@ -590,7 +598,7 @@ class QuicConnection:
                     frame_type=None,
                     reason_phrase="Idle timeout",
                 )
-            self._close_complete()
+            self._close_end()
             return
 
         # loss detection timeout
@@ -652,7 +660,7 @@ class QuicConnection:
                         frame_type=None,
                         reason_phrase="Could not find a common protocol version",
                     )
-                    self._close_complete()
+                    self._close_end()
                     return
                 self._version = QuicProtocolVersion(max(common))
                 self._version_negotiation_count += 1
@@ -851,9 +859,9 @@ class QuicConnection:
                 reason_phrase="Stream is receive-only",
             )
 
-    def _close(self, is_initiator: bool, now: float) -> None:
+    def _close_begin(self, is_initiator: bool, now: float) -> None:
         """
-        Start the close procedure.
+        Begin the close procedure.
         """
         self._close_at = now + 3 * self._loss.get_probe_timeout()
         if is_initiator:
@@ -861,15 +869,15 @@ class QuicConnection:
         else:
             self._set_state(QuicConnectionState.DRAINING)
 
-    def _close_complete(self) -> None:
+    def _close_end(self) -> None:
         """
-        Finish the close procedure.
+        End the close procedure.
         """
-        self._logger.info("Connection closed")
         self._close_at = None
         for epoch in self._spaces.keys():
             self._discard_epoch(epoch)
         self._events.append(self._close_event)
+        self._set_state(QuicConnectionState.TERMINATED)
 
     def _connect(self, now: float) -> None:
         """
@@ -1056,7 +1064,7 @@ class QuicConnection:
         self._close_event = events.ConnectionTerminated(
             error_code=error_code, frame_type=frame_type, reason_phrase=reason_phrase
         )
-        self._close(is_initiator=False, now=context.time)
+        self._close_begin(is_initiator=False, now=context.time)
 
     def _handle_crypto_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
