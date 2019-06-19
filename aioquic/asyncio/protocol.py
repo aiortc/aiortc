@@ -14,10 +14,22 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         connection: QuicConnection,
         stream_handler: Optional[QuicStreamHandler] = None,
     ):
+        loop = asyncio.get_event_loop()
+
         self._connection = connection
+        self._closed = asyncio.Event()
+        self._connected_waiter = loop.create_future()
+        self._loop = loop
+        self._ping_waiter: Optional[asyncio.Future[None]] = None
+        self._send_task: Optional[asyncio.Handle] = None
+        self._stream_readers: Dict[int, asyncio.StreamReader] = {}
+        self._timer: Optional[asyncio.TimerHandle] = None
+        self._timer_at: Optional[float] = None
+        self._transport: Optional[asyncio.DatagramTransport] = None
+
+        # callbacks
         self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
         self._connection_id_retired_handler: QuicConnectionIdHandler = lambda c: None
-
         if stream_handler is not None:
             self._stream_handler = stream_handler
         else:
@@ -94,16 +106,6 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
     # asyncio.Transport
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        loop = asyncio.get_event_loop()
-
-        self._closed = asyncio.Event()
-        self._connected_waiter = loop.create_future()
-        self._loop = loop
-        self._ping_waiter: Optional[asyncio.Future[None]] = None
-        self._send_task: Optional[asyncio.Handle] = None
-        self._stream_readers: Dict[int, asyncio.StreamReader] = {}
-        self._timer: Optional[asyncio.TimerHandle] = None
-        self._timer_at: Optional[float] = None
         self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
