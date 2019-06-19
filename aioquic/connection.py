@@ -807,9 +807,7 @@ class QuicConnection:
         except KeyError:
             self.create_stream(stream_id=stream_id)
             stream = self._streams[stream_id]
-        stream.write(data)
-        if end_stream:
-            stream.write_eof()
+        stream.write(data, end_stream=end_stream)
 
     # Private
 

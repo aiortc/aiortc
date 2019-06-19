@@ -190,15 +190,7 @@ class QuicStream:
             if stop == self._send_buffer_fin:
                 self._send_pending_eof = True
 
-    # asyncio.Transport
-
-    def get_write_buffer_size(self) -> int:
-        """
-        Return the current size of the write buffer.
-        """
-        return self._send_buffer_stop - self._send_buffer_start
-
-    def write(self, data: bytes) -> None:
+    def write(self, data: bytes, end_stream: bool = False) -> None:
         """
         Write some data bytes to the QUIC stream.
         """
@@ -212,10 +204,6 @@ class QuicStream:
             )
             self._send_buffer += data
             self._send_buffer_stop += size
-
-    def write_eof(self) -> None:
-        assert self._send_buffer_fin is None, "cannot call write_eof() after FIN"
-
-        self.send_buffer_is_empty = False
-        self._send_buffer_fin = self._send_buffer_stop
-        self._send_pending_eof = True
+        if end_stream:
+            self._send_buffer_fin = self._send_buffer_stop
+            self._send_pending_eof = True

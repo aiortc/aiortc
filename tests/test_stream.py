@@ -178,7 +178,6 @@ class QuicStreamTest(TestCase):
 
         # write data
         stream.write(b"0123456789012345")
-        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [range(0, 16)])
 
         # send a chunk
@@ -186,7 +185,6 @@ class QuicStreamTest(TestCase):
         self.assertEqual(frame.data, b"01234567")
         self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 0)
-        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [range(8, 16)])
 
         # send another chunk
@@ -194,22 +192,18 @@ class QuicStreamTest(TestCase):
         self.assertEqual(frame.data, b"89012345")
         self.assertFalse(frame.fin)
         self.assertEqual(frame.offset, 8)
-        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [])
 
         # nothing more to send
         frame = stream.get_frame(8)
         self.assertIsNone(frame)
-        self.assertEqual(stream.get_write_buffer_size(), 16)
         self.assertEqual(list(stream._send_pending), [])
 
         # first chunk gets acknowledged
         stream.on_data_delivery(QuicDeliveryState.ACKED, 0, 8)
-        self.assertEqual(stream.get_write_buffer_size(), 8)
 
         # second chunk gets acknowledged
         stream.on_data_delivery(QuicDeliveryState.ACKED, 8, 16)
-        self.assertEqual(stream.get_write_buffer_size(), 0)
 
     def test_send_data_and_fin(self):
         stream = QuicStream()
@@ -219,8 +213,7 @@ class QuicStreamTest(TestCase):
         self.assertIsNone(frame)
 
         # write data and EOF, send a chunk
-        stream.write(b"0123456789012345")
-        stream.write_eof()
+        stream.write(b"0123456789012345", end_stream=True)
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"01234567")
         self.assertFalse(frame.fin)
@@ -244,8 +237,7 @@ class QuicStreamTest(TestCase):
         self.assertIsNone(frame)
 
         # write data and EOF
-        stream.write(b"0123456789012345")
-        stream.write_eof()
+        stream.write(b"0123456789012345", end_stream=True)
         self.assertEqual(list(stream._send_pending), [range(0, 16)])
 
         # send a chunk
@@ -282,8 +274,7 @@ class QuicStreamTest(TestCase):
         self.assertIsNone(frame)
 
         # write data and EOF
-        stream.write(b"0123456789012345")
-        stream.write_eof()
+        stream.write(b"0123456789012345", end_stream=True)
         self.assertEqual(list(stream._send_pending), [range(0, 16)])
 
         # send a chunk
@@ -375,7 +366,7 @@ class QuicStreamTest(TestCase):
         self.assertIsNone(frame)
 
         # write EOF
-        stream.write_eof()
+        stream.write(b"", end_stream=True)
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"")
         self.assertTrue(frame.fin)
@@ -393,7 +384,7 @@ class QuicStreamTest(TestCase):
         self.assertIsNone(frame)
 
         # write EOF
-        stream.write_eof()
+        stream.write(b"", end_stream=True)
         frame = stream.get_frame(8)
         self.assertEqual(frame.data, b"")
         self.assertTrue(frame.fin)
