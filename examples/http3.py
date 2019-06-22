@@ -58,6 +58,10 @@ class StreamType(IntEnum):
 
 
 class H3Connection:
+    """
+    A low-level HTTP/3 connection object.
+    """
+
     def __init__(self, configuration: QuicConfiguration):
         self._quic = QuicConnection(configuration=configuration)
         self._decoder = Decoder(0x100, 0x10)
@@ -65,7 +69,6 @@ class H3Connection:
         self._pending: List[Tuple[int, bytes, bool]] = []
         self._stream_buffers: Dict[int, bytes] = {}
 
-        self._local_control_stream_id = 2
         self._peer_control_stream_id: Optional[int] = None
         self._peer_decoder_stream_id: Optional[int] = None
         self._peer_encoder_stream_id: Optional[int] = None
@@ -77,14 +80,36 @@ class H3Connection:
         """
         return self._quic.datagrams_to_send(now=time.time())
 
+    def get_next_available_stream_id(self) -> int:
+        """
+        Return the stream ID for the next stream created by this endpoint.
+        """
+        return self._quic.get_next_available_stream_id()
+
     def initiate_connection(self, addr: Any) -> None:
+        """
+        Initiate the TLS handshake.
+
+        This method can only be called for clients and a single time.
+
+        After calling this method call :meth:`datagrams_to_send` to retrieve data
+        which needs to be sent.
+
+        :param addr: The network address of the remote peer.
+        """
         self._quic.connect(addr, now=time.time())
 
     def receive_datagram(self, data: bytes, addr: Any) -> List[Event]:
+        """
+        Handle an incoming datagram and return events.
+        """
         self._quic.receive_datagram(data, addr, now=time.time())
         return self._update()
 
-    def send_data(self, stream_id: int, data: bytes, end_stream: bool):
+    def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
+        """
+        Send data on the given stream.
+        """
         buf = Buffer(capacity=len(data) + 16)
         buf.push_uint_var(FrameType.DATA)
         buf.push_uint_var(len(data))
@@ -92,7 +117,10 @@ class H3Connection:
 
         self._pending.append((stream_id, buf.data, end_stream))
 
-    def send_headers(self, stream_id: int, headers: Headers):
+    def send_headers(self, stream_id: int, headers: Headers) -> None:
+        """
+        Send headers on the given stream.
+        """
         control, header = self._encoder.encode(stream_id, 0, headers)
 
         buf = Buffer(capacity=len(header) + 16)
@@ -204,8 +232,10 @@ def run(url: str) -> None:
     else:
         server_name = parsed.netloc
         port = 443
+
+    # prepare socket
     server_addr = (socket.gethostbyname(server_name), port)
-    stream_id = 0
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     conn = H3Connection(
         QuicConfiguration(
@@ -216,6 +246,9 @@ def run(url: str) -> None:
         )
     )
     conn.initiate_connection(server_addr)
+
+    # send request
+    stream_id = conn.get_next_available_stream_id()
     conn.send_headers(
         stream_id=stream_id,
         headers=[
@@ -226,11 +259,10 @@ def run(url: str) -> None:
         ],
     )
     conn.send_data(stream_id=stream_id, data=b"", end_stream=True)
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for data, addr in conn.datagrams_to_send():
         sock.sendto(data, addr)
 
+    # handle events
     stream_ended = False
     while not stream_ended:
         data, addr = sock.recvfrom(2048)
