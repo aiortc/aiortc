@@ -101,8 +101,8 @@ class QuicStream:
 
         r = self._recv_ranges.shift()
         pos = r.stop - r.start
-        data = self._recv_buffer[:pos]
-        self._recv_buffer = self._recv_buffer[pos:]
+        data = bytes(self._recv_buffer[:pos])
+        del self._recv_buffer[:pos]
         self._recv_buffer_start = r.stop
         return data
 
