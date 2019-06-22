@@ -71,6 +71,10 @@ class H3Connection:
         self._peer_encoder_stream_id: Optional[int] = None
 
     def datagrams_to_send(self) -> List[Tuple[bytes, Any]]:
+        """
+        Return a list of `(data, addr)` tuples of datagrams which need to be
+        sent, and the network address to which they need to be sent.
+        """
         return self._quic.datagrams_to_send(now=time.time())
 
     def initiate_connection(self, addr: Any) -> None:

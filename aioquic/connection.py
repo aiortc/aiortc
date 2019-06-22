@@ -445,43 +445,10 @@ class QuicConnection:
             self._version = max(self._configuration.supported_versions)
         self._connect(now=now)
 
-    def create_stream(
-        self, is_unidirectional: bool = False, stream_id: Optional[int] = None
-    ) -> QuicStream:
-        """
-        Create a QUIC stream and return it.
-        """
-        if stream_id is None:
-            stream_id = (int(is_unidirectional) << 1) | int(not self._is_client)
-            while stream_id in self._streams:
-                stream_id += 4
-
-        # determine limits
-        if is_unidirectional:
-            max_stream_data_local = 0
-            max_stream_data_remote = self._remote_max_stream_data_uni
-            max_streams = self._remote_max_streams_uni
-        else:
-            max_stream_data_local = self._local_max_stream_data_bidi_local
-            max_stream_data_remote = self._remote_max_stream_data_bidi_remote
-            max_streams = self._remote_max_streams_bidi
-
-        # check max streams
-        if stream_id // 4 >= max_streams:
-            raise ValueError("Too many streams open")
-
-        # create stream
-        stream = self._streams[stream_id] = QuicStream(
-            connection=self,
-            stream_id=stream_id,
-            max_stream_data_local=max_stream_data_local,
-            max_stream_data_remote=max_stream_data_remote,
-        )
-        return stream
-
     def datagrams_to_send(self, now: float) -> List[Tuple[bytes, NetworkAddress]]:
         """
-        Return (data, addr) tuples of datagrams which need to be sent.
+        Return a list of `(data, addr)` tuples of datagrams which need to be
+        sent, and the network address to which they need to be sent.
         """
         network_path = self._network_paths[0]
 
@@ -563,6 +530,15 @@ class QuicConnection:
             network_path.bytes_sent += len(datagram)
             ret.append((datagram, network_path.addr))
         return ret
+
+    def get_next_available_stream_id(self, is_unidirectional=False) -> int:
+        """
+        Return the stream ID for the next stream created by this endpoint.
+        """
+        stream_id = (int(is_unidirectional) << 1) | int(not self._is_client)
+        while stream_id in self._streams:
+            stream_id += 4
+        return stream_id
 
     def get_timer(self) -> Optional[float]:
         """
@@ -831,7 +807,7 @@ class QuicConnection:
         try:
             stream = self._streams[stream_id]
         except KeyError:
-            self.create_stream(stream_id=stream_id)
+            self._create_stream(stream_id=stream_id)
             stream = self._streams[stream_id]
         stream.write(data, end_stream=end_stream)
 
@@ -890,6 +866,33 @@ class QuicConnection:
 
         self.tls.handle_message(b"", self._crypto_buffers)
         self._push_crypto_data()
+
+    def _create_stream(self, stream_id: int) -> QuicStream:
+        """
+        Create a QUIC stream in order to send data to the peer.
+        """
+        # determine limits
+        if stream_is_unidirectional(stream_id):
+            max_stream_data_local = 0
+            max_stream_data_remote = self._remote_max_stream_data_uni
+            max_streams = self._remote_max_streams_uni
+        else:
+            max_stream_data_local = self._local_max_stream_data_bidi_local
+            max_stream_data_remote = self._remote_max_stream_data_bidi_remote
+            max_streams = self._remote_max_streams_bidi
+
+        # check max streams
+        if stream_id // 4 >= max_streams:
+            raise ValueError("Too many streams open")
+
+        # create stream
+        stream = self._streams[stream_id] = QuicStream(
+            connection=self,
+            stream_id=stream_id,
+            max_stream_data_local=max_stream_data_local,
+            max_stream_data_remote=max_stream_data_remote,
+        )
+        return stream
 
     def _discard_epoch(self, epoch: tls.Epoch) -> None:
         self._logger.debug("Discarding epoch %s", epoch)
