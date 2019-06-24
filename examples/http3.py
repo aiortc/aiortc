@@ -50,11 +50,28 @@ class FrameType(IntEnum):
     DUPLICATE_PUSH = 8
 
 
+class Setting(IntEnum):
+    QPACK_MAX_TABLE_CAPACITY = 1
+    SETTINGS_MAX_HEADER_LIST_SIZE = 6
+    QPACK_BLOCKED_STREAMS = 7
+    SETTINGS_NUM_PLACEHOLDERS = 9
+
+
 class StreamType(IntEnum):
     CONTROL = 0
     PUSH = 1
     QPACK_ENCODER = 2
     QPACK_DECODER = 3
+
+
+def parse_settings(data):
+    buf = Buffer(data=data)
+    settings = []
+    while not buf.eof():
+        setting = buf.pull_uint_var()
+        value = buf.pull_uint_var()
+        settings.append((setting, value))
+    return dict(settings)
 
 
 class H3Connection:
@@ -196,7 +213,13 @@ class H3Connection:
             elif stream_id == self._peer_control_stream_id:
                 # unidirectional control stream
                 if frame_type == FrameType.SETTINGS:
-                    pass
+                    settings = parse_settings(frame_data)
+                    self._encoder.apply_settings(
+                        max_table_capacity=settings.get(
+                            Setting.QPACK_MAX_TABLE_CAPACITY, 0
+                        ),
+                        blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
+                    )
 
         # remove processed data from buffer
         self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
