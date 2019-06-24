@@ -104,7 +104,8 @@ class HighLevelTest(TestCase):
         data = b"Z" * 65536
         _, response = run(
             asyncio.gather(
-                run_server(stateless_retry=True), run_client("127.0.0.1", request=data)
+                run_server(idle_timeout=300.0, stateless_retry=True),
+                run_client("127.0.0.1", idle_timeout=300.0, request=data),
             )
         )
         self.assertEqual(response, data)

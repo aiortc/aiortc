@@ -178,6 +178,7 @@ async def serve(
     private_key: Any,
     alpn_protocols: Optional[List[str]] = None,
     connection_handler: QuicConnectionHandler = None,
+    idle_timeout: Optional[float] = None,
     stream_handler: QuicStreamHandler = None,
     secrets_log_file: Optional[TextIO] = None,
     session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
@@ -224,6 +225,8 @@ async def serve(
         private_key=private_key,
         secrets_log_file=secrets_log_file,
     )
+    if idle_timeout is not None:
+        configuration.idle_timeout = idle_timeout
 
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
