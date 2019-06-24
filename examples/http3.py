@@ -68,6 +68,7 @@ class H3Connection:
         self._encoder = Encoder()
         self._pending: List[Tuple[int, bytes, bool]] = []
         self._stream_buffers: Dict[int, bytes] = {}
+        self._stream_types: Dict[int, int] = {}
 
         self._peer_control_stream_id: Optional[int] = None
         self._peer_decoder_stream_id: Optional[int] = None
@@ -137,17 +138,18 @@ class H3Connection:
 
         if stream_id in self._stream_buffers:
             self._stream_buffers[stream_id] += data
-            stream_is_new = False
         else:
             self._stream_buffers[stream_id] = data
-            stream_is_new = True
         consumed = 0
 
         buf = Buffer(data=self._stream_buffers[stream_id])
         while not buf.eof():
             # fetch stream type for unidirectional streams
-            if stream_is_new and (stream_id % 4) == 3:
-                stream_type = buf.pull_uint_var()
+            if (stream_id % 4) == 3 and stream_id not in self._stream_types:
+                try:
+                    stream_type = buf.pull_uint_var()
+                except BufferReadError:
+                    break
                 if stream_type == StreamType.CONTROL:
                     assert self._peer_control_stream_id is None
                     self._peer_control_stream_id = stream_id
@@ -157,6 +159,7 @@ class H3Connection:
                 elif stream_type == StreamType.QPACK_ENCODER:
                     assert self._peer_encoder_stream_id is None
                     self._peer_encoder_stream_id = stream_id
+                self._stream_types[stream_id] = stream_type
 
             # fetch next frame
             try:
