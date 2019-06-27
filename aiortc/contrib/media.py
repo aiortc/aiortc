@@ -333,8 +333,14 @@ class MediaRecorder:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
         else:
+            print('**MediaRecorder addTrack container.format.name:', self.__container.format.name)
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
+                stream.pix_fmt = "rgb24"
+            elif self.__container.format.name == "v4l2":
+                # rate=31 workaround for error:
+                # Application provided invalid, non monotonically increasing dts to muxer in stream 0: 1127 >= 1127
+                stream = self.__container.add_stream("rawvideo", rate=31)
                 stream.pix_fmt = "rgb24"
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
