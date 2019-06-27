@@ -333,7 +333,6 @@ class MediaRecorder:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
         else:
-            print('**MediaRecorder addTrack container.format.name:', self.__container.format.name)
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"

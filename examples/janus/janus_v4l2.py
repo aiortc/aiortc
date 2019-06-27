@@ -144,6 +144,7 @@ async def subscribe(sub_id, room, recorder, session):
 
     await recorder.start()
 
+
 async def run(pc, player, recorder, room, session):
     await session.create()
 
@@ -240,7 +241,6 @@ if __name__ == "__main__":
         recorder = MediaRecorder(args.record_to, format='v4l2')
     else:
         recorder = MediaBlackhole()
-
 
     loop = asyncio.get_event_loop()
     try:
