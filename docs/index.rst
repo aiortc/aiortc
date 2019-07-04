@@ -25,5 +25,6 @@ Here is a client which performs an HTTP/0.9 request using asyncio:
    :maxdepth: 2
 
    asyncio
+   http3
    sansio
    license

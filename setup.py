@@ -43,5 +43,9 @@ setuptools.setup(
         )
     ],
     packages=['aioquic'],
-    install_requires=['cryptography >= 2.5', 'dataclasses; python_version < "3.7"'],
+    install_requires=[
+        'cryptography >= 2.5',
+        'dataclasses; python_version < "3.7"',
+        'pylsqpack >= 0.1.1, < 0.2.0',
+    ],
 )

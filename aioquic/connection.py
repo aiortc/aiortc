@@ -379,6 +379,10 @@ class QuicConnection:
             (self._handle_connection_close_frame, EPOCHS("ZO")),
         ]
 
+    @property
+    def configuration(self) -> QuicConfiguration:
+        return self._configuration
+
     def change_connection_id(self) -> None:
         """
         Switch to the next available connection ID and retire

@@ -1,0 +1,14 @@
+HTTP/3 API
+==========
+
+The HTTP/3 API performs no I/O on its own, leaving this to the API user.
+This allows you to integrate HTTP/3 in any Python application, regardless of
+the concurrency model you are using.
+
+Connection
+----------
+
+.. automodule:: aioquic.h3.connection
+
+    .. autoclass:: H3Connection
+        :members:

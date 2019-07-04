@@ -2,250 +2,14 @@ import argparse
 import logging
 import socket
 import time
-from dataclasses import dataclass
-from enum import IntEnum
-from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from pylsqpack import Decoder, Encoder
-
-import aioquic.events
-from aioquic.buffer import Buffer, BufferReadError
 from aioquic.configuration import QuicConfiguration
 from aioquic.connection import QuicConnection
+from aioquic.h3.connection import H3Connection
+from aioquic.h3.events import DataReceived, ResponseReceived
 
 logger = logging.getLogger("http3")
-
-
-Headers = List[Tuple[bytes, bytes]]
-
-
-class Event:
-    pass
-
-
-@dataclass
-class DataReceived(Event):
-    data: bytes
-    stream_id: int
-    stream_ended: bool
-
-
-@dataclass
-class ResponseReceived(Event):
-    headers: Headers
-    stream_id: int
-    stream_ended: bool
-
-
-class FrameType(IntEnum):
-    DATA = 0
-    HEADERS = 1
-    PRIORITY = 2
-    CANCEL_PUSH = 3
-    SETTINGS = 4
-    PUSH_PROMISE = 5
-    GOAWAY = 6
-    MAX_PUSH_ID = 7
-    DUPLICATE_PUSH = 8
-
-
-class Setting(IntEnum):
-    QPACK_MAX_TABLE_CAPACITY = 1
-    SETTINGS_MAX_HEADER_LIST_SIZE = 6
-    QPACK_BLOCKED_STREAMS = 7
-    SETTINGS_NUM_PLACEHOLDERS = 9
-
-
-class StreamType(IntEnum):
-    CONTROL = 0
-    PUSH = 1
-    QPACK_ENCODER = 2
-    QPACK_DECODER = 3
-
-
-def parse_settings(data):
-    buf = Buffer(data=data)
-    settings = []
-    while not buf.eof():
-        setting = buf.pull_uint_var()
-        value = buf.pull_uint_var()
-        settings.append((setting, value))
-    return dict(settings)
-
-
-class H3Connection:
-    """
-    A low-level HTTP/3 connection object.
-    """
-
-    def __init__(self, configuration: QuicConfiguration):
-        self._quic = QuicConnection(configuration=configuration)
-        self._decoder = Decoder(0x100, 0x10)
-        self._encoder = Encoder()
-        self._pending: List[Tuple[int, bytes, bool]] = []
-        self._stream_buffers: Dict[int, bytes] = {}
-        self._stream_types: Dict[int, int] = {}
-
-        self._peer_control_stream_id: Optional[int] = None
-        self._peer_decoder_stream_id: Optional[int] = None
-        self._peer_encoder_stream_id: Optional[int] = None
-
-    def datagrams_to_send(self) -> List[Tuple[bytes, Any]]:
-        """
-        Return a list of `(data, addr)` tuples of datagrams which need to be
-        sent, and the network address to which they need to be sent.
-        """
-        return self._quic.datagrams_to_send(now=time.time())
-
-    def get_next_available_stream_id(self) -> int:
-        """
-        Return the stream ID for the next stream created by this endpoint.
-        """
-        return self._quic.get_next_available_stream_id()
-
-    def initiate_connection(self, addr: Any) -> None:
-        """
-        Initiate the TLS handshake.
-
-        This method can only be called for clients and a single time.
-
-        After calling this method call :meth:`datagrams_to_send` to retrieve data
-        which needs to be sent.
-
-        :param addr: The network address of the remote peer.
-        """
-        self._quic.connect(addr, now=time.time())
-
-    def receive_datagram(self, data: bytes, addr: Any) -> List[Event]:
-        """
-        Handle an incoming datagram and return events.
-        """
-        self._quic.receive_datagram(data, addr, now=time.time())
-        return self._update()
-
-    def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
-        """
-        Send data on the given stream.
-        """
-        buf = Buffer(capacity=len(data) + 16)
-        buf.push_uint_var(FrameType.DATA)
-        buf.push_uint_var(len(data))
-        buf.push_bytes(data)
-
-        self._pending.append((stream_id, buf.data, end_stream))
-
-    def send_headers(self, stream_id: int, headers: Headers) -> None:
-        """
-        Send headers on the given stream.
-        """
-        control, header = self._encoder.encode(stream_id, 0, headers)
-
-        buf = Buffer(capacity=len(header) + 16)
-        buf.push_uint_var(FrameType.HEADERS)
-        buf.push_uint_var(len(header))
-        buf.push_bytes(header)
-
-        self._pending.append((stream_id, buf.data, False))
-
-    def _receive_stream_data(
-        self, stream_id: int, data: bytes, stream_ended: bool
-    ) -> List[Event]:
-        http_events: List[Event] = []
-
-        if stream_id in self._stream_buffers:
-            self._stream_buffers[stream_id] += data
-        else:
-            self._stream_buffers[stream_id] = data
-        consumed = 0
-
-        buf = Buffer(data=self._stream_buffers[stream_id])
-        while not buf.eof():
-            # fetch stream type for unidirectional streams
-            if (stream_id % 4) == 3 and stream_id not in self._stream_types:
-                try:
-                    stream_type = buf.pull_uint_var()
-                except BufferReadError:
-                    break
-                if stream_type == StreamType.CONTROL:
-                    assert self._peer_control_stream_id is None
-                    self._peer_control_stream_id = stream_id
-                elif stream_type == StreamType.QPACK_DECODER:
-                    assert self._peer_decoder_stream_id is None
-                    self._peer_decoder_stream_id = stream_id
-                elif stream_type == StreamType.QPACK_ENCODER:
-                    assert self._peer_encoder_stream_id is None
-                    self._peer_encoder_stream_id = stream_id
-                self._stream_types[stream_id] = stream_type
-
-            # fetch next frame
-            try:
-                frame_type = buf.pull_uint_var()
-                frame_length = buf.pull_uint_var()
-                frame_data = buf.pull_bytes(frame_length)
-            except BufferReadError:
-                break
-            consumed = buf.tell()
-
-            if (stream_id % 4) == 0:
-                # bidirectional streams carry requests and responses
-                if frame_type == FrameType.DATA:
-                    http_events.append(
-                        DataReceived(
-                            data=frame_data,
-                            stream_id=stream_id,
-                            stream_ended=stream_ended and buf.eof(),
-                        )
-                    )
-                elif frame_type == FrameType.HEADERS:
-                    control, headers = self._decoder.feed_header(stream_id, frame_data)
-                    http_events.append(
-                        ResponseReceived(
-                            headers=headers,
-                            stream_id=stream_id,
-                            stream_ended=stream_ended and buf.eof(),
-                        )
-                    )
-                else:
-                    logger.info(
-                        "Unhandled frame type %d on stream %d", frame_type, stream_id
-                    )
-            elif stream_id == self._peer_control_stream_id:
-                # unidirectional control stream
-                if frame_type == FrameType.SETTINGS:
-                    settings = parse_settings(frame_data)
-                    self._encoder.apply_settings(
-                        max_table_capacity=settings.get(
-                            Setting.QPACK_MAX_TABLE_CAPACITY, 0
-                        ),
-                        blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
-                    )
-
-        # remove processed data from buffer
-        self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
-
-        return http_events
-
-    def _update(self) -> List[Event]:
-        http_events: List[Event] = []
-
-        # process QUIC events
-        event = self._quic.next_event()
-        while event is not None:
-            if isinstance(event, aioquic.events.HandshakeCompleted):
-                for args in self._pending:
-                    self._quic.send_stream_data(*args)
-                self._pending.clear()
-            elif isinstance(event, aioquic.events.StreamDataReceived):
-                http_events.extend(
-                    self._receive_stream_data(
-                        event.stream_id, event.data, event.end_stream
-                    )
-                )
-
-            event = self._quic.next_event()
-
-        return http_events
 
 
 def run(url: str) -> None:
@@ -263,18 +27,20 @@ def run(url: str) -> None:
     server_addr = (socket.gethostbyname(server_name), port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    conn = H3Connection(
-        QuicConfiguration(
+    # prepare QUIC connection
+    quic = QuicConnection(
+        configuration=QuicConfiguration(
             alpn_protocols=["h3-20"],
             is_client=True,
             secrets_log_file=open("/tmp/ssl.log", "w"),
             server_name=server_name,
         )
     )
-    conn.initiate_connection(server_addr)
+    quic.connect(server_addr, now=time.time())
 
     # send request
-    stream_id = conn.get_next_available_stream_id()
+    conn = H3Connection(quic)
+    stream_id = quic.get_next_available_stream_id()
     conn.send_headers(
         stream_id=stream_id,
         headers=[
@@ -285,19 +51,19 @@ def run(url: str) -> None:
         ],
     )
     conn.send_data(stream_id=stream_id, data=b"", end_stream=True)
-    for data, addr in conn.datagrams_to_send():
+    for data, addr in quic.datagrams_to_send(now=time.time()):
         sock.sendto(data, addr)
 
     # handle events
     stream_ended = False
     while not stream_ended:
         data, addr = sock.recvfrom(2048)
-        for event in conn.receive_datagram(data, addr):
+        for event in conn.receive_datagram(data, addr, now=time.time()):
             print(event)
             if isinstance(event, (DataReceived, ResponseReceived)):
                 stream_ended = event.stream_ended
 
-        for data, addr in conn.datagrams_to_send():
+        for data, addr in quic.datagrams_to_send(now=time.time()):
             sock.sendto(data, addr)
 
 
