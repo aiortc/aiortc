@@ -12,3 +12,18 @@ Connection
 
     .. autoclass:: H3Connection
         :members:
+
+
+Events
+------
+
+.. automodule:: aioquic.h3.events
+
+    .. autoclass:: DataReceived
+        :members:
+
+    .. autoclass:: RequestReceived
+        :members:
+
+    .. autoclass:: ResponseReceived
+        :members:

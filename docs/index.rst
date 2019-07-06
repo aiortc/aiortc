@@ -24,7 +24,7 @@ Here is a client which performs an HTTP/0.9 request using asyncio:
 .. toctree::
    :maxdepth: 2
 
-   asyncio
+   core
    http3
-   sansio
+   asyncio
    license
