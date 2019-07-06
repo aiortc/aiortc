@@ -131,6 +131,16 @@ class H3Connection:
             stream_id, encode_frame(FrameType.HEADERS, header), False
         )
 
+    def _create_uni_stream(self, stream_type: int) -> int:
+        """
+        Create an unidirectional stream of the given type.
+        """
+        stream_id = self._quic.get_next_available_stream_id(is_unidirectional=True)
+        buf = Buffer(capacity=8)
+        buf.push_uint_var(stream_type)
+        self._quic.send_stream_data(stream_id, buf.data)
+        return stream_id
+
     def _receive_stream_data(
         self, stream_id: int, data: bytes, stream_ended: bool
     ) -> List[Event]:
@@ -225,13 +235,9 @@ class H3Connection:
                 self._handshake_completed = True
 
                 # send our settings
-                self._local_control_stream_id = self._quic.get_next_available_stream_id(
-                    is_unidirectional=True
+                self._local_control_stream_id = self._create_uni_stream(
+                    StreamType.CONTROL
                 )
-                buf = Buffer(capacity=1)
-                buf.push_uint_var(StreamType.CONTROL)
-                self._quic.send_stream_data(self._local_control_stream_id, buf.data)
-
                 self._quic.send_stream_data(
                     self._local_control_stream_id,
                     encode_frame(
@@ -243,6 +249,14 @@ class H3Connection:
                             }
                         ),
                     ),
+                )
+
+                # create encoder and decoder streams
+                self._local_encoder_stream_id = self._create_uni_stream(
+                    StreamType.QPACK_ENCODER
+                )
+                self._local_decoder_stream_id = self._create_uni_stream(
+                    StreamType.QPACK_DECODER
                 )
 
                 # send pending data
