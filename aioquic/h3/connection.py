@@ -6,7 +6,7 @@ from pylsqpack import Decoder, Encoder
 
 import aioquic.events
 from aioquic.buffer import Buffer, BufferReadError
-from aioquic.connection import QuicConnection
+from aioquic.connection import QuicConnection, stream_is_unidirectional
 from aioquic.h3.events import (
     DataReceived,
     Event,
@@ -44,6 +44,23 @@ class StreamType(IntEnum):
     QPACK_DECODER = 3
 
 
+def encode_frame(frame_type: int, frame_data: bytes) -> bytes:
+    frame_length = len(frame_data)
+    buf = Buffer(capacity=frame_length + 16)
+    buf.push_uint_var(frame_type)
+    buf.push_uint_var(frame_length)
+    buf.push_bytes(frame_data)
+    return buf.data
+
+
+def encode_settings(settings: Dict[int, int]) -> bytes:
+    buf = Buffer(capacity=1024)
+    for setting, value in settings.items():
+        buf.push_uint_var(setting)
+        buf.push_uint_var(value)
+    return buf.data
+
+
 def parse_settings(data: bytes) -> Dict[int, int]:
     buf = Buffer(data=data)
     settings = []
@@ -62,14 +79,21 @@ class H3Connection:
     """
 
     def __init__(self, quic: QuicConnection):
+        self._max_table_capacity = 0x100
+        self._blocked_streams = 0x10
+
         self._handshake_completed = False
         self._is_client = quic.configuration.is_client
         self._quic = quic
-        self._decoder = Decoder(0x100, 0x10)
+        self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
         self._encoder = Encoder()
         self._pending: List[Tuple[int, bytes, bool]] = []
         self._stream_buffers: Dict[int, bytes] = {}
         self._stream_types: Dict[int, int] = {}
+
+        self._local_control_stream_id: Optional[int] = None
+        self._local_decoder_stream_id: Optional[int] = None
+        self._local_encoder_stream_id: Optional[int] = None
 
         self._peer_control_stream_id: Optional[int] = None
         self._peer_decoder_stream_id: Optional[int] = None
@@ -90,12 +114,9 @@ class H3Connection:
         connection's :meth:`~aioquic.connection.QuicConnection.datagrams_to_send`
         method.
         """
-        buf = Buffer(capacity=len(data) + 16)
-        buf.push_uint_var(FrameType.DATA)
-        buf.push_uint_var(len(data))
-        buf.push_bytes(data)
-
-        self._send_stream_data(stream_id, buf.data, end_stream)
+        self._send_stream_data(
+            stream_id, encode_frame(FrameType.DATA, data), end_stream
+        )
 
     def send_headers(self, stream_id: int, headers: Headers) -> None:
         """
@@ -106,13 +127,9 @@ class H3Connection:
         method.
         """
         control, header = self._encoder.encode(stream_id, 0, headers)
-
-        buf = Buffer(capacity=len(header) + 16)
-        buf.push_uint_var(FrameType.HEADERS)
-        buf.push_uint_var(len(header))
-        buf.push_bytes(header)
-
-        self._send_stream_data(stream_id, buf.data, False)
+        self._send_stream_data(
+            stream_id, encode_frame(FrameType.HEADERS, header), False
+        )
 
     def _receive_stream_data(
         self, stream_id: int, data: bytes, stream_ended: bool
@@ -128,7 +145,10 @@ class H3Connection:
         buf = Buffer(data=self._stream_buffers[stream_id])
         while not buf.eof():
             # fetch stream type for unidirectional streams
-            if (stream_id % 4) == 3 and stream_id not in self._stream_types:
+            if (
+                stream_is_unidirectional(stream_id)
+                and stream_id not in self._stream_types
+            ):
                 try:
                     stream_type = buf.pull_uint_var()
                 except BufferReadError:
@@ -154,7 +174,7 @@ class H3Connection:
             consumed = buf.tell()
 
             if (stream_id % 4) == 0:
-                # bidirectional streams carry requests and responses
+                # client-initiated bidirectional streams carry requests and responses
                 if frame_type == FrameType.DATA:
                     http_events.append(
                         DataReceived(
@@ -172,10 +192,6 @@ class H3Connection:
                             stream_id=stream_id,
                             stream_ended=stream_ended and buf.eof(),
                         )
-                    )
-                else:
-                    logger.info(
-                        "Unhandled frame type %d on stream %d", frame_type, stream_id
                     )
             elif stream_id == self._peer_control_stream_id:
                 # unidirectional control stream
@@ -207,6 +223,29 @@ class H3Connection:
         while event is not None:
             if isinstance(event, aioquic.events.HandshakeCompleted):
                 self._handshake_completed = True
+
+                # send our settings
+                self._local_control_stream_id = self._quic.get_next_available_stream_id(
+                    is_unidirectional=True
+                )
+                buf = Buffer(capacity=1)
+                buf.push_uint_var(StreamType.CONTROL)
+                self._quic.send_stream_data(self._local_control_stream_id, buf.data)
+
+                self._quic.send_stream_data(
+                    self._local_control_stream_id,
+                    encode_frame(
+                        FrameType.SETTINGS,
+                        encode_settings(
+                            {
+                                Setting.QPACK_MAX_TABLE_CAPACITY: self._max_table_capacity,
+                                Setting.QPACK_BLOCKED_STREAMS: self._blocked_streams,
+                            }
+                        ),
+                    ),
+                )
+
+                # send pending data
                 for args in self._pending:
                     self._quic.send_stream_data(*args)
                 self._pending.clear()
