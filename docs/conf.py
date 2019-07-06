@@ -33,8 +33,16 @@ class MockCrypto:
     HeaderProtection = None
 
 
-sys.modules.update({"aioquic._buffer": MockBuffer()})
-sys.modules.update({"aioquic._crypto": MockCrypto()})
+class MockPylsqpack:
+    Decoder = None
+    Encoder = None
+
+
+sys.modules.update({
+    "aioquic._buffer": MockBuffer(),
+    "aioquic._crypto": MockCrypto(),
+    "pylsqpack": MockPylsqpack(),
+})
 
 # -- General configuration ------------------------------------------------
 
