@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pylsqpack import Decoder, Encoder
 
 import aioquic.events
-from aioquic.buffer import Buffer, BufferReadError
+from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
 from aioquic.connection import QuicConnection, stream_is_unidirectional
 from aioquic.h3.events import (
     DataReceived,
@@ -136,9 +136,7 @@ class H3Connection:
         Create an unidirectional stream of the given type.
         """
         stream_id = self._quic.get_next_available_stream_id(is_unidirectional=True)
-        buf = Buffer(capacity=8)
-        buf.push_uint_var(stream_type)
-        self._quic.send_stream_data(stream_id, buf.data)
+        self._quic.send_stream_data(stream_id, encode_uint_var(stream_type))
         return stream_id
 
     def _receive_stream_data(

@@ -1,9 +1,18 @@
 from ._buffer import Buffer, BufferReadError, BufferWriteError  # noqa
 
 
+def encode_uint_var(value: int) -> bytes:
+    """
+    Encode a variable-length unsigned integer.
+    """
+    buf = Buffer(capacity=8)
+    buf.push_uint_var(value)
+    return buf.data
+
+
 def size_uint_var(value: int) -> int:
     """
-    Returns the number of bytes required to encode the given value
+    Return the number of bytes required to encode the given value
     as a QUIC variable-length unsigned integer.
     """
     if value <= 0x3F:

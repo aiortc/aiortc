@@ -6,7 +6,7 @@ import time
 from unittest import TestCase
 
 from aioquic import events, tls
-from aioquic.buffer import Buffer
+from aioquic.buffer import Buffer, encode_uint_var
 from aioquic.configuration import QuicConfiguration
 from aioquic.connection import (
     QuicConnection,
@@ -30,12 +30,6 @@ from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
 SERVER_ADDR = ("2.3.4.5", 4433)
-
-
-def encode_uint_var(v):
-    buf = Buffer(capacity=8)
-    buf.push_uint_var(v)
-    return buf.data
 
 
 def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
