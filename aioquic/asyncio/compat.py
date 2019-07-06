@@ -18,8 +18,6 @@ class _AsyncGeneratorContextManager(ContextDecorator):
 
     async def __aexit__(self, typ, value, traceback):
         if typ is not None:
-            if value is None:
-                value = typ()
             await self.gen.athrow(typ, value, traceback)
 
 
