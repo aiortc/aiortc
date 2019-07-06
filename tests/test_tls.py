@@ -1,6 +1,7 @@
 import binascii
-import os
-from unittest import TestCase, skipIf
+from unittest import TestCase
+
+from cryptography.exceptions import UnsupportedAlgorithm
 
 from aioquic import tls
 from aioquic.buffer import Buffer, BufferReadError
@@ -380,13 +381,15 @@ class ContextTest(TestCase):
 
         self._handshake(client, server)
 
-    @skipIf(os.environ.get("TRAVIS") == "true", "travis lacks a modern OpenSSL")
     def test_handshake_with_x25519(self):
         client = self.create_client()
         client._supported_groups = [tls.Group.X25519]
         server = self.create_server()
 
-        self._handshake(client, server)
+        try:
+            self._handshake(client, server)
+        except UnsupportedAlgorithm as exc:
+            self.skipTest(str(exc))
 
     def test_session_ticket(self):
         client_tickets = []
