@@ -161,6 +161,8 @@ class H3Connection:
                     stream_type = buf.pull_uint_var()
                 except BufferReadError:
                     break
+                consumed = buf.tell()
+
                 if stream_type == StreamType.CONTROL:
                     assert self._peer_control_stream_id is None
                     self._peer_control_stream_id = stream_id

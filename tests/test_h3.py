@@ -84,3 +84,35 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(events[1].data, b"<html><body>hello</body></html>")
             self.assertEqual(events[1].stream_id, stream_id)
             self.assertEqual(events[1].stream_ended, True)
+
+    def test_uni_stream_type(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-20"]},
+            server_options={"alpn_protocols": ["h3-20"]},
+        ) as (quic_client, quic_server):
+            h3_server = H3Connection(quic_server)
+
+            # unknown stream type 9
+            stream_id = quic_client.get_next_available_stream_id(is_unidirectional=True)
+            self.assertEqual(stream_id, 2)
+            quic_client.send_stream_data(stream_id, b"\x09")
+            transfer(quic_client, quic_server)
+            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_server._stream_buffers, {2: b""})
+            self.assertEqual(h3_server._stream_types, {2: 9})
+
+            # unknown stream type 64, one byte at a time
+            stream_id = quic_client.get_next_available_stream_id(is_unidirectional=True)
+            self.assertEqual(stream_id, 6)
+
+            quic_client.send_stream_data(stream_id, b"\x40")
+            transfer(quic_client, quic_server)
+            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b"\x40"})
+            self.assertEqual(h3_server._stream_types, {2: 9})
+
+            quic_client.send_stream_data(stream_id, b"\x40")
+            transfer(quic_client, quic_server)
+            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b""})
+            self.assertEqual(h3_server._stream_types, {2: 9, 6: 64})
