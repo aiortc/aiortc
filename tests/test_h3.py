@@ -22,8 +22,8 @@ class H3ConnectionTest(TestCase):
                 headers=[
                     (b":method", b"GET"),
                     (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
                     (b":path", b"/"),
-                    (b"host", b"localhost"),
                 ],
             )
             h3_client.send_data(stream_id=stream_id, data=b"", end_stream=True)
@@ -40,8 +40,8 @@ class H3ConnectionTest(TestCase):
                 [
                     (b":method", b"GET"),
                     (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
                     (b":path", b"/"),
-                    (b"host", b"localhost"),
                 ],
             )
             self.assertEqual(events[0].stream_id, stream_id)

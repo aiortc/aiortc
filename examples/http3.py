@@ -45,9 +45,9 @@ def run(url: str) -> None:
         stream_id=stream_id,
         headers=[
             (b":method", b"GET"),
-            (b":scheme", b"https"),
+            (b":scheme", parsed.scheme.encode("utf8")),
+            (b":authority", parsed.netloc.encode("utf8")),
             (b":path", parsed.path.encode("utf8")),
-            (b"host", server_name.encode("utf8")),
         ],
     )
     conn.send_data(stream_id=stream_id, data=b"", end_stream=True)
