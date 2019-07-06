@@ -1148,11 +1148,6 @@ class Context:
             elif self.state == State.SERVER_POST_HANDSHAKE:
                 raise AlertUnexpectedMessage
 
-            # should not happen
-
-            else:
-                raise Exception("unhandled state")
-
             assert input_buf.eof()
 
     def _build_session_ticket(
