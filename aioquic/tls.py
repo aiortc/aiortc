@@ -554,6 +554,7 @@ class ServerHello:
     key_share: Optional[KeyShareEntry] = None
     pre_shared_key: Optional[int] = None
     supported_version: Optional[int] = None
+    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
 def pull_server_hello(buf: Buffer) -> ServerHello:
@@ -580,7 +581,9 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
             elif extension_type == ExtensionType.PRE_SHARED_KEY:
                 hello.pre_shared_key = buf.pull_uint16()
             else:
-                buf.pull_bytes(extension_length)
+                hello.other_extensions.append(
+                    (extension_type, buf.pull_bytes(extension_length))
+                )
 
         pull_list(buf, 2, pull_extension)
 
@@ -611,6 +614,10 @@ def push_server_hello(buf: Buffer, hello: ServerHello) -> None:
                 with push_extension(buf, ExtensionType.PRE_SHARED_KEY):
                     buf.push_uint16(hello.pre_shared_key)
 
+            for extension_type, extension_value in hello.other_extensions:
+                with push_extension(buf, extension_type):
+                    buf.push_bytes(extension_value)
+
 
 @dataclass
 class NewSessionTicket:
@@ -621,6 +628,7 @@ class NewSessionTicket:
 
     # extensions
     max_early_data_size: Optional[int] = None
+    other_extensions: List[Tuple[int, bytes]] = field(default_factory=list)
 
 
 def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
@@ -639,7 +647,9 @@ def pull_new_session_ticket(buf: Buffer) -> NewSessionTicket:
             if extension_type == ExtensionType.EARLY_DATA:
                 new_session_ticket.max_early_data_size = buf.pull_uint32()
             else:
-                buf.pull_bytes(extension_length)
+                new_session_ticket.other_extensions.append(
+                    (extension_type, buf.pull_bytes(extension_length))
+                )
 
         pull_list(buf, 2, pull_extension)
 
@@ -658,6 +668,10 @@ def push_new_session_ticket(buf: Buffer, new_session_ticket: NewSessionTicket) -
             if new_session_ticket.max_early_data_size is not None:
                 with push_extension(buf, ExtensionType.EARLY_DATA):
                     buf.push_uint32(new_session_ticket.max_early_data_size)
+
+            for extension_type, extension_value in new_session_ticket.other_extensions:
+                with push_extension(buf, extension_type):
+                    buf.push_bytes(extension_value)
 
 
 @dataclass

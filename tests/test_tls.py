@@ -926,6 +926,40 @@ class TlsTest(TestCase):
         push_server_hello(buf, hello)
         self.assertEqual(buf.data, load("tls_server_hello_with_psk.bin"))
 
+    def test_pull_server_hello_with_unknown_extension(self):
+        buf = Buffer(data=load("tls_server_hello_with_unknown_extension.bin"))
+        hello = pull_server_hello(buf)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            hello,
+            ServerHello(
+                random=binascii.unhexlify(
+                    "ada85271d19680c615ea7336519e3fdf6f1e26f3b1075ee1de96ffa8884e8280"
+                ),
+                session_id=binascii.unhexlify(
+                    "9aee82a2d186c1cb32a329d9dcfe004a1a438ad0485a53c6bfcf55c132a23235"
+                ),
+                cipher_suite=tls.CipherSuite.AES_256_GCM_SHA384,
+                compression_method=tls.CompressionMethod.NULL,
+                key_share=(
+                    tls.Group.SECP256R1,
+                    binascii.unhexlify(
+                        "048b27d0282242d84b7fcc02a9c4f13eca0329e3c7029aa34a33794e6e7ba189"
+                        "5cca1c503bf0378ac6937c354912116ff3251026bca1958d7f387316c83ae6cf"
+                        "b2"
+                    ),
+                ),
+                supported_version=tls.TLS_VERSION_1_3,
+                other_extensions=[(12345, b"foo")],
+            ),
+        )
+
+        # serialize
+        buf = Buffer(1000)
+        push_server_hello(buf, hello)
+        self.assertEqual(buf.data, load("tls_server_hello_with_unknown_extension.bin"))
+
     def test_push_server_hello(self):
         hello = ServerHello(
             random=binascii.unhexlify(
@@ -974,6 +1008,33 @@ class TlsTest(TestCase):
         buf = Buffer(100)
         push_new_session_ticket(buf, new_session_ticket)
         self.assertEqual(buf.data, load("tls_new_session_ticket.bin"))
+
+    def test_pull_new_session_ticket_with_unknown_extension(self):
+        buf = Buffer(data=load("tls_new_session_ticket_with_unknown_extension.bin"))
+        new_session_ticket = pull_new_session_ticket(buf)
+        self.assertIsNotNone(new_session_ticket)
+        self.assertTrue(buf.eof())
+
+        self.assertEqual(
+            new_session_ticket,
+            NewSessionTicket(
+                ticket_lifetime=86400,
+                ticket_age_add=3303452425,
+                ticket_nonce=b"",
+                ticket=binascii.unhexlify(
+                    "dbe6f1a77a78c0426bfa607cd0d02b350247d90618704709596beda7e962cc81"
+                ),
+                max_early_data_size=4294967295,
+                other_extensions=[(12345, b"foo")],
+            ),
+        )
+
+        # serialize
+        buf = Buffer(100)
+        push_new_session_ticket(buf, new_session_ticket)
+        self.assertEqual(
+            buf.data, load("tls_new_session_ticket_with_unknown_extension.bin")
+        )
 
     def test_encrypted_extensions(self):
         data = load("tls_encrypted_extensions.bin")
