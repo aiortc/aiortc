@@ -95,6 +95,22 @@ class HighLevelTest(TestCase):
         )
         self.assertEqual(response, b"5432109876543210")
 
+    def test_connect_and_serve_with_connection_handler(self):
+        server_conn = None
+
+        def connection_handler(conn):
+            nonlocal server_conn
+            server_conn = conn
+
+        _, response = run(
+            asyncio.gather(
+                run_server(connection_handler=connection_handler),
+                run_client("127.0.0.1"),
+            )
+        )
+        self.assertEqual(response, b"gnip")
+        self.assertIsNotNone(server_conn)
+
     @patch("socket.socket.sendto", new_callable=lambda: sendto_with_loss)
     def test_connect_and_serve_with_packet_loss(self, mock_sendto):
         """
@@ -147,6 +163,18 @@ class HighLevelTest(TestCase):
             asyncio.gather(run_server(stateless_retry=True), run_client("127.0.0.1"))
         )
         self.assertEqual(response, b"gnip")
+
+    @patch("aioquic.asyncio.server.QuicServer._validate_retry_token")
+    def test_connect_and_serve_with_stateless_retry_bad(self, mock_validate):
+        mock_validate.side_effect = ValueError("Decryption failed.")
+
+        with self.assertRaises(ConnectionError):
+            run(
+                asyncio.gather(
+                    run_server(stateless_retry=True),
+                    run_client("127.0.0.1", idle_timeout=4.0),
+                )
+            )
 
     def test_connect_and_serve_with_version_negotiation(self):
         _, response = run(
