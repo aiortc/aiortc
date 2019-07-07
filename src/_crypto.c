@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 
 #define MODULE_NAME "aioquic._crypto"
@@ -13,12 +14,14 @@
 
 #define CHECK_RESULT(expr) \
     if (!expr) { \
+        ERR_clear_error(); \
         PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return NULL; \
     }
 
 #define CHECK_RESULT_CTOR(expr) \
     if (!expr) { \
+        ERR_clear_error(); \
         PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return -1; \
     }
