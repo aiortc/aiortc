@@ -14,5 +14,7 @@ elif [ "$BUILD" = "sdist" ]; then
     fi
 else
     coverage run setup.py test
-    curl -s https://codecov.io/bash | bash
+    if [ "$TRAVIS_PYTHON_VERSION" != "pypy3" ]; then
+        curl -s https://codecov.io/bash | bash
+    fi
 fi
