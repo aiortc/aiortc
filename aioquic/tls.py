@@ -1422,6 +1422,19 @@ class Context:
     ) -> None:
         peer_hello = pull_client_hello(input_buf)
 
+        # determine applicable signature algorithms
+        signature_algorithms: List[SignatureAlgorithm] = []
+        if isinstance(self.certificate_private_key, rsa.RSAPrivateKey):
+            signature_algorithms = [
+                SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
+                SignatureAlgorithm.RSA_PKCS1_SHA256,
+                SignatureAlgorithm.RSA_PKCS1_SHA1,
+            ]
+        elif isinstance(
+            self.certificate_private_key, ec.EllipticCurvePrivateKey
+        ) and isinstance(self.certificate_private_key.curve, ec.SECP256R1):
+            signature_algorithms = [SignatureAlgorithm.ECDSA_SECP256R1_SHA256]
+
         # negotiate parameters
         cipher_suite = negotiate(
             self._cipher_suites,
@@ -1439,7 +1452,7 @@ class Context:
             AlertHandshakeFailure("No supported key exchange mode"),
         )
         signature_algorithm = negotiate(
-            self._signature_algorithms,
+            signature_algorithms,
             peer_hello.signature_algorithms,
             AlertHandshakeFailure("No supported signature algorithm"),
         )

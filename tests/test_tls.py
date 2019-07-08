@@ -1,7 +1,12 @@
 import binascii
+import datetime
 from unittest import TestCase
 
+from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from aioquic import tls
 from aioquic.buffer import Buffer, BufferReadError
@@ -75,6 +80,26 @@ def create_buffers():
         tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
         tls.Epoch.ONE_RTT: Buffer(capacity=4096),
     }
+
+
+def generate_ec_certificate(curve):
+    key = ec.generate_private_key(backend=default_backend(), curve=curve)
+
+    subject = issuer = x509.Name(
+        [x509.NameAttribute(x509.NameOID.COMMON_NAME, "example.com")]
+    )
+
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
+        .sign(key, hashes.SHA256(), default_backend())
+    )
+    return cert, key
 
 
 def merge_buffers(buffers):
@@ -230,10 +255,9 @@ class ContextTest(TestCase):
 
     def test_server_unsupported_signature_algorithm(self):
         client = self.create_client()
-        client._signature_algorithms = [tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256]
+        client._signature_algorithms = [tls.SignatureAlgorithm.ED448]
 
         server = self.create_server()
-        server._signature_algorithms = [tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA512]
 
         with self.assertRaises(tls.AlertHandshakeFailure) as cm:
             self._server_fail_hello(client, server)
@@ -298,7 +322,7 @@ class ContextTest(TestCase):
         server.handle_message(server_input, server_buf)
         self.assertEqual(server.state, State.SERVER_EXPECT_FINISHED)
         client_input = merge_buffers(server_buf)
-        self.assertGreaterEqual(len(client_input), 2194)
+        self.assertGreaterEqual(len(client_input), 600)
         self.assertLessEqual(len(client_input), 2316)
 
         reset_buffers(server_buf)
@@ -332,6 +356,19 @@ class ContextTest(TestCase):
     def test_handshake(self):
         client = self.create_client()
         server = self.create_server()
+
+        self._handshake(client, server)
+
+        # check ALPN matches
+        self.assertEqual(client.alpn_negotiated, None)
+        self.assertEqual(server.alpn_negotiated, None)
+
+    def test_handshake_ecdsa_secp256r1(self):
+        client = self.create_client()
+        server = self.create_server()
+        server.certificate, server.certificate_private_key = generate_ec_certificate(
+            ec.SECP256R1
+        )
 
         self._handshake(client, server)
 
