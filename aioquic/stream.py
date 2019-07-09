@@ -15,6 +15,7 @@ class QuicStream:
         max_stream_data_remote: int = 0,
     ) -> None:
         self._connection = connection
+        self.is_blocked = False
         self.max_stream_data_local = max_stream_data_local
         self.max_stream_data_local_sent = max_stream_data_local
         self.max_stream_data_remote = max_stream_data_remote

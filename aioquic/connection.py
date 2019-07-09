@@ -333,6 +333,8 @@ class QuicConnection:
         self._spin_highest_pn = 0
         self._state = QuicConnectionState.FIRSTFLIGHT
         self._streams: Dict[int, QuicStream] = {}
+        self._streams_blocked_bidi: List[QuicStream] = []
+        self._streams_blocked_uni: List[QuicStream] = []
         self._version: Optional[int] = None
 
         # things to send
@@ -340,6 +342,7 @@ class QuicConnection:
         self._ping_pending: List[int] = []
         self._probe_pending = False
         self._retire_connection_ids: List[int] = []
+        self._streams_blocked_pending = False
 
         # callbacks
         self._session_ticket_fetcher = session_ticket_fetcher
@@ -888,14 +891,12 @@ class QuicConnection:
             max_stream_data_local = 0
             max_stream_data_remote = self._remote_max_stream_data_uni
             max_streams = self._remote_max_streams_uni
+            streams_blocked = self._streams_blocked_uni
         else:
             max_stream_data_local = self._local_max_stream_data_bidi_local
             max_stream_data_remote = self._remote_max_stream_data_bidi_remote
             max_streams = self._remote_max_streams_bidi
-
-        # check max streams
-        if stream_id // 4 >= max_streams:
-            raise ValueError("Too many streams open")
+            streams_blocked = self._streams_blocked_bidi
 
         # create stream
         stream = self._streams[stream_id] = QuicStream(
@@ -904,6 +905,13 @@ class QuicConnection:
             max_stream_data_local=max_stream_data_local,
             max_stream_data_remote=max_stream_data_remote,
         )
+
+        # mark stream as blocked if needed
+        if stream_id // 4 >= max_streams:
+            stream.is_blocked = True
+            streams_blocked.append(stream)
+            self._streams_blocked_pending = True
+
         return stream
 
     def _discard_epoch(self, epoch: tls.Epoch) -> None:
@@ -1130,6 +1138,8 @@ class QuicConnection:
                         session_resumed=self.tls.session_resumed,
                     )
                 )
+                self._unblock_streams(is_unidirectional=False)
+                self._unblock_streams(is_unidirectional=True)
                 self._logger.info(
                     "ALPN negotiated protocol %s", self.tls.alpn_negotiated
                 )
@@ -1190,6 +1200,7 @@ class QuicConnection:
         if max_streams > self._remote_max_streams_bidi:
             self._logger.debug("Remote max_streams_bidi raised to %d", max_streams)
             self._remote_max_streams_bidi = max_streams
+            self._unblock_streams(is_unidirectional=False)
 
     def _handle_max_streams_uni_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1203,6 +1214,7 @@ class QuicConnection:
         if max_streams > self._remote_max_streams_uni:
             self._logger.debug("Remote max_streams_uni raised to %d", max_streams)
             self._remote_max_streams_uni = max_streams
+            self._unblock_streams(is_unidirectional=True)
 
     def _handle_new_connection_id_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1585,6 +1597,24 @@ class QuicConnection:
             stream_id
         ) == self._is_client or not stream_is_unidirectional(stream_id)
 
+    def _unblock_streams(self, is_unidirectional: bool) -> None:
+        if is_unidirectional:
+            max_stream_data_remote = self._remote_max_stream_data_uni
+            max_streams = self._remote_max_streams_uni
+            streams_blocked = self._streams_blocked_uni
+        else:
+            max_stream_data_remote = self._remote_max_stream_data_bidi_remote
+            max_streams = self._remote_max_streams_bidi
+            streams_blocked = self._streams_blocked_bidi
+
+        while streams_blocked and streams_blocked[0].stream_id // 4 < max_streams:
+            stream = streams_blocked.pop(0)
+            stream.is_blocked = False
+            stream.max_stream_data_remote = max_stream_data_remote
+
+        if not self._streams_blocked_bidi and not self._streams_blocked_uni:
+            self._streams_blocked_pending = False
+
     def _update_traffic_key(
         self,
         direction: tls.Direction,
@@ -1690,6 +1720,16 @@ class QuicConnection:
                     )
                     buf.push_uint_var(sequence_number)
 
+                # STREAMS_BLOCKED
+                if self._streams_blocked_pending:
+                    if self._streams_blocked_bidi:
+                        builder.start_frame(QuicFrameType.STREAMS_BLOCKED_BIDI)
+                        buf.push_uint_var(self._remote_max_streams_bidi)
+                    if self._streams_blocked_uni:
+                        builder.start_frame(QuicFrameType.STREAMS_BLOCKED_UNI)
+                        buf.push_uint_var(self._remote_max_streams_uni)
+                    self._streams_blocked_pending = False
+
                 # connection-level limits
                 self._write_connection_limits(builder=builder, space=space)
 
@@ -1719,7 +1759,7 @@ class QuicConnection:
 
             for stream in self._streams.values():
                 # STREAM
-                if not stream.send_buffer_is_empty:
+                if not stream.is_blocked and not stream.send_buffer_is_empty:
                     self._remote_max_data_used += write_stream_frame(
                         builder=builder,
                         space=space,

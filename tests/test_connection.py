@@ -343,17 +343,6 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(stream_id, 7)
             server.send_stream_data(stream_id, b"hello")
 
-    def test_create_stream_over_max_streams(self):
-        with client_and_server() as (client, server):
-            # create streams
-            for i in range(128):
-                client.send_stream_data(i * 4, b"")
-
-            # create one too many
-            with self.assertRaises(ValueError) as cm:
-                client.send_stream_data(128 * 4, b"")
-            self.assertEqual(str(cm.exception), "Too many streams open")
-
     def test_decryption_error(self):
         with client_and_server() as (client, server):
             # mess with encryption key
@@ -888,6 +877,60 @@ class QuicConnectionTest(TestCase):
             event = client.next_event()
             self.assertEqual(type(event), events.PingAcknowledged)
             self.assertEqual(event.uid, 12345)
+
+    def test_send_stream_data_over_max_streams_bidi(self):
+        with client_and_server() as (client, server):
+            # create streams
+            for i in range(128):
+                stream_id = i * 4
+                client.send_stream_data(stream_id, b"")
+                self.assertFalse(client._streams[stream_id].is_blocked)
+            self.assertEqual(len(client._streams_blocked_bidi), 0)
+            self.assertEqual(len(client._streams_blocked_uni), 0)
+            self.assertEqual(roundtrip(client, server), (0, 0))
+
+            # create one too many -> STREAMS_BLOCKED
+            stream_id = 128 * 4
+            client.send_stream_data(stream_id, b"")
+            self.assertTrue(client._streams[stream_id].is_blocked)
+            self.assertEqual(len(client._streams_blocked_bidi), 1)
+            self.assertEqual(len(client._streams_blocked_uni), 0)
+            self.assertEqual(roundtrip(client, server), (1, 1))
+
+            # peer raises max streams
+            client._handle_max_streams_bidi_frame(
+                client_receive_context(client),
+                QuicFrameType.MAX_STREAMS_BIDI,
+                Buffer(data=encode_uint_var(129)),
+            )
+            self.assertFalse(client._streams[stream_id].is_blocked)
+
+    def test_send_stream_data_over_max_streams_uni(self):
+        with client_and_server() as (client, server):
+            # create streams
+            for i in range(128):
+                stream_id = i * 4 + 2
+                client.send_stream_data(stream_id, b"")
+                self.assertFalse(client._streams[stream_id].is_blocked)
+            self.assertEqual(len(client._streams_blocked_bidi), 0)
+            self.assertEqual(len(client._streams_blocked_uni), 0)
+            self.assertEqual(roundtrip(client, server), (0, 0))
+
+            # create one too many -> STREAMS_BLOCKED
+            stream_id = 128 * 4 + 2
+            client.send_stream_data(stream_id, b"")
+            self.assertTrue(client._streams[stream_id].is_blocked)
+            self.assertEqual(len(client._streams_blocked_bidi), 0)
+            self.assertEqual(len(client._streams_blocked_uni), 1)
+            self.assertEqual(roundtrip(client, server), (1, 1))
+
+            # peer raises max streams
+            client._handle_max_streams_uni_frame(
+                client_receive_context(client),
+                QuicFrameType.MAX_STREAMS_UNI,
+                Buffer(data=encode_uint_var(129)),
+            )
+            self.assertFalse(client._streams[stream_id].is_blocked)
 
     def test_send_stream_data_peer_initiated(self):
         with client_and_server() as (client, server):
