@@ -808,6 +808,14 @@ class QuicConnection:
         :param data: The data to be sent.
         :param end_stream: If set to `True`, the FIN bit will be set.
         """
+        if stream_is_client_initiated(stream_id) != self._is_client:
+            if stream_id not in self._streams:
+                raise ValueError("Cannot send data on unknown peer-initiated stream")
+            if stream_is_unidirectional(stream_id):
+                raise ValueError(
+                    "Cannot send data on peer-initiated unidirectional stream"
+                )
+
         try:
             stream = self._streams[stream_id]
         except KeyError:

@@ -889,6 +889,43 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(type(event), events.PingAcknowledged)
             self.assertEqual(event.uid, 12345)
 
+    def test_send_stream_data_peer_initiated(self):
+        with client_and_server() as (client, server):
+            # server creates bidirectional stream
+            server.send_stream_data(1, b"hello")
+            roundtrip(server, client)
+
+            # server creates unidirectional stream
+            server.send_stream_data(3, b"hello")
+            roundtrip(server, client)
+
+            # client creates bidirectional stream
+            client.send_stream_data(0, b"hello")
+            roundtrip(client, server)
+
+            # client sends data on server-initiated bidirectional stream
+            client.send_stream_data(1, b"hello")
+            roundtrip(client, server)
+
+            # client create unidirectional stream
+            client.send_stream_data(2, b"hello")
+            roundtrip(client, server)
+
+            # client tries to send data on server-initial unidirectional stream
+            with self.assertRaises(ValueError) as cm:
+                client.send_stream_data(3, b"hello")
+            self.assertEqual(
+                str(cm.exception),
+                "Cannot send data on peer-initiated unidirectional stream",
+            )
+
+            # client tries to send data on unknown server-initiated bidirectional stream
+            with self.assertRaises(ValueError) as cm:
+                client.send_stream_data(5, b"hello")
+            self.assertEqual(
+                str(cm.exception), "Cannot send data on unknown peer-initiated stream"
+            )
+
     def test_stream_direction(self):
         with client_and_server() as (client, server):
             for off in [0, 4, 8]:
