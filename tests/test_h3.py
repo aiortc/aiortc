@@ -6,6 +6,11 @@ from aioquic.h3.events import DataReceived, RequestReceived, ResponseReceived
 from .test_connection import client_and_server, transfer
 
 
+def h3_transfer(quic_sender, h3_receiver):
+    transfer(quic_sender, h3_receiver._quic)
+    return h3_receiver._update()
+
+
 class H3ConnectionTest(TestCase):
     def test_connect(self):
         with client_and_server(
@@ -27,11 +32,9 @@ class H3ConnectionTest(TestCase):
                 ],
             )
             h3_client.send_data(stream_id=stream_id, data=b"", end_stream=True)
-            self.assertEqual(h3_client._update(), [])
 
             # receive request
-            transfer(quic_client, quic_server)
-            events = h3_server._update()
+            events = h3_transfer(quic_client, h3_server)
             self.assertEqual(len(events), 2)
 
             self.assertTrue(isinstance(events[0], RequestReceived))
@@ -65,11 +68,9 @@ class H3ConnectionTest(TestCase):
                 data=b"<html><body>hello</body></html>",
                 end_stream=True,
             )
-            self.assertEqual(h3_server._update(), [])
 
             # receive response
-            transfer(quic_server, quic_client)
-            events = h3_client._update()
+            events = h3_transfer(quic_server, h3_client)
             self.assertEqual(len(events), 2)
 
             self.assertTrue(isinstance(events[0], ResponseReceived))
@@ -96,8 +97,7 @@ class H3ConnectionTest(TestCase):
             stream_id = quic_client.get_next_available_stream_id(is_unidirectional=True)
             self.assertEqual(stream_id, 2)
             quic_client.send_stream_data(stream_id, b"\x09")
-            transfer(quic_client, quic_server)
-            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_transfer(quic_client, h3_server), [])
             self.assertEqual(h3_server._stream_buffers, {2: b""})
             self.assertEqual(h3_server._stream_types, {2: 9})
 
@@ -106,13 +106,11 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(stream_id, 6)
 
             quic_client.send_stream_data(stream_id, b"\x40")
-            transfer(quic_client, quic_server)
-            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_transfer(quic_client, h3_server), [])
             self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b"\x40"})
             self.assertEqual(h3_server._stream_types, {2: 9})
 
             quic_client.send_stream_data(stream_id, b"\x40")
-            transfer(quic_client, quic_server)
-            self.assertEqual(h3_server._update(), [])
+            self.assertEqual(h3_transfer(quic_client, h3_server), [])
             self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b""})
             self.assertEqual(h3_server._stream_types, {2: 9, 6: 64})
