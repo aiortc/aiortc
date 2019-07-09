@@ -1,6 +1,6 @@
 import logging
 from enum import IntEnum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from pylsqpack import Decoder, Encoder
 
@@ -82,12 +82,10 @@ class H3Connection:
         self._max_table_capacity = 0x100
         self._blocked_streams = 0x10
 
-        self._handshake_completed = False
         self._is_client = quic.configuration.is_client
         self._quic = quic
         self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
         self._encoder = Encoder()
-        self._pending: List[Tuple[int, bytes, bool]] = []
         self._stream_buffers: Dict[int, bytes] = {}
         self._stream_types: Dict[int, int] = {}
 
@@ -114,7 +112,7 @@ class H3Connection:
         connection's :meth:`~aioquic.connection.QuicConnection.datagrams_to_send`
         method.
         """
-        self._send_stream_data(
+        self._quic.send_stream_data(
             stream_id, encode_frame(FrameType.DATA, data), end_stream
         )
 
@@ -127,7 +125,7 @@ class H3Connection:
         method.
         """
         control, header = self._encoder.encode(stream_id, 0, headers)
-        self._send_stream_data(
+        self._quic.send_stream_data(
             stream_id, encode_frame(FrameType.HEADERS, header), False
         )
 
@@ -219,12 +217,6 @@ class H3Connection:
 
         return http_events
 
-    def _send_stream_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
-        if self._handshake_completed:
-            self._quic.send_stream_data(stream_id, data, end_stream)
-        else:
-            self._pending.append((stream_id, data, end_stream))
-
     def _update(self) -> List[Event]:
         http_events: List[Event] = []
 
@@ -232,8 +224,6 @@ class H3Connection:
         event = self._quic.next_event()
         while event is not None:
             if isinstance(event, aioquic.events.HandshakeCompleted):
-                self._handshake_completed = True
-
                 # send our settings
                 self._local_control_stream_id = self._create_uni_stream(
                     StreamType.CONTROL
@@ -258,11 +248,6 @@ class H3Connection:
                 self._local_decoder_stream_id = self._create_uni_stream(
                     StreamType.QPACK_DECODER
                 )
-
-                # send pending data
-                for args in self._pending:
-                    self._quic.send_stream_data(*args)
-                self._pending.clear()
             elif isinstance(event, aioquic.events.StreamDataReceived):
                 http_events.extend(
                     self._receive_stream_data(
