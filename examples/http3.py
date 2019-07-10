@@ -39,9 +39,9 @@ def run(url: str) -> None:
     quic.connect(server_addr, now=time.time())
 
     # send request
-    conn = H3Connection(quic)
+    http = H3Connection(quic)
     stream_id = quic.get_next_available_stream_id()
-    conn.send_headers(
+    http.send_headers(
         stream_id=stream_id,
         headers=[
             (b":method", b"GET"),
@@ -50,7 +50,7 @@ def run(url: str) -> None:
             (b":path", parsed.path.encode("utf8")),
         ],
     )
-    conn.send_data(stream_id=stream_id, data=b"", end_stream=True)
+    http.send_data(stream_id=stream_id, data=b"", end_stream=True)
     for data, addr in quic.datagrams_to_send(now=time.time()):
         sock.sendto(data, addr)
 
@@ -58,7 +58,8 @@ def run(url: str) -> None:
     stream_ended = False
     while not stream_ended:
         data, addr = sock.recvfrom(2048)
-        for event in conn.receive_datagram(data, addr, now=time.time()):
+        quic.receive_datagram(data, addr, now=time.time())
+        for event in http.handle_events():
             print(event)
             if isinstance(event, (DataReceived, ResponseReceived)):
                 stream_ended = event.stream_ended

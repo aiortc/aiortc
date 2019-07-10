@@ -97,12 +97,27 @@ class H3Connection:
         self._peer_decoder_stream_id: Optional[int] = None
         self._peer_encoder_stream_id: Optional[int] = None
 
-    def receive_datagram(self, data: bytes, addr: Any, now: float) -> List[Event]:
+        self._init_connection()
+
+    def handle_events(self) -> List[Event]:
         """
-        Handle an incoming datagram and return events.
+        Handle events from the QUIC connection and return HTTP events.
         """
-        self._quic.receive_datagram(data, addr, now=now)
-        return self._update()
+        http_events: List[Event] = []
+
+        # process QUIC events
+        event = self._quic.next_event()
+        while event is not None:
+            if isinstance(event, aioquic.events.StreamDataReceived):
+                http_events.extend(
+                    self._receive_stream_data(
+                        event.stream_id, event.data, event.end_stream
+                    )
+                )
+
+            event = self._quic.next_event()
+
+        return http_events
 
     def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
         """
@@ -136,6 +151,30 @@ class H3Connection:
         stream_id = self._quic.get_next_available_stream_id(is_unidirectional=True)
         self._quic.send_stream_data(stream_id, encode_uint_var(stream_type))
         return stream_id
+
+    def _init_connection(self) -> None:
+        # send our settings
+        self._local_control_stream_id = self._create_uni_stream(StreamType.CONTROL)
+        self._quic.send_stream_data(
+            self._local_control_stream_id,
+            encode_frame(
+                FrameType.SETTINGS,
+                encode_settings(
+                    {
+                        Setting.QPACK_MAX_TABLE_CAPACITY: self._max_table_capacity,
+                        Setting.QPACK_BLOCKED_STREAMS: self._blocked_streams,
+                    }
+                ),
+            ),
+        )
+
+        # create encoder and decoder streams
+        self._local_encoder_stream_id = self._create_uni_stream(
+            StreamType.QPACK_ENCODER
+        )
+        self._local_decoder_stream_id = self._create_uni_stream(
+            StreamType.QPACK_DECODER
+        )
 
     def _receive_stream_data(
         self, stream_id: int, data: bytes, stream_ended: bool
@@ -214,47 +253,5 @@ class H3Connection:
 
         # remove processed data from buffer
         self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
-
-        return http_events
-
-    def _update(self) -> List[Event]:
-        http_events: List[Event] = []
-
-        # process QUIC events
-        event = self._quic.next_event()
-        while event is not None:
-            if isinstance(event, aioquic.events.HandshakeCompleted):
-                # send our settings
-                self._local_control_stream_id = self._create_uni_stream(
-                    StreamType.CONTROL
-                )
-                self._quic.send_stream_data(
-                    self._local_control_stream_id,
-                    encode_frame(
-                        FrameType.SETTINGS,
-                        encode_settings(
-                            {
-                                Setting.QPACK_MAX_TABLE_CAPACITY: self._max_table_capacity,
-                                Setting.QPACK_BLOCKED_STREAMS: self._blocked_streams,
-                            }
-                        ),
-                    ),
-                )
-
-                # create encoder and decoder streams
-                self._local_encoder_stream_id = self._create_uni_stream(
-                    StreamType.QPACK_ENCODER
-                )
-                self._local_decoder_stream_id = self._create_uni_stream(
-                    StreamType.QPACK_DECODER
-                )
-            elif isinstance(event, aioquic.events.StreamDataReceived):
-                http_events.extend(
-                    self._receive_stream_data(
-                        event.stream_id, event.data, event.end_stream
-                    )
-                )
-
-            event = self._quic.next_event()
 
         return http_events
