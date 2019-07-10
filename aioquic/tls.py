@@ -873,20 +873,17 @@ class KeySchedule:
 
 class KeyScheduleProxy:
     def __init__(self, cipher_suites: List[CipherSuite]):
-        self.__items = list(map(KeySchedule, cipher_suites))
+        self.__schedules = dict(map(lambda c: (c, KeySchedule(c)), cipher_suites))
 
     def extract(self, key_material: Optional[bytes] = None) -> None:
-        for k in self.__items:
+        for k in self.__schedules.values():
             k.extract(key_material)
 
     def select(self, cipher_suite: CipherSuite) -> KeySchedule:
-        for k in self.__items:
-            if k.cipher_suite == cipher_suite:
-                return k
-        raise KeyError
+        return self.__schedules[cipher_suite]
 
     def update_hash(self, data: bytes) -> None:
-        for k in self.__items:
+        for k in self.__schedules.values():
             k.update_hash(data)
 
 
