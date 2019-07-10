@@ -7,6 +7,8 @@ from av import AudioFrame, VideoFrame
 from pyee import EventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
+AUDIO_CLOCK_RATE = 8000
+AUDIO_TIME_BASE = fractions.Fraction(1, AUDIO_CLOCK_RATE)
 VIDEO_CLOCK_RATE = 90000
 VIDEO_PTIME = 1 / 30  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
@@ -55,12 +57,41 @@ class MediaStreamTrack(EventEmitter):
             self.remove_all_listeners()
 
 
-class AudioStreamTrack(MediaStreamTrack):
+class TimedMediaStreamTrack(MediaStreamTrack):
+    time_base = None
+    sample_rate = None
+    ptime = None
+
+    def __init__(self):
+        super().__init__()
+        self.__timestamp = None
+        self.__start = None
+
+    async def next_timestamp(self):
+        if self.readyState != "live":
+            raise MediaStreamError
+
+        if self.__timestamp is None:
+            self.__timestamp = 0
+            self.__start = time.time()
+        else:
+            self.__timestamp += int(self.ptime * self.sample_rate)
+            wait = self.__start + (self.__timestamp / self.sample_rate) - time.time()
+            await asyncio.sleep(wait)
+
+        return self.__timestamp, self.time_base
+
+
+class AudioStreamTrack(TimedMediaStreamTrack):
     """
     An audio track.
     """
 
     kind = "audio"
+
+    sample_rate = AUDIO_CLOCK_RATE
+    time_base = AUDIO_TIME_BASE
+    ptime = AUDIO_PTIME
 
     async def recv(self):
         """
@@ -69,48 +100,29 @@ class AudioStreamTrack(MediaStreamTrack):
         The base implementation just reads silence, subclass
         :class:`AudioStreamTrack` to provide a useful implementation.
         """
-        if self.readyState != "live":
-            raise MediaStreamError
+        pts, time_base = await self.next_timestamp()
 
-        sample_rate = 8000
-        samples = int(AUDIO_PTIME * sample_rate)
-
-        if hasattr(self, "_timestamp"):
-            self._timestamp += samples
-            wait = self._start + (self._timestamp / sample_rate) - time.time()
-            await asyncio.sleep(wait)
-        else:
-            self._start = time.time()
-            self._timestamp = 0
-
-        frame = AudioFrame(format="s16", layout="mono", samples=samples)
+        frame = AudioFrame(
+            format="s16", layout="mono", samples=int(self.ptime * self.sample_rate)
+        )
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
-        frame.pts = self._timestamp
-        frame.sample_rate = sample_rate
-        frame.time_base = fractions.Fraction(1, sample_rate)
+        frame.pts = pts
+        frame.sample_rate = self.sample_rate
+        frame.time_base = time_base
         return frame
 
 
-class VideoStreamTrack(MediaStreamTrack):
+class VideoStreamTrack(TimedMediaStreamTrack):
     """
     A video stream track.
     """
 
     kind = "video"
 
-    async def next_timestamp(self):
-        if self.readyState != "live":
-            raise MediaStreamError
-
-        if hasattr(self, "_timestamp"):
-            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
-            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
-            await asyncio.sleep(wait)
-        else:
-            self._start = time.time()
-            self._timestamp = 0
-        return self._timestamp, VIDEO_TIME_BASE
+    sample_rate = VIDEO_CLOCK_RATE
+    time_base = VIDEO_TIME_BASE
+    ptime = VIDEO_PTIME
 
     async def recv(self):
         """
