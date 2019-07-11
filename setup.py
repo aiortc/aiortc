@@ -18,7 +18,7 @@ install_requires = [
     'cffi>=1.0.0',
     'crc32c',
     'cryptography>=2.2',
-    'pyee',
+    'pyee>=6.0.0',
     'pylibsrtp>=0.5.6',
     'pyopenssl',
 ]
