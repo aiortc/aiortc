@@ -4,7 +4,7 @@ import time
 import uuid
 
 from av import AudioFrame, VideoFrame
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
 VIDEO_CLOCK_RATE = 90000
@@ -22,7 +22,7 @@ class MediaStreamError(Exception):
     pass
 
 
-class MediaStreamTrack(EventEmitter):
+class MediaStreamTrack(AsyncIOEventEmitter):
     """
     A single media track within a stream.
 

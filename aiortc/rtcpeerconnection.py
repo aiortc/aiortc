@@ -3,7 +3,7 @@ import copy
 import uuid
 from collections import OrderedDict
 
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 
 from . import clock, rtp, sdp
 from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
@@ -233,7 +233,7 @@ def wrap_session_description(session_description: sdp.SessionDescription):
         )
 
 
-class RTCPeerConnection(EventEmitter):
+class RTCPeerConnection(AsyncIOEventEmitter):
     """
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
     between the local computer and a remote peer.

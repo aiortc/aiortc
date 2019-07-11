@@ -9,7 +9,7 @@ from collections import deque
 from struct import pack, unpack_from
 
 import attr
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -574,7 +574,7 @@ class RTCSctpCapabilities:
     """
 
 
-class RTCSctpTransport(EventEmitter):
+class RTCSctpTransport(AsyncIOEventEmitter):
     """
     The :class:`RTCSctpTransport` interface includes information relating to
     Stream Control Transmission Protocol (SCTP) transport.

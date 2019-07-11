@@ -1,14 +1,14 @@
 import logging
 
 import attr
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 
 logger = logging.getLogger("datachannel")
 
 
-class RTCDataChannel(EventEmitter):
+class RTCDataChannel(AsyncIOEventEmitter):
     """
     The :class:`RTCDataChannel` interface represents a network channel which
     can be used for bidirectional peer-to-peer transfers of arbitrary data.

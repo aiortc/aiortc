@@ -4,7 +4,7 @@ import re
 
 import attr
 from aioice import Candidate, Connection
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer
@@ -140,7 +140,7 @@ def parse_stun_turn_uri(uri):
     return match
 
 
-class RTCIceGatherer(EventEmitter):
+class RTCIceGatherer(AsyncIOEventEmitter):
     """
     The :class:`RTCIceGatherer` interface gathers local host, server reflexive
     and relay candidates, as well as enabling the retrieval of local
@@ -220,7 +220,7 @@ class RTCIceParameters:
     iceLite = attr.ib(default=False)
 
 
-class RTCIceTransport(EventEmitter):
+class RTCIceTransport(AsyncIOEventEmitter):
     """
     The :class:`RTCIceTransport` interface allows an application access to
     information about the Interactive Connectivity Establishment (ICE)
