@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
 )
 from OpenSSL import crypto
-from pyee import EventEmitter
+from pyee import AsyncIOEventEmitter
 from pylibsrtp import Policy, Session
 
 from . import clock, rtp
@@ -340,7 +340,7 @@ class RtpRouter:
                 d.pop(k)
 
 
-class RTCDtlsTransport(EventEmitter):
+class RTCDtlsTransport(AsyncIOEventEmitter):
     """
     The :class:`RTCDtlsTransport` object includes information relating to
     Datagram Transport Layer Security (DTLS) transport.
