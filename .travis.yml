@@ -7,6 +7,9 @@ matrix:
     install: pip install black flake8 isort mypy
   - env: BUILD=test
   - env: BUILD=test
+    language: generic
+    os: osx
+  - env: BUILD=test
     python: "3.6"
   - env: BUILD=test
     python: "pypy3"
