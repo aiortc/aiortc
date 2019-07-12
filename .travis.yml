@@ -11,6 +11,7 @@ addons:
     - ffmpeg
     - opus
     - libvpx
+    update: true
 cache:
   directories: $HOME/.local
   pip: true
