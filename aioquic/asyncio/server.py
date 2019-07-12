@@ -61,6 +61,12 @@ class QuicServer(asyncio.DatagramProtocol):
         else:
             self._retry_key = None
 
+    def close(self):
+        for protocol in set(self._protocols.values()):
+            protocol.close()
+        self._protocols.clear()
+        self._transport.close()
+
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self._transport = cast(asyncio.DatagramTransport, transport)
 
@@ -184,7 +190,7 @@ async def serve(
     session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stateless_retry: bool = False,
-) -> None:
+) -> QuicServer:
     """
     Start a QUIC server at the given `host` and `port`.
 
@@ -239,3 +245,4 @@ async def serve(
         ),
         local_addr=(host, port),
     )
+    return cast(QuicServer, protocol)
