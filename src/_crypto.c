@@ -13,14 +13,14 @@
 #define SAMPLE_LENGTH 16
 
 #define CHECK_RESULT(expr) \
-    if (!expr) { \
+    if (!(expr)) { \
         ERR_clear_error(); \
         PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return NULL; \
     }
 
 #define CHECK_RESULT_CTOR(expr) \
-    if (!expr) { \
+    if (!(expr)) { \
         ERR_clear_error(); \
         PyErr_SetString(CryptoError, "OpenSSL call failed"); \
         return -1; \
