@@ -37,6 +37,14 @@ RTP = load("rtp.bin")
 RTCP = load("rtcp_sr.bin")
 
 
+class BrokenDataReceiver:
+    def __init__(self):
+        self.data = []
+
+    async def _handle_data(self, data):
+        raise Exception("some error")
+
+
 class DummyDataReceiver:
     def __init__(self):
         self.data = []
@@ -145,6 +153,33 @@ class RTCDtlsTransportTest(TestCase):
         # try sending after close
         with self.assertRaises(ConnectionError):
             run(session1._send_data(b"foo"))
+
+    def test_data_handler_error(self):
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+        receiver1 = DummyDataReceiver()
+        session1._register_data_receiver(receiver1)
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+        session2._register_data_receiver(BrokenDataReceiver())
+
+        run(
+            asyncio.gather(
+                session1.start(session2.getLocalParameters()),
+                session2.start(session1.getLocalParameters()),
+            )
+        )
+
+        # send encypted data
+        run(session1._send_data(b"ping"))
+        run(asyncio.sleep(0.1))
+
+        # shutdown
+        run(session1.stop())
+        run(session2.stop())
 
     def test_rtp(self):
         transport1, transport2 = dummy_ice_transport_pair()

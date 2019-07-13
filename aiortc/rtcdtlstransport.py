@@ -6,6 +6,7 @@ import enum
 import logging
 import os
 import struct
+import traceback
 
 import attr
 import pylibsrtp
@@ -526,6 +527,10 @@ class RTCDtlsTransport(EventEmitter):
         except ConnectionError:
             for receiver in self._rtp_router.receivers:
                 receiver._handle_disconnect()
+        except Exception as exc:
+            if not isinstance(exc, asyncio.CancelledError):
+                self.__log_warning(traceback.format_exc())
+            raise exc
         finally:
             self._set_state(State.CLOSED)
 
@@ -692,3 +697,6 @@ class RTCDtlsTransport(EventEmitter):
 
     def __log_debug(self, msg, *args):
         logger.debug(self._role + " " + msg, *args)
+
+    def __log_warning(self, msg, *args):
+        logger.warning(self._role + " " + msg, *args)
