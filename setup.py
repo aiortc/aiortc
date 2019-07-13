@@ -25,7 +25,7 @@ install_requires = [
 
 if os.environ.get('READTHEDOCS') == 'True':
     cffi_modules = []
-    install_requires = list(filter(lambda x: x != 'av', install_requires))
+    install_requires = list(filter(lambda x: not x.startswith('av'), install_requires))
 
 setuptools.setup(
     name='aiortc',
