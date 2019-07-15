@@ -1,12 +1,7 @@
 import asyncio
-import ipaddress
 import os
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cast
-
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from ..buffer import Buffer
 from ..configuration import QuicConfiguration
@@ -17,16 +12,13 @@ from ..packet import (
     encode_quic_version_negotiation,
     pull_quic_header,
 )
+from ..retry import QuicRetryTokenHandler
 from ..tls import SessionTicketFetcher, SessionTicketHandler
 from .protocol import QuicConnectionProtocol, QuicStreamHandler
 
 __all__ = ["serve"]
 
 QuicConnectionHandler = Callable[[QuicConnectionProtocol], None]
-
-
-def encode_address(addr: NetworkAddress) -> bytes:
-    return ipaddress.ip_address(addr[0]).packed + bytes([addr[1] >> 8, addr[1] & 0xFF])
 
 
 class QuicServer(asyncio.DatagramProtocol):
@@ -55,11 +47,9 @@ class QuicServer(asyncio.DatagramProtocol):
         self._stream_handler = stream_handler
 
         if stateless_retry:
-            self._retry_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=1024, backend=default_backend()
-            )
+            self._retry = QuicRetryTokenHandler()
         else:
-            self._retry_key = None
+            self._retry = None
 
     def close(self):
         for protocol in set(self._protocols.values()):
@@ -94,7 +84,7 @@ class QuicServer(asyncio.DatagramProtocol):
         original_connection_id: Optional[bytes] = None
         if protocol is None and header.packet_type == PACKET_TYPE_INITIAL:
             # stateless retry
-            if self._retry_key is not None:
+            if self._retry is not None:
                 if not header.token:
                     # create a retry token
                     self._transport.sendto(
@@ -103,7 +93,7 @@ class QuicServer(asyncio.DatagramProtocol):
                             source_cid=os.urandom(8),
                             destination_cid=header.source_cid,
                             original_destination_cid=header.destination_cid,
-                            retry_token=self._create_retry_token(
+                            retry_token=self._retry.create_token(
                                 addr, header.destination_cid
                             ),
                         ),
@@ -113,7 +103,7 @@ class QuicServer(asyncio.DatagramProtocol):
                 else:
                     # validate retry token
                     try:
-                        original_connection_id = self._validate_retry_token(
+                        original_connection_id = self._retry.validate_token(
                             addr, header.token
                         )
                     except ValueError:
@@ -153,27 +143,6 @@ class QuicServer(asyncio.DatagramProtocol):
     ) -> None:
         assert self._protocols[cid] == protocol
         del self._protocols[cid]
-
-    def _create_retry_token(self, addr: bytes, destination_cid: bytes) -> bytes:
-        retry_message = encode_address(addr) + b"|" + destination_cid
-        return self._retry_key.public_key().encrypt(
-            retry_message,
-            padding.OAEP(
-                mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None
-            ),
-        )
-
-    def _validate_retry_token(self, addr: bytes, token: bytes) -> bytes:
-        retry_message = self._retry_key.decrypt(
-            token,
-            padding.OAEP(
-                mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None
-            ),
-        )
-        encoded_addr, original_connection_id = retry_message.split(b"|", maxsplit=1)
-        if encoded_addr != encode_address(addr):
-            raise ValueError("Remote address does not match.")
-        return original_connection_id
 
 
 async def serve(
