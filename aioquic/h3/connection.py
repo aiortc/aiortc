@@ -99,6 +99,19 @@ class H3Connection:
 
         self._init_connection()
 
+    def handle_event(self, event: aioquic.events.Event) -> List[Event]:
+        """
+        Handle a QUIC event and return a list of HTTP events.
+        """
+        http_events: List[Event] = []
+
+        if isinstance(event, aioquic.events.StreamDataReceived):
+            http_events.extend(
+                self._receive_stream_data(event.stream_id, event.data, event.end_stream)
+            )
+
+        return http_events
+
     def handle_events(self) -> List[Event]:
         """
         Handle events from the QUIC connection and return HTTP events.
@@ -108,13 +121,7 @@ class H3Connection:
         # process QUIC events
         event = self._quic.next_event()
         while event is not None:
-            if isinstance(event, aioquic.events.StreamDataReceived):
-                http_events.extend(
-                    self._receive_stream_data(
-                        event.stream_id, event.data, event.end_stream
-                    )
-                )
-
+            http_events.extend(self.handle_event(event))
             event = self._quic.next_event()
 
         return http_events
