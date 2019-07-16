@@ -23,7 +23,7 @@ TEMPLATE = """<!DOCTYPE html>
     </head>
     <body>
         <h1>Welcome to aioquic</h1>
-        <p>{content}/p>
+        <p>{content}</p>
     </body>
 </html>
 """
