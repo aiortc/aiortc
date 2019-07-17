@@ -74,7 +74,6 @@ class QuicPacketRecovery:
         packet_threshold = space.largest_acked_packet - K_PACKET_THRESHOLD
         time_threshold = now - loss_delay
 
-        lost_bytes = 0
         lost_largest_time = None
         lost_packets = []
         space.loss_time = None
@@ -91,21 +90,12 @@ class QuicPacketRecovery:
 
         for packet in lost_packets:
             # remove packet and update counters
-            del space.sent_packets[packet.packet_number]
-            if packet.is_ack_eliciting:
-                space.ack_eliciting_in_flight -= 1
-            if packet.is_crypto_packet:
-                space.crypto_packet_in_flight -= 1
+            self.on_packet_lost(packet, space)
             if packet.in_flight:
-                lost_bytes += packet.sent_bytes
                 lost_largest_time = packet.sent_time
 
-            # trigger callbacks
-            for handler, args in packet.delivery_handlers:
-                handler(QuicDeliveryState.LOST, *args)
-
-        if lost_bytes:
-            self.on_packets_lost(lost_bytes, lost_largest_time, now=now)
+        if lost_largest_time is not None:
+            self.on_packets_lost(lost_largest_time, now=now)
 
     def discard_space(self, space: QuicPacketSpace) -> None:
         assert space in self.spaces
@@ -247,15 +237,7 @@ class QuicPacketRecovery:
                     filter(lambda i: i[1].is_crypto_packet, space.sent_packets.items())
                 ):
                     # remove packet and update counters
-                    del space.sent_packets[packet_number]
-                    space.ack_eliciting_in_flight -= 1
-                    space.crypto_packet_in_flight -= 1
-                    if packet.in_flight:
-                        self.bytes_in_flight -= packet.sent_bytes
-
-                    # trigger callbacks
-                    for handler, args in packet.delivery_handlers:
-                        handler(QuicDeliveryState.LOST, *args)
+                    self.on_packet_lost(packet, space)
             self._crypto_count += 1
         else:
             self._pto_count += 1
@@ -280,6 +262,20 @@ class QuicPacketRecovery:
     def on_packet_expired(self, packet: QuicSentPacket) -> None:
         self.bytes_in_flight -= packet.sent_bytes
 
+    def on_packet_lost(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
+        del space.sent_packets[packet.packet_number]
+
+        if packet.is_ack_eliciting:
+            space.ack_eliciting_in_flight -= 1
+        if packet.is_crypto_packet:
+            space.crypto_packet_in_flight -= 1
+        if packet.in_flight:
+            self.bytes_in_flight -= packet.sent_bytes
+
+        # trigger callbacks
+        for handler, args in packet.delivery_handlers:
+            handler(QuicDeliveryState.LOST, *args)
+
     def on_packet_sent(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
         space.sent_packets[packet.packet_number] = packet
 
@@ -296,12 +292,7 @@ class QuicPacketRecovery:
             # add packet to bytes in flight
             self.bytes_in_flight += packet.sent_bytes
 
-    def on_packets_lost(
-        self, lost_bytes: int, lost_largest_time: float, now: float
-    ) -> None:
-        # remove lost packets from bytes in flight
-        self.bytes_in_flight -= lost_bytes
-
+    def on_packets_lost(self, lost_largest_time: float, now: float) -> None:
         # start a new congestion event if packet was sent after the
         # start of the previous congestion recovery period.
         if lost_largest_time > self._congestion_recovery_start_time:
