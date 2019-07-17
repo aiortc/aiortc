@@ -1,5 +1,6 @@
 import argparse
 import logging
+import pickle
 import socket
 import time
 from urllib.parse import urlparse
@@ -9,10 +10,21 @@ from aioquic.connection import QuicConnection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, ResponseReceived
 
-logger = logging.getLogger("http3")
+logger = logging.getLogger("client")
 
 
-def run(url: str) -> None:
+def save_session_ticket(ticket):
+    """
+    Callback which is invoked by the TLS engine when a new session ticket
+    is received.
+    """
+    logger.info("New session ticket received")
+    if args.session_ticket:
+        with open(args.session_ticket, "wb") as fp:
+            pickle.dump(ticket, fp)
+
+
+def run(url: str, **kwargs) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
@@ -30,11 +42,9 @@ def run(url: str) -> None:
     # prepare QUIC connection
     quic = QuicConnection(
         configuration=QuicConfiguration(
-            alpn_protocols=["h3-20"],
-            is_client=True,
-            secrets_log_file=open("/tmp/ssl.log", "w"),
-            server_name=server_name,
-        )
+            alpn_protocols=["h3-20"], is_client=True, server_name=server_name, **kwargs
+        ),
+        session_ticket_handler=save_session_ticket,
     )
     quic.connect(server_addr, now=time.time())
 
@@ -71,5 +81,41 @@ def run(url: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
     parser.add_argument("url", type=str, help="the server's host name or address")
+    parser.add_argument(
+        "-l",
+        "--secrets-log",
+        type=str,
+        help="log secrets to a file, for use with Wireshark",
+    )
+    parser.add_argument(
+        "-s",
+        "--session-ticket",
+        type=str,
+        help="read and write session ticket from the specified file",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="increase logging verbosity"
+    )
     args = parser.parse_args()
-    run(args.url)
+
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
+    )
+
+    # open SSL log file
+    if args.secrets_log:
+        secrets_log_file = open(args.secrets_log, "a")
+    else:
+        secrets_log_file = None
+
+    # load session ticket
+    session_ticket = None
+    if args.session_ticket:
+        try:
+            with open(args.session_ticket, "rb") as fp:
+                session_ticket = pickle.load(fp)
+        except FileNotFoundError:
+            pass
+
+    run(url=args.url, secrets_log_file=secrets_log_file, session_ticket=session_ticket)

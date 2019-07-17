@@ -78,6 +78,7 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
+    # open SSL log file
     if args.secrets_log:
         secrets_log_file = open(args.secrets_log, "a")
     else:
