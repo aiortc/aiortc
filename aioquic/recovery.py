@@ -26,7 +26,6 @@ class QuicPacketSpace:
 
         # sent packets and loss
         self.ack_eliciting_in_flight = 0
-        self.crypto_packet_in_flight = 0
         self.largest_acked_packet = 0
         self.loss_time: Optional[float] = None
         self.sent_packets: Dict[int, QuicSentPacket] = {}
@@ -46,7 +45,6 @@ class QuicPacketRecovery:
         self._send_probe = send_probe
 
         # loss detection
-        self._crypto_count = 0
         self._pto_count = 0
         self._rtt_initialized = False
         self._rtt_latest = 0.0
@@ -54,7 +52,6 @@ class QuicPacketRecovery:
         self._rtt_smoothed = 0.0
         self._rtt_variance = 0.0
         self._time_of_last_sent_ack_eliciting_packet = 0.0
-        self._time_of_last_sent_crypto_packet = 0.0
 
         # congestion control
         self.bytes_in_flight = 0
@@ -107,7 +104,6 @@ class QuicPacketRecovery:
 
         space.ack_at = None
         space.ack_eliciting_in_flight = 0
-        space.crypto_packet_in_flight = 0
         space.loss_time = None
 
     def get_earliest_loss_time(self) -> Optional[QuicPacketSpace]:
@@ -125,21 +121,16 @@ class QuicPacketRecovery:
         if loss_space is not None:
             return loss_space.loss_time
 
-        # crypto timer
-        if sum(space.crypto_packet_in_flight for space in self.spaces):
-            timeout = max(
-                2 * (self._rtt_smoothed if self._rtt_initialized else K_INITIAL_RTT),
-                K_GRANULARITY,
-            ) * (2 ** self._crypto_count)
-            return self._time_of_last_sent_crypto_packet + timeout
-
         # packet timer
         if sum(space.ack_eliciting_in_flight for space in self.spaces):
-            timeout = (
-                self._rtt_smoothed
-                + max(4 * self._rtt_variance, K_GRANULARITY)
-                + self.max_ack_delay / 1000
-            ) * (2 ** self._pto_count)
+            if not self._rtt_initialized:
+                timeout = 2 * K_INITIAL_RTT * (2 ** self._pto_count)
+            else:
+                timeout = (
+                    self._rtt_smoothed
+                    + max(4 * self._rtt_variance, K_GRANULARITY)
+                    + self.max_ack_delay / 1000
+                ) * (2 ** self._pto_count)
             return self._time_of_last_sent_ack_eliciting_packet + timeout
 
         return None
@@ -178,8 +169,6 @@ class QuicPacketRecovery:
                 if packet.is_ack_eliciting:
                     is_ack_eliciting = True
                     space.ack_eliciting_in_flight -= 1
-                if packet.is_crypto_packet:
-                    space.crypto_packet_in_flight -= 1
                 if packet.in_flight:
                     self.on_packet_acked(packet)
                 largest_newly_acked = packet_number
@@ -223,24 +212,23 @@ class QuicPacketRecovery:
 
         self.detect_loss(space, now=now)
 
-        self._crypto_count = 0
         self._pto_count = 0
 
     def on_loss_detection_timeout(self, now: float) -> None:
         loss_space = self.get_earliest_loss_time()
         if loss_space is not None:
             self.detect_loss(loss_space, now=now)
-        elif sum(space.crypto_packet_in_flight for space in self.spaces):
-            # reschedule crypto packets
+        else:
+            self._pto_count += 1
+
+            # reschedule some data
             for space in self.spaces:
                 for packet_number, packet in list(
                     filter(lambda i: i[1].is_crypto_packet, space.sent_packets.items())
                 ):
                     # remove packet and update counters
                     self.on_packet_lost(packet, space)
-            self._crypto_count += 1
-        else:
-            self._pto_count += 1
+
             self._send_probe()
 
     def on_packet_acked(self, packet: QuicSentPacket) -> None:
@@ -267,8 +255,6 @@ class QuicPacketRecovery:
 
         if packet.is_ack_eliciting:
             space.ack_eliciting_in_flight -= 1
-        if packet.is_crypto_packet:
-            space.crypto_packet_in_flight -= 1
         if packet.in_flight:
             self.bytes_in_flight -= packet.sent_bytes
 
@@ -281,11 +267,7 @@ class QuicPacketRecovery:
 
         if packet.is_ack_eliciting:
             space.ack_eliciting_in_flight += 1
-        if packet.is_crypto_packet:
-            space.crypto_packet_in_flight += 1
         if packet.in_flight:
-            if packet.is_crypto_packet:
-                self._time_of_last_sent_crypto_packet = packet.sent_time
             if packet.is_ack_eliciting:
                 self._time_of_last_sent_ack_eliciting_packet = packet.sent_time
 

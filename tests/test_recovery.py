@@ -40,11 +40,9 @@ class QuicPacketRecoveryTest(TestCase):
         self.recovery.on_packet_sent(packet, space)
         self.assertEqual(self.recovery.bytes_in_flight, 1280)
         self.assertEqual(space.ack_eliciting_in_flight, 1)
-        self.assertEqual(space.crypto_packet_in_flight, 1)
         self.assertEqual(len(space.sent_packets), 1)
 
         self.recovery.on_packet_lost(packet, space)
         self.assertEqual(self.recovery.bytes_in_flight, 0)
         self.assertEqual(space.ack_eliciting_in_flight, 0)
-        self.assertEqual(space.crypto_packet_in_flight, 0)
         self.assertEqual(len(space.sent_packets), 0)
