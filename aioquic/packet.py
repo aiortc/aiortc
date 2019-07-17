@@ -43,6 +43,8 @@ class QuicProtocolVersion(IntEnum):
     DRAFT_18 = 0xFF000012
     DRAFT_19 = 0xFF000013
     DRAFT_20 = 0xFF000014
+    DRAFT_21 = 0xFF000015
+    DRAFT_22 = 0xFF000016
 
 
 @dataclass
@@ -55,10 +57,6 @@ class QuicHeader:
     original_destination_cid: bytes = b""
     token: bytes = b""
     rest_length: int = 0
-
-
-def decode_cid_length(length: int) -> int:
-    return length + 3 if length else 0
 
 
 def decode_packet_number(truncated: int, num_bits: int, expected: int) -> int:
@@ -78,10 +76,6 @@ def decode_packet_number(truncated: int, num_bits: int, expected: int) -> int:
         return candidate
 
 
-def encode_cid_length(length: int) -> int:
-    return length - 3 if length else 0
-
-
 def get_spin_bit(first_byte: int) -> bool:
     return bool(first_byte & PACKET_SPIN_BIT)
 
@@ -98,12 +92,11 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
     if is_long_header(first_byte):
         # long header packet
         version = buf.pull_uint32()
-        cid_lengths = buf.pull_uint8()
 
-        destination_cid_length = decode_cid_length(cid_lengths // 16)
+        destination_cid_length = buf.pull_uint8()
         destination_cid = buf.pull_bytes(destination_cid_length)
 
-        source_cid_length = decode_cid_length(cid_lengths % 16)
+        source_cid_length = buf.pull_uint8()
         source_cid = buf.pull_bytes(source_cid_length)
 
         if version == QuicProtocolVersion.NEGOTIATION:
@@ -120,7 +113,7 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
                 token = buf.pull_bytes(token_length)
                 rest_length = buf.pull_uint_var()
             elif packet_type == PACKET_TYPE_RETRY:
-                original_destination_cid_length = decode_cid_length(first_byte & 0xF)
+                original_destination_cid_length = buf.pull_uint8()
                 original_destination_cid = buf.pull_bytes(
                     original_destination_cid_length
                 )
@@ -165,20 +158,19 @@ def encode_quic_retry(
     retry_token: bytes,
 ) -> bytes:
     buf = Buffer(
-        capacity=6
+        capacity=8
         + len(destination_cid)
         + len(source_cid)
         + len(original_destination_cid)
         + len(retry_token)
     )
-    buf.push_uint8(PACKET_TYPE_RETRY | encode_cid_length(len(original_destination_cid)))
+    buf.push_uint8(PACKET_TYPE_RETRY)
     buf.push_uint32(version)
-    buf.push_uint8(
-        (encode_cid_length(len(destination_cid)) << 4)
-        | encode_cid_length(len(source_cid))
-    )
+    buf.push_uint8(len(destination_cid))
     buf.push_bytes(destination_cid)
+    buf.push_uint8(len(source_cid))
     buf.push_bytes(source_cid)
+    buf.push_uint8(len(original_destination_cid))
     buf.push_bytes(original_destination_cid)
     buf.push_bytes(retry_token)
     return buf.data
@@ -190,18 +182,16 @@ def encode_quic_version_negotiation(
     supported_versions: List[QuicProtocolVersion],
 ) -> bytes:
     buf = Buffer(
-        capacity=6
+        capacity=7
         + len(destination_cid)
         + len(source_cid)
         + 4 * len(supported_versions)
     )
     buf.push_uint8(os.urandom(1)[0] | PACKET_LONG_HEADER)
     buf.push_uint32(QuicProtocolVersion.NEGOTIATION)
-    buf.push_uint8(
-        (encode_cid_length(len(destination_cid)) << 4)
-        | encode_cid_length(len(source_cid))
-    )
+    buf.push_uint8(len(destination_cid))
     buf.push_bytes(destination_cid)
+    buf.push_uint8(len(source_cid))
     buf.push_bytes(source_cid)
     for version in supported_versions:
         buf.push_uint32(version)
@@ -231,6 +221,7 @@ class QuicTransportParameters:
     max_ack_delay: Optional[int] = None
     disable_migration: Optional[bool] = False
     preferred_address: Optional[bytes] = None
+    active_connection_id_limit: Optional[int] = None
 
 
 PARAMS = [
@@ -248,6 +239,7 @@ PARAMS = [
     ("max_ack_delay", int),
     ("disable_migration", bool),
     ("preferred_address", bytes),
+    ("active_connection_id_limit", int),
 ]
 
 
@@ -389,22 +381,25 @@ def push_new_token_frame(buf: Buffer, token: bytes) -> None:
     buf.push_bytes(token)
 
 
-def pull_new_connection_id_frame(buf: Buffer) -> Tuple[int, bytes, bytes]:
+def pull_new_connection_id_frame(buf: Buffer) -> Tuple[int, int, bytes, bytes]:
     sequence_number = buf.pull_uint_var()
+    retire_prior_to = buf.pull_uint_var()
     length = buf.pull_uint8()
     connection_id = buf.pull_bytes(length)
     stateless_reset_token = buf.pull_bytes(16)
-    return (sequence_number, connection_id, stateless_reset_token)
+    return (sequence_number, retire_prior_to, connection_id, stateless_reset_token)
 
 
 def push_new_connection_id_frame(
     buf: Buffer,
     sequence_number: int,
+    retire_prior_to: int,
     connection_id: bytes,
     stateless_reset_token: bytes,
 ) -> None:
     assert len(stateless_reset_token) == 16
     buf.push_uint_var(sequence_number)
+    buf.push_uint_var(retire_prior_to)
     buf.push_uint8(len(connection_id))
     buf.push_bytes(connection_id)
     buf.push_bytes(stateless_reset_token)
@@ -418,7 +413,7 @@ def decode_reason_phrase(reason_bytes: bytes) -> str:
 
 
 def pull_transport_close_frame(buf: Buffer) -> Tuple[int, int, str]:
-    error_code = buf.pull_uint16()
+    error_code = buf.pull_uint_var()
     frame_type = buf.pull_uint_var()
     reason_length = buf.pull_uint_var()
     reason_phrase = decode_reason_phrase(buf.pull_bytes(reason_length))
@@ -426,7 +421,7 @@ def pull_transport_close_frame(buf: Buffer) -> Tuple[int, int, str]:
 
 
 def pull_application_close_frame(buf: Buffer) -> Tuple[int, str]:
-    error_code = buf.pull_uint16()
+    error_code = buf.pull_uint_var()
     reason_length = buf.pull_uint_var()
     reason_phrase = decode_reason_phrase(buf.pull_bytes(reason_length))
     return (error_code, reason_phrase)

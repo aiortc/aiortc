@@ -11,7 +11,6 @@ from .packet import (
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_MASK,
     QuicFrameType,
-    encode_cid_length,
     is_long_header,
 )
 from .tls import Epoch
@@ -174,7 +173,7 @@ class QuicPacketBuilder:
         # calculate header size
         packet_long_header = is_long_header(packet_type)
         if packet_long_header:
-            header_size = 10 + len(self._peer_cid) + len(self._host_cid)
+            header_size = 11 + len(self._peer_cid) + len(self._host_cid)
             if (packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
                 token_length = len(self._peer_token)
                 header_size += size_uint_var(token_length) + token_length
@@ -238,11 +237,9 @@ class QuicPacketBuilder:
                 buf.seek(self._packet_start)
                 buf.push_uint8(self._packet_type | (PACKET_NUMBER_SEND_SIZE - 1))
                 buf.push_uint32(self._version)
-                buf.push_uint8(
-                    (encode_cid_length(len(self._peer_cid)) << 4)
-                    | encode_cid_length(len(self._host_cid))
-                )
+                buf.push_uint8(len(self._peer_cid))
                 buf.push_bytes(self._peer_cid)
+                buf.push_uint8(len(self._host_cid))
                 buf.push_bytes(self._host_cid)
                 if (self._packet_type & PACKET_TYPE_MASK) == PACKET_TYPE_INITIAL:
                     buf.push_uint_var(len(self._peer_token))

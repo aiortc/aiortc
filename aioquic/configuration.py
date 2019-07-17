@@ -16,8 +16,5 @@ class QuicConfiguration:
     server_name: Optional[str] = None
     session_ticket: Optional[tls.SessionTicket] = None
     supported_versions: List[QuicProtocolVersion] = field(
-        default_factory=lambda: [
-            QuicProtocolVersion.DRAFT_19,
-            QuicProtocolVersion.DRAFT_20,
-        ]
+        default_factory=lambda: [QuicProtocolVersion.DRAFT_22]
     )

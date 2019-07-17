@@ -42,7 +42,7 @@ def run(url: str, **kwargs) -> None:
     # prepare QUIC connection
     quic = QuicConnection(
         configuration=QuicConfiguration(
-            alpn_protocols=["h3-20"], is_client=True, server_name=server_name, **kwargs
+            alpn_protocols=["h3-22"], is_client=True, server_name=server_name, **kwargs
         ),
         session_ticket_handler=save_session_ticket,
     )

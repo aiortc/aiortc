@@ -11,7 +11,7 @@ CIPHER_SUITES = {
     CipherSuite.CHACHA20_POLY1305_SHA256: (b"chacha20", b"chacha20-poly1305"),
 }
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
-INITIAL_SALT = binascii.unhexlify("ef4fb0abb47470c41befcf8031334fae485e09a0")
+INITIAL_SALT = binascii.unhexlify("7fbcdb0e7c66bbe9193a96cd21519ebd7a02644a")
 SAMPLE_SIZE = 16
 
 

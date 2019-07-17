@@ -50,50 +50,47 @@ class PacketTest(TestCase):
         buf = Buffer(data=load("initial_client.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_17)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
-        self.assertEqual(header.destination_cid, binascii.unhexlify("90ed1e1c7b04b5d3"))
+        self.assertEqual(header.destination_cid, binascii.unhexlify("858b39368b8e3c6e"))
         self.assertEqual(header.source_cid, b"")
         self.assertEqual(header.original_destination_cid, b"")
         self.assertEqual(header.token, b"")
-        self.assertEqual(header.rest_length, 1263)
-        self.assertEqual(buf.tell(), 17)
+        self.assertEqual(header.rest_length, 1262)
+        self.assertEqual(buf.tell(), 18)
 
     def test_pull_initial_server(self):
         buf = Buffer(data=load("initial_server.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_17)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, b"")
-        self.assertEqual(header.source_cid, binascii.unhexlify("0fcee9852fde8780"))
+        self.assertEqual(header.source_cid, binascii.unhexlify("195c68344e28d479"))
         self.assertEqual(header.original_destination_cid, b"")
         self.assertEqual(header.token, b"")
-        self.assertEqual(header.rest_length, 182)
-        self.assertEqual(buf.tell(), 17)
+        self.assertEqual(header.rest_length, 184)
+        self.assertEqual(buf.tell(), 18)
 
     def test_pull_retry(self):
         buf = Buffer(data=load("retry.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_19)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
         self.assertEqual(header.packet_type, PACKET_TYPE_RETRY)
-        self.assertEqual(header.destination_cid, binascii.unhexlify("c98343fe8f5f0ff4"))
+        self.assertEqual(header.destination_cid, binascii.unhexlify("fee746dfde699d61"))
+        self.assertEqual(header.source_cid, binascii.unhexlify("59aa0942fd2f11e9"))
         self.assertEqual(
-            header.source_cid,
-            binascii.unhexlify("c17f7c0473e635351b85a17e9f3296d7246c"),
-        )
-        self.assertEqual(
-            header.original_destination_cid, binascii.unhexlify("85abb547bf28be97")
+            header.original_destination_cid, binascii.unhexlify("d61e7448e0d63dff")
         )
         self.assertEqual(
             header.token,
             binascii.unhexlify(
-                "01652d68d17c8e9f968d4fb4b70c9e526c4f837dbd85abb547bf28be97"
+                "5282f57f85a1a5c50de5aac2ff7dba43ff34524737099ec41c4b8e8c76734f935e8efd51177dbbe764"
             ),
         )
         self.assertEqual(header.rest_length, 0)
-        self.assertEqual(buf.tell(), 69)
+        self.assertEqual(buf.tell(), 73)
 
     def test_pull_version_negotiation(self):
         buf = Buffer(data=load("version_negotiation.bin"))
@@ -101,15 +98,15 @@ class PacketTest(TestCase):
         self.assertTrue(header.is_long_header)
         self.assertEqual(header.version, QuicProtocolVersion.NEGOTIATION)
         self.assertEqual(header.packet_type, None)
-        self.assertEqual(header.destination_cid, binascii.unhexlify("dae1889b81a91c26"))
-        self.assertEqual(header.source_cid, binascii.unhexlify("f49243784f9bf3be"))
+        self.assertEqual(header.destination_cid, binascii.unhexlify("9aac5a49ba87a849"))
+        self.assertEqual(header.source_cid, binascii.unhexlify("f92f4336fa951ba1"))
         self.assertEqual(header.original_destination_cid, b"")
         self.assertEqual(header.token, b"")
         self.assertEqual(header.rest_length, 8)
-        self.assertEqual(buf.tell(), 22)
+        self.assertEqual(buf.tell(), 23)
 
     def test_pull_long_header_no_fixed_bit(self):
-        buf = Buffer(data=b"\x80\xff\x00\x00\x11\x00")
+        buf = Buffer(data=b"\x80\xff\x00\x00\x11\x00\x00")
         with self.assertRaises(ValueError) as cm:
             pull_quic_header(buf, host_cid_length=8)
         self.assertEqual(str(cm.exception), "Packet fixed bit is zero")
@@ -140,9 +137,9 @@ class PacketTest(TestCase):
 
     def test_encode_quic_version_negotiation(self):
         data = encode_quic_version_negotiation(
-            destination_cid=binascii.unhexlify("dae1889b81a91c26"),
-            source_cid=binascii.unhexlify("f49243784f9bf3be"),
-            supported_versions=[QuicProtocolVersion.DRAFT_18, 0x1A2A3A4A],
+            destination_cid=binascii.unhexlify("9aac5a49ba87a849"),
+            source_cid=binascii.unhexlify("f92f4336fa951ba1"),
+            supported_versions=[0x45474716, QuicProtocolVersion.DRAFT_22],
         )
         self.assertEqual(data[1:], load("version_negotiation.bin")[1:])
 
@@ -310,7 +307,7 @@ class FrameTest(TestCase):
 
     def test_new_connection_id(self):
         data = binascii.unhexlify(
-            "02117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
+            "0200117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"
         )
 
         # parse
@@ -320,6 +317,7 @@ class FrameTest(TestCase):
             frame,
             (
                 2,
+                0,
                 binascii.unhexlify("7813f3d9e45e0cacbb491b4b66b039f204"),
                 binascii.unhexlify("06f68fede38ec4c31aba8ab1245244e8"),
             ),
@@ -331,7 +329,7 @@ class FrameTest(TestCase):
         self.assertEqual(buf.data, data)
 
     def test_transport_close(self):
-        data = binascii.unhexlify("000a0212696c6c6567616c2041434b206672616d6500")
+        data = binascii.unhexlify("0a0212696c6c6567616c2041434b206672616d6500")
 
         # parse
         buf = Buffer(data=data)
@@ -339,7 +337,7 @@ class FrameTest(TestCase):
         self.assertEqual(frame, (10, 2, "illegal ACK frame\x00"))
 
     def test_application_close(self):
-        data = binascii.unhexlify("000008676f6f6462796500")
+        data = binascii.unhexlify("0008676f6f6462796500")
 
         # parse
         buf = Buffer(data=data)
@@ -347,7 +345,7 @@ class FrameTest(TestCase):
         self.assertEqual(frame, (0, "goodbye\x00"))
 
     def test_application_close_not_utf8(self):
-        data = binascii.unhexlify("000008676f6f6462798200")
+        data = binascii.unhexlify("0008676f6f6462798200")
 
         # parse
         buf = Buffer(data=data)

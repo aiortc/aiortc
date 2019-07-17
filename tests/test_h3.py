@@ -14,8 +14,8 @@ def h3_transfer(quic_sender, h3_receiver):
 class H3ConnectionTest(TestCase):
     def test_connect(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-20"]},
-            server_options={"alpn_protocols": ["h3-20"]},
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -88,8 +88,8 @@ class H3ConnectionTest(TestCase):
 
     def test_uni_stream_type(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-20"]},
-            server_options={"alpn_protocols": ["h3-20"]},
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
         ) as (quic_client, quic_server):
             h3_server = H3Connection(quic_server)
 

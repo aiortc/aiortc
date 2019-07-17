@@ -40,7 +40,7 @@ class QuicPacketBuilderTest(TestCase):
         crypto = CryptoPair()
 
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        self.assertEqual(builder.remaining_space, 1237)
+        self.assertEqual(builder.remaining_space, 1236)
 
         # nothing to write
 
@@ -67,7 +67,7 @@ class QuicPacketBuilderTest(TestCase):
 
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        self.assertEqual(builder.remaining_space, 1237)
+        self.assertEqual(builder.remaining_space, 1236)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(100))
         self.assertTrue(builder.end_packet())
@@ -105,7 +105,7 @@ class QuicPacketBuilderTest(TestCase):
 
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        self.assertEqual(builder.remaining_space, 1237)
+        self.assertEqual(builder.remaining_space, 1236)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertTrue(builder.end_packet())
@@ -160,26 +160,26 @@ class QuicPacketBuilderTest(TestCase):
 
         # INITIAL
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        self.assertEqual(builder.remaining_space, 1237)
+        self.assertEqual(builder.remaining_space, 1236)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(199))
-        self.assertEqual(builder.buffer.tell(), 227)
+        self.assertEqual(builder.buffer.tell(), 228)
         self.assertTrue(builder.end_packet())
-        self.assertEqual(builder.buffer.tell(), 243)
+        self.assertEqual(builder.buffer.tell(), 244)
 
         # HANDSHAKE
         builder.start_packet(PACKET_TYPE_HANDSHAKE, crypto)
-        self.assertEqual(builder.buffer.tell(), 269)
-        self.assertEqual(builder.remaining_space, 995)
+        self.assertEqual(builder.buffer.tell(), 271)
+        self.assertEqual(builder.remaining_space, 993)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(299))
-        self.assertEqual(builder.buffer.tell(), 569)
+        self.assertEqual(builder.buffer.tell(), 571)
         self.assertTrue(builder.end_packet())
-        self.assertEqual(builder.buffer.tell(), 585)
+        self.assertEqual(builder.buffer.tell(), 587)
 
         # ONE_RTT
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
-        self.assertEqual(builder.remaining_space, 668)
+        self.assertEqual(builder.remaining_space, 666)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(299))
         self.assertTrue(builder.end_packet())
@@ -188,7 +188,7 @@ class QuicPacketBuilderTest(TestCase):
         # check datagrams
         datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
-        self.assertEqual(len(datagrams[0]), 912)
+        self.assertEqual(len(datagrams[0]), 914)
         self.assertEqual(
             packets,
             [
@@ -198,7 +198,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
-                    sent_bytes=243,
+                    sent_bytes=244,
                 ),
                 QuicSentPacket(
                     epoch=Epoch.HANDSHAKE,
@@ -206,7 +206,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=1,
-                    sent_bytes=342,
+                    sent_bytes=343,
                 ),
                 QuicSentPacket(
                     epoch=Epoch.ONE_RTT,

@@ -185,9 +185,9 @@ class HttpServer(asyncio.DatagramProtocol):
                 self._timer.pop(connection, None)
                 return
             elif isinstance(event, aioquic.events.HandshakeCompleted):
-                if event.alpn_protocol == "h3-20":
+                if event.alpn_protocol == "h3-22":
                     self._http[connection] = H3Connection(connection)
-                elif event.alpn_protocol == "hq-20":
+                elif event.alpn_protocol == "hq-22":
                     self._http[connection] = H0Connection(connection)
             elif isinstance(event, aioquic.events.ConnectionIdIssued):
                 self._connections[event.connection_id] = connection
@@ -381,7 +381,7 @@ if __name__ == "__main__":
     ticket_store = SessionTicketStore()
 
     configuration = QuicConfiguration(
-        alpn_protocols=["h3-20", "hq-20"],
+        alpn_protocols=["h3-22", "hq-22"],
         certificate=certificate,
         is_client=False,
         private_key=private_key,

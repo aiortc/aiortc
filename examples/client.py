@@ -102,7 +102,7 @@ if __name__ == "__main__":
     loop.run_until_complete(
         run(
             url=args.url,
-            alpn_protocols=["hq-20"],
+            alpn_protocols=["hq-22"],
             secrets_log_file=secrets_log_file,
             session_ticket=session_ticket,
             session_ticket_handler=save_session_ticket,

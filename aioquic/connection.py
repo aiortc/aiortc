@@ -104,12 +104,12 @@ def write_close_frame(
 
     if frame_type is None:
         builder.start_frame(QuicFrameType.APPLICATION_CLOSE)
-        buf.push_uint16(error_code)
+        buf.push_uint_var(error_code)
         buf.push_uint_var(len(reason_bytes))
         buf.push_bytes(reason_bytes)
     else:
         builder.start_frame(QuicFrameType.TRANSPORT_CLOSE)
-        buf.push_uint16(error_code)
+        buf.push_uint_var(error_code)
         buf.push_uint_var(frame_type)
         buf.push_uint_var(len(reason_bytes))
         buf.push_bytes(reason_bytes)
@@ -303,6 +303,7 @@ class QuicConnection:
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
+        self._local_active_connection_id_limit = 8
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
         self._local_max_data_used = 0
@@ -326,6 +327,7 @@ class QuicConnection:
         self._peer_cid_seq: Optional[int] = None
         self._peer_cid_available: List[QuicConnectionId] = []
         self._peer_token = b""
+        self._remote_active_connection_id_limit = 0
         self._remote_idle_timeout = 0.0  # seconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
@@ -1233,7 +1235,9 @@ class QuicConnection:
         """
         Handle a NEW_CONNECTION_ID frame.
         """
-        sequence_number, cid, stateless_reset_token = pull_new_connection_id_frame(buf)
+        sequence_number, retire_prior_to, cid, stateless_reset_token = pull_new_connection_id_frame(
+            buf
+        )
         self._logger.debug(
             "New connection ID received %d %s", sequence_number, dump_cid(cid)
         )
@@ -1295,7 +1299,7 @@ class QuicConnection:
         Handle a RESET_STREAM frame.
         """
         stream_id = buf.pull_uint_var()
-        error_code = buf.pull_uint16()
+        error_code = buf.pull_uint_var()
         final_size = buf.pull_uint_var()
 
         # check stream direction
@@ -1343,7 +1347,7 @@ class QuicConnection:
         Handle a STOP_SENDING frame.
         """
         stream_id = buf.pull_uint_var()
-        buf.pull_uint16()  # application error code
+        buf.pull_uint_var()  # application error code
 
         # check stream direction
         self._assert_stream_can_send(frame_type, stream_id)
@@ -1517,7 +1521,7 @@ class QuicConnection:
         """
         Generate new connection IDs.
         """
-        while len(self._host_cids) < 8:
+        while len(self._host_cids) < self._remote_active_connection_id_limit:
             self._host_cids.append(
                 QuicConnectionId(
                     cid=os.urandom(8),
@@ -1556,6 +1560,10 @@ class QuicConnection:
             )
 
         # store remote parameters
+        if quic_transport_parameters.active_connection_id_limit is not None:
+            self._remote_active_connection_id_limit = (
+                quic_transport_parameters.active_connection_id_limit
+            )
         if quic_transport_parameters.idle_timeout is not None:
             self._remote_idle_timeout = quic_transport_parameters.idle_timeout / 1000.0
         for param in ["ack_delay_exponent", "max_ack_delay"]:
@@ -1576,6 +1584,7 @@ class QuicConnection:
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
+            active_connection_id_limit=self._local_active_connection_id_limit,
             idle_timeout=int(self._configuration.idle_timeout * 1000),
             initial_max_data=self._local_max_data,
             initial_max_stream_data_bidi_local=self._local_max_stream_data_bidi_local,
@@ -1713,6 +1722,7 @@ class QuicConnection:
                         push_new_connection_id_frame(
                             buf,
                             connection_id.sequence_number,
+                            0,  # FIXME: retire_prior_to
                             connection_id.cid,
                             connection_id.stateless_reset_token,
                         )
