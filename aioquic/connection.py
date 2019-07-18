@@ -36,7 +36,12 @@ from .packet import (
     push_new_connection_id_frame,
     push_quic_transport_parameters,
 )
-from .packet_builder import QuicDeliveryState, QuicPacketBuilder, QuicPacketBuilderStop
+from .packet_builder import (
+    PACKET_MAX_SIZE,
+    QuicDeliveryState,
+    QuicPacketBuilder,
+    QuicPacketBuilderStop,
+)
 from .recovery import K_GRANULARITY, QuicPacketRecovery, QuicPacketSpace
 from .stream import QuicStream
 
@@ -500,8 +505,11 @@ class QuicConnection:
             builder.max_flight_bytes = (
                 self._loss.congestion_window - self._loss.bytes_in_flight
             )
+            if self._probe_pending and builder.max_flight_bytes < PACKET_MAX_SIZE:
+                builder.max_flight_bytes = PACKET_MAX_SIZE
+
+            # limit data on un-validated network paths
             if not network_path.is_validated:
-                # limit data on un-validated network paths
                 builder.max_total_bytes = (
                     network_path.bytes_received * 3 - network_path.bytes_sent
                 )
@@ -1663,7 +1671,7 @@ class QuicConnection:
 
         while True:
             # write header
-            builder.start_packet(packet_type, crypto, is_probe=self._probe_pending)
+            builder.start_packet(packet_type, crypto)
 
             if self._handshake_complete:
                 # ACK
@@ -1792,7 +1800,7 @@ class QuicConnection:
                 packet_type = PACKET_TYPE_INITIAL
             else:
                 packet_type = PACKET_TYPE_HANDSHAKE
-            builder.start_packet(packet_type, crypto, is_probe=self._probe_pending)
+            builder.start_packet(packet_type, crypto)
 
             # ACK
             if space.ack_at is not None:

@@ -145,9 +145,7 @@ class QuicPacketBuilder:
         if handler is not None:
             self._packet.delivery_handlers.append((handler, args))
 
-    def start_packet(
-        self, packet_type: int, crypto: CryptoPair, is_probe=False
-    ) -> None:
+    def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
         """
         Starts a new packet.
         """
@@ -163,7 +161,7 @@ class QuicPacketBuilder:
 
         # initialize datagram if needed
         if self._datagram_init:
-            if self.max_flight_bytes is not None and not is_probe:
+            if self.max_flight_bytes is not None:
                 remaining_flight_bytes = self.max_flight_bytes - self._flight_bytes
                 if remaining_flight_bytes < self._buffer_capacity:
                     self._buffer_capacity = remaining_flight_bytes
