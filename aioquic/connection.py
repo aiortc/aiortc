@@ -309,7 +309,9 @@ class QuicConnection:
         self._logger = QuicConnectionAdapter(
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
-        self._loss = QuicPacketRecovery(send_probe=self._send_probe)
+        self._loss = QuicPacketRecovery(
+            is_client_without_1rtt=self._is_client, send_probe=self._send_probe
+        )
         self._loss_at: Optional[float] = None
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
@@ -1130,6 +1132,7 @@ class QuicConnection:
                 tls.State.SERVER_POST_HANDSHAKE,
             ]:
                 self._handshake_complete = True
+                self._loss.is_client_without_1rtt = False
                 self._replenish_connection_ids()
                 self._events.append(
                     events.HandshakeCompleted(
@@ -1789,7 +1792,7 @@ class QuicConnection:
                 packet_type = PACKET_TYPE_INITIAL
             else:
                 packet_type = PACKET_TYPE_HANDSHAKE
-            builder.start_packet(packet_type, crypto)
+            builder.start_packet(packet_type, crypto, is_probe=self._probe_pending)
 
             # ACK
             if space.ack_at is not None:
@@ -1800,6 +1803,11 @@ class QuicConnection:
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:
                 write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
+
+            # PADDING (anti-deadlock packet)
+            if self._probe_pending and self._is_client and epoch == tls.Epoch.HANDSHAKE:
+                buf.push_bytes(bytes(builder.remaining_space))
+                self._probe_pending = False
 
             if not builder.end_packet():
                 break

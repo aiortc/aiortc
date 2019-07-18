@@ -36,8 +36,11 @@ class QuicPacketRecovery:
     Packet loss and congestion controller.
     """
 
-    def __init__(self, send_probe: Callable[[], None]) -> None:
+    def __init__(
+        self, is_client_without_1rtt: bool, send_probe: Callable[[], None]
+    ) -> None:
         self.ack_delay_exponent = 3
+        self.is_client_without_1rtt = is_client_without_1rtt
         self.max_ack_delay = 25  # ms
         self.spaces: List[QuicPacketSpace] = []
 
@@ -122,7 +125,10 @@ class QuicPacketRecovery:
             return loss_space.loss_time
 
         # packet timer
-        if sum(space.ack_eliciting_in_flight for space in self.spaces):
+        if (
+            self.is_client_without_1rtt
+            or sum(space.ack_eliciting_in_flight for space in self.spaces) > 0
+        ):
             if not self._rtt_initialized:
                 timeout = 2 * K_INITIAL_RTT * (2 ** self._pto_count)
             else:

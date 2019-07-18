@@ -15,7 +15,9 @@ class QuicPacketRecoveryTest(TestCase):
         self.HANDSHAKE_SPACE = QuicPacketSpace()
         self.ONE_RTT_SPACE = QuicPacketSpace()
 
-        self.recovery = QuicPacketRecovery(send_probe=send_probe)
+        self.recovery = QuicPacketRecovery(
+            is_client_without_1rtt=False, send_probe=send_probe
+        )
         self.recovery.spaces = [
             self.INITIAL_SPACE,
             self.HANDSHAKE_SPACE,
