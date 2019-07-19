@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 import aioquic.events
 from aioquic.connection import QuicConnection
-from aioquic.h3.events import RequestReceived, ResponseReceived
+from aioquic.h3.events import DataReceived, Event, RequestReceived, ResponseReceived
 
 
 class H0Connection:
@@ -14,22 +14,36 @@ class H0Connection:
         self._is_client = quic.configuration.is_client
         self._quic = quic
 
-    def handle_event(self, event: aioquic.events.Event):
-        http_events = []
+    def handle_event(self, event: aioquic.events.Event) -> List[Event]:
+        http_events: List[Event] = []
 
         if (
             isinstance(event, aioquic.events.StreamDataReceived)
             and (event.stream_id % 4) == 0
         ):
-            method, path = event.data.rstrip().split(b" ", 1)
-            cls = ResponseReceived if self._is_client else RequestReceived
-            http_events.append(
-                cls(
-                    headers=[(b":method", method), (b":path", path)],
-                    stream_ended=event.end_stream,
-                    stream_id=event.stream_id,
+            if self._is_client:
+                http_events.append(
+                    ResponseReceived(
+                        headers=[], stream_ended=False, stream_id=event.stream_id
+                    )
                 )
-            )
+                http_events.append(
+                    DataReceived(
+                        data=event.data,
+                        stream_ended=event.end_stream,
+                        stream_id=event.stream_id,
+                    )
+                )
+
+            else:
+                method, path = event.data.rstrip().split(b" ", 1)
+                http_events.append(
+                    RequestReceived(
+                        headers=[(b":method", method), (b":path", path)],
+                        stream_ended=event.end_stream,
+                        stream_id=event.stream_id,
+                    )
+                )
 
         return http_events
 
@@ -37,5 +51,10 @@ class H0Connection:
         self._quic.send_stream_data(stream_id, data, end_stream)
 
     def send_headers(self, stream_id: int, headers: List[Tuple[bytes, bytes]]) -> None:
-        # HTTP/0.9 has no concept of headers.
-        pass
+        if self._is_client:
+            headers_dict = dict(headers)
+            self._quic.send_stream_data(
+                stream_id,
+                headers_dict[b":method"] + b" " + headers_dict[b":path"] + b"\r\n",
+                False,
+            )
