@@ -4,7 +4,7 @@ import logging
 import os
 import re
 from functools import partial
-from typing import Dict, List, Optional, Text, Tuple, Union, cast
+from typing import Dict, Optional, Text, Tuple, Union, cast
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -14,6 +14,7 @@ import aioquic.events
 from aioquic.buffer import Buffer
 from aioquic.configuration import QuicConfiguration
 from aioquic.connection import NetworkAddress, QuicConnection
+from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import RequestReceived
 from aioquic.packet import (
@@ -37,40 +38,6 @@ TEMPLATE = """<!DOCTYPE html>
     </body>
 </html>
 """
-
-
-class H0Connection:
-    """
-    An HTTP/0.9 connection object.
-    """
-
-    def __init__(self, quic: QuicConnection):
-        self._quic = quic
-
-    def handle_event(self, event: aioquic.events.Event):
-        http_events = []
-
-        if (
-            isinstance(event, aioquic.events.StreamDataReceived)
-            and (event.stream_id % 4) == 0
-        ):
-            method, path = event.data.rstrip().split(b" ", 1)
-            http_events.append(
-                RequestReceived(
-                    headers=[(b":method", method), (b":path", path)],
-                    stream_ended=event.end_stream,
-                    stream_id=event.stream_id,
-                )
-            )
-
-        return http_events
-
-    def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
-        self._quic.send_stream_data(stream_id, data, end_stream)
-
-    def send_headers(self, stream_id: int, headers: List[Tuple[bytes, bytes]]) -> None:
-        # HTTP/0.9 has no concept of headers.
-        pass
 
 
 HttpConnection = Union[H0Connection, H3Connection]
