@@ -69,11 +69,17 @@ def run(url: str, **kwargs) -> None:
     while not stream_ended:
         data, addr = sock.recvfrom(2048)
         quic.receive_datagram(data, addr, now=time.time())
-        for event in http.handle_events():
-            print(event)
-            if isinstance(event, (DataReceived, ResponseReceived)):
-                stream_ended = event.stream_ended
 
+        # process events
+        event = quic.next_event()
+        while event is not None:
+            for http_event in http.handle_event(event):
+                print(http_event)
+                if isinstance(http_event, (DataReceived, ResponseReceived)):
+                    stream_ended = http_event.stream_ended
+            event = quic.next_event()
+
+        # send datagrams
         for data, addr in quic.datagrams_to_send(now=time.time()):
             sock.sendto(data, addr)
 

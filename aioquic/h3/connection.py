@@ -112,20 +112,6 @@ class H3Connection:
 
         return http_events
 
-    def handle_events(self) -> List[Event]:
-        """
-        Handle events from the QUIC connection and return HTTP events.
-        """
-        http_events: List[Event] = []
-
-        # process QUIC events
-        event = self._quic.next_event()
-        while event is not None:
-            http_events.extend(self.handle_event(event))
-            event = self._quic.next_event()
-
-        return http_events
-
     def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
         """
         Send data on the given stream.

@@ -7,8 +7,16 @@ from .test_connection import client_and_server, transfer
 
 
 def h3_transfer(quic_sender, h3_receiver):
-    transfer(quic_sender, h3_receiver._quic)
-    return h3_receiver.handle_events()
+    quic_receiver = h3_receiver._quic
+    transfer(quic_sender, quic_receiver)
+
+    # process QUIC events
+    http_events = []
+    event = quic_receiver.next_event()
+    while event is not None:
+        http_events.extend(h3_receiver.handle_event(event))
+        event = quic_receiver.next_event()
+    return http_events
 
 
 class H3ConnectionTest(TestCase):
