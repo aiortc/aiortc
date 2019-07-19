@@ -77,6 +77,11 @@ def run(url: str, **kwargs) -> None:
         for data, addr in quic.datagrams_to_send(now=time.time()):
             sock.sendto(data, addr)
 
+    # close connection
+    quic.close()
+    for data, addr in quic.datagrams_to_send(now=time.time()):
+        sock.sendto(data, addr)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
