@@ -1004,6 +1004,7 @@ class SessionTicket:
         return (age + self.age_add) % (1 << 32)
 
 
+AlpnHandler = Callable[[str], None]
 SessionTicketFetcher = Callable[[bytes], Optional[SessionTicket]]
 SessionTicketHandler = Callable[[SessionTicket], None]
 
@@ -1028,6 +1029,7 @@ class Context:
         self.server_name: Optional[str] = None
 
         # callbacks
+        self.alpn_cb: Optional[AlpnHandler] = None
         self.get_session_ticket_cb: Optional[SessionTicketFetcher] = None
         self.new_session_ticket_cb: Optional[SessionTicketHandler] = None
         self.update_traffic_key_cb: Callable[
@@ -1322,6 +1324,8 @@ class Context:
         self.alpn_negotiated = encrypted_extensions.alpn_protocol
         self.early_data_accepted = encrypted_extensions.early_data
         self.received_extensions = encrypted_extensions.other_extensions
+        if self.alpn_cb:
+            self.alpn_cb(self.alpn_negotiated)
 
         self._setup_traffic_protection(
             Direction.ENCRYPT, Epoch.HANDSHAKE, b"c hs traffic"
@@ -1466,6 +1470,8 @@ class Context:
                 peer_hello.alpn_protocols,
                 AlertHandshakeFailure("No common ALPN protocols"),
             )
+        if self.alpn_cb:
+            self.alpn_cb(self.alpn_negotiated)
 
         self.client_random = peer_hello.random
         self.server_random = os.urandom(32)

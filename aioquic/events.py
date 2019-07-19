@@ -63,6 +63,16 @@ class PingAcknowledged(Event):
 
 
 @dataclass
+class ProtocolNegotiated(Event):
+    """
+    The ProtocolNegotiated event is fired when ALPN negotiation completes.
+    """
+
+    alpn_protocol: Optional[str]
+    "The protocol which was negotiated using ALPN, or `None`."
+
+
+@dataclass
 class StreamDataReceived(Event):
     """
     The StreamDataReceived event is fired whenever data is received on a

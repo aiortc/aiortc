@@ -843,6 +843,12 @@ class QuicConnection:
 
     # Private
 
+    def _alpn_handler(self, alpn_protocol: str) -> None:
+        """
+        Callback which is invoked by the TLS engine when ALPN negotiation completes.
+        """
+        self._events.append(events.ProtocolNegotiated(alpn_protocol=alpn_protocol))
+
     def _assert_stream_can_receive(self, frame_type: int, stream_id: int) -> None:
         """
         Check the specified stream can receive data or raises a QuicConnectionError.
@@ -1021,6 +1027,7 @@ class QuicConnection:
                         break
 
         # TLS callbacks
+        self.tls.alpn_cb = self._alpn_handler
         if self._session_ticket_fetcher is not None:
             self.tls.get_session_ticket_cb = self._session_ticket_fetcher
         if self._session_ticket_handler is not None:

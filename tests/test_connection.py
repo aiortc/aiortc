@@ -131,6 +131,9 @@ class QuicConnectionTest(TestCase):
         with client_and_server() as (client, server):
             # check handshake completed
             event = client.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, None)
+            event = client.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, None)
             self.assertEqual(event.early_data_accepted, False)
@@ -139,6 +142,9 @@ class QuicConnectionTest(TestCase):
                 self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(client.next_event())
 
+            event = server.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, None)
             event = server.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, None)
@@ -185,12 +191,18 @@ class QuicConnectionTest(TestCase):
         ) as (client, server):
             # check handshake completed
             event = client.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, "hq-22")
+            event = client.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, "hq-22")
             for i in range(7):
                 self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(client.next_event())
 
+            event = server.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, "hq-22")
             event = server.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
             self.assertEqual(event.alpn_protocol, "hq-22")
@@ -287,14 +299,16 @@ class QuicConnectionTest(TestCase):
         items = client.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [32])
         self.assertAlmostEqual(client.get_timer(), 61.4)  # idle timeout
-        self.assertTrue(isinstance(client.next_event(), events.HandshakeCompleted))
+        self.assertEqual(type(client.next_event()), events.ProtocolNegotiated)
+        self.assertEqual(type(client.next_event()), events.HandshakeCompleted)
 
         now = 1.5
         server.receive_datagram(items[0][0], CLIENT_ADDR, now=now)
         items = server.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [])
         self.assertAlmostEqual(server.get_timer(), 61.5)  # idle timeout
-        self.assertTrue(isinstance(server.next_event(), events.HandshakeCompleted))
+        self.assertEqual(type(server.next_event()), events.ProtocolNegotiated)
+        self.assertEqual(type(server.next_event()), events.HandshakeCompleted)
 
     def test_connect_with_loss_2(self):
         def datagram_sizes(items):
@@ -367,14 +381,16 @@ class QuicConnectionTest(TestCase):
         items = client.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [334])
         self.assertAlmostEqual(client.get_timer(), 2.45)
-        self.assertTrue(isinstance(client.next_event(), events.HandshakeCompleted))
+        self.assertEqual(type(client.next_event()), events.ProtocolNegotiated)
+        self.assertEqual(type(client.next_event()), events.HandshakeCompleted)
 
         now = 1.3
         server.receive_datagram(items[0][0], CLIENT_ADDR, now=now)
         items = server.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [228])
         self.assertAlmostEqual(server.get_timer(), 1.825)
-        self.assertTrue(isinstance(server.next_event(), events.HandshakeCompleted))
+        self.assertEqual(type(server.next_event()), events.ProtocolNegotiated)
+        self.assertEqual(type(server.next_event()), events.HandshakeCompleted)
 
         now = 1.4
         client.receive_datagram(items[0][0], SERVER_ADDR, now=now)

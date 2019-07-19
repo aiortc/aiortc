@@ -184,7 +184,7 @@ class HttpServer(asyncio.DatagramProtocol):
                 self._http.pop(connection, None)
                 self._timer.pop(connection, None)
                 return
-            elif isinstance(event, aioquic.events.HandshakeCompleted):
+            elif isinstance(event, aioquic.events.ProtocolNegotiated):
                 if event.alpn_protocol == "h3-22":
                     self._http[connection] = H3Connection(connection)
                 elif event.alpn_protocol == "hq-22":
