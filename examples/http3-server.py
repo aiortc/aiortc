@@ -26,6 +26,11 @@ from aioquic.packet import (
 from aioquic.retry import QuicRetryTokenHandler
 from aioquic.tls import SessionTicket, SessionTicketFetcher, SessionTicketHandler
 
+try:
+    import uvloop
+except ImportError:
+    uvloop = None
+
 TEMPLATE = """<!DOCTYPE html>
 <html>
     <head>
@@ -355,6 +360,8 @@ if __name__ == "__main__":
         secrets_log_file=secrets_log_file,
     )
 
+    if uvloop is not None:
+        uvloop.install()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
         loop.create_datagram_endpoint(
