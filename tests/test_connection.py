@@ -521,6 +521,12 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(event.frame_type, QuicFrameType.CRYPTO)
             self.assertEqual(event.reason_phrase, "No supported protocol version")
 
+    def test_receive_datagram_garbage(self):
+        client = create_standalone_client(self)
+
+        datagram = binascii.unhexlify("c00000000080")
+        client.receive_datagram(datagram, SERVER_ADDR, now=time.time())
+
     def test_receive_datagram_wrong_version(self):
         client = create_standalone_client(self)
 

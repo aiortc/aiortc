@@ -628,7 +628,10 @@ class QuicConnection:
         buf = Buffer(data=data)
         while not buf.eof():
             start_off = buf.tell()
-            header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
+            try:
+                header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
+            except ValueError:
+                return
 
             # check destination CID matches
             destination_cid_seq: Optional[int] = None
