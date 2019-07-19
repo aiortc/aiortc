@@ -195,14 +195,23 @@ async def run(only=None, **kwargs) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC client")
-    parser.add_argument("--only", type=str)
-    parser.add_argument("--secrets-log-file", type=str)
+    parser.add_argument(
+        "--only", type=str, help="only test against the specified implementation."
+    )
+    parser.add_argument(
+        "-l",
+        "--secrets-log",
+        type=str,
+        help="log secrets to a file, for use with Wireshark",
+    )
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
 
-    if args.secrets_log_file:
-        secrets_log_file = open(args.secrets_log_file, "a")
+    # open SSL log file
+    if args.secrets_log:
+        secrets_log_file = open(args.secrets_log, "a")
     else:
         secrets_log_file = None
 
