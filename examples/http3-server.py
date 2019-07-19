@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import re
+from functools import partial
 from typing import Dict, List, Optional, Text, Tuple, Union, cast
 
 from cryptography import x509
@@ -90,6 +91,7 @@ class HttpServer(asyncio.DatagramProtocol):
         self._loop = asyncio.get_event_loop()
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
+        self._timer: Dict[QuicConnection, Tuple[asyncio.TimerHandle, float]] = {}
         self._transport: Optional[asyncio.DatagramTransport] = None
 
         if stateless_retry:
@@ -174,7 +176,15 @@ class HttpServer(asyncio.DatagramProtocol):
         # process events
         event = connection.next_event()
         while event is not None:
-            if isinstance(event, aioquic.events.HandshakeCompleted):
+            if isinstance(event, aioquic.events.ConnectionTerminated):
+                # remove the connection
+                for cid, conn in list(self._connections.items()):
+                    if conn == connection:
+                        del self._connections[cid]
+                self._http.pop(connection, None)
+                self._timer.pop(connection, None)
+                return
+            elif isinstance(event, aioquic.events.HandshakeCompleted):
                 if event.alpn_protocol == "h3-20":
                     self._http[connection] = H3Connection(connection)
                 elif event.alpn_protocol == "hq-20":
@@ -198,15 +208,24 @@ class HttpServer(asyncio.DatagramProtocol):
             self._transport.sendto(data, addr)
 
         # re-arm timer
-        """
-        timer_at = connection.get_timer()
-        if self._timer is not None and self._timer_at != timer_at:
-            self._timer.cancel()
-            self._timer = None
-        if self._timer is None and timer_at is not None:
-            self._timer = self._loop.call_at(timer_at, self._handle_timer)
-        self._timer_at = timer_at
-        """
+        next_timer_at = connection.get_timer()
+        (timer, timer_at) = self._timer.get(connection, (None, None))
+        if timer is not None and timer_at != next_timer_at:
+            timer.cancel()
+            timer = None
+        if timer is None and timer_at is not None:
+            timer = self._loop.call_at(
+                next_timer_at, partial(self._handle_timer, connection)
+            )
+        self._timer[connection] = (timer, next_timer_at)
+
+    def _handle_timer(self, connection: QuicConnection) -> None:
+        (timer, timer_at) = self._timer.pop(connection)
+
+        now = max(timer_at, self._loop.time())
+        connection.handle_timer(now=now)
+
+        self._consume_events(connection)
 
 
 class SessionTicketStore:
