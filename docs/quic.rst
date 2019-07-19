@@ -1,7 +1,7 @@
-Low-level API
-=============
+QUIC API
+========
 
-The low-level API performs no I/O on its own, leaving this to the API user.
+The QUIC API performs no I/O on its own, leaving this to the API user.
 This allows you to integrate QUIC in any Python application, regardless of
 the concurrency model you are using.
 
