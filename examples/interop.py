@@ -167,11 +167,11 @@ async def test_spin_bit(config, **kwargs):
             config.result |= Result.P
 
 
-def print_result(config):
+def print_result(config: Config) -> None:
     print("%s%s%s" % (config.name, " " * (20 - len(config.name)), config.result))
 
 
-async def run(only=None, **kwargs):
+async def run(only=None, **kwargs) -> None:
     configs = list(filter(lambda x: not only or x.name == only, CONFIGS))
 
     for config in configs:

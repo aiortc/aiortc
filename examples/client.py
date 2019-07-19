@@ -27,7 +27,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(url, **kwargs):
+async def run(url, **kwargs) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."

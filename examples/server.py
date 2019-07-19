@@ -2,12 +2,14 @@ import argparse
 import asyncio
 import logging
 import re
+from typing import Dict, Optional
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from aioquic.asyncio import serve
+from aioquic.tls import SessionTicket
 
 try:
     import uvloop
@@ -67,13 +69,17 @@ def handle_stream(reader, writer):
 
 
 class SessionTicketStore:
-    def __init__(self):
-        self.tickets = {}
+    """
+    Simple in-memory store for session tickets.
+    """
 
-    def add(self, ticket):
+    def __init__(self) -> None:
+        self.tickets: Dict[bytes, SessionTicket] = {}
+
+    def add(self, ticket) -> None:
         self.tickets[ticket.ticket] = ticket
 
-    def pop(self, label):
+    def pop(self, label: bytes) -> Optional[SessionTicket]:
         return self.tickets.pop(label, None)
 
 
