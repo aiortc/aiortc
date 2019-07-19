@@ -80,7 +80,7 @@ def run(url: str, **kwargs) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
-    parser.add_argument("url", type=str, help="the server's host name or address")
+    parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
     parser.add_argument(
         "-l",
         "--secrets-log",

@@ -3,6 +3,7 @@ import asyncio
 import logging
 import pickle
 import time
+from urllib.parse import urlparse
 
 from aioquic.asyncio import connect
 
@@ -26,11 +27,21 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(host, port, path, **kwargs):
-    async with connect(host, port, **kwargs) as connection:
+async def run(url, **kwargs):
+    # parse URL
+    parsed = urlparse(url)
+    assert parsed.scheme == "https", "Only HTTPS URLs are supported."
+    if ":" in parsed.netloc:
+        server_name, port_str = parsed.netloc.split(":")
+        port = int(port_str)
+    else:
+        server_name = parsed.netloc
+        port = 443
+
+    async with connect(server_name, port, **kwargs) as connection:
         # perform HTTP/0.9 request
         reader, writer = await connection.create_stream()
-        writer.write(("GET %s\r\n" % path).encode("utf8"))
+        writer.write(("GET %s\r\n" % parsed.path).encode("utf8"))
         writer.write_eof()
 
         start = time.time()
@@ -46,16 +57,8 @@ async def run(host, port, path, **kwargs):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QUIC client")
-    parser.add_argument("host", type=str, help="the server's host name or address")
-    parser.add_argument("port", type=int, help="the server's port")
-    parser.add_argument(
-        "path",
-        type=str,
-        default="/",
-        nargs="?",
-        help="the path to request (defaults to /)",
-    )
+    parser = argparse.ArgumentParser(description="HTTP/0.9 client")
+    parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
     parser.add_argument(
         "-l",
         "--secrets-log",
@@ -98,9 +101,7 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
         run(
-            host=args.host,
-            port=args.port,
-            path=args.path,
+            url=args.url,
             alpn_protocols=["hq-20"],
             secrets_log_file=secrets_log_file,
             session_ticket=session_ticket,
