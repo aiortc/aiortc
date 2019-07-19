@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import logging
 import pickle
 import socket
@@ -14,6 +15,7 @@ from aioquic.h3.events import DataReceived, Event, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
 from aioquic.quic.events import ConnectionTerminated
+from aioquic.quic.logger import QuicLogger
 from aioquic.tls import SessionTicketHandler
 
 try:
@@ -219,6 +221,9 @@ if __name__ == "__main__":
     parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
     parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
     parser.add_argument(
+        "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
+    )
+    parser.add_argument(
         "-l",
         "--secrets-log",
         type=str,
@@ -240,6 +245,12 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
+    # create QUIC logger
+    if args.quic_log:
+        quic_logger = QuicLogger()
+    else:
+        quic_logger = None
+
     # open SSL log file
     if args.secrets_log:
         secrets_log_file = open(args.secrets_log, "a")
@@ -258,11 +269,17 @@ if __name__ == "__main__":
     if uvloop is not None:
         uvloop.install()
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        run(
-            url=args.url,
-            legacy_http=args.legacy_http,
-            secrets_log_file=secrets_log_file,
-            session_ticket=session_ticket,
+    try:
+        loop.run_until_complete(
+            run(
+                url=args.url,
+                legacy_http=args.legacy_http,
+                quic_logger=quic_logger,
+                secrets_log_file=secrets_log_file,
+                session_ticket=session_ticket,
+            )
         )
-    )
+    finally:
+        if quic_logger is not None:
+            with open(args.quic_log, "w") as logger_fp:
+                json.dump(quic_logger.to_dict(), logger_fp, indent=4)

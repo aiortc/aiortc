@@ -1,6 +1,7 @@
 import math
 from typing import Callable, Dict, List, Optional
 
+from .logger import QuicLogger
 from .packet_builder import QuicDeliveryState, QuicSentPacket
 from .rangeset import RangeSet
 
@@ -37,7 +38,10 @@ class QuicPacketRecovery:
     """
 
     def __init__(
-        self, is_client_without_1rtt: bool, send_probe: Callable[[], None]
+        self,
+        is_client_without_1rtt: bool,
+        send_probe: Callable[[], None],
+        quic_logger: Optional[QuicLogger] = None,
     ) -> None:
         self.ack_delay_exponent = 3
         self.is_client_without_1rtt = is_client_without_1rtt
@@ -45,6 +49,7 @@ class QuicPacketRecovery:
         self.spaces: List[QuicPacketSpace] = []
 
         # callbacks
+        self._quic_logger = quic_logger
         self._send_probe = send_probe
 
         # loss detection
@@ -60,7 +65,7 @@ class QuicPacketRecovery:
         self.bytes_in_flight = 0
         self.congestion_window = K_INITIAL_WINDOW
         self._congestion_recovery_start_time = 0.0
-        self._ssthresh = math.inf
+        self._ssthresh: Optional[int] = None
 
     def detect_loss(self, space: QuicPacketSpace, now: float) -> None:
         """
@@ -216,6 +221,18 @@ class QuicPacketRecovery:
                     7 / 8 * self._rtt_smoothed + 1 / 8 * self._rtt_latest
                 )
 
+            if self._quic_logger is not None:
+                self._quic_logger.log_event(
+                    category="recovery",
+                    event="metric_update",
+                    data={
+                        "latest_rtt": int(self._rtt_latest * 1000),
+                        "min_rtt": int(self._rtt_min * 1000),
+                        "smoothed_rtt": int(self._rtt_smoothed * 1000),
+                        "rtt_variance": int(self._rtt_variance * 1000),
+                    },
+                )
+
         self.detect_loss(space, now=now)
 
         self._pto_count = 0
@@ -244,7 +261,7 @@ class QuicPacketRecovery:
         if packet.sent_time <= self._congestion_recovery_start_time:
             return
 
-        if self.congestion_window < self._ssthresh:
+        if self._ssthresh is None or self.congestion_window < self._ssthresh:
             # slow start
             self.congestion_window += packet.sent_bytes
         else:
@@ -253,8 +270,14 @@ class QuicPacketRecovery:
                 K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self.congestion_window
             )
 
+        if self._quic_logger is not None:
+            self._log_metric_update()
+
     def on_packet_expired(self, packet: QuicSentPacket) -> None:
         self.bytes_in_flight -= packet.sent_bytes
+
+        if self._quic_logger is not None:
+            self._log_metric_update()
 
     def on_packet_lost(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
         del space.sent_packets[packet.packet_number]
@@ -263,6 +286,17 @@ class QuicPacketRecovery:
             space.ack_eliciting_in_flight -= 1
         if packet.in_flight:
             self.bytes_in_flight -= packet.sent_bytes
+
+        if self._quic_logger is not None:
+            self._quic_logger.log_event(
+                category="recovery",
+                event="packet_lost",
+                data={
+                    "type": self._quic_logger.packet_type(packet.packet_type),
+                    "packet_number": packet.packet_number,
+                },
+            )
+            self._log_metric_update()
 
         # trigger callbacks
         for handler, args in packet.delivery_handlers:
@@ -280,6 +314,9 @@ class QuicPacketRecovery:
             # add packet to bytes in flight
             self.bytes_in_flight += packet.sent_bytes
 
+            if self._quic_logger is not None:
+                self._log_metric_update()
+
     def on_packets_lost(self, lost_largest_time: float, now: float) -> None:
         # start a new congestion event if packet was sent after the
         # start of the previous congestion recovery period.
@@ -290,4 +327,16 @@ class QuicPacketRecovery:
             )
             self._ssthresh = self.congestion_window
 
+            if self._quic_logger is not None:
+                self._log_metric_update()
+
         # TODO : collapse congestion window if persistent congestion
+
+    def _log_metric_update(self) -> None:
+        data = {"bytes_in_flight": self.bytes_in_flight, "cwnd": self.congestion_window}
+        if self._ssthresh is not None:
+            data["ssthresh"] = self._ssthresh
+
+        self._quic_logger.log_event(
+            category="recovery", event="metric_update", data=data
+        )

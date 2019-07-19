@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import logging
 import os
 import re
@@ -17,6 +18,7 @@ from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import RequestReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
+from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
@@ -321,6 +323,9 @@ if __name__ == "__main__":
         help="log secrets to a file, for use with Wireshark",
     )
     parser.add_argument(
+        "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
+    )
+    parser.add_argument(
         "-r",
         "--stateless-retry",
         action="store_true",
@@ -336,6 +341,19 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
+    # create QUIC logger
+    if args.quic_log:
+        quic_logger = QuicLogger()
+    else:
+        quic_logger = None
+
+    # open SSL log file
+    if args.secrets_log:
+        secrets_log_file = open(args.secrets_log, "a")
+    else:
+        secrets_log_file = None
+
+    # load SSL certificate and key
     with open(args.certificate, "rb") as fp:
         certificate = x509.load_pem_x509_certificate(
             fp.read(), backend=default_backend()
@@ -345,21 +363,15 @@ if __name__ == "__main__":
             fp.read(), password=None, backend=default_backend()
         )
 
-    if args.secrets_log:
-        secrets_log_file = open(args.secrets_log, "a")
-    else:
-        secrets_log_file = None
-
-    # session tickets
-    ticket_store = SessionTicketStore()
-
     configuration = QuicConfiguration(
         alpn_protocols=["h3-22", "hq-22"],
         certificate=certificate,
         is_client=False,
         private_key=private_key,
+        quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,
     )
+    ticket_store = SessionTicketStore()
 
     if uvloop is not None:
         uvloop.install()
@@ -375,4 +387,9 @@ if __name__ == "__main__":
             local_addr=(args.host, args.port),
         )
     )
-    loop.run_forever()
+    try:
+        loop.run_forever()
+    finally:
+        if quic_logger is not None:
+            with open(args.quic_log, "w") as logger_fp:
+                json.dump(quic_logger.to_dict(), logger_fp, indent=4)

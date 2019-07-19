@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional, TextIO
 
 from ..tls import SessionTicket
+from .logger import QuicLogger
 from .packet import QuicProtocolVersion
 
 
@@ -44,6 +45,11 @@ class QuicConfiguration:
     See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
 
     .. note:: This is only used by servers.
+    """
+
+    quic_logger: Optional[QuicLogger] = None
+    """
+    The :class:`~aioquic.quic.logger.QuicLogger` instance to log events to.
     """
 
     secrets_log_file: TextIO = None

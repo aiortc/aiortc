@@ -16,6 +16,7 @@ from aioquic.quic.connection import (
     QuicReceiveContext,
 )
 from aioquic.quic.crypto import CryptoPair
+from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     QuicErrorCode,
@@ -211,7 +212,26 @@ class QuicConnectionTest(TestCase):
                 self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(server.next_event())
 
-    def test_connect_with_log(self):
+    def test_connect_with_qlog(self):
+        # open logs
+        client_logger = QuicLogger()
+        server_logger = QuicLogger()
+
+        with client_and_server(
+            client_options={"quic_logger": client_logger},
+            server_options={"quic_logger": server_logger},
+        ) as (client, server):
+            pass
+
+        # check client log
+        client_log = client_logger.to_dict()
+        self.assertGreater(len(client_log["traces"][0]["events"]), 20)
+
+        # check server log
+        server_log = server_logger.to_dict()
+        self.assertGreater(len(server_log["traces"][0]["events"]), 20)
+
+    def test_connect_with_secrets_log(self):
         client_log_file = io.StringIO()
         server_log_file = io.StringIO()
         with client_and_server(

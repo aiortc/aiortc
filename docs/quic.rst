@@ -22,6 +22,10 @@ Configuration
     .. autoclass:: QuicConfiguration
         :members:
 
+.. automodule:: aioquic.quic.logger
+
+    .. autoclass:: QuicLogger
+        :members:
 
 Events
 ------

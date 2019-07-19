@@ -279,6 +279,7 @@ class QuicConnection:
             ), "SSL private key is required for a server"
 
         # counters for debugging
+        self._quic_logger = configuration.quic_logger
         self._stateless_retry_count = 0
         self._version_negotiation_count = 0
 
@@ -319,7 +320,9 @@ class QuicConnection:
             logger, {"host_cid": dump_cid(self.host_cid)}
         )
         self._loss = QuicPacketRecovery(
-            is_client_without_1rtt=self._is_client, send_probe=self._send_probe
+            is_client_without_1rtt=self._is_client,
+            quic_logger=self._quic_logger,
+            send_probe=self._send_probe,
         )
         self._loss_at: Optional[float] = None
         self._network_paths: List[QuicNetworkPath] = []
@@ -544,6 +547,21 @@ class QuicConnection:
                 if packet.epoch == tls.Epoch.HANDSHAKE:
                     sent_handshake = True
 
+                # log packet
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="transport",
+                        event="packet_sent",
+                        data={
+                            "type": self._quic_logger.packet_type(packet.packet_type),
+                            "header": {
+                                "packet_number": packet.packet_number,
+                                "packet_size": packet.sent_bytes,
+                            },
+                            "frames": [],
+                        },
+                    )
+
             # check if we can discard initial keys
             if sent_handshake and self._is_client:
                 self._discard_epoch(tls.Epoch.INITIAL)
@@ -551,8 +569,16 @@ class QuicConnection:
         # return datagrams to send and the destination network address
         ret = []
         for datagram in datagrams:
-            network_path.bytes_sent += len(datagram)
+            byte_length = len(datagram)
+            network_path.bytes_sent += byte_length
             ret.append((datagram, network_path.addr))
+
+            if self._quic_logger is not None:
+                self._quic_logger.log_event(
+                    category="transport",
+                    event="datagram_sent",
+                    data={"byte_length": byte_length, "count": 1},
+                )
         return ret
 
     def get_next_available_stream_id(self, is_unidirectional=False) -> int:
@@ -630,6 +656,13 @@ class QuicConnection:
             return
 
         data = cast(bytes, data)
+        if self._quic_logger is not None:
+            self._quic_logger.log_event(
+                category="transport",
+                event="datagram_received",
+                data={"byte_length": len(data), "count": 1},
+            )
+
         buf = Buffer(data=data)
         while not buf.eof():
             start_off = buf.tell()
@@ -653,6 +686,12 @@ class QuicConnection:
                 versions = []
                 while not buf.eof():
                     versions.append(buf.pull_uint32())
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="transport",
+                        event="version_negotation",
+                        data={"type": "retry", "header": {}, "frames": []},
+                    )
                 common = set(self._configuration.supported_versions).intersection(
                     versions
                 )
@@ -684,6 +723,13 @@ class QuicConnection:
                     and header.original_destination_cid == self._peer_cid
                     and not self._stateless_retry_count
                 ):
+                    if self._quic_logger is not None:
+                        self._quic_logger.log_event(
+                            category="transport",
+                            event="packet_received",
+                            data={"type": "retry", "header": {}, "frames": []},
+                        )
+
                     self._original_connection_id = self._peer_cid
                     self._peer_cid = header.source_cid
                     self._peer_token = header.token
@@ -726,6 +772,21 @@ class QuicConnection:
             if packet_number > space.expected_packet_number:
                 space.expected_packet_number = packet_number + 1
 
+            # log packet
+            if self._quic_logger is not None:
+                self._quic_logger.log_event(
+                    category="transport",
+                    event="packet_received",
+                    data={
+                        "type": self._quic_logger.packet_type(header.packet_type),
+                        "header": {
+                            "packet_number": packet_number,
+                            "packet_size": end_off - start_off,
+                        },
+                        "frames": [],
+                    },
+                )
+
             # discard initial keys and packet space
             if not self._is_client and epoch == tls.Epoch.HANDSHAKE:
                 self._discard_epoch(tls.Epoch.INITIAL)
@@ -746,6 +807,13 @@ class QuicConnection:
                 else:
                     self._spin_bit = self._spin_bit_peer
                 self._spin_highest_pn = packet_number
+
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="connectivity",
+                        event="spin_bit_update",
+                        data={"state": self._spin_bit},
+                    )
 
             # handle payload
             context = QuicReceiveContext(
