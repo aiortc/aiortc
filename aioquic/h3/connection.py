@@ -132,10 +132,9 @@ class H3Connection:
         connection's :meth:`~aioquic.connection.QuicConnection.datagrams_to_send`
         method.
         """
-        control, header = self._encoder.encode(stream_id, 0, headers)
-        self._quic.send_stream_data(
-            stream_id, encode_frame(FrameType.HEADERS, header), False
-        )
+        encoder, header = self._encoder.encode(stream_id, 0, headers)
+        self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+        self._quic.send_stream_data(stream_id, encode_frame(FrameType.HEADERS, header))
 
     def _create_uni_stream(self, stream_type: int) -> int:
         """
@@ -225,8 +224,11 @@ class H3Connection:
                             )
                         )
                     elif frame_type == FrameType.HEADERS:
-                        control, headers = self._decoder.feed_header(
+                        decoder, headers = self._decoder.feed_header(
                             stream_id, frame_data
+                        )
+                        self._quic.send_stream_data(
+                            self._local_decoder_stream_id, decoder
                         )
                         cls = ResponseReceived if self._is_client else RequestReceived
                         http_events.append(
