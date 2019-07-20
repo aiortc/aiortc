@@ -1531,7 +1531,7 @@ class QuicConnection:
         """
         Generate new connection IDs.
         """
-        while len(self._host_cids) < self._remote_active_connection_id_limit:
+        while len(self._host_cids) < min(8, self._remote_active_connection_id_limit):
             self._host_cids.append(
                 QuicConnectionId(
                     cid=os.urandom(8),
