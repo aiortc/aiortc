@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import aioquic.events
 from aioquic.connection import QuicConnection
@@ -11,6 +11,7 @@ class H0Connection:
     """
 
     def __init__(self, quic: QuicConnection):
+        self._headers_received: Dict[int, bool] = {}
         self._is_client = quic.configuration.is_client
         self._quic = quic
 
@@ -21,29 +22,31 @@ class H0Connection:
             isinstance(event, aioquic.events.StreamDataReceived)
             and (event.stream_id % 4) == 0
         ):
-            if self._is_client:
-                http_events.append(
-                    ResponseReceived(
-                        headers=[], stream_ended=False, stream_id=event.stream_id
+            data = event.data
+            if not self._headers_received.get(event.stream_id, False):
+                if self._is_client:
+                    http_events.append(
+                        ResponseReceived(
+                            headers=[], stream_ended=False, stream_id=event.stream_id
+                        )
                     )
-                )
-                http_events.append(
-                    DataReceived(
-                        data=event.data,
-                        stream_ended=event.end_stream,
-                        stream_id=event.stream_id,
+                else:
+                    method, path = data.rstrip().split(b" ", 1)
+                    http_events.append(
+                        RequestReceived(
+                            headers=[(b":method", method), (b":path", path)],
+                            stream_ended=False,
+                            stream_id=event.stream_id,
+                        )
                     )
-                )
+                    data = b""
+                self._headers_received[event.stream_id] = True
 
-            else:
-                method, path = event.data.rstrip().split(b" ", 1)
-                http_events.append(
-                    RequestReceived(
-                        headers=[(b":method", method), (b":path", path)],
-                        stream_ended=event.end_stream,
-                        stream_id=event.stream_id,
-                    )
+            http_events.append(
+                DataReceived(
+                    data=data, stream_ended=event.end_stream, stream_id=event.stream_id
                 )
+            )
 
         return http_events
 
