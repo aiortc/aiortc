@@ -204,45 +204,60 @@ class H3Connection:
                     self._peer_encoder_stream_id = stream_id
                 self._stream_types[stream_id] = stream_type
 
-            # fetch next frame
-            try:
-                frame_type = buf.pull_uint_var()
-                frame_length = buf.pull_uint_var()
-                frame_data = buf.pull_bytes(frame_length)
-            except BufferReadError:
-                break
-            consumed = buf.tell()
+            if (stream_id % 4 == 0) or stream_id == self._peer_control_stream_id:
+                # fetch next frame
+                try:
+                    frame_type = buf.pull_uint_var()
+                    frame_length = buf.pull_uint_var()
+                    frame_data = buf.pull_bytes(frame_length)
+                except BufferReadError:
+                    break
+                consumed = buf.tell()
 
-            if (stream_id % 4) == 0:
-                # client-initiated bidirectional streams carry requests and responses
-                if frame_type == FrameType.DATA:
-                    http_events.append(
-                        DataReceived(
-                            data=frame_data,
-                            stream_id=stream_id,
-                            stream_ended=stream_ended and buf.eof(),
+                if (stream_id % 4) == 0:
+                    # client-initiated bidirectional streams carry requests and responses
+                    if frame_type == FrameType.DATA:
+                        http_events.append(
+                            DataReceived(
+                                data=frame_data,
+                                stream_id=stream_id,
+                                stream_ended=stream_ended and buf.eof(),
+                            )
                         )
-                    )
-                elif frame_type == FrameType.HEADERS:
-                    control, headers = self._decoder.feed_header(stream_id, frame_data)
-                    cls = ResponseReceived if self._is_client else RequestReceived
-                    http_events.append(
-                        cls(
-                            headers=headers,
-                            stream_id=stream_id,
-                            stream_ended=stream_ended and buf.eof(),
+                    elif frame_type == FrameType.HEADERS:
+                        control, headers = self._decoder.feed_header(
+                            stream_id, frame_data
                         )
-                    )
-            elif stream_id == self._peer_control_stream_id:
-                # unidirectional control stream
-                if frame_type == FrameType.SETTINGS:
-                    settings = parse_settings(frame_data)
-                    self._encoder.apply_settings(
-                        max_table_capacity=settings.get(
-                            Setting.QPACK_MAX_TABLE_CAPACITY, 0
-                        ),
-                        blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
-                    )
+                        cls = ResponseReceived if self._is_client else RequestReceived
+                        http_events.append(
+                            cls(
+                                headers=headers,
+                                stream_id=stream_id,
+                                stream_ended=stream_ended and buf.eof(),
+                            )
+                        )
+                elif stream_id == self._peer_control_stream_id:
+                    # unidirectional control stream
+                    if frame_type == FrameType.SETTINGS:
+                        settings = parse_settings(frame_data)
+                        self._encoder.apply_settings(
+                            max_table_capacity=settings.get(
+                                Setting.QPACK_MAX_TABLE_CAPACITY, 0
+                            ),
+                            blocked_streams=settings.get(
+                                Setting.QPACK_BLOCKED_STREAMS, 0
+                            ),
+                        )
+            else:
+                # fetch unframed data
+                data = buf.pull_bytes(buf.capacity - buf.tell())
+                consumed = buf.tell()
+
+                if stream_id == self._peer_decoder_stream_id:
+                    self._encoder.feed_decoder(data)
+
+                elif stream_id == self._peer_encoder_stream_id:
+                    self._decoder.feed_encoder(data)
 
         # remove processed data from buffer
         self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
