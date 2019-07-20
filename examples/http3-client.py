@@ -3,14 +3,18 @@ import logging
 import pickle
 import socket
 import time
+from typing import Union
 from urllib.parse import urlparse
 
 from aioquic.configuration import QuicConfiguration
 from aioquic.connection import QuicConnection
+from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, ResponseReceived
 
 logger = logging.getLogger("client")
+
+HttpConnection = Union[H0Connection, H3Connection]
 
 
 def save_session_ticket(ticket):
@@ -24,7 +28,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-def run(url: str, **kwargs) -> None:
+def run(url: str, legacy_http: bool, **kwargs) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
@@ -42,14 +46,21 @@ def run(url: str, **kwargs) -> None:
     # prepare QUIC connection
     quic = QuicConnection(
         configuration=QuicConfiguration(
-            alpn_protocols=["h3-22"], is_client=True, server_name=server_name, **kwargs
+            alpn_protocols=["hq-22" if legacy_http else "h3-22"],
+            is_client=True,
+            server_name=server_name,
+            **kwargs
         ),
         session_ticket_handler=save_session_ticket,
     )
     quic.connect(server_addr, now=time.time())
 
     # send request
-    http = H3Connection(quic)
+    http: HttpConnection
+    if legacy_http:
+        http = H0Connection(quic)
+    else:
+        http = H3Connection(quic)
     stream_id = quic.get_next_available_stream_id()
     http.send_headers(
         stream_id=stream_id,
@@ -92,6 +103,7 @@ def run(url: str, **kwargs) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
     parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
+    parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
     parser.add_argument(
         "-l",
         "--secrets-log",
@@ -129,4 +141,9 @@ if __name__ == "__main__":
         except FileNotFoundError:
             pass
 
-    run(url=args.url, secrets_log_file=secrets_log_file, session_ticket=session_ticket)
+    run(
+        url=args.url,
+        legacy_http=args.legacy_http,
+        secrets_log_file=secrets_log_file,
+        session_ticket=session_ticket,
+    )
