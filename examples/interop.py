@@ -56,7 +56,7 @@ class Config:
 CONFIGS = [
     Config("aioquic", "quic.aiortc.org", 4434, "/"),
     Config("ats", "quic.ogre.com", 4434, "/"),
-    Config("f5", "208.85.208.226", 4433, "/"),
+    Config("f5", "204.134.187.194", 4433, "/"),
     Config("gquic", "quic.rocks", 4433, "/"),
     Config("lsquic", "http3-test.litespeedtech.com", 4434, None),
     Config("mvfst", "fb.mvfst.net", 4433, "/"),
