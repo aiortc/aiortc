@@ -2,6 +2,7 @@ import argparse
 import logging
 import pickle
 import socket
+import sys
 import time
 from typing import Union
 from urllib.parse import urlparse
@@ -86,9 +87,16 @@ def run(url: str, legacy_http: bool, **kwargs) -> None:
         event = quic.next_event()
         while event is not None:
             for http_event in http.handle_event(event):
-                print(http_event)
-                if isinstance(http_event, (DataReceived, ResponseReceived)):
+                if isinstance(http_event, ResponseReceived):
                     stream_ended = http_event.stream_ended
+                    headers = b""
+                    for k, v in http_event.headers:
+                        headers += k + b": " + v + b"\r\n"
+                    if headers:
+                        sys.stderr.buffer.write(headers + b"\r\n")
+                if isinstance(http_event, DataReceived):
+                    stream_ended = http_event.stream_ended
+                    sys.stdout.buffer.write(http_event.data)
             event = quic.next_event()
 
         # send datagrams

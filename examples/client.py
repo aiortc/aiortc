@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import pickle
+import sys
 import time
 from urllib.parse import urlparse
 
@@ -47,7 +48,7 @@ async def run(url, **kwargs) -> None:
         start = time.time()
         response = await reader.read()
         elapsed = time.time() - start
-        print(response.decode("utf8"))
+        sys.stdout.buffer.write(response)
 
         octets = len(response)
         logger.info(
