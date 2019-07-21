@@ -312,7 +312,7 @@ class ContextTest(TestCase):
         client.handle_message(b"", client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
         server_input = merge_buffers(client_buf)
-        self.assertGreaterEqual(len(server_input), 219)
+        self.assertGreaterEqual(len(server_input), 213)
         self.assertLessEqual(len(server_input), 264)
         reset_buffers(client_buf)
 
@@ -401,7 +401,7 @@ class ContextTest(TestCase):
         client.handle_message(b"", client_buf)
         self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
         server_input = merge_buffers(client_buf)
-        self.assertEqual(len(server_input), 264)
+        self.assertEqual(len(server_input), 258)
         reset_buffers(client_buf)
 
         # handle client hello
@@ -607,7 +607,6 @@ class TlsTest(TestCase):
 
         # extensions
         self.assertEqual(hello.alpn_protocols, None)
-        self.assertEqual(hello.key_exchange_modes, [tls.KeyExchangeMode.PSK_DHE_KE])
         self.assertEqual(
             hello.key_share,
             [
@@ -620,6 +619,9 @@ class TlsTest(TestCase):
                     ),
                 )
             ],
+        )
+        self.assertEqual(
+            hello.psk_key_exchange_modes, [tls.PskKeyExchangeMode.PSK_DHE_KE]
         )
         self.assertEqual(hello.server_name, None)
         self.assertEqual(
@@ -678,7 +680,6 @@ class TlsTest(TestCase):
         # extensions
         self.assertEqual(hello.alpn_protocols, ["h3-19"])
         self.assertEqual(hello.early_data, False)
-        self.assertEqual(hello.key_exchange_modes, [tls.KeyExchangeMode.PSK_DHE_KE])
         self.assertEqual(
             hello.key_share,
             [
@@ -691,6 +692,9 @@ class TlsTest(TestCase):
                     ),
                 )
             ],
+        )
+        self.assertEqual(
+            hello.psk_key_exchange_modes, [tls.PskKeyExchangeMode.PSK_DHE_KE]
         )
         self.assertEqual(hello.server_name, "cloudflare-quic.com")
         self.assertEqual(
@@ -792,7 +796,6 @@ class TlsTest(TestCase):
 
         # extensions
         self.assertEqual(hello.alpn_protocols, None)
-        self.assertEqual(hello.key_exchange_modes, [tls.KeyExchangeMode.PSK_DHE_KE])
         self.assertEqual(
             hello.key_share,
             [
@@ -805,6 +808,9 @@ class TlsTest(TestCase):
                     ),
                 )
             ],
+        )
+        self.assertEqual(
+            hello.psk_key_exchange_modes, [tls.PskKeyExchangeMode.PSK_DHE_KE]
         )
         self.assertEqual(hello.server_name, "cloudflare-quic.com")
         self.assertEqual(
@@ -856,7 +862,6 @@ class TlsTest(TestCase):
                 tls.CipherSuite.CHACHA20_POLY1305_SHA256,
             ],
             compression_methods=[tls.CompressionMethod.NULL],
-            key_exchange_modes=[tls.KeyExchangeMode.PSK_DHE_KE],
             key_share=[
                 (
                     tls.Group.SECP256R1,
@@ -867,6 +872,7 @@ class TlsTest(TestCase):
                     ),
                 )
             ],
+            psk_key_exchange_modes=[tls.PskKeyExchangeMode.PSK_DHE_KE],
             signature_algorithms=[
                 tls.SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
                 tls.SignatureAlgorithm.ECDSA_SECP256R1_SHA256,

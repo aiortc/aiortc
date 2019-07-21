@@ -201,7 +201,7 @@ class HandshakeType(IntEnum):
     MESSAGE_HASH = 254
 
 
-class KeyExchangeMode(IntEnum):
+class PskKeyExchangeMode(IntEnum):
     PSK_KE = 0
     PSK_DHE_KE = 1
 
@@ -239,12 +239,12 @@ def pull_compression_method(buf: Buffer) -> CompressionMethod:
     return CompressionMethod(buf.pull_uint8())
 
 
-def pull_key_exchange_mode(buf: Buffer) -> KeyExchangeMode:
-    return KeyExchangeMode(buf.pull_uint8())
-
-
 def pull_group(buf: Buffer) -> Group:
     return Group(buf.pull_uint16())
+
+
+def pull_psk_key_exchange_mode(buf: Buffer) -> PskKeyExchangeMode:
+    return PskKeyExchangeMode(buf.pull_uint8())
 
 
 def pull_signature_algorithm(buf: Buffer) -> SignatureAlgorithm:
@@ -404,9 +404,9 @@ class ClientHello:
     # extensions
     alpn_protocols: Optional[List[str]] = None
     early_data: bool = False
-    key_exchange_modes: Optional[List[KeyExchangeMode]] = None
     key_share: Optional[List[KeyShareEntry]] = None
     pre_shared_key: Optional[OfferedPsks] = None
+    psk_key_exchange_modes: Optional[List[PskKeyExchangeMode]] = None
     server_name: Optional[str] = None
     signature_algorithms: Optional[List[SignatureAlgorithm]] = None
     supported_groups: Optional[List[Group]] = None
@@ -451,8 +451,8 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
             elif extension_type == ExtensionType.SUPPORTED_GROUPS:
                 hello.supported_groups = pull_list(buf, 2, partial(pull_group, buf))
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
-                hello.key_exchange_modes = pull_list(
-                    buf, 1, partial(pull_key_exchange_mode, buf)
+                hello.psk_key_exchange_modes = pull_list(
+                    buf, 1, partial(pull_psk_key_exchange_mode, buf)
                 )
             elif extension_type == ExtensionType.SERVER_NAME:
                 with pull_block(buf, 2):
@@ -503,8 +503,9 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
             with push_extension(buf, ExtensionType.SUPPORTED_GROUPS):
                 push_list(buf, 2, buf.push_uint16, hello.supported_groups)
 
-            with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
-                push_list(buf, 1, buf.push_uint8, hello.key_exchange_modes)
+            if hello.psk_key_exchange_modes is not None:
+                with push_extension(buf, ExtensionType.PSK_KEY_EXCHANGE_MODES):
+                    push_list(buf, 1, buf.push_uint8, hello.psk_key_exchange_modes)
 
             if hello.server_name is not None:
                 with push_extension(buf, ExtensionType.SERVER_NAME):
@@ -939,13 +940,17 @@ def encode_public_key(
     )
 
 
-def negotiate(supported: List[T], offered: Optional[List[T]], exc: Alert) -> T:
+def negotiate(
+    supported: List[T], offered: Optional[List[T]], exc: Optional[Alert] = None
+) -> T:
     if offered is not None:
         for c in supported:
             if c in offered:
                 return c
 
-    raise exc
+    if exc is not None:
+        raise exc
+    return None
 
 
 def signature_algorithm_params(
@@ -1043,7 +1048,7 @@ class Context:
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
         self._compression_methods = [CompressionMethod.NULL]
-        self._key_exchange_modes = [KeyExchangeMode.PSK_DHE_KE]
+        self._psk_key_exchange_modes = [PskKeyExchangeMode.PSK_DHE_KE]
         self._signature_algorithms = [
             SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
             SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
@@ -1213,8 +1218,10 @@ class Context:
             cipher_suites=self._cipher_suites,
             compression_methods=self._compression_methods,
             alpn_protocols=self.alpn_protocols,
-            key_exchange_modes=self._key_exchange_modes,
             key_share=key_share,
+            psk_key_exchange_modes=self._psk_key_exchange_modes
+            if (self.session_ticket or self.new_session_ticket_cb is not None)
+            else None,
             server_name=self.server_name,
             signature_algorithms=self._signature_algorithms,
             supported_groups=supported_groups,
@@ -1447,10 +1454,8 @@ class Context:
             peer_hello.compression_methods,
             AlertHandshakeFailure("No supported compression method"),
         )
-        negotiate(
-            self._key_exchange_modes,
-            peer_hello.key_exchange_modes,
-            AlertHandshakeFailure("No supported key exchange mode"),
+        psk_key_exchange_mode = negotiate(
+            self._psk_key_exchange_modes, peer_hello.psk_key_exchange_modes
         )
         signature_algorithm = negotiate(
             signature_algorithms,
@@ -1482,6 +1487,7 @@ class Context:
         pre_shared_key = None
         if (
             self.get_session_ticket_cb is not None
+            and psk_key_exchange_mode is not None
             and peer_hello.pre_shared_key is not None
             and len(peer_hello.pre_shared_key.identities) == 1
             and len(peer_hello.pre_shared_key.binders) == 1
@@ -1642,7 +1648,7 @@ class Context:
         self.key_schedule.update_hash(buf.data)
 
         # create a new session ticket
-        if self.new_session_ticket_cb is not None:
+        if self.new_session_ticket_cb is not None and psk_key_exchange_mode is not None:
             self._new_session_ticket = NewSessionTicket(
                 ticket_lifetime=86400,
                 ticket_age_add=struct.unpack("I", os.urandom(4))[0],
