@@ -242,13 +242,16 @@ class H3Connection:
                     # unidirectional control stream
                     if frame_type == FrameType.SETTINGS:
                         settings = parse_settings(frame_data)
-                        self._encoder.apply_settings(
+                        encoder = self._encoder.apply_settings(
                             max_table_capacity=settings.get(
                                 Setting.QPACK_MAX_TABLE_CAPACITY, 0
                             ),
                             blocked_streams=settings.get(
                                 Setting.QPACK_BLOCKED_STREAMS, 0
                             ),
+                        )
+                        self._quic.send_stream_data(
+                            self._local_encoder_stream_id, encoder
                         )
             else:
                 # fetch unframed data
