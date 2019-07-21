@@ -69,6 +69,7 @@ def run(url: str, legacy_http: bool, **kwargs) -> None:
             (b":scheme", parsed.scheme.encode("utf8")),
             (b":authority", parsed.netloc.encode("utf8")),
             (b":path", parsed.path.encode("utf8")),
+            (b"user-agent", b"aioquic"),
         ],
     )
     http.send_data(stream_id=stream_id, data=b"", end_stream=True)

@@ -280,6 +280,7 @@ def send_response(
         headers=[
             (b":status", str(status_code).encode("ascii")),
             (b"content-type", content_type.encode("ascii")),
+            (b"server", b"aioquic"),
         ],
     )
     connection.send_data(stream_id=stream_id, data=data, end_stream=True)
