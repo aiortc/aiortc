@@ -36,6 +36,7 @@ class QuicSentPacket:
     is_ack_eliciting: bool
     is_crypto_packet: bool
     packet_number: int
+    packet_type: int
     sent_time: Optional[float] = None
     sent_bytes: int = 0
 
@@ -199,6 +200,7 @@ class QuicPacketBuilder:
             is_ack_eliciting=False,
             is_crypto_packet=False,
             packet_number=self._packet_number,
+            packet_type=packet_type,
         )
         self._packet_crypto = crypto
         self._packet_long_header = packet_long_header

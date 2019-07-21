@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 from aioquic import tls
+from aioquic.packet import PACKET_TYPE_INITIAL
 from aioquic.packet_builder import QuicSentPacket
 from aioquic.recovery import QuicPacketRecovery, QuicPacketSpace
 
@@ -34,6 +35,7 @@ class QuicPacketRecoveryTest(TestCase):
             is_ack_eliciting=True,
             is_crypto_packet=True,
             packet_number=0,
+            packet_type=PACKET_TYPE_INITIAL,
             sent_bytes=1280,
             sent_time=123.45,
         )

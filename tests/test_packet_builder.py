@@ -86,6 +86,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
+                    packet_type=PACKET_TYPE_INITIAL,
                     sent_bytes=1280,
                 )
             ],
@@ -133,6 +134,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
+                    packet_type=PACKET_TYPE_INITIAL,
                     sent_bytes=1280,
                 ),
                 QuicSentPacket(
@@ -141,6 +143,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=False,
                     packet_number=1,
+                    packet_type=PACKET_TYPE_ONE_RTT,
                     sent_bytes=1280,
                 ),
             ],
@@ -198,6 +201,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
+                    packet_type=PACKET_TYPE_INITIAL,
                     sent_bytes=244,
                 ),
                 QuicSentPacket(
@@ -206,6 +210,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=1,
+                    packet_type=PACKET_TYPE_HANDSHAKE,
                     sent_bytes=343,
                 ),
                 QuicSentPacket(
@@ -214,6 +219,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=2,
+                    packet_type=PACKET_TYPE_ONE_RTT,
                     sent_bytes=327,
                 ),
             ],
@@ -280,6 +286,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_ack_eliciting=True,
                     is_crypto_packet=True,
                     packet_number=0,
+                    packet_type=PACKET_TYPE_ONE_RTT,
                     sent_bytes=1280,
                 )
             ],
