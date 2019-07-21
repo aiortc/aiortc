@@ -1,5 +1,7 @@
 from unittest import TestCase
 
+from aioquic.configuration import QuicConfiguration
+from aioquic.events import StreamDataReceived
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, RequestReceived, ResponseReceived
 
@@ -113,6 +115,95 @@ class H3ConnectionTest(TestCase):
 
             # make third request -> dynamic table
             self._make_request(h3_client, h3_server)
+
+    def test_fragmented_frame(self):
+        class FakeQuicConnection:
+            def __init__(self, configuration):
+                self.configuration = configuration
+                self.stream_queue = []
+                self._next_stream_bidi = 0 if configuration.is_client else 2
+                self._next_stream_uni = 1 if configuration.is_client else 3
+
+            def get_next_available_stream_id(self, is_unidirectional=False):
+                if is_unidirectional:
+                    stream_id = self._next_stream_uni
+                    self._next_stream_uni += 4
+                else:
+                    stream_id = self._next_stream_bidi
+                    self._next_stream_bidi += 4
+                return stream_id
+
+            def send_stream_data(self, stream_id, data, end_stream=False):
+                # chop up data into individual bytes
+                for c in data:
+                    self.stream_queue.append(
+                        StreamDataReceived(
+                            data=bytes([c]), end_stream=False, stream_id=stream_id
+                        )
+                    )
+                if end_stream:
+                    self.stream_queue.append(
+                        StreamDataReceived(
+                            data=b"", end_stream=end_stream, stream_id=stream_id
+                        )
+                    )
+
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+
+        h3_client = H3Connection(quic_client)
+        h3_server = H3Connection(quic_server)
+
+        # send headers
+        stream_id = quic_client.get_next_available_stream_id()
+        h3_client.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"localhost"),
+                (b":path", b"/"),
+                (b"x-foo", b"client"),
+            ],
+        )
+        http_events = []
+        for event in quic_client.stream_queue:
+            http_events.extend(h3_server.handle_event(event))
+        quic_client.stream_queue.clear()
+        self.assertEqual(
+            http_events,
+            [
+                RequestReceived(
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/"),
+                        (b"x-foo", b"client"),
+                    ],
+                    stream_id=0,
+                    stream_ended=False,
+                )
+            ],
+        )
+
+        # send body
+        h3_client.send_data(stream_id=stream_id, data=b"hello", end_stream=True)
+        http_events = []
+        for event in quic_client.stream_queue:
+            http_events.extend(h3_server.handle_event(event))
+        quic_client.stream_queue.clear()
+        self.assertEqual(
+            http_events,
+            [
+                DataReceived(data=b"hello", stream_id=0, stream_ended=False),
+                DataReceived(data=b"", stream_id=0, stream_ended=True),
+            ],
+        )
 
     def test_uni_stream_type(self):
         with client_and_server(

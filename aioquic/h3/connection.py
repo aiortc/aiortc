@@ -177,9 +177,16 @@ class H3Connection:
             self._stream_buffers[stream_id] += data
         else:
             self._stream_buffers[stream_id] = data
-        consumed = 0
 
         buf = Buffer(data=self._stream_buffers[stream_id])
+        consumed = 0
+
+        # some peers (e.g. f5) end the stream with no data
+        if stream_ended and buf.eof() and (stream_id % 4 == 0):
+            http_events.append(
+                DataReceived(data=b"", stream_id=stream_id, stream_ended=True)
+            )
+
         while not buf.eof():
             # fetch stream type for unidirectional streams
             if (
