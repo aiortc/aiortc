@@ -1,8 +1,8 @@
 import logging
 from enum import IntEnum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
-from pylsqpack import Decoder, Encoder
+from pylsqpack import Decoder, Encoder, StreamBlocked
 
 import aioquic.events
 from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
@@ -86,7 +86,9 @@ class H3Connection:
         self._quic = quic
         self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
         self._encoder = Encoder()
+        self._stream_blocked: Set[int] = set()
         self._stream_buffers: Dict[int, bytes] = {}
+        self._stream_ended: Set[int] = set()
         self._stream_types: Dict[int, int] = {}
 
         self._local_control_stream_id: Optional[int] = None
@@ -177,9 +179,14 @@ class H3Connection:
             self._stream_buffers[stream_id] += data
         else:
             self._stream_buffers[stream_id] = data
+        if stream_ended:
+            self._stream_ended.add(stream_id)
+        if stream_id in self._stream_blocked:
+            return http_events
 
         buf = Buffer(data=self._stream_buffers[stream_id])
         consumed = 0
+        unblocked_streams: Set[int] = set()
 
         # some peers (e.g. f5) end the stream with no data
         if stream_ended and buf.eof() and (stream_id % 4 == 0):
@@ -231,9 +238,13 @@ class H3Connection:
                             )
                         )
                     elif frame_type == FrameType.HEADERS:
-                        decoder, headers = self._decoder.feed_header(
-                            stream_id, frame_data
-                        )
+                        try:
+                            decoder, headers = self._decoder.feed_header(
+                                stream_id, frame_data
+                            )
+                        except StreamBlocked:
+                            self._stream_blocked.add(stream_id)
+                            break
                         self._quic.send_stream_data(
                             self._local_decoder_stream_id, decoder
                         )
@@ -269,9 +280,28 @@ class H3Connection:
                     self._encoder.feed_decoder(data)
 
                 elif stream_id == self._peer_encoder_stream_id:
-                    self._decoder.feed_encoder(data)
+                    unblocked_streams.update(self._decoder.feed_encoder(data))
 
         # remove processed data from buffer
         self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
+
+        # process unblocked streams
+        for stream_id in unblocked_streams:
+            decoder, headers = self._decoder.resume_header(stream_id)
+            self._stream_blocked.discard(stream_id)
+            cls = ResponseReceived if self._is_client else RequestReceived
+            http_events.append(
+                cls(
+                    headers=headers,
+                    stream_id=stream_id,
+                    stream_ended=stream_id in self._stream_ended
+                    and not self._stream_buffers[stream_id],
+                )
+            )
+            http_events.extend(
+                self._receive_stream_data(
+                    stream_id, b"", stream_id in self._stream_ended
+                )
+            )
 
         return http_events

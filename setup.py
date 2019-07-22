@@ -46,6 +46,6 @@ setuptools.setup(
     install_requires=[
         'cryptography >= 2.5',
         'dataclasses; python_version < "3.7"',
-        'pylsqpack >= 0.1.1, < 0.2.0',
+        'pylsqpack >= 0.2.0, < 0.3.0',
     ],
 )

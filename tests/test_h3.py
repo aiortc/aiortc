@@ -1,3 +1,4 @@
+import binascii
 from unittest import TestCase
 
 from aioquic.configuration import QuicConfiguration
@@ -19,6 +20,36 @@ def h3_transfer(quic_sender, h3_receiver):
         http_events.extend(h3_receiver.handle_event(event))
         event = quic_receiver.next_event()
     return http_events
+
+
+class FakeQuicConnection:
+    def __init__(self, configuration):
+        self.configuration = configuration
+        self.stream_queue = []
+        self._next_stream_bidi = 0 if configuration.is_client else 2
+        self._next_stream_uni = 1 if configuration.is_client else 3
+
+    def get_next_available_stream_id(self, is_unidirectional=False):
+        if is_unidirectional:
+            stream_id = self._next_stream_uni
+            self._next_stream_uni += 4
+        else:
+            stream_id = self._next_stream_bidi
+            self._next_stream_bidi += 4
+        return stream_id
+
+    def send_stream_data(self, stream_id, data, end_stream=False):
+        # chop up data into individual bytes
+        for c in data:
+            self.stream_queue.append(
+                StreamDataReceived(
+                    data=bytes([c]), end_stream=False, stream_id=stream_id
+                )
+            )
+        if end_stream:
+            self.stream_queue.append(
+                StreamDataReceived(data=b"", end_stream=end_stream, stream_id=stream_id)
+            )
 
 
 class H3ConnectionTest(TestCase):
@@ -117,37 +148,6 @@ class H3ConnectionTest(TestCase):
             self._make_request(h3_client, h3_server)
 
     def test_fragmented_frame(self):
-        class FakeQuicConnection:
-            def __init__(self, configuration):
-                self.configuration = configuration
-                self.stream_queue = []
-                self._next_stream_bidi = 0 if configuration.is_client else 2
-                self._next_stream_uni = 1 if configuration.is_client else 3
-
-            def get_next_available_stream_id(self, is_unidirectional=False):
-                if is_unidirectional:
-                    stream_id = self._next_stream_uni
-                    self._next_stream_uni += 4
-                else:
-                    stream_id = self._next_stream_bidi
-                    self._next_stream_bidi += 4
-                return stream_id
-
-            def send_stream_data(self, stream_id, data, end_stream=False):
-                # chop up data into individual bytes
-                for c in data:
-                    self.stream_queue.append(
-                        StreamDataReceived(
-                            data=bytes([c]), end_stream=False, stream_id=stream_id
-                        )
-                    )
-                if end_stream:
-                    self.stream_queue.append(
-                        StreamDataReceived(
-                            data=b"", end_stream=end_stream, stream_id=stream_id
-                        )
-                    )
-
         quic_client = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=True)
         )
@@ -202,6 +202,60 @@ class H3ConnectionTest(TestCase):
             [
                 DataReceived(data=b"hello", stream_id=0, stream_ended=False),
                 DataReceived(data=b"", stream_id=0, stream_ended=True),
+            ],
+        )
+
+    def test_blocked_stream(self):
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        h3_client._receive_stream_data(
+            3,
+            binascii.unhexlify("0004170150000680020000074064091040bcc0000000faceb00c"),
+            False,
+        )
+        h3_client._receive_stream_data(7, b"\x02", False)
+        h3_client._receive_stream_data(11, b"\x03", False)
+        h3_client._receive_stream_data(0, binascii.unhexlify("01040280d910"), False)
+        h3_client._receive_stream_data(
+            0,
+            binascii.unhexlify(
+                "00408d796f752072656163686564206d766673742e6e65742c20726561636820"
+                "746865202f6563686f20656e64706f696e7420666f7220616e206563686f2072"
+                "6573706f6e7365207175657279202f3c6e756d6265723e20656e64706f696e74"
+                "7320666f722061207661726961626c652073697a6520726573706f6e73652077"
+                "6974682072616e646f6d206279746573"
+            ),
+            True,
+        )
+        self.assertEqual(
+            h3_client._receive_stream_data(
+                7,
+                binascii.unhexlify(
+                    "3fe101c696d07abe941094cb6d0a08017d403971966e32ca98b46f"
+                ),
+                False,
+            ),
+            [
+                ResponseReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"date", b"Mon, 22 Jul 2019 06:33:33 GMT"),
+                    ],
+                    stream_id=0,
+                    stream_ended=False,
+                ),
+                DataReceived(
+                    data=(
+                        b"you reached mvfst.net, reach the /echo endpoint for an "
+                        b"echo response query /<number> endpoints for a variable "
+                        b"size response with random bytes"
+                    ),
+                    stream_id=0,
+                    stream_ended=True,
+                ),
             ],
         )
 

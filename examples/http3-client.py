@@ -94,6 +94,7 @@ def run(url: str, legacy_http: bool, **kwargs) -> None:
                         headers += k + b": " + v + b"\r\n"
                     if headers:
                         sys.stderr.buffer.write(headers + b"\r\n")
+                        sys.stderr.buffer.flush()
                 if isinstance(http_event, DataReceived):
                     stream_ended = http_event.stream_ended
                     sys.stdout.buffer.write(http_event.data)
