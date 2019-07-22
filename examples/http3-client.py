@@ -1,21 +1,134 @@
 import argparse
+import asyncio
 import logging
 import pickle
 import socket
 import sys
 import time
-from typing import Union
+from typing import Dict, List, Optional, Text, Union, cast
 from urllib.parse import urlparse
 
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, ResponseReceived
+from aioquic.h3.events import DataReceived, Event, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.connection import QuicConnection
+from aioquic.quic.connection import NetworkAddress, QuicConnection
+from aioquic.quic.events import ConnectionTerminated
+from aioquic.tls import SessionTicketHandler
 
 logger = logging.getLogger("client")
 
 HttpConnection = Union[H0Connection, H3Connection]
+
+
+class HttpClient(asyncio.DatagramProtocol):
+    def __init__(
+        self,
+        *,
+        configuration: QuicConfiguration,
+        server_addr: NetworkAddress,
+        session_ticket_handler: Optional[SessionTicketHandler] = None
+    ):
+        self._closed = asyncio.Event()
+        self._connect_called = False
+        self._http: HttpConnection
+        self._loop = asyncio.get_event_loop()
+        self._quic = QuicConnection(configuration=configuration)
+        self._server_addr = server_addr
+        self._timer: Optional[asyncio.TimerHandle] = None
+        self._timer_at = 0.0
+
+        self._request_events: Dict[int, List[Event]] = {}
+        self._request_waiter: Dict[int, asyncio.Future[List[Event]]] = {}
+
+        if configuration.alpn_protocols[0].startswith("hq-"):
+            self._http = H0Connection(self._quic)
+        else:
+            self._http = H3Connection(self._quic)
+
+    async def close(self) -> None:
+        """
+        Close the connection.
+        """
+        self._quic.close()
+        self._consume_events()
+        await self._closed.wait()
+
+    async def get(self, path: str) -> List[Event]:
+        """
+        Perform a GET request.
+        """
+        if not self._connect_called:
+            self._quic.connect(self._server_addr, now=self._loop.time())
+            self._connect_called = True
+
+        stream_id = self._quic.get_next_available_stream_id()
+        self._http.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", self._quic.configuration.server_name.encode("utf8")),
+                (b":path", path.encode("utf8")),
+            ],
+        )
+        self._http.send_data(stream_id=stream_id, data=b"", end_stream=True)
+
+        waiter = self._loop.create_future()
+        self._request_events[stream_id] = []
+        self._request_waiter[stream_id] = waiter
+        self._consume_events()
+
+        return await asyncio.shield(waiter)
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
+
+    def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
+        self._quic.receive_datagram(cast(bytes, data), addr, self._loop.time())
+        self._consume_events()
+
+    def _consume_events(self) -> None:
+        # process events
+        event = self._quic.next_event()
+        while event is not None:
+            #  pass event to the HTTP layer
+            for http_event in self._http.handle_event(event):
+                if (
+                    isinstance(http_event, (ResponseReceived, DataReceived))
+                    and http_event.stream_id in self._request_events
+                ):
+                    self._request_events[http_event.stream_id].append(http_event)
+                    if http_event.stream_ended:
+                        request_waiter = self._request_waiter.pop(http_event.stream_id)
+                        request_waiter.set_result(
+                            self._request_events.pop(http_event.stream_id)
+                        )
+
+            if isinstance(event, ConnectionTerminated):
+                self._closed.set()
+
+            event = self._quic.next_event()
+
+        # send datagrams
+        for data, addr in self._quic.datagrams_to_send(now=self._loop.time()):
+            self._transport.sendto(data, addr)
+
+        # re-arm timer
+        timer_at = self._quic.get_timer()
+        if self._timer is not None and self._timer_at != timer_at:
+            self._timer.cancel()
+            self._timer = None
+        if self._timer is None and timer_at is not None:
+            self._timer = self._loop.call_at(timer_at, self._handle_timer)
+        self._timer_at = timer_at
+
+    def _handle_timer(self) -> None:
+        now = max(self._timer_at, self._loop.time())
+        self._timer = None
+        self._timer_at = None
+        self._quic.handle_timer(now=now)
+        self._consume_events()
 
 
 def save_session_ticket(ticket):
@@ -29,7 +142,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-def run(url: str, legacy_http: bool, **kwargs) -> None:
+async def run(url: str, legacy_http: bool, **kwargs) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
@@ -40,74 +153,58 @@ def run(url: str, legacy_http: bool, **kwargs) -> None:
         server_name = parsed.netloc
         port = 443
 
-    # prepare socket
-    server_addr = (socket.gethostbyname(server_name), port)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # lookup remote address
+    infos = await loop.getaddrinfo(server_name, port, type=socket.SOCK_DGRAM)
+    server_addr = infos[0][4]
+    if len(server_addr) == 2:
+        server_addr = ("::ffff:" + server_addr[0], server_addr[1], 0, 0)
 
     # prepare QUIC connection
-    quic = QuicConnection(
-        configuration=QuicConfiguration(
-            alpn_protocols=["hq-22" if legacy_http else "h3-22"],
-            is_client=True,
-            server_name=server_name,
-            **kwargs
+    _, client = await loop.create_datagram_endpoint(
+        lambda: HttpClient(
+            configuration=QuicConfiguration(
+                alpn_protocols=["hq-22" if legacy_http else "h3-22"],
+                is_client=True,
+                server_name=server_name,
+                **kwargs
+            ),
+            server_addr=server_addr,
+            session_ticket_handler=save_session_ticket,
         ),
-        session_ticket_handler=save_session_ticket,
+        local_addr=("::", 0),
     )
-    quic.connect(server_addr, now=time.time())
+    client = cast(HttpClient, client)
 
-    # send request
-    http: HttpConnection
-    if legacy_http:
-        http = H0Connection(quic)
-    else:
-        http = H3Connection(quic)
-    stream_id = quic.get_next_available_stream_id()
-    http.send_headers(
-        stream_id=stream_id,
-        headers=[
-            (b":method", b"GET"),
-            (b":scheme", parsed.scheme.encode("utf8")),
-            (b":authority", parsed.netloc.encode("utf8")),
-            (b":path", parsed.path.encode("utf8")),
-            (b"user-agent", b"aioquic"),
-        ],
+    # perform request
+    start = time.time()
+    http_events = await client.get(parsed.path)
+    elapsed = time.time() - start
+
+    # print speed
+    octets = 0
+    for http_event in http_events:
+        if isinstance(http_event, DataReceived):
+            octets += len(http_event.data)
+    logger.info(
+        "Received %d bytes in %.1f s (%.3f Mbps)"
+        % (octets, elapsed, octets * 8 / elapsed / 1000000)
     )
-    http.send_data(stream_id=stream_id, data=b"", end_stream=True)
-    for data, addr in quic.datagrams_to_send(now=time.time()):
-        sock.sendto(data, addr)
 
-    # handle events
-    stream_ended = False
-    while not stream_ended:
-        data, addr = sock.recvfrom(2048)
-        quic.receive_datagram(data, addr, now=time.time())
+    # print response
+    for http_event in http_events:
+        if isinstance(http_event, ResponseReceived):
+            headers = b""
+            for k, v in http_event.headers:
+                headers += k + b": " + v + b"\r\n"
+            if headers:
+                sys.stderr.buffer.write(headers + b"\r\n")
+                sys.stderr.buffer.flush()
+        elif isinstance(http_event, DataReceived):
+            sys.stdout.buffer.write(http_event.data)
+            sys.stdout.buffer.flush()
 
-        # process events
-        event = quic.next_event()
-        while event is not None:
-            for http_event in http.handle_event(event):
-                if isinstance(http_event, ResponseReceived):
-                    stream_ended = http_event.stream_ended
-                    headers = b""
-                    for k, v in http_event.headers:
-                        headers += k + b": " + v + b"\r\n"
-                    if headers:
-                        sys.stderr.buffer.write(headers + b"\r\n")
-                        sys.stderr.buffer.flush()
-                if isinstance(http_event, DataReceived):
-                    stream_ended = http_event.stream_ended
-                    sys.stdout.buffer.write(http_event.data)
-            event = quic.next_event()
-
-        # send datagrams
-        for data, addr in quic.datagrams_to_send(now=time.time()):
-            sock.sendto(data, addr)
-
-    # close connection
-    quic.close()
-    for data, addr in quic.datagrams_to_send(now=time.time()):
-        sock.sendto(data, addr)
+    # close QUIC connection
+    await client.close()
 
 
 if __name__ == "__main__":
@@ -151,9 +248,12 @@ if __name__ == "__main__":
         except FileNotFoundError:
             pass
 
-    run(
-        url=args.url,
-        legacy_http=args.legacy_http,
-        secrets_log_file=secrets_log_file,
-        session_ticket=session_ticket,
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(
+        run(
+            url=args.url,
+            legacy_http=args.legacy_http,
+            secrets_log_file=secrets_log_file,
+            session_ticket=session_ticket,
+        )
     )
