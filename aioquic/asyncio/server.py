@@ -4,15 +4,15 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cast
 
 from ..buffer import Buffer
-from ..configuration import QuicConfiguration
-from ..connection import NetworkAddress, QuicConnection
-from ..packet import (
+from ..quic.configuration import QuicConfiguration
+from ..quic.connection import NetworkAddress, QuicConnection
+from ..quic.packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
     encode_quic_version_negotiation,
     pull_quic_header,
 )
-from ..retry import QuicRetryTokenHandler
+from ..quic.retry import QuicRetryTokenHandler
 from ..tls import SessionTicketFetcher, SessionTicketHandler
 from .protocol import QuicConnectionProtocol, QuicStreamHandler
 

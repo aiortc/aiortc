@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Deque, Dict, FrozenSet, List, Optional, Sequence, Tuple, cast
 
-from . import events, tls
-from .buffer import Buffer, BufferReadError, size_uint_var
+from .. import tls
+from ..buffer import Buffer, BufferReadError, size_uint_var
+from . import events
 from .configuration import QuicConfiguration
 from .crypto import CryptoError, CryptoPair
 from .packet import (

@@ -4,9 +4,8 @@ from typing import Dict, List, Optional, Set
 
 from pylsqpack import Decoder, Encoder, StreamBlocked
 
-import aioquic.events
+import aioquic.quic.events
 from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
-from aioquic.connection import QuicConnection, stream_is_unidirectional
 from aioquic.h3.events import (
     DataReceived,
     Event,
@@ -14,6 +13,7 @@ from aioquic.h3.events import (
     RequestReceived,
     ResponseReceived,
 )
+from aioquic.quic.connection import QuicConnection, stream_is_unidirectional
 
 logger = logging.getLogger("http3")
 
@@ -101,13 +101,13 @@ class H3Connection:
 
         self._init_connection()
 
-    def handle_event(self, event: aioquic.events.Event) -> List[Event]:
+    def handle_event(self, event: aioquic.quic.events.Event) -> List[Event]:
         """
         Handle a QUIC event and return a list of HTTP events.
         """
         http_events: List[Event] = []
 
-        if isinstance(event, aioquic.events.StreamDataReceived):
+        if isinstance(event, aioquic.quic.events.StreamDataReceived):
             http_events.extend(
                 self._receive_stream_data(event.stream_id, event.data, event.end_stream)
             )

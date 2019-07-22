@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aioquic.retry import QuicRetryTokenHandler
+from aioquic.quic.retry import QuicRetryTokenHandler
 
 
 class QuicRetryTokenHandlerTest(TestCase):

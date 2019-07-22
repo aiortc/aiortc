@@ -1,8 +1,8 @@
 from unittest import TestCase
 
-from aioquic.packet import QuicStreamFrame
-from aioquic.packet_builder import QuicDeliveryState
-from aioquic.stream import QuicStream
+from aioquic.quic.packet import QuicStreamFrame
+from aioquic.quic.packet_builder import QuicDeliveryState
+from aioquic.quic.stream import QuicStream
 
 
 class QuicStreamTest(TestCase):

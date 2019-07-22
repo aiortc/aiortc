@@ -1,14 +1,14 @@
 from unittest import TestCase
 
-from aioquic.crypto import CryptoPair
-from aioquic.packet import (
+from aioquic.quic.crypto import CryptoPair
+from aioquic.quic.packet import (
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_ONE_RTT,
     QuicFrameType,
     QuicProtocolVersion,
 )
-from aioquic.packet_builder import (
+from aioquic.quic.packet_builder import (
     QuicPacketBuilder,
     QuicPacketBuilderStop,
     QuicSentPacket,

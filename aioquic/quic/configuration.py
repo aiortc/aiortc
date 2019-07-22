@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, TextIO
 
-from . import tls
+from ..tls import SessionTicket
 from .packet import QuicProtocolVersion
 
 
@@ -14,7 +14,7 @@ class QuicConfiguration:
     private_key: Any = None
     secrets_log_file: TextIO = None
     server_name: Optional[str] = None
-    session_ticket: Optional[tls.SessionTicket] = None
+    session_ticket: Optional[SessionTicket] = None
     supported_versions: List[QuicProtocolVersion] = field(
         default_factory=lambda: [QuicProtocolVersion.DRAFT_22]
     )

@@ -3,8 +3,8 @@ import ipaddress
 import socket
 from typing import AsyncGenerator, List, Optional, TextIO, cast
 
-from ..configuration import QuicConfiguration
-from ..connection import QuicConnection
+from ..quic.configuration import QuicConfiguration
+from ..quic.connection import QuicConnection
 from ..tls import SessionTicket, SessionTicketHandler
 from .compat import asynccontextmanager
 from .protocol import QuicConnectionProtocol, QuicStreamHandler

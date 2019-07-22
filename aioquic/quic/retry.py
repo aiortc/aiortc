@@ -4,7 +4,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from aioquic.connection import NetworkAddress
+from .connection import NetworkAddress
 
 
 def encode_address(addr: NetworkAddress) -> bytes:

@@ -36,6 +36,7 @@ class MockCrypto:
 class MockPylsqpack:
     Decoder = None
     Encoder = None
+    StreamBlocked = None
 
 
 sys.modules.update({

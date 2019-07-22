@@ -2,7 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
-from .buffer import Buffer, size_uint_var
+from ..buffer import Buffer, size_uint_var
+from ..tls import Epoch
 from .crypto import CryptoPair
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -13,7 +14,6 @@ from .packet import (
     QuicFrameType,
     is_long_header,
 )
-from .tls import Epoch
 
 PACKET_MAX_SIZE = 1280
 PACKET_LENGTH_SEND_SIZE = 2

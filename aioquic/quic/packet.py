@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import List, Optional, Tuple
 
-from .buffer import Buffer
+from ..buffer import Buffer
+from ..tls import pull_block, push_block
 from .rangeset import RangeSet
-from .tls import pull_block, push_block
 
 PACKET_LONG_HEADER = 0x80
 PACKET_FIXED_BIT = 0x40

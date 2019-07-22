@@ -7,11 +7,11 @@ import time
 from typing import Union
 from urllib.parse import urlparse
 
-from aioquic.configuration import QuicConfiguration
-from aioquic.connection import QuicConnection
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, ResponseReceived
+from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import QuicConnection
 
 logger = logging.getLogger("client")
 

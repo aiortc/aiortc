@@ -1,8 +1,8 @@
 from typing import Dict, List, Tuple
 
-import aioquic.events
-from aioquic.connection import QuicConnection
+import aioquic.quic.events
 from aioquic.h3.events import DataReceived, Event, RequestReceived, ResponseReceived
+from aioquic.quic.connection import QuicConnection
 
 
 class H0Connection:
@@ -15,11 +15,11 @@ class H0Connection:
         self._is_client = quic.configuration.is_client
         self._quic = quic
 
-    def handle_event(self, event: aioquic.events.Event) -> List[Event]:
+    def handle_event(self, event: aioquic.quic.events.Event) -> List[Event]:
         http_events: List[Event] = []
 
         if (
-            isinstance(event, aioquic.events.StreamDataReceived)
+            isinstance(event, aioquic.quic.events.StreamDataReceived)
             and (event.stream_id % 4) == 0
         ):
             data = event.data

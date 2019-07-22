@@ -1,9 +1,9 @@
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.packet import PACKET_TYPE_INITIAL
-from aioquic.packet_builder import QuicSentPacket
-from aioquic.recovery import QuicPacketRecovery, QuicPacketSpace
+from aioquic.quic.packet import PACKET_TYPE_INITIAL
+from aioquic.quic.packet_builder import QuicSentPacket
+from aioquic.quic.recovery import QuicPacketRecovery, QuicPacketSpace
 
 
 def send_probe():

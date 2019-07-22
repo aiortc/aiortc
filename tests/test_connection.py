@@ -5,17 +5,18 @@ import io
 import time
 from unittest import TestCase
 
-from aioquic import events, tls
+from aioquic import tls
 from aioquic.buffer import Buffer, encode_uint_var
-from aioquic.configuration import QuicConfiguration
-from aioquic.connection import (
+from aioquic.quic import events
+from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import (
     QuicConnection,
     QuicConnectionError,
     QuicNetworkPath,
     QuicReceiveContext,
 )
-from aioquic.crypto import CryptoPair
-from aioquic.packet import (
+from aioquic.quic.crypto import CryptoPair
+from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     QuicErrorCode,
     QuicFrameType,
@@ -23,7 +24,7 @@ from aioquic.packet import (
     encode_quic_retry,
     encode_quic_version_negotiation,
 )
-from aioquic.packet_builder import QuicDeliveryState, QuicPacketBuilder
+from aioquic.quic.packet_builder import QuicDeliveryState, QuicPacketBuilder
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY
 

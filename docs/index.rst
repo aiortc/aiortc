@@ -24,6 +24,6 @@ APIs:
    :maxdepth: 2
 
    quic
-   http3
+   h3
    asyncio
    license

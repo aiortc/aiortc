@@ -10,20 +10,20 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
-import aioquic.events
+import aioquic.quic.events
 from aioquic.buffer import Buffer
-from aioquic.configuration import QuicConfiguration
-from aioquic.connection import NetworkAddress, QuicConnection
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import RequestReceived
-from aioquic.packet import (
+from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import NetworkAddress, QuicConnection
+from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
     encode_quic_version_negotiation,
     pull_quic_header,
 )
-from aioquic.retry import QuicRetryTokenHandler
+from aioquic.quic.retry import QuicRetryTokenHandler
 from aioquic.tls import SessionTicket, SessionTicketFetcher, SessionTicketHandler
 
 try:
@@ -148,7 +148,7 @@ class HttpServer(asyncio.DatagramProtocol):
         # process events
         event = connection.next_event()
         while event is not None:
-            if isinstance(event, aioquic.events.ConnectionTerminated):
+            if isinstance(event, aioquic.quic.events.ConnectionTerminated):
                 # remove the connection
                 for cid, conn in list(self._connections.items()):
                     if conn == connection:
@@ -156,14 +156,14 @@ class HttpServer(asyncio.DatagramProtocol):
                 self._http.pop(connection, None)
                 self._timer.pop(connection, None)
                 return
-            elif isinstance(event, aioquic.events.ProtocolNegotiated):
+            elif isinstance(event, aioquic.quic.events.ProtocolNegotiated):
                 if event.alpn_protocol == "h3-22":
                     self._http[connection] = H3Connection(connection)
                 elif event.alpn_protocol == "hq-22":
                     self._http[connection] = H0Connection(connection)
-            elif isinstance(event, aioquic.events.ConnectionIdIssued):
+            elif isinstance(event, aioquic.quic.events.ConnectionIdIssued):
                 self._connections[event.connection_id] = connection
-            elif isinstance(event, aioquic.events.ConnectionIdRetired):
+            elif isinstance(event, aioquic.quic.events.ConnectionIdRetired):
                 assert self._connections[event.connection_id] == connection
                 del self._connections[event.connection_id]
 

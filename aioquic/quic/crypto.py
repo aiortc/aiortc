@@ -1,9 +1,9 @@
 import binascii
 from typing import Optional, Tuple
 
-from ._crypto import AEAD, CryptoError, HeaderProtection
+from .._crypto import AEAD, CryptoError, HeaderProtection
+from ..tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
 from .packet import decode_packet_number, is_long_header
-from .tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
 
 CIPHER_SUITES = {
     CipherSuite.AES_128_GCM_SHA256: (b"aes-128-ecb", b"aes-128-gcm"),

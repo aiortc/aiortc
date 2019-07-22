@@ -8,7 +8,7 @@ the concurrency model you are using.
 Connection
 ----------
 
-.. automodule:: aioquic.connection
+.. automodule:: aioquic.quic.connection
 
     .. autoclass:: QuicConnection
         :members:
@@ -16,7 +16,7 @@ Connection
 Events
 ------
 
-.. automodule:: aioquic.events
+.. automodule:: aioquic.quic.events
 
     .. autoclass:: ConnectionTerminated
         :members:

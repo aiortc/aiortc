@@ -1,8 +1,8 @@
 import asyncio
 from typing import Any, Callable, Dict, Optional, Text, Tuple, Union, cast
 
-from .. import events
-from ..connection import NetworkAddress, QuicConnection
+from ..quic import events
+from ..quic.connection import NetworkAddress, QuicConnection
 
 QuicConnectionIdHandler = Callable[[bytes], None]
 QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]

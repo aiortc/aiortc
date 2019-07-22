@@ -172,7 +172,7 @@ class HighLevelTest(TestCase):
         self.assertEqual(response, b"gnip")
         server.close()
 
-    @patch("aioquic.retry.QuicRetryTokenHandler.validate_token")
+    @patch("aioquic.quic.retry.QuicRetryTokenHandler.validate_token")
     def test_connect_and_serve_with_stateless_retry_bad(self, mock_validate):
         mock_validate.side_effect = ValueError("Decryption failed.")
 

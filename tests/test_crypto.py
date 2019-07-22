@@ -3,13 +3,13 @@ import os
 from unittest import TestCase, skipIf
 
 from aioquic.buffer import Buffer
-from aioquic.crypto import (
+from aioquic.quic.crypto import (
     INITIAL_CIPHER_SUITE,
     CryptoError,
     CryptoPair,
     derive_key_iv_hp,
 )
-from aioquic.packet import PACKET_FIXED_BIT
+from aioquic.quic.packet import PACKET_FIXED_BIT
 from aioquic.tls import CipherSuite
 
 CHACHA20_CLIENT_PACKET_NUMBER = 2
