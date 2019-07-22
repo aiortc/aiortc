@@ -12,21 +12,26 @@ from enum import Flag
 from typing import Optional
 
 from aioquic.asyncio import connect
+from aioquic.h3.connection import H3Connection
 
 
 class Result(Flag):
-    V = 1
-    H = 2
-    D = 4
-    C = 8
-    R = 16
-    Z = 32
-    S = 64
-    # M = 128
-    # B = 256
-    U = 512
-    # 3 = 1024
-    P = 2048
+    V = 0x0001
+    H = 0x0002
+    D = 0x0004
+    C = 0x0008
+    R = 0x0010
+    Z = 0x0020
+    S = 0x0040
+    M = 0x0080
+    B = 0x0100
+    U = 0x0200
+    P = 0x0400
+    E = 0x0800
+    T = 0x1000
+    three = 0x2000
+    d = 0x4000
+    p = 0x8000
 
     def __str__(self):
         flags = sorted(
@@ -62,7 +67,7 @@ CONFIGS = [
     Config("gquic", "quic.rocks", 4433, 4433, "/"),
     Config("lsquic", "http3-test.litespeedtech.com", 4433, 4434, None),
     Config("mvfst", "fb.mvfst.net", 4433, 4434, "/"),
-    Config("ngtcp2", "nghttp2.org", 4433, 4434, None),
+    Config("ngtcp2", "nghttp2.org", 4433, 4434, "/"),
     Config("ngx_quic", "cloudflare-quic.com", 443, 443, None),
     Config("pandora", "pandora.cm.in.tum.de", 4433, 4434, "/"),
     Config("picoquic", "test.privateoctopus.com", 4433, 4434, "/"),
@@ -81,6 +86,25 @@ async def http_request(connection, path):
     reader, writer = await connection.create_stream()
     writer.write(("GET %s\r\n" % path).encode("utf8"))
     writer.write_eof()
+
+    return await reader.read()
+
+
+async def http3_request(connection, authority, path):
+    reader, writer = await connection.create_stream()
+    stream_id = writer.get_extra_info("stream_id")
+
+    http = H3Connection(connection._connection)
+    http.send_headers(
+        stream_id=stream_id,
+        headers=[
+            (b":method", b"GET"),
+            (b":scheme", b"https"),
+            (b":authority", authority.encode("utf8")),
+            (b":path", path.encode("utf8")),
+        ],
+    )
+    http.send_data(stream_id=stream_id, data=b"", end_stream=True)
 
     return await reader.read()
 
@@ -108,16 +132,27 @@ async def test_stateless_retry(config, **kwargs):
             config.result |= Result.S
 
 
-async def test_data_transfer(config, **kwargs):
+async def test_http_0(config, **kwargs):
     if config.path is None:
         return
 
+    kwargs["alpn_protocols"] = ["hq-22"]
     async with connect(config.host, config.port, **kwargs) as connection:
-        response1 = await http_request(connection, config.path)
-        response2 = await http_request(connection, config.path)
-
-        if response1 and response2:
+        response = await http_request(connection, config.path)
+        if response:
             config.result |= Result.D
+
+
+async def test_http_3(config, **kwargs):
+    if config.path is None:
+        return
+
+    kwargs["alpn_protocols"] = ["h3-22"]
+    async with connect(config.host, config.port, **kwargs) as connection:
+        response = await http3_request(connection, config.host, config.path)
+        if response:
+            config.result |= Result.D
+            config.result |= Result.three
 
 
 async def test_session_resumption(config, **kwargs):
@@ -143,13 +178,13 @@ async def test_session_resumption(config, **kwargs):
         ) as connection:
             await connection.ping()
 
-        # check session was resumed
-        if connection._connection.tls.session_resumed:
-            config.result |= Result.R
+            # check session was resumed
+            if connection._connection.tls.session_resumed:
+                config.result |= Result.R
 
-        # check early data was accepted
-        if connection._connection.tls.early_data_accepted:
-            config.result |= Result.Z
+            # check early data was accepted
+            if connection._connection.tls.early_data_accepted:
+                config.result |= Result.Z
 
 
 async def test_key_update(config, **kwargs):
@@ -177,16 +212,14 @@ async def test_spin_bit(config, **kwargs):
 
 
 def print_result(config: Config) -> None:
-    print("%s%s%s" % (config.name, " " * (20 - len(config.name)), config.result))
+    result = str(config.result).replace("three", "3")
+    result = result[0:7] + " " + result[7:13] + " " + result[13:]
+    print("%s%s%s" % (config.name, " " * (20 - len(config.name)), result))
 
 
-async def run(only=None, **kwargs) -> None:
-    configs = list(filter(lambda x: not only or x.name == only, CONFIGS))
-
+async def run(configs, tests, **kwargs) -> None:
     for config in configs:
-        for test_name, test_func in filter(
-            lambda x: x[0].startswith("test_"), globals().items()
-        ):
+        for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (config.name, test_name))
             try:
                 await asyncio.wait_for(test_func(config, **kwargs), timeout=5)
@@ -205,8 +238,11 @@ async def run(only=None, **kwargs) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC client")
     parser.add_argument(
-        "--only", type=str, help="only test against the specified implementation."
+        "--implementation",
+        type=str,
+        help="only test against the specified implementation.",
     )
+    parser.add_argument("--test", type=str, help="only run the specifed test.")
     parser.add_argument(
         "-l",
         "--secrets-log",
@@ -224,7 +260,20 @@ if __name__ == "__main__":
     else:
         secrets_log_file = None
 
+    # determine what to run
+    configs = CONFIGS
+    tests = list(filter(lambda x: x[0].startswith("test_"), globals().items()))
+    if args.implementation:
+        configs = list(filter(lambda x: x.name == args.implementation, configs))
+    if args.test:
+        tests = list(filter(lambda x: x[0] == args.test, tests))
+
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        run(alpn_protocols=["hq-22"], only=args.only, secrets_log_file=secrets_log_file)
+        run(
+            alpn_protocols=["hq-22", "h3-22"],
+            configs=configs,
+            tests=tests,
+            secrets_log_file=secrets_log_file,
+        )
     )
