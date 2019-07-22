@@ -9,6 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Flag
+from typing import Optional
 
 from aioquic.asyncio import connect
 
@@ -49,28 +50,29 @@ class Config:
     name: str
     host: str
     port: int
+    retry_port: Optional[int]
     path: str
     result: Result = field(default_factory=lambda: Result(0))
 
 
 CONFIGS = [
-    Config("aioquic", "quic.aiortc.org", 4434, "/"),
-    Config("ats", "quic.ogre.com", 4434, "/"),
-    Config("f5", "f5quic.com", 4433, "/"),
-    Config("gquic", "quic.rocks", 4433, "/"),
-    Config("lsquic", "http3-test.litespeedtech.com", 4434, None),
-    Config("mvfst", "fb.mvfst.net", 4433, "/"),
-    Config("ngtcp2", "nghttp2.org", 4434, None),
-    Config("ngx_quic", "cloudflare-quic.com", 443, None),
-    Config("pandora", "pandora.cm.in.tum.de", 4433, "/"),
-    Config("picoquic", "test.privateoctopus.com", 4434, "/"),
-    Config("quant", "quant.eggert.org", 4434, "/"),
-    Config("quic-go", "quic.seemann.io", 443, "/"),
-    Config("quiche", "quic.tech", 4433, "/"),
-    Config("quicker", "quicker.edm.uhasselt.be", 4433, "/"),
-    Config("quicly", "kazuhooku.com", 4434, "/"),
-    Config("quinn", "ralith.com", 4433, "/"),
-    Config("winquic", "quic.westus.cloudapp.azure.com", 4434, "/"),
+    Config("aioquic", "quic.aiortc.org", 4433, 4434, "/"),
+    Config("ats", "quic.ogre.com", 4433, 4434, "/"),
+    Config("f5", "f5quic.com", 4433, 4433, "/"),
+    Config("gquic", "quic.rocks", 4433, 4433, "/"),
+    Config("lsquic", "http3-test.litespeedtech.com", 4433, 4434, None),
+    Config("mvfst", "fb.mvfst.net", 4433, 4434, "/"),
+    Config("ngtcp2", "nghttp2.org", 4433, 4434, None),
+    Config("ngx_quic", "cloudflare-quic.com", 443, 443, None),
+    Config("pandora", "pandora.cm.in.tum.de", 4433, 4434, "/"),
+    Config("picoquic", "test.privateoctopus.com", 4433, 4434, "/"),
+    Config("quant", "quant.eggert.org", 4433, 4434, "/"),
+    Config("quic-go", "quic.seemann.io", 443, 443, "/"),
+    Config("quiche", "quic.tech", 4433, 4433, "/"),
+    Config("quicker", "quicker.edm.uhasselt.be", 4433, None, "/"),
+    Config("quicly", "kazuhooku.com", 4433, 4434, "/"),
+    Config("quinn", "ralith.com", 4433, 4434, "/"),
+    Config("winquic", "quic.westus.cloudapp.azure.com", 4433, 4434, "/"),
 ]
 
 
@@ -87,16 +89,23 @@ async def test_version_negotiation(config, **kwargs):
     async with connect(
         config.host, config.port, protocol_version=0x1A2A3A4A, **kwargs
     ) as connection:
+        await connection.ping()
         if connection._connection._version_negotiation_count == 1:
             config.result |= Result.V
 
 
 async def test_handshake_and_close(config, **kwargs):
     async with connect(config.host, config.port, **kwargs) as connection:
+        await connection.ping()
         config.result |= Result.H
+    config.result |= Result.C
+
+
+async def test_stateless_retry(config, **kwargs):
+    async with connect(config.host, config.retry_port, **kwargs) as connection:
+        await connection.ping()
         if connection._connection._stateless_retry_count == 1:
             config.result |= Result.S
-    config.result |= Result.C
 
 
 async def test_data_transfer(config, **kwargs):
