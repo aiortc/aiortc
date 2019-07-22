@@ -33,7 +33,9 @@ class HttpClient(asyncio.DatagramProtocol):
         self._connect_called = False
         self._http: HttpConnection
         self._loop = asyncio.get_event_loop()
-        self._quic = QuicConnection(configuration=configuration)
+        self._quic = QuicConnection(
+            configuration=configuration, session_ticket_handler=session_ticket_handler
+        )
         self._server_addr = server_addr
         self._timer: Optional[asyncio.TimerHandle] = None
         self._timer_at = 0.0
