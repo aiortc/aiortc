@@ -271,8 +271,9 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(stream_id, 2)
             quic_client.send_stream_data(stream_id, b"\x09")
             self.assertEqual(h3_transfer(quic_client, h3_server), [])
-            self.assertEqual(h3_server._stream_buffers, {2: b""})
-            self.assertEqual(h3_server._stream_types, {2: 9})
+            self.assertEqual(list(h3_server._stream.keys()), [2])
+            self.assertEqual(h3_server._stream[2].buffer, b"")
+            self.assertEqual(h3_server._stream[2].stream_type, 9)
 
             # unknown stream type 64, one byte at a time
             stream_id = quic_client.get_next_available_stream_id(is_unidirectional=True)
@@ -280,10 +281,16 @@ class H3ConnectionTest(TestCase):
 
             quic_client.send_stream_data(stream_id, b"\x40")
             self.assertEqual(h3_transfer(quic_client, h3_server), [])
-            self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b"\x40"})
-            self.assertEqual(h3_server._stream_types, {2: 9})
+            self.assertEqual(list(h3_server._stream.keys()), [2, 6])
+            self.assertEqual(h3_server._stream[2].buffer, b"")
+            self.assertEqual(h3_server._stream[2].stream_type, 9)
+            self.assertEqual(h3_server._stream[6].buffer, b"\x40")
+            self.assertEqual(h3_server._stream[6].stream_type, None)
 
             quic_client.send_stream_data(stream_id, b"\x40")
             self.assertEqual(h3_transfer(quic_client, h3_server), [])
-            self.assertEqual(h3_server._stream_buffers, {2: b"", 6: b""})
-            self.assertEqual(h3_server._stream_types, {2: 9, 6: 64})
+            self.assertEqual(list(h3_server._stream.keys()), [2, 6])
+            self.assertEqual(h3_server._stream[2].buffer, b"")
+            self.assertEqual(h3_server._stream[2].stream_type, 9)
+            self.assertEqual(h3_server._stream[6].buffer, b"")
+            self.assertEqual(h3_server._stream[6].stream_type, 64)

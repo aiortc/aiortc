@@ -71,6 +71,14 @@ def parse_settings(data: bytes) -> Dict[int, int]:
     return dict(settings)
 
 
+class H3Stream:
+    def __init__(self):
+        self.blocked = False
+        self.buffer = b""
+        self.ended = False
+        self.stream_type = None
+
+
 class H3Connection:
     """
     A low-level HTTP/3 connection object.
@@ -86,10 +94,7 @@ class H3Connection:
         self._quic = quic
         self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
         self._encoder = Encoder()
-        self._stream_blocked: Set[int] = set()
-        self._stream_buffers: Dict[int, bytes] = {}
-        self._stream_ended: Set[int] = set()
-        self._stream_types: Dict[int, int] = {}
+        self._stream: Dict[int, H3Stream] = {}
 
         self._local_control_stream_id: Optional[int] = None
         self._local_decoder_stream_id: Optional[int] = None
@@ -175,16 +180,16 @@ class H3Connection:
     ) -> List[Event]:
         http_events: List[Event] = []
 
-        if stream_id in self._stream_buffers:
-            self._stream_buffers[stream_id] += data
-        else:
-            self._stream_buffers[stream_id] = data
+        if stream_id not in self._stream:
+            self._stream[stream_id] = H3Stream()
+        stream = self._stream[stream_id]
+        stream.buffer += data
         if stream_ended:
-            self._stream_ended.add(stream_id)
-        if stream_id in self._stream_blocked:
+            stream.ended = True
+        if stream.blocked:
             return http_events
 
-        buf = Buffer(data=self._stream_buffers[stream_id])
+        buf = Buffer(data=stream.buffer)
         consumed = 0
         unblocked_streams: Set[int] = set()
 
@@ -196,26 +201,22 @@ class H3Connection:
 
         while not buf.eof():
             # fetch stream type for unidirectional streams
-            if (
-                stream_is_unidirectional(stream_id)
-                and stream_id not in self._stream_types
-            ):
+            if stream_is_unidirectional(stream_id) and stream.stream_type is None:
                 try:
-                    stream_type = buf.pull_uint_var()
+                    stream.stream_type = buf.pull_uint_var()
                 except BufferReadError:
                     break
                 consumed = buf.tell()
 
-                if stream_type == StreamType.CONTROL:
+                if stream.stream_type == StreamType.CONTROL:
                     assert self._peer_control_stream_id is None
                     self._peer_control_stream_id = stream_id
-                elif stream_type == StreamType.QPACK_DECODER:
+                elif stream.stream_type == StreamType.QPACK_DECODER:
                     assert self._peer_decoder_stream_id is None
                     self._peer_decoder_stream_id = stream_id
-                elif stream_type == StreamType.QPACK_ENCODER:
+                elif stream.stream_type == StreamType.QPACK_ENCODER:
                     assert self._peer_encoder_stream_id is None
                     self._peer_encoder_stream_id = stream_id
-                self._stream_types[stream_id] = stream_type
 
             if (stream_id % 4 == 0) or stream_id == self._peer_control_stream_id:
                 # fetch next frame
@@ -243,7 +244,7 @@ class H3Connection:
                                 stream_id, frame_data
                             )
                         except StreamBlocked:
-                            self._stream_blocked.add(stream_id)
+                            stream.blocked = True
                             break
                         self._quic.send_stream_data(
                             self._local_decoder_stream_id, decoder
@@ -283,25 +284,21 @@ class H3Connection:
                     unblocked_streams.update(self._decoder.feed_encoder(data))
 
         # remove processed data from buffer
-        self._stream_buffers[stream_id] = self._stream_buffers[stream_id][consumed:]
+        stream.buffer = stream.buffer[consumed:]
 
         # process unblocked streams
         for stream_id in unblocked_streams:
+            stream = self._stream[stream_id]
             decoder, headers = self._decoder.resume_header(stream_id)
-            self._stream_blocked.discard(stream_id)
+            stream.blocked = False
             cls = ResponseReceived if self._is_client else RequestReceived
             http_events.append(
                 cls(
                     headers=headers,
                     stream_id=stream_id,
-                    stream_ended=stream_id in self._stream_ended
-                    and not self._stream_buffers[stream_id],
+                    stream_ended=stream.ended and not stream.buffer,
                 )
             )
-            http_events.extend(
-                self._receive_stream_data(
-                    stream_id, b"", stream_id in self._stream_ended
-                )
-            )
+            http_events.extend(self._receive_stream_data(stream_id, b"", stream.ended))
 
         return http_events
