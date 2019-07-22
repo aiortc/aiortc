@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from functools import partial
 from typing import (
+    Any,
     Callable,
     Dict,
     Generator,
@@ -231,10 +232,6 @@ class SignatureAlgorithm(IntEnum):
 # INTEGERS
 
 
-def pull_cipher_suite(buf: Buffer) -> CipherSuite:
-    return CipherSuite(buf.pull_uint16())
-
-
 def pull_compression_method(buf: Buffer) -> CompressionMethod:
     return CompressionMethod(buf.pull_uint8())
 
@@ -398,7 +395,7 @@ class OfferedPsks:
 class ClientHello:
     random: bytes
     session_id: bytes
-    cipher_suites: List[CipherSuite]
+    cipher_suites: List[int]
     compression_methods: List[CompressionMethod]
 
     # extensions
@@ -424,7 +421,7 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
         hello = ClientHello(
             random=client_random,
             session_id=pull_opaque(buf, 1),
-            cipher_suites=pull_list(buf, 2, partial(pull_cipher_suite, buf)),
+            cipher_suites=pull_list(buf, 2, buf.pull_uint16),
             compression_methods=pull_list(
                 buf, 1, partial(pull_compression_method, buf)
             ),
@@ -548,7 +545,7 @@ def push_client_hello(buf: Buffer, hello: ClientHello) -> None:
 class ServerHello:
     random: bytes
     session_id: bytes
-    cipher_suite: CipherSuite
+    cipher_suite: int
     compression_method: CompressionMethod
 
     # extensions
@@ -567,7 +564,7 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
         hello = ServerHello(
             random=server_random,
             session_id=pull_opaque(buf, 1),
-            cipher_suite=pull_cipher_suite(buf),
+            cipher_suite=buf.pull_uint16(),
             compression_method=pull_compression_method(buf),
         )
 
@@ -941,7 +938,7 @@ def encode_public_key(
 
 
 def negotiate(
-    supported: List[T], offered: Optional[List[T]], exc: Optional[Alert] = None
+    supported: List[T], offered: Optional[List[Any]], exc: Optional[Alert] = None
 ) -> T:
     if offered is not None:
         for c in supported:
@@ -1215,7 +1212,7 @@ class Context:
         hello = ClientHello(
             random=self.client_random,
             session_id=self.session_id,
-            cipher_suites=self._cipher_suites,
+            cipher_suites=[int(x) for x in self._cipher_suites],
             compression_methods=self._compression_methods,
             alpn_protocols=self.alpn_protocols,
             key_share=key_share,
@@ -1269,7 +1266,7 @@ class Context:
                     early_key,
                 )
 
-        self._key_schedule_proxy = KeyScheduleProxy(hello.cipher_suites)
+        self._key_schedule_proxy = KeyScheduleProxy(self._cipher_suites)
         self._key_schedule_proxy.extract(None)
 
         with push_message(self._key_schedule_proxy, output_buf):
@@ -1280,7 +1277,11 @@ class Context:
     def _client_handle_hello(self, input_buf: Buffer, output_buf: Buffer) -> None:
         peer_hello = pull_server_hello(input_buf)
 
-        assert peer_hello.cipher_suite in self._cipher_suites
+        cipher_suite = negotiate(
+            self._cipher_suites,
+            [peer_hello.cipher_suite],
+            AlertHandshakeFailure("Unsupported cipher suite"),
+        )
         assert peer_hello.compression_method in self._compression_methods
         assert peer_hello.supported_version in self._supported_versions
 
@@ -1289,13 +1290,13 @@ class Context:
             if (
                 self._key_schedule_psk is None
                 or peer_hello.pre_shared_key != 0
-                or peer_hello.cipher_suite != self._key_schedule_psk.cipher_suite
+                or cipher_suite != self._key_schedule_psk.cipher_suite
             ):
                 raise AlertIllegalParameter
             self.key_schedule = self._key_schedule_psk
             self._session_resumed = True
         else:
-            self.key_schedule = self._key_schedule_proxy.select(peer_hello.cipher_suite)
+            self.key_schedule = self._key_schedule_proxy.select(cipher_suite)
         self._key_schedule_psk = None
         self._key_schedule_proxy = None
 
