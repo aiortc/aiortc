@@ -109,6 +109,8 @@ class H3Connection:
     def handle_event(self, event: aioquic.quic.events.Event) -> List[Event]:
         """
         Handle a QUIC event and return a list of HTTP events.
+
+        :param event: The QUIC event to handle.
         """
         http_events: List[Event] = []
 
@@ -126,6 +128,10 @@ class H3Connection:
         To retrieve datagram which need to be sent over the network call the QUIC
         connection's :meth:`~aioquic.connection.QuicConnection.datagrams_to_send`
         method.
+
+        :param stream_id: The stream ID on which to send the data.
+        :param data: The data to send.
+        :param end_stream: Whether to end the stream.
         """
         self._quic.send_stream_data(
             stream_id, encode_frame(FrameType.DATA, data), end_stream
@@ -138,6 +144,9 @@ class H3Connection:
         To retrieve datagram which need to be sent over the network call the QUIC
         connection's :meth:`~aioquic.connection.QuicConnection.datagrams_to_send`
         method.
+
+        :param stream_id: The stream ID on which to send the headers.
+        :param headers: The HTTP headers to send.
         """
         encoder, header = self._encoder.encode(stream_id, 0, headers)
         self._quic.send_stream_data(self._local_encoder_stream_id, encoder)

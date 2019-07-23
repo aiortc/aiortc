@@ -28,6 +28,9 @@ Events
 
 .. automodule:: aioquic.quic.events
 
+    .. autoclass:: Event
+        :members:
+
     .. autoclass:: ConnectionTerminated
         :members:
 

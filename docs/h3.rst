@@ -19,6 +19,9 @@ Events
 
 .. automodule:: aioquic.h3.events
 
+    .. autoclass:: Event
+        :members:
+
     .. autoclass:: DataReceived
         :members:
 
