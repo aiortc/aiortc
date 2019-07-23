@@ -112,14 +112,17 @@ class H3Connection:
 
         :param event: The QUIC event to handle.
         """
-        http_events: List[Event] = []
-
         if isinstance(event, aioquic.quic.events.StreamDataReceived):
-            http_events.extend(
-                self._receive_stream_data(event.stream_id, event.data, event.end_stream)
-            )
-
-        return http_events
+            stream_id = event.stream_id
+            if stream_id not in self._stream:
+                self._stream[stream_id] = H3Stream()
+            if stream_id % 4 == 0:
+                return self._receive_stream_data_bidi(
+                    stream_id, event.data, event.end_stream
+                )
+            elif stream_is_unidirectional(stream_id):
+                return self._receive_stream_data_uni(stream_id, event.data)
+        return []
 
     def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
         """
@@ -184,13 +187,14 @@ class H3Connection:
             StreamType.QPACK_DECODER
         )
 
-    def _receive_stream_data(
+    def _receive_stream_data_bidi(
         self, stream_id: int, data: bytes, stream_ended: bool
     ) -> List[Event]:
+        """
+        Client-initiated bidirectional streams carry requests and responses.
+        """
         http_events: List[Event] = []
 
-        if stream_id not in self._stream:
-            self._stream[stream_id] = H3Stream()
         stream = self._stream[stream_id]
         stream.buffer += data
         if stream_ended:
@@ -203,14 +207,64 @@ class H3Connection:
         unblocked_streams: Set[int] = set()
 
         # some peers (e.g. f5) end the stream with no data
-        if stream_ended and buf.eof() and (stream_id % 4 == 0):
+        if stream_ended and buf.eof():
             http_events.append(
                 DataReceived(data=b"", stream_id=stream_id, stream_ended=True)
             )
+            return http_events
+
+        while not buf.eof():
+            # fetch next frame
+            try:
+                frame_type = buf.pull_uint_var()
+                frame_length = buf.pull_uint_var()
+                frame_data = buf.pull_bytes(frame_length)
+            except BufferReadError:
+                break
+            consumed = buf.tell()
+
+            if frame_type == FrameType.DATA:
+                http_events.append(
+                    DataReceived(
+                        data=frame_data,
+                        stream_id=stream_id,
+                        stream_ended=stream_ended and buf.eof(),
+                    )
+                )
+            elif frame_type == FrameType.HEADERS:
+                try:
+                    decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+                except StreamBlocked:
+                    stream.blocked = True
+                    break
+                self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
+                cls = ResponseReceived if self._is_client else RequestReceived
+                http_events.append(
+                    cls(
+                        headers=headers,
+                        stream_id=stream_id,
+                        stream_ended=stream_ended and buf.eof(),
+                    )
+                )
+
+        # remove processed data from buffer
+        stream.buffer = stream.buffer[consumed:]
+
+        return http_events
+
+    def _receive_stream_data_uni(self, stream_id: int, data: bytes) -> List[Event]:
+        http_events: List[Event] = []
+
+        stream = self._stream[stream_id]
+        stream.buffer += data
+
+        buf = Buffer(data=stream.buffer)
+        consumed = 0
+        unblocked_streams: Set[int] = set()
 
         while not buf.eof():
             # fetch stream type for unidirectional streams
-            if stream_is_unidirectional(stream_id) and stream.stream_type is None:
+            if stream.stream_type is None:
                 try:
                     stream.stream_type = buf.pull_uint_var()
                 except BufferReadError:
@@ -227,7 +281,7 @@ class H3Connection:
                     assert self._peer_encoder_stream_id is None
                     self._peer_encoder_stream_id = stream_id
 
-            if (stream_id % 4 == 0) or stream_id == self._peer_control_stream_id:
+            if stream_id == self._peer_control_stream_id:
                 # fetch next frame
                 try:
                     frame_type = buf.pull_uint_var()
@@ -237,50 +291,16 @@ class H3Connection:
                     break
                 consumed = buf.tell()
 
-                if (stream_id % 4) == 0:
-                    # client-initiated bidirectional streams carry requests and responses
-                    if frame_type == FrameType.DATA:
-                        http_events.append(
-                            DataReceived(
-                                data=frame_data,
-                                stream_id=stream_id,
-                                stream_ended=stream_ended and buf.eof(),
-                            )
-                        )
-                    elif frame_type == FrameType.HEADERS:
-                        try:
-                            decoder, headers = self._decoder.feed_header(
-                                stream_id, frame_data
-                            )
-                        except StreamBlocked:
-                            stream.blocked = True
-                            break
-                        self._quic.send_stream_data(
-                            self._local_decoder_stream_id, decoder
-                        )
-                        cls = ResponseReceived if self._is_client else RequestReceived
-                        http_events.append(
-                            cls(
-                                headers=headers,
-                                stream_id=stream_id,
-                                stream_ended=stream_ended and buf.eof(),
-                            )
-                        )
-                elif stream_id == self._peer_control_stream_id:
-                    # unidirectional control stream
-                    if frame_type == FrameType.SETTINGS:
-                        settings = parse_settings(frame_data)
-                        encoder = self._encoder.apply_settings(
-                            max_table_capacity=settings.get(
-                                Setting.QPACK_MAX_TABLE_CAPACITY, 0
-                            ),
-                            blocked_streams=settings.get(
-                                Setting.QPACK_BLOCKED_STREAMS, 0
-                            ),
-                        )
-                        self._quic.send_stream_data(
-                            self._local_encoder_stream_id, encoder
-                        )
+                # unidirectional control stream
+                if frame_type == FrameType.SETTINGS:
+                    settings = parse_settings(frame_data)
+                    encoder = self._encoder.apply_settings(
+                        max_table_capacity=settings.get(
+                            Setting.QPACK_MAX_TABLE_CAPACITY, 0
+                        ),
+                        blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
+                    )
+                    self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
             else:
                 # fetch unframed data
                 data = buf.pull_bytes(buf.capacity - buf.tell())
@@ -308,6 +328,8 @@ class H3Connection:
                     stream_ended=stream.ended and not stream.buffer,
                 )
             )
-            http_events.extend(self._receive_stream_data(stream_id, b"", stream.ended))
+            http_events.extend(
+                self._receive_stream_data_bidi(stream_id, b"", stream.ended)
+            )
 
         return http_events

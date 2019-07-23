@@ -211,32 +211,48 @@ class H3ConnectionTest(TestCase):
         )
         h3_client = H3Connection(quic_client)
 
-        h3_client._receive_stream_data(
-            3,
-            binascii.unhexlify("0004170150000680020000074064091040bcc0000000faceb00c"),
-            False,
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=3,
+                data=binascii.unhexlify(
+                    "0004170150000680020000074064091040bcc0000000faceb00c"
+                ),
+                end_stream=False,
+            )
         )
-        h3_client._receive_stream_data(7, b"\x02", False)
-        h3_client._receive_stream_data(11, b"\x03", False)
-        h3_client._receive_stream_data(0, binascii.unhexlify("01040280d910"), False)
-        h3_client._receive_stream_data(
-            0,
-            binascii.unhexlify(
-                "00408d796f752072656163686564206d766673742e6e65742c20726561636820"
-                "746865202f6563686f20656e64706f696e7420666f7220616e206563686f2072"
-                "6573706f6e7365207175657279202f3c6e756d6265723e20656e64706f696e74"
-                "7320666f722061207661726961626c652073697a6520726573706f6e73652077"
-                "6974682072616e646f6d206279746573"
-            ),
-            True,
+        h3_client.handle_event(
+            StreamDataReceived(stream_id=7, data=b"\x02", end_stream=False)
+        )
+        h3_client.handle_event(
+            StreamDataReceived(stream_id=11, data=b"\x03", end_stream=False)
+        )
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=0, data=binascii.unhexlify("01040280d910"), end_stream=False
+            )
+        )
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=0,
+                data=binascii.unhexlify(
+                    "00408d796f752072656163686564206d766673742e6e65742c20726561636820"
+                    "746865202f6563686f20656e64706f696e7420666f7220616e206563686f2072"
+                    "6573706f6e7365207175657279202f3c6e756d6265723e20656e64706f696e74"
+                    "7320666f722061207661726961626c652073697a6520726573706f6e73652077"
+                    "6974682072616e646f6d206279746573"
+                ),
+                end_stream=True,
+            )
         )
         self.assertEqual(
-            h3_client._receive_stream_data(
-                7,
-                binascii.unhexlify(
-                    "3fe101c696d07abe941094cb6d0a08017d403971966e32ca98b46f"
-                ),
-                False,
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=7,
+                    data=binascii.unhexlify(
+                        "3fe101c696d07abe941094cb6d0a08017d403971966e32ca98b46f"
+                    ),
+                    end_stream=False,
+                )
             ),
             [
                 ResponseReceived(
