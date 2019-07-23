@@ -254,6 +254,8 @@ END_STATES = frozenset(
 class QuicConnection:
     """
     A QUIC connection.
+
+    :param configuration: The QUIC configuration to use.
     """
 
     def __init__(
@@ -466,6 +468,8 @@ class QuicConnection:
         """
         Return a list of `(data, addr)` tuples of datagrams which need to be
         sent, and the network address to which they need to be sent.
+
+        :param now: The current time.
         """
         network_path = self._network_paths[0]
 
@@ -824,6 +828,7 @@ class QuicConnection:
         """
         Send data on the specific stream.
 
+        :param stream_id: The stream's ID.
         :param data: The data to be sent.
         :param end_stream: If set to `True`, the FIN bit will be set.
         """
