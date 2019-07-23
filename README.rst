@@ -34,6 +34,8 @@ QUIC standardisation is not finalised yet, but ``aioquic`` closely tracks the
 specification drafts and is regularly tested for interoperability against other
 `QUIC implementations`_.
 
+To learn more about ``aioquic`` please `read the documentation`_.
+
 Design and features
 -------------------
 
@@ -91,6 +93,7 @@ License
 
 ``aioquic`` is released under the `BSD license`_.
 
+.. _read the documentation: https://aioquic.readthedocs.io/en/latest/
 .. _QUIC implementations: https://github.com/quicwg/base-drafts/wiki/Implementations
 .. _cryptography: https://cryptography.io/
 .. _BSD license: https://aioquic.readthedocs.io/en/latest/license.html
