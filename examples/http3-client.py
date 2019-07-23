@@ -16,6 +16,11 @@ from aioquic.quic.connection import NetworkAddress, QuicConnection
 from aioquic.quic.events import ConnectionTerminated
 from aioquic.tls import SessionTicketHandler
 
+try:
+    import uvloop
+except ImportError:
+    uvloop = None
+
 logger = logging.getLogger("client")
 
 HttpConnection = Union[H0Connection, H3Connection]
@@ -250,6 +255,8 @@ if __name__ == "__main__":
         except FileNotFoundError:
             pass
 
+    if uvloop is not None:
+        uvloop.install()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
         run(
