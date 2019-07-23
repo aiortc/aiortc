@@ -72,11 +72,11 @@ def parse_settings(data: bytes) -> Dict[int, int]:
 
 
 class H3Stream:
-    def __init__(self):
+    def __init__(self) -> None:
         self.blocked = False
         self.buffer = b""
         self.ended = False
-        self.stream_type = None
+        self.stream_type: Optional[int] = None
 
 
 class H3Connection:
