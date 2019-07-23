@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 import re
 from functools import partial
@@ -33,19 +34,7 @@ try:
 except ImportError:
     uvloop = None
 
-TEMPLATE = """<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="utf-8"/>
-        <title>aioquic</title>
-    </head>
-    <body>
-        <h1>Welcome to aioquic</h1>
-        <p>{content}</p>
-    </body>
-</html>
-"""
-
+ROOT = os.path.join(os.path.dirname(__file__), "htdocs")
 
 HttpConnection = Union[H0Connection, H3Connection]
 
@@ -231,14 +220,16 @@ def handle_http_event(
         except (UnicodeDecodeError, ValueError):
             send_response(
                 connection=connection,
-                data=render_html("Bad Request"),
+                content_type="text/plain",
+                data=b"Bad Request",
                 status_code=400,
                 stream_id=event.stream_id,
             )
+            return
 
+        # dynamically generated data, maximum 50MB
         size_match = re.match(r"^/(\d+)$", path)
         if size_match:
-            # we accept a maximum of 50MB
             size = min(50000000, int(size_match.group(1)))
             send_response(
                 connection=connection,
@@ -247,24 +238,37 @@ def handle_http_event(
                 status_code=200,
                 stream_id=event.stream_id,
             )
-        elif path in ["/", "/index.html"]:
-            send_response(
-                connection=connection,
-                data=render_html("It works!"),
-                status_code=200,
-                stream_id=event.stream_id,
-            )
-        else:
-            send_response(
-                connection=connection,
-                data=render_html("The document could not be found."),
-                status_code=404,
-                stream_id=event.stream_id,
-            )
+            return
 
+        if path == "/":
+            path = "/index.html"
 
-def render_html(content: str) -> bytes:
-    return TEMPLATE.format(content=content).encode("utf8")
+        # static files
+        file_match = re.match(r"^/([a-z0-9]+\.[a-z]+)$", path)
+        if file_match:
+            file_name = file_match.group(1)
+            file_path = os.path.join(ROOT, file_match.group(1))
+            try:
+                with open(file_path, "rb") as fp:
+                    send_response(
+                        connection=connection,
+                        content_type=mimetypes.guess_type(file_name)[0],
+                        data=fp.read(),
+                        status_code=200,
+                        stream_id=event.stream_id,
+                    )
+                    return
+            except OSError:
+                pass
+
+        # not found
+        send_response(
+            connection=connection,
+            content_type="text/plain",
+            data=b"Not Found",
+            status_code=404,
+            stream_id=event.stream_id,
+        )
 
 
 def send_response(
