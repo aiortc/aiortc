@@ -393,6 +393,8 @@ if __name__ == "__main__":
     )
     try:
         loop.run_forever()
+    except KeyboardInterrupt:
+        pass
     finally:
         if quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:
