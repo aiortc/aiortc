@@ -1,10 +1,19 @@
 aioquic
 =======
 
-|rtd| |travis| |codecov| |black|
+|rtd| |pypi-v| |pypi-pyversions| |pypi-l| |travis| |codecov| |black|
 
 .. |rtd| image:: https://readthedocs.org/projects/aioquic/badge/?version=latest
     :target: https://aioquic.readthedocs.io/
+
+.. |pypi-v| image:: https://img.shields.io/pypi/v/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
+
+.. |pypi-pyversions| image:: https://img.shields.io/pypi/pyversions/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
+
+.. |pypi-l| image:: https://img.shields.io/pypi/l/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
 
 .. |travis| image:: https://img.shields.io/travis/com/aiortc/aioquic.svg
     :target: https://travis-ci.com/aiortc/aioquic

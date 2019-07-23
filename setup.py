@@ -9,7 +9,7 @@ with open(readme_file, encoding='utf-8') as f:
 
 setuptools.setup(
     name='aioquic',
-    version='0.1.0',
+    version='0.2.0',
     description='An implementation of QUIC',
     long_description=long_description,
     url='https://github.com/aiortc/aioquic',
@@ -42,7 +42,13 @@ setuptools.setup(
             ],
         )
     ],
-    packages=['aioquic'],
+    packages=[
+        'aioquic',
+        'aioquic.asyncio',
+        'aioquic.h0',
+        'aioquic.h3',
+        'aioquic.quic',
+    ],
     install_requires=[
         'cryptography >= 2.5',
         'dataclasses; python_version < "3.7"',

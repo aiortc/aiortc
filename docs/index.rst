@@ -1,7 +1,16 @@
 aioquic
 =======
 
-|travis| |codecov|
+|pypi-v| |pypi-pyversions| |pypi-l| |travis| |codecov|
+
+.. |pypi-v| image:: https://img.shields.io/pypi/v/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
+
+.. |pypi-pyversions| image:: https://img.shields.io/pypi/pyversions/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
+
+.. |pypi-l| image:: https://img.shields.io/pypi/l/aioquic.svg
+    :target: https://pypi.python.org/pypi/aioquic
 
 .. |travis| image:: https://img.shields.io/travis/com/aiortc/aioquic.svg
     :target: https://travis-ci.com/aiortc/aioquic
