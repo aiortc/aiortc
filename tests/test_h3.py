@@ -200,7 +200,11 @@ class H3ConnectionTest(TestCase):
         self.assertEqual(
             http_events,
             [
-                DataReceived(data=b"hello", stream_id=0, stream_ended=False),
+                DataReceived(data=b"h", stream_id=0, stream_ended=False),
+                DataReceived(data=b"e", stream_id=0, stream_ended=False),
+                DataReceived(data=b"l", stream_id=0, stream_ended=False),
+                DataReceived(data=b"l", stream_id=0, stream_ended=False),
+                DataReceived(data=b"o", stream_id=0, stream_ended=False),
                 DataReceived(data=b"", stream_id=0, stream_ended=True),
             ],
         )

@@ -76,6 +76,8 @@ class H3Stream:
         self.blocked = False
         self.buffer = b""
         self.ended = False
+        self.frame_size: Optional[int] = None
+        self.frame_type: Optional[int] = None
         self.stream_type: Optional[int] = None
 
 
@@ -202,28 +204,59 @@ class H3Connection:
         if stream.blocked:
             return http_events
 
-        buf = Buffer(data=stream.buffer)
-        consumed = 0
-        unblocked_streams: Set[int] = set()
+        # shortcut DATA frame bits
+        if (
+            stream.frame_size is not None
+            and stream.frame_type == FrameType.DATA
+            and len(stream.buffer) < stream.frame_size
+        ):
+            http_events.append(
+                DataReceived(
+                    data=stream.buffer, stream_id=stream_id, stream_ended=False
+                )
+            )
+            stream.frame_size -= len(stream.buffer)
+            stream.buffer = b""
+            return http_events
 
         # some peers (e.g. f5) end the stream with no data
-        if stream_ended and buf.eof():
+        if stream_ended and not stream.buffer:
             http_events.append(
                 DataReceived(data=b"", stream_id=stream_id, stream_ended=True)
             )
             return http_events
 
+        buf = Buffer(data=stream.buffer)
+        consumed = 0
+
         while not buf.eof():
-            # fetch next frame
-            try:
-                frame_type = buf.pull_uint_var()
-                frame_length = buf.pull_uint_var()
-                frame_data = buf.pull_bytes(frame_length)
-            except BufferReadError:
+            # fetch next frame header
+            if stream.frame_size is None:
+                try:
+                    stream.frame_type = buf.pull_uint_var()
+                    stream.frame_size = buf.pull_uint_var()
+                except BufferReadError:
+                    break
+                consumed = buf.tell()
+
+            # check how much data is available
+            chunk_size = min(stream.frame_size, buf.capacity - consumed)
+            if (
+                stream.frame_type == FrameType.HEADERS
+                and chunk_size < stream.frame_size
+            ):
                 break
+
+            # read available data
+            frame_data = buf.pull_bytes(chunk_size)
             consumed = buf.tell()
 
-            if frame_type == FrameType.DATA:
+            # detect end of frame
+            stream.frame_size -= chunk_size
+            if not stream.frame_size:
+                stream.frame_size = None
+
+            if stream.frame_type == FrameType.DATA and (stream_ended or frame_data):
                 http_events.append(
                     DataReceived(
                         data=frame_data,
@@ -231,7 +264,7 @@ class H3Connection:
                         stream_ended=stream_ended and buf.eof(),
                     )
                 )
-            elif frame_type == FrameType.HEADERS:
+            elif stream.frame_type == FrameType.HEADERS:
                 try:
                     decoder, headers = self._decoder.feed_header(stream_id, frame_data)
                 except StreamBlocked:
