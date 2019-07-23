@@ -13,6 +13,16 @@ Connection
     .. autoclass:: QuicConnection
         :members:
 
+
+Configuration
+-------------
+
+.. automodule:: aioquic.quic.configuration
+
+    .. autoclass:: QuicConfiguration
+        :members:
+
+
 Events
 ------
 
