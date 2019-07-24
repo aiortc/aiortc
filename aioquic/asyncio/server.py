@@ -26,7 +26,6 @@ class QuicServer(asyncio.DatagramProtocol):
         self,
         *,
         configuration: QuicConfiguration,
-        connection_handler: Optional[QuicConnectionHandler] = None,
         session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
         session_ticket_handler: Optional[SessionTicketHandler] = None,
         stateless_retry: bool = False,
@@ -38,11 +37,6 @@ class QuicServer(asyncio.DatagramProtocol):
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
         self._transport: Optional[asyncio.DatagramTransport] = None
-
-        if connection_handler is not None:
-            self._connection_handler = connection_handler
-        else:
-            self._connection_handler = lambda c: None
 
         self._stream_handler = stream_handler
 
@@ -130,7 +124,6 @@ class QuicServer(asyncio.DatagramProtocol):
             protocol.connection_made(self._transport)
 
             self._protocols[connection.host_cid] = protocol
-            self._connection_handler(protocol)
 
         if protocol is not None:
             protocol.datagram_received(data, addr)
@@ -152,7 +145,6 @@ async def serve(
     certificate: Any,
     private_key: Any,
     alpn_protocols: Optional[List[str]] = None,
-    connection_handler: QuicConnectionHandler = None,
     idle_timeout: Optional[float] = None,
     stream_handler: QuicStreamHandler = None,
     secrets_log_file: Optional[TextIO] = None,
@@ -173,9 +165,6 @@ async def serve(
 
     :func:`serve` also accepts the following optional arguments:
 
-    * ``connection_handler`` is a callback which is invoked whenever a
-      connection is created. It must be a a function accepting a single
-      argument: a :class:`~aioquic.asyncio.QuicConnectionProtocol`.
     * ``secrets_log_file`` is  a file-like object in which to log traffic
       secrets. This is useful to analyze traffic captures with Wireshark.
     * ``session_ticket_fetcher`` is a callback which is invoked by the TLS
@@ -206,7 +195,6 @@ async def serve(
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
             configuration=configuration,
-            connection_handler=connection_handler,
             session_ticket_fetcher=session_ticket_fetcher,
             session_ticket_handler=session_ticket_handler,
             stateless_retry=stateless_retry,

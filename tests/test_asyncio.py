@@ -97,23 +97,6 @@ class HighLevelTest(TestCase):
         self.assertEqual(response, b"5432109876543210")
         server.close()
 
-    def test_connect_and_serve_with_connection_handler(self):
-        server_conn = None
-
-        def connection_handler(conn):
-            nonlocal server_conn
-            server_conn = conn
-
-        server, response = run(
-            asyncio.gather(
-                run_server(connection_handler=connection_handler),
-                run_client("127.0.0.1"),
-            )
-        )
-        self.assertEqual(response, b"gnip")
-        self.assertIsNotNone(server_conn)
-        server.close()
-
     @patch("socket.socket.sendto", new_callable=lambda: sendto_with_loss)
     def test_connect_and_serve_with_packet_loss(self, mock_sendto):
         """
