@@ -6,7 +6,8 @@ import pickle
 import socket
 import sys
 import time
-from typing import Dict, List, Optional, Text, Union, cast
+from collections import deque
+from typing import Deque, Dict, Optional, Text, Union, cast
 from urllib.parse import urlparse
 
 from aioquic.h0.connection import H0Connection
@@ -47,8 +48,8 @@ class HttpClient(asyncio.DatagramProtocol):
         self._timer: Optional[asyncio.TimerHandle] = None
         self._timer_at = 0.0
 
-        self._request_events: Dict[int, List[Event]] = {}
-        self._request_waiter: Dict[int, asyncio.Future[List[Event]]] = {}
+        self._request_events: Dict[int, Deque[Event]] = {}
+        self._request_waiter: Dict[int, asyncio.Future[Deque[Event]]] = {}
 
         if configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
@@ -63,7 +64,7 @@ class HttpClient(asyncio.DatagramProtocol):
         self._consume_events()
         await self._closed.wait()
 
-    async def get(self, path: str) -> List[Event]:
+    async def get(self, path: str) -> Deque[Event]:
         """
         Perform a GET request.
         """
@@ -84,7 +85,7 @@ class HttpClient(asyncio.DatagramProtocol):
         self._http.send_data(stream_id=stream_id, data=b"", end_stream=True)
 
         waiter = self._loop.create_future()
-        self._request_events[stream_id] = []
+        self._request_events[stream_id] = deque()
         self._request_waiter[stream_id] = waiter
         self._consume_events()
 
