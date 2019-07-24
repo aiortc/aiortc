@@ -7,15 +7,16 @@ import socket
 import sys
 import time
 from collections import deque
-from typing import Deque, Dict, Optional, Text, Union, cast
+from typing import Deque, Dict, Optional, Union, cast
 from urllib.parse import urlparse
 
+from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, Event, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
-from aioquic.quic.events import ConnectionTerminated
+from aioquic.quic.events import ConnectionTerminated, QuicEvent
 from aioquic.quic.logger import QuicLogger
 from aioquic.tls import SessionTicketHandler
 
@@ -29,7 +30,7 @@ logger = logging.getLogger("client")
 HttpConnection = Union[H0Connection, H3Connection]
 
 
-class HttpClient(asyncio.DatagramProtocol):
+class HttpClient(QuicConnectionProtocol):
     def __init__(
         self,
         *,
@@ -37,16 +38,16 @@ class HttpClient(asyncio.DatagramProtocol):
         server_addr: NetworkAddress,
         session_ticket_handler: Optional[SessionTicketHandler] = None
     ):
-        self._closed = asyncio.Event()
+        super().__init__(
+            quic=QuicConnection(
+                configuration=configuration,
+                session_ticket_handler=session_ticket_handler,
+            )
+        )
+
         self._connect_called = False
         self._http: HttpConnection
-        self._loop = asyncio.get_event_loop()
-        self._quic = QuicConnection(
-            configuration=configuration, session_ticket_handler=session_ticket_handler
-        )
         self._server_addr = server_addr
-        self._timer: Optional[asyncio.TimerHandle] = None
-        self._timer_at = 0.0
 
         self._request_events: Dict[int, Deque[Event]] = {}
         self._request_waiter: Dict[int, asyncio.Future[Deque[Event]]] = {}
@@ -55,14 +56,6 @@ class HttpClient(asyncio.DatagramProtocol):
             self._http = H0Connection(self._quic)
         else:
             self._http = H3Connection(self._quic)
-
-    async def close(self) -> None:
-        """
-        Close the connection.
-        """
-        self._quic.close()
-        self._consume_events()
-        await self._closed.wait()
 
     async def get(self, path: str) -> Deque[Event]:
         """
@@ -87,58 +80,26 @@ class HttpClient(asyncio.DatagramProtocol):
         waiter = self._loop.create_future()
         self._request_events[stream_id] = deque()
         self._request_waiter[stream_id] = waiter
-        self._consume_events()
+        self._send_pending()
 
         return await asyncio.shield(waiter)
 
-    def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        self._transport = cast(asyncio.DatagramTransport, transport)
+    def _handle_event(self, event: QuicEvent):
+        #  pass event to the HTTP layer
+        for http_event in self._http.handle_event(event):
+            if (
+                isinstance(http_event, (ResponseReceived, DataReceived))
+                and http_event.stream_id in self._request_events
+            ):
+                self._request_events[http_event.stream_id].append(http_event)
+                if http_event.stream_ended:
+                    request_waiter = self._request_waiter.pop(http_event.stream_id)
+                    request_waiter.set_result(
+                        self._request_events.pop(http_event.stream_id)
+                    )
 
-    def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
-        self._quic.receive_datagram(cast(bytes, data), addr, self._loop.time())
-        self._consume_events()
-
-    def _consume_events(self) -> None:
-        # process events
-        event = self._quic.next_event()
-        while event is not None:
-            #  pass event to the HTTP layer
-            for http_event in self._http.handle_event(event):
-                if (
-                    isinstance(http_event, (ResponseReceived, DataReceived))
-                    and http_event.stream_id in self._request_events
-                ):
-                    self._request_events[http_event.stream_id].append(http_event)
-                    if http_event.stream_ended:
-                        request_waiter = self._request_waiter.pop(http_event.stream_id)
-                        request_waiter.set_result(
-                            self._request_events.pop(http_event.stream_id)
-                        )
-
-            if isinstance(event, ConnectionTerminated):
-                self._closed.set()
-
-            event = self._quic.next_event()
-
-        # send datagrams
-        for data, addr in self._quic.datagrams_to_send(now=self._loop.time()):
-            self._transport.sendto(data, addr)
-
-        # re-arm timer
-        timer_at = self._quic.get_timer()
-        if self._timer is not None and self._timer_at != timer_at:
-            self._timer.cancel()
-            self._timer = None
-        if self._timer is None and timer_at is not None:
-            self._timer = self._loop.call_at(timer_at, self._handle_timer)
-        self._timer_at = timer_at
-
-    def _handle_timer(self) -> None:
-        now = max(self._timer_at, self._loop.time())
-        self._timer = None
-        self._timer_at = None
-        self._quic.handle_timer(now=now)
-        self._consume_events()
+        if isinstance(event, ConnectionTerminated):
+            self._closed.set()
 
 
 def save_session_ticket(ticket):
@@ -214,7 +175,8 @@ async def run(url: str, legacy_http: bool, **kwargs) -> None:
             sys.stdout.buffer.flush()
 
     # close QUIC connection
-    await client.close()
+    client.close()
+    await client.wait_closed()
 
 
 if __name__ == "__main__":

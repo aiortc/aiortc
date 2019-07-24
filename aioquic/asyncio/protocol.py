@@ -10,17 +10,15 @@ QuicStreamHandler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], None]
 
 class QuicConnectionProtocol(asyncio.DatagramProtocol):
     def __init__(
-        self,
-        connection: QuicConnection,
-        stream_handler: Optional[QuicStreamHandler] = None,
+        self, quic: QuicConnection, stream_handler: Optional[QuicStreamHandler] = None
     ):
         loop = asyncio.get_event_loop()
 
-        self._connection = connection
         self._closed = asyncio.Event()
         self._connected_waiter = loop.create_future()
         self._loop = loop
         self._ping_waiter: Optional[asyncio.Future[None]] = None
+        self._quic = quic
         self._send_task: Optional[asyncio.Handle] = None
         self._stream_readers: Dict[int, asyncio.StreamReader] = {}
         self._timer: Optional[asyncio.TimerHandle] = None
@@ -41,14 +39,14 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
 
         The previous connection ID will be retired.
         """
-        self._connection.change_connection_id()
+        self._quic.change_connection_id()
         self._send_pending()
 
     def close(self) -> None:
         """
         Close the connection.
         """
-        self._connection.close()
+        self._quic.close()
         self._send_pending()
 
     def connect(self, addr: NetworkAddress, protocol_version: int) -> None:
@@ -57,7 +55,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
 
         This method can only be called for clients and a single time.
         """
-        self._connection.connect(
+        self._quic.connect(
             addr, now=self._loop.time(), protocol_version=protocol_version
         )
         self._send_pending()
@@ -71,7 +69,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         The returned reader and writer objects are instances of :class:`asyncio.StreamReader`
         and :class:`asyncio.StreamWriter` classes.
         """
-        stream_id = self._connection.get_next_available_stream_id(
+        stream_id = self._quic.get_next_available_stream_id(
             is_unidirectional=is_unidirectional
         )
         return self._create_stream(stream_id)
@@ -80,7 +78,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         Request an update of the encryption keys.
         """
-        self._connection.request_key_update()
+        self._quic.request_key_update()
         self._send_pending()
 
     async def ping(self) -> None:
@@ -89,7 +87,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         assert self._ping_waiter is None, "already await a ping"
         self._ping_waiter = self._loop.create_future()
-        self._connection.send_ping(id(self._ping_waiter))
+        self._quic.send_ping(id(self._ping_waiter))
         self._send_pending()
         await asyncio.shield(self._ping_waiter)
 
@@ -111,9 +109,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
-        self._connection.receive_datagram(
-            cast(bytes, data), addr, now=self._loop.time()
-        )
+        self._quic.receive_datagram(cast(bytes, data), addr, now=self._loop.time())
         self._send_pending()
 
     # private
@@ -127,55 +123,54 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._stream_readers[stream_id] = reader
         return reader, writer
 
+    def _handle_event(self, event: events.QuicEvent) -> None:
+        if isinstance(event, events.ConnectionIdIssued):
+            self._connection_id_issued_handler(event.connection_id)
+        elif isinstance(event, events.ConnectionIdRetired):
+            self._connection_id_retired_handler(event.connection_id)
+        elif isinstance(event, events.ConnectionTerminated):
+            for reader in self._stream_readers.values():
+                reader.feed_eof()
+            if not self._connected_waiter.done():
+                self._connected_waiter.set_exception(ConnectionError)
+            self._closed.set()
+        elif isinstance(event, events.HandshakeCompleted):
+            self._connected_waiter.set_result(None)
+        elif isinstance(event, events.PingAcknowledged):
+            waiter = self._ping_waiter
+            self._ping_waiter = None
+            waiter.set_result(None)
+        elif isinstance(event, events.StreamDataReceived):
+            reader = self._stream_readers.get(event.stream_id, None)
+            if reader is None:
+                reader, writer = self._create_stream(event.stream_id)
+                self._stream_handler(reader, writer)
+            reader.feed_data(event.data)
+            if event.end_stream:
+                reader.feed_eof()
+
     def _handle_timer(self) -> None:
         now = max(self._timer_at, self._loop.time())
-
         self._timer = None
         self._timer_at = None
-
-        self._connection.handle_timer(now=now)
-
+        self._quic.handle_timer(now=now)
         self._send_pending()
 
     def _send_pending(self) -> None:
         self._send_task = None
 
         # process events
-        event = self._connection.next_event()
+        event = self._quic.next_event()
         while event is not None:
-            if isinstance(event, events.ConnectionIdIssued):
-                self._connection_id_issued_handler(event.connection_id)
-            elif isinstance(event, events.ConnectionIdRetired):
-                self._connection_id_retired_handler(event.connection_id)
-            elif isinstance(event, events.ConnectionTerminated):
-                for reader in self._stream_readers.values():
-                    reader.feed_eof()
-                if not self._connected_waiter.done():
-                    self._connected_waiter.set_exception(ConnectionError)
-                self._closed.set()
-            elif isinstance(event, events.HandshakeCompleted):
-                self._connected_waiter.set_result(None)
-            elif isinstance(event, events.PingAcknowledged):
-                waiter = self._ping_waiter
-                self._ping_waiter = None
-                waiter.set_result(None)
-            elif isinstance(event, events.StreamDataReceived):
-                reader = self._stream_readers.get(event.stream_id, None)
-                if reader is None:
-                    reader, writer = self._create_stream(event.stream_id)
-                    self._stream_handler(reader, writer)
-                reader.feed_data(event.data)
-                if event.end_stream:
-                    reader.feed_eof()
-
-            event = self._connection.next_event()
+            self._handle_event(event)
+            event = self._quic.next_event()
 
         # send datagrams
-        for data, addr in self._connection.datagrams_to_send(now=self._loop.time()):
+        for data, addr in self._quic.datagrams_to_send(now=self._loop.time()):
             self._transport.sendto(data, addr)
 
         # re-arm timer
-        timer_at = self._connection.get_timer()
+        timer_at = self._quic.get_timer()
         if self._timer is not None and self._timer_at != timer_at:
             self._timer.cancel()
             self._timer = None
@@ -204,9 +199,9 @@ class QuicStreamAdapter(asyncio.Transport):
             return self.stream_id
 
     def write(self, data):
-        self.protocol._connection.send_stream_data(self.stream_id, data)
+        self.protocol._quic.send_stream_data(self.stream_id, data)
         self.protocol._send_soon()
 
     def write_eof(self):
-        self.protocol._connection.send_stream_data(self.stream_id, b"", end_stream=True)
+        self.protocol._quic.send_stream_data(self.stream_id, b"", end_stream=True)
         self.protocol._send_soon()

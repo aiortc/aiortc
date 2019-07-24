@@ -294,7 +294,7 @@ class QuicConnection:
         self._cryptos: Dict[tls.Epoch, CryptoPair] = {}
         self._crypto_buffers: Dict[tls.Epoch, Buffer] = {}
         self._crypto_streams: Dict[tls.Epoch, QuicStream] = {}
-        self._events: Deque[events.Event] = deque()
+        self._events: Deque[events.QuicEvent] = deque()
         self._handshake_complete = False
         self._handshake_confirmed = False
         self._host_cids = [
@@ -632,7 +632,7 @@ class QuicConnection:
             self._logger.debug("Loss detection triggered")
             self._loss.on_loss_detection_timeout(now=now)
 
-    def next_event(self) -> Optional[events.Event]:
+    def next_event(self) -> Optional[events.QuicEvent]:
         """
         Retrieve the next event from the event buffer.
 

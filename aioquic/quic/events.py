@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-class Event:
+class QuicEvent:
     """
     Base class for QUIC events.
     """
@@ -11,17 +11,17 @@ class Event:
 
 
 @dataclass
-class ConnectionIdIssued(Event):
+class ConnectionIdIssued(QuicEvent):
     connection_id: bytes
 
 
 @dataclass
-class ConnectionIdRetired(Event):
+class ConnectionIdRetired(QuicEvent):
     connection_id: bytes
 
 
 @dataclass
-class ConnectionTerminated(Event):
+class ConnectionTerminated(QuicEvent):
     """
     The ConnectionTerminated event is fired when the QUIC connection is terminated.
     """
@@ -37,7 +37,7 @@ class ConnectionTerminated(Event):
 
 
 @dataclass
-class HandshakeCompleted(Event):
+class HandshakeCompleted(QuicEvent):
     """
     The HandshakeCompleted event is fired when the TLS handshake completes.
     """
@@ -53,7 +53,7 @@ class HandshakeCompleted(Event):
 
 
 @dataclass
-class PingAcknowledged(Event):
+class PingAcknowledged(QuicEvent):
     """
     The PingAcknowledged event is fired when a PING frame is acknowledged.
     """
@@ -63,7 +63,7 @@ class PingAcknowledged(Event):
 
 
 @dataclass
-class ProtocolNegotiated(Event):
+class ProtocolNegotiated(QuicEvent):
     """
     The ProtocolNegotiated event is fired when ALPN negotiation completes.
     """
@@ -73,7 +73,7 @@ class ProtocolNegotiated(Event):
 
 
 @dataclass
-class StreamDataReceived(Event):
+class StreamDataReceived(QuicEvent):
     """
     The StreamDataReceived event is fired whenever data is received on a
     stream.
@@ -90,7 +90,7 @@ class StreamDataReceived(Event):
 
 
 @dataclass
-class StreamReset(Event):
+class StreamReset(QuicEvent):
     """
     The StreamReset event is fired when the remote peer resets a stream.
     """
