@@ -54,30 +54,30 @@ class Result(Flag):
 class Config:
     name: str
     host: str
-    port: int
-    retry_port: Optional[int]
-    path: str
+    port: int = 4433
+    retry_port: Optional[int] = 4434
+    path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
 
 
 CONFIGS = [
-    Config("aioquic", "quic.aiortc.org", 4433, 4434, "/"),
-    Config("ats", "quic.ogre.com", 4433, 4434, "/"),
-    Config("f5", "f5quic.com", 4433, 4433, "/"),
-    Config("gquic", "quic.rocks", 4433, 4433, "/"),
-    Config("lsquic", "http3-test.litespeedtech.com", 4433, 4434, None),
-    Config("mvfst", "fb.mvfst.net", 4433, 4434, "/"),
-    Config("ngtcp2", "nghttp2.org", 4433, 4434, "/"),
-    Config("ngx_quic", "cloudflare-quic.com", 443, 443, None),
-    Config("pandora", "pandora.cm.in.tum.de", 4433, 4434, "/"),
-    Config("picoquic", "test.privateoctopus.com", 4433, 4434, "/"),
-    Config("quant", "quant.eggert.org", 4433, 4434, "/"),
-    Config("quic-go", "quic.seemann.io", 443, 443, "/"),
-    Config("quiche", "quic.tech", 4433, 4433, "/"),
-    Config("quicker", "quicker.edm.uhasselt.be", 4433, None, "/"),
-    Config("quicly", "kazuhooku.com", 4433, 4434, "/"),
-    Config("quinn", "ralith.com", 4433, 4434, "/"),
-    Config("winquic", "quic.westus.cloudapp.azure.com", 4433, 4434, "/"),
+    Config("aioquic", "quic.aiortc.org"),
+    Config("ats", "quic.ogre.com"),
+    Config("f5", "f5quic.com", retry_port=4433),
+    Config("gquic", "quic.rocks", retry_port=None),
+    Config("lsquic", "http3-test.litespeedtech.com"),
+    Config("mvfst", "fb.mvfst.net"),
+    Config("ngtcp2", "nghttp2.org"),
+    Config("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
+    Config("pandora", "pandora.cm.in.tum.de"),
+    Config("picoquic", "test.privateoctopus.com"),
+    Config("quant", "quant.eggert.org"),
+    Config("quic-go", "quic.seemann.io", port=443, retry_port=443),
+    Config("quiche", "quic.tech", retry_port=4433),
+    Config("quicker", "quicker.edm.uhasselt.be", retry_port=None),
+    Config("quicly", "kazuhooku.com"),
+    Config("quinn", "ralith.com"),
+    Config("winquic", "quic.westus.cloudapp.azure.com"),
 ]
 
 
@@ -94,7 +94,7 @@ async def http3_request(connection, authority, path):
     reader, writer = await connection.create_stream()
     stream_id = writer.get_extra_info("stream_id")
 
-    http = H3Connection(connection._connection)
+    http = H3Connection(connection._quic)
     http.send_headers(
         stream_id=stream_id,
         headers=[
@@ -114,7 +114,7 @@ async def test_version_negotiation(config, **kwargs):
         config.host, config.port, protocol_version=0x1A2A3A4A, **kwargs
     ) as connection:
         await connection.ping()
-        if connection._connection._version_negotiation_count == 1:
+        if connection._quic._version_negotiation_count == 1:
             config.result |= Result.V
 
 
@@ -128,7 +128,7 @@ async def test_handshake_and_close(config, **kwargs):
 async def test_stateless_retry(config, **kwargs):
     async with connect(config.host, config.retry_port, **kwargs) as connection:
         await connection.ping()
-        if connection._connection._stateless_retry_count == 1:
+        if connection._quic._stateless_retry_count == 1:
             config.result |= Result.S
 
 
@@ -179,11 +179,11 @@ async def test_session_resumption(config, **kwargs):
             await connection.ping()
 
             # check session was resumed
-            if connection._connection.tls.session_resumed:
+            if connection._quic.tls.session_resumed:
                 config.result |= Result.R
 
             # check early data was accepted
-            if connection._connection.tls.early_data_accepted:
+            if connection._quic.tls.early_data_accepted:
                 config.result |= Result.Z
 
 
@@ -206,7 +206,7 @@ async def test_spin_bit(config, **kwargs):
         spin_bits = set()
         for i in range(5):
             await connection.ping()
-            spin_bits.add(connection._connection._spin_bit_peer)
+            spin_bits.add(connection._quic._spin_bit_peer)
         if len(spin_bits) == 2:
             config.result |= Result.P
 
