@@ -1036,6 +1036,23 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(cm.exception.frame_type, 0x1C)
             self.assertEqual(cm.exception.reason_phrase, "Failed to parse frame")
 
+    def test_send_max_data_retransmit(self):
+        with client_and_server() as (client, server):
+            # artificially raise received data counter
+            client._local_max_data_used = client._local_max_data
+            self.assertEqual(server._remote_max_data, 1048576)
+
+            # MAX_DATA is sent and lost
+            self.assertEqual(drop(client), 1)
+            self.assertEqual(client._local_max_data_sent, 2097152)
+            self.assertEqual(server._remote_max_data, 1048576)
+
+            # MAX_DATA is retransmitted and acked
+            client._on_max_data_delivery(QuicDeliveryState.LOST)
+            self.assertEqual(client._local_max_data_sent, 0)
+            self.assertEqual(roundtrip(client, server), (1, 1))
+            self.assertEqual(server._remote_max_data, 2097152)
+
     def test_send_ping(self):
         with client_and_server() as (client, server):
             consume_events(client)
