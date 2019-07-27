@@ -175,7 +175,10 @@ class HighLevelTest(TestCase):
     def test_connect_and_serve_with_version_negotiation(self):
         server, response = run(
             asyncio.gather(
-                run_server(), run_client("127.0.0.1", protocol_version=0x1A2A3A4A)
+                run_server(),
+                run_client(
+                    "127.0.0.1", protocol_version=0x1A2A3A4A, quic_logger=QuicLogger()
+                ),
             )
         )
         self.assertEqual(response, b"gnip")
