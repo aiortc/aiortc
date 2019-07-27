@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cas
 from ..buffer import Buffer
 from ..quic.configuration import QuicConfiguration
 from ..quic.connection import NetworkAddress, QuicConnection
+from ..quic.logger import QuicLogger
 from ..quic.packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
@@ -146,6 +147,7 @@ async def serve(
     private_key: Any,
     alpn_protocols: Optional[List[str]] = None,
     idle_timeout: Optional[float] = None,
+    quic_logger: Optional[QuicLogger] = None,
     stream_handler: QuicStreamHandler = None,
     secrets_log_file: Optional[TextIO] = None,
     session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
@@ -187,6 +189,7 @@ async def serve(
         certificate=certificate,
         is_client=False,
         private_key=private_key,
+        quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,
     )
     if idle_timeout is not None:

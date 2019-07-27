@@ -5,6 +5,7 @@ from typing import AsyncGenerator, List, Optional, TextIO, cast
 
 from ..quic.configuration import QuicConfiguration
 from ..quic.connection import QuicConnection
+from ..quic.logger import QuicLogger
 from ..tls import SessionTicket, SessionTicketHandler
 from .compat import asynccontextmanager
 from .protocol import QuicConnectionProtocol, QuicStreamHandler
@@ -20,6 +21,7 @@ async def connect(
     alpn_protocols: Optional[List[str]] = None,
     idle_timeout: Optional[float] = None,
     protocol_version: Optional[int] = None,
+    quic_logger: Optional[QuicLogger] = None,
     secrets_log_file: Optional[TextIO] = None,
     session_ticket: Optional[SessionTicket] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
@@ -64,6 +66,7 @@ async def connect(
     configuration = QuicConfiguration(
         alpn_protocols=alpn_protocols,
         is_client=True,
+        quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,
         server_name=server_name,
         session_ticket=session_ticket,

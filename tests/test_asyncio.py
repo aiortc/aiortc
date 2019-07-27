@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.server import serve
+from aioquic.quic.logger import QuicLogger
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
@@ -106,8 +107,15 @@ class HighLevelTest(TestCase):
         data = b"Z" * 65536
         server, response = run(
             asyncio.gather(
-                run_server(idle_timeout=300.0, stateless_retry=True),
-                run_client("127.0.0.1", idle_timeout=300.0, request=data),
+                run_server(
+                    idle_timeout=300.0, quic_logger=QuicLogger(), stateless_retry=True
+                ),
+                run_client(
+                    "127.0.0.1",
+                    idle_timeout=300.0,
+                    quic_logger=QuicLogger(),
+                    request=data,
+                ),
             )
         )
         self.assertEqual(response, data)
