@@ -34,6 +34,17 @@ CLIENT_ADDR = ("1.2.3.4", 1234)
 SERVER_ADDR = ("2.3.4.5", 4433)
 
 
+class SessionTicketStore:
+    def __init__(self):
+        self.tickets = {}
+
+    def add(self, ticket):
+        self.tickets[ticket.ticket] = ticket
+
+    def pop(self, label):
+        return self.tickets.pop(label, None)
+
+
 def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
     return QuicReceiveContext(
         epoch=epoch,
@@ -63,14 +74,18 @@ def create_standalone_client(self):
 
 @contextlib.contextmanager
 def client_and_server(
+    client_kwargs={},
     client_options={},
     client_patch=lambda x: None,
+    handshake=True,
+    server_kwargs={},
     server_options={},
     server_patch=lambda x: None,
     transport_options={},
 ):
     client = QuicConnection(
-        configuration=QuicConfiguration(is_client=True, **client_options)
+        configuration=QuicConfiguration(is_client=True, **client_options),
+        **client_kwargs
     )
     client._ack_delay = 0
     client_patch(client)
@@ -81,15 +96,17 @@ def client_and_server(
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY,
             **server_options
-        )
+        ),
+        **server_kwargs
     )
     server._ack_delay = 0
     server_patch(server)
 
     # perform handshake
-    client.connect(SERVER_ADDR, now=time.time())
-    for i in range(3):
-        roundtrip(client, server)
+    if handshake:
+        client.connect(SERVER_ADDR, now=time.time())
+        for i in range(3):
+            roundtrip(client, server)
 
     yield client, server
 
@@ -418,6 +435,38 @@ class QuicConnectionTest(TestCase):
         items = client.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [32])
         self.assertAlmostEqual(client.get_timer(), 61.4)  # idle timeout
+
+    def test_connect_with_0rtt(self):
+        client_ticket = None
+        ticket_store = SessionTicketStore()
+
+        def save_session_ticket(ticket):
+            nonlocal client_ticket
+            client_ticket = ticket
+
+        with client_and_server(
+            client_kwargs={"session_ticket_handler": save_session_ticket},
+            server_kwargs={"session_ticket_handler": ticket_store.add},
+        ) as (client, server):
+            pass
+
+        with client_and_server(
+            client_options={"session_ticket": client_ticket},
+            server_kwargs={"session_ticket_fetcher": ticket_store.pop},
+            handshake=False,
+        ) as (client, server):
+            client.connect(SERVER_ADDR, now=time.time())
+            stream_id = client.get_next_available_stream_id()
+            client.send_stream_data(stream_id, b"hello")
+
+            roundtrip(client, server)
+
+            event = server.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+
+            event = server.next_event()
+            self.assertEqual(type(event), events.StreamDataReceived)
+            self.assertEqual(event.data, b"hello")
 
     def test_change_connection_id(self):
         with client_and_server() as (client, server):
