@@ -1102,6 +1102,39 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(roundtrip(client, server), (1, 1))
             self.assertEqual(server._remote_max_data, 2097152)
 
+    def test_send_max_stream_data_retransmit(self):
+        with client_and_server() as (client, server):
+            # client creates bidirectional stream 0
+            stream = client._create_stream(stream_id=0)
+            client.send_stream_data(0, b"hello")
+            self.assertEqual(stream.max_stream_data_local, 1048576)
+            self.assertEqual(stream.max_stream_data_local_sent, 1048576)
+            roundtrip(client, server)
+
+            # server sends data, just before raising MAX_STREAM_DATA
+            server.send_stream_data(0, b"Z" * 786432)  # 0.75 * 1048576
+            for i in range(10):
+                roundtrip(server, client)
+            self.assertEqual(stream.max_stream_data_local, 1048576)
+            self.assertEqual(stream.max_stream_data_local_sent, 1048576)
+
+            # server sends one more byte
+            server.send_stream_data(0, b"Z")
+            transfer(server, client)
+
+            # MAX_STREAM_DATA is sent and lost
+            self.assertEqual(drop(client), 1)
+            self.assertEqual(stream.max_stream_data_local, 2097152)
+            self.assertEqual(stream.max_stream_data_local_sent, 2097152)
+            client._on_max_stream_data_delivery(QuicDeliveryState.LOST, stream)
+            self.assertEqual(stream.max_stream_data_local, 2097152)
+            self.assertEqual(stream.max_stream_data_local_sent, 0)
+
+            # MAX_DATA is retransmitted and acked
+            self.assertEqual(roundtrip(client, server), (1, 1))
+            self.assertEqual(stream.max_stream_data_local, 2097152)
+            self.assertEqual(stream.max_stream_data_local_sent, 2097152)
+
     def test_send_ping(self):
         with client_and_server() as (client, server):
             consume_events(client)
