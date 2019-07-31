@@ -26,8 +26,8 @@ class FakeQuicConnection:
     def __init__(self, configuration):
         self.configuration = configuration
         self.stream_queue = []
-        self._next_stream_bidi = 0 if configuration.is_client else 2
-        self._next_stream_uni = 1 if configuration.is_client else 3
+        self._next_stream_bidi = 0 if configuration.is_client else 1
+        self._next_stream_uni = 2 if configuration.is_client else 3
 
     def get_next_available_stream_id(self, is_unidirectional=False):
         if is_unidirectional:
