@@ -1504,16 +1504,25 @@ class QuicConnection:
     def _on_ack_delivery(
         self, delivery: QuicDeliveryState, space: QuicPacketSpace, highest_acked: int
     ) -> None:
+        """
+        Callback when an ACK frame is acknowledged or lost.
+        """
         if delivery == QuicDeliveryState.ACKED:
             space.ack_queue.subtract(0, highest_acked + 1)
 
     def _on_max_data_delivery(self, delivery: QuicDeliveryState) -> None:
+        """
+        Callback when a MAX_DATA frame is acknowledged or lost.
+        """
         if delivery != QuicDeliveryState.ACKED:
             self._local_max_data_sent = 0
 
     def _on_max_stream_data_delivery(
         self, delivery: QuicDeliveryState, stream: QuicStream
     ) -> None:
+        """
+        Callback when a MAX_STREAM_DATA frame is acknowledged or lost.
+        """
         if delivery != QuicDeliveryState.ACKED:
             stream.max_stream_data_local_sent = 0
 
