@@ -1,12 +1,11 @@
 import argparse
 import asyncio
+import importlib
 import json
 import logging
-import mimetypes
 import os
-import re
 from functools import partial
-from typing import Dict, Optional, Text, Tuple, Union, cast
+from typing import Callable, Dict, Optional, Text, Tuple, Union, cast
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -34,8 +33,7 @@ try:
 except ImportError:
     uvloop = None
 
-ROOT = os.path.join(os.path.dirname(__file__), "htdocs")
-
+AsgiApplication = Callable
 HttpConnection = Union[H0Connection, H3Connection]
 
 
@@ -43,11 +41,13 @@ class HttpServer(asyncio.DatagramProtocol):
     def __init__(
         self,
         *,
+        application: AsgiApplication,
         configuration: QuicConfiguration,
         session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
         session_ticket_handler: Optional[SessionTicketHandler] = None,
         stateless_retry: bool = False,
     ) -> None:
+        self._application = application
         self._connections: Dict[bytes, QuicConnection] = {}
         self._configuration = configuration
         self._http: Dict[QuicConnection, HttpConnection] = {}
@@ -162,7 +162,10 @@ class HttpServer(asyncio.DatagramProtocol):
             http = self._http.get(connection)
             if http is not None:
                 for http_event in http.handle_event(event):
-                    handle_http_event(http, http_event)
+                    if isinstance(http_event, RequestReceived):
+                        asyncio.ensure_future(
+                            handle_http_request(self._application, http, http_event)
+                        )
 
             event = connection.next_event()
 
@@ -206,94 +209,56 @@ class SessionTicketStore:
         return self.tickets.pop(label, None)
 
 
-def handle_http_event(
-    connection: HttpConnection, event: aioquic.h3.events.Event
-) -> None:
-    """
-    Serve HTTP requests.
-    """
-
-    if isinstance(event, RequestReceived):
-        headers = dict(event.headers)
-        try:
-            path = headers[b":path"].decode("utf8")
-        except (UnicodeDecodeError, ValueError):
-            send_response(
-                connection=connection,
-                content_type="text/plain",
-                data=b"Bad Request",
-                status_code=400,
-                stream_id=event.stream_id,
-            )
-            return
-
-        # dynamically generated data, maximum 50MB
-        size_match = re.match(r"^/(\d+)$", path)
-        if size_match:
-            size = min(50000000, int(size_match.group(1)))
-            send_response(
-                connection=connection,
-                content_type="text/plain",
-                data=b"Z" * size,
-                status_code=200,
-                stream_id=event.stream_id,
-            )
-            return
-
-        if path == "/":
-            path = "/index.html"
-
-        # static files
-        file_match = re.match(r"^/([a-z0-9]+\.[a-z]+)$", path)
-        if file_match:
-            file_name = file_match.group(1)
-            file_path = os.path.join(ROOT, file_match.group(1))
-            try:
-                with open(file_path, "rb") as fp:
-                    send_response(
-                        connection=connection,
-                        content_type=mimetypes.guess_type(file_name)[0],
-                        data=fp.read(),
-                        status_code=200,
-                        stream_id=event.stream_id,
-                    )
-                    return
-            except OSError:
-                pass
-
-        # not found
-        send_response(
-            connection=connection,
-            content_type="text/plain",
-            data=b"Not Found",
-            status_code=404,
-            stream_id=event.stream_id,
-        )
-
-
-def send_response(
+async def handle_http_request(
+    application: AsgiApplication,
     connection: HttpConnection,
-    stream_id: int,
-    data: bytes = b"",
-    content_type: str = "text/html",
-    status_code: int = 200,
+    event: aioquic.h3.events.RequestReceived,
 ) -> None:
     """
-    Send an HTTP response on a connection and stream.
+    Pass HTTP requests to the ASGI application.
     """
-    connection.send_headers(
-        stream_id=stream_id,
-        headers=[
-            (b":status", str(status_code).encode("ascii")),
-            (b"content-type", content_type.encode("ascii")),
-            (b"server", b"aioquic"),
-        ],
-    )
-    connection.send_data(stream_id=stream_id, data=data, end_stream=True)
+    headers = dict(event.headers)
+    stream_id = event.stream_id
+
+    scope = {
+        "headers": event.headers,
+        "http_version": "3",
+        "method": headers[b":method"].decode("utf8"),
+        "path": headers[b":path"].decode("utf8"),
+        "query_string": b"",
+        "raw_path": headers[b":path"],
+        "root_path": "",
+        "scheme": "https",
+        "type": "http",
+    }
+
+    async def receive(x):
+        pass
+
+    async def send(event):
+        if event["type"] == "http.response.start":
+            connection.send_headers(
+                stream_id=stream_id,
+                headers=[(b":status", str(event["status"]).encode("ascii"))]
+                + [(k, v) for k, v in event["headers"]],
+            )
+        elif event["type"] == "http.response.body":
+            connection.send_data(
+                stream_id=stream_id, data=event["body"], end_stream=True
+            )
+
+    await application(scope, receive, send)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC server")
+    parser.add_argument(
+        "app",
+        type=str,
+        nargs="?",
+        default="demo:app",
+        help="the ASGI application as <module>:<attribute>",
+    )
     parser.add_argument(
         "-c",
         "--certificate",
@@ -345,6 +310,11 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
+    # import ASGI application
+    module_str, attr_str = args.app.split(":", maxsplit=1)
+    module = importlib.import_module(module_str)
+    application = getattr(module, attr_str)
+
     # create QUIC logger
     if args.quic_log:
         quic_logger = QuicLogger()
@@ -383,6 +353,7 @@ if __name__ == "__main__":
     loop.run_until_complete(
         loop.create_datagram_endpoint(
             lambda: HttpServer(
+                application=application,
                 configuration=configuration,
                 session_ticket_fetcher=ticket_store.pop,
                 session_ticket_handler=ticket_store.add,
