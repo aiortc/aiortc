@@ -9,7 +9,7 @@ with open(readme_file, encoding='utf-8') as f:
 
 setuptools.setup(
     name='aioquic',
-    version='0.2.0',
+    version='0.3.0',
     description='An implementation of QUIC',
     long_description=long_description,
     url='https://github.com/aiortc/aioquic',
