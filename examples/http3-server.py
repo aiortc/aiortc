@@ -134,6 +134,7 @@ class HttpServer(asyncio.DatagramProtocol):
         if connection is not None:
             connection.receive_datagram(cast(bytes, data), addr, now=self._loop.time())
             self._consume_events(connection)
+            self._send_pending(connection)
 
     def _consume_events(self, connection: QuicConnection) -> None:
         # process events
@@ -164,11 +165,26 @@ class HttpServer(asyncio.DatagramProtocol):
                 for http_event in http.handle_event(event):
                     if isinstance(http_event, RequestReceived):
                         asyncio.ensure_future(
-                            handle_http_request(self._application, http, http_event)
+                            handle_http_request(
+                                self._application,
+                                http,
+                                http_event,
+                                partial(self._send_pending, connection),
+                            )
                         )
 
             event = connection.next_event()
 
+    def _handle_timer(self, connection: QuicConnection) -> None:
+        (timer, timer_at) = self._timer.pop(connection)
+
+        now = max(timer_at, self._loop.time())
+        connection.handle_timer(now=now)
+
+        self._consume_events(connection)
+        self._send_pending(connection)
+
+    def _send_pending(self, connection: QuicConnection) -> None:
         # send datagrams
         for data, addr in connection.datagrams_to_send(now=self._loop.time()):
             self._transport.sendto(data, addr)
@@ -184,14 +200,6 @@ class HttpServer(asyncio.DatagramProtocol):
                 next_timer_at, partial(self._handle_timer, connection)
             )
         self._timer[connection] = (timer, next_timer_at)
-
-    def _handle_timer(self, connection: QuicConnection) -> None:
-        (timer, timer_at) = self._timer.pop(connection)
-
-        now = max(timer_at, self._loop.time())
-        connection.handle_timer(now=now)
-
-        self._consume_events(connection)
 
 
 class SessionTicketStore:
@@ -213,6 +221,7 @@ async def handle_http_request(
     application: AsgiApplication,
     connection: HttpConnection,
     event: aioquic.h3.events.RequestReceived,
+    send_pending: Callable[[], None],
 ) -> None:
     """
     Pass HTTP requests to the ASGI application.
@@ -267,10 +276,12 @@ async def handle_http_request(
             connection.send_data(
                 stream_id=stream_id, data=event["body"], end_stream=False
             )
+        send_pending()
 
     await application(scope, receive, send)
 
     connection.send_data(stream_id=stream_id, data=b"", end_stream=True)
+    send_pending()
 
 
 if __name__ == "__main__":
