@@ -4,20 +4,21 @@ import importlib
 import json
 import logging
 import os
-from functools import partial
-from typing import Callable, Dict, Optional, Text, Tuple, Union, cast
+from typing import Callable, Dict, Optional, Text, Union, cast
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 import aioquic.quic.events
+from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.buffer import Buffer
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import RequestReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
+from aioquic.quic.events import QuicEvent
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
@@ -48,13 +49,11 @@ class HttpServer(asyncio.DatagramProtocol):
         stateless_retry: bool = False,
     ) -> None:
         self._application = application
-        self._connections: Dict[bytes, QuicConnection] = {}
         self._configuration = configuration
-        self._http: Dict[QuicConnection, HttpConnection] = {}
         self._loop = asyncio.get_event_loop()
+        self._protocols: Dict[bytes, QuicConnectionProtocol] = {}
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
-        self._timer: Dict[QuicConnection, Tuple[asyncio.TimerHandle, float]] = {}
         self._transport: Optional[asyncio.DatagramTransport] = None
 
         if stateless_retry:
@@ -63,9 +62,9 @@ class HttpServer(asyncio.DatagramProtocol):
             self._retry = None
 
     def close(self):
-        for connection in set(self._connections.values()):
-            connection.close()
-        self._connections.clear()
+        for protocol in set(self._protocols.values()):
+            protocol.close()
+        self._protocols.clear()
         self._transport.close()
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -91,9 +90,9 @@ class HttpServer(asyncio.DatagramProtocol):
             )
             return
 
-        connection = self._connections.get(header.destination_cid, None)
+        protocol = self._protocols.get(header.destination_cid, None)
         original_connection_id: Optional[bytes] = None
-        if connection is None and header.packet_type == PACKET_TYPE_INITIAL:
+        if protocol is None and header.packet_type == PACKET_TYPE_INITIAL:
             # stateless retry
             if self._retry is not None:
                 if not header.token:
@@ -127,79 +126,52 @@ class HttpServer(asyncio.DatagramProtocol):
                 session_ticket_fetcher=self._session_ticket_fetcher,
                 session_ticket_handler=self._session_ticket_handler,
             )
+            protocol = HttpServerProtocol(connection, self)
+            protocol.connection_made(self._transport)
 
-            self._connections[header.destination_cid] = connection
-            self._connections[connection.host_cid] = connection
+            self._protocols[header.destination_cid] = protocol
+            self._protocols[connection.host_cid] = protocol
 
-        if connection is not None:
-            connection.receive_datagram(cast(bytes, data), addr, now=self._loop.time())
-            self._consume_events(connection)
-            self._send_pending(connection)
+        if protocol is not None:
+            protocol.datagram_received(data, addr)
 
-    def _consume_events(self, connection: QuicConnection) -> None:
-        # process events
-        event = connection.next_event()
-        while event is not None:
-            if isinstance(event, aioquic.quic.events.ConnectionTerminated):
-                # remove the connection
-                for cid, conn in list(self._connections.items()):
-                    if conn == connection:
-                        del self._connections[cid]
-                self._http.pop(connection, None)
-                self._timer.pop(connection, None)
-                return
-            elif isinstance(event, aioquic.quic.events.ProtocolNegotiated):
-                if event.alpn_protocol == "h3-22":
-                    self._http[connection] = H3Connection(connection)
-                elif event.alpn_protocol == "hq-22":
-                    self._http[connection] = H0Connection(connection)
-            elif isinstance(event, aioquic.quic.events.ConnectionIdIssued):
-                self._connections[event.connection_id] = connection
-            elif isinstance(event, aioquic.quic.events.ConnectionIdRetired):
-                assert self._connections[event.connection_id] == connection
-                del self._connections[event.connection_id]
 
-            #  pass event to the HTTP layer
-            http = self._http.get(connection)
-            if http is not None:
-                for http_event in http.handle_event(event):
-                    if isinstance(http_event, RequestReceived):
-                        asyncio.ensure_future(
-                            handle_http_request(
-                                self._application,
-                                http,
-                                http_event,
-                                partial(self._send_pending, connection),
-                            )
+class HttpServerProtocol(QuicConnectionProtocol):
+    def __init__(self, quic: QuicConnection, server: HttpServer):
+        super().__init__(quic)
+        self._http: Optional[HttpConnection] = None
+        self._server = server
+
+    def _handle_event(self, event: QuicEvent):
+        if isinstance(event, aioquic.quic.events.ConnectionTerminated):
+            # remove the connection
+            for cid, protocol in list(self._server._protocols.items()):
+                if protocol == self:
+                    del self._server._protocols[cid]
+            return
+        elif isinstance(event, aioquic.quic.events.ProtocolNegotiated):
+            if event.alpn_protocol == "h3-22":
+                self._http = H3Connection(self._quic)
+            elif event.alpn_protocol == "hq-22":
+                self._http = H0Connection(self._quic)
+        elif isinstance(event, aioquic.quic.events.ConnectionIdIssued):
+            self._server._protocols[event.connection_id] = self
+        elif isinstance(event, aioquic.quic.events.ConnectionIdRetired):
+            assert self._server._protocols[event.connection_id] == self
+            del self._server._protocols[event.connection_id]
+
+        #  pass event to the HTTP layer
+        if self._http is not None:
+            for http_event in self._http.handle_event(event):
+                if isinstance(http_event, RequestReceived):
+                    asyncio.ensure_future(
+                        handle_http_request(
+                            self._server._application,
+                            self._http,
+                            http_event,
+                            self._send_pending,
                         )
-
-            event = connection.next_event()
-
-    def _handle_timer(self, connection: QuicConnection) -> None:
-        (timer, timer_at) = self._timer.pop(connection)
-
-        now = max(timer_at, self._loop.time())
-        connection.handle_timer(now=now)
-
-        self._consume_events(connection)
-        self._send_pending(connection)
-
-    def _send_pending(self, connection: QuicConnection) -> None:
-        # send datagrams
-        for data, addr in connection.datagrams_to_send(now=self._loop.time()):
-            self._transport.sendto(data, addr)
-
-        # re-arm timer
-        next_timer_at = connection.get_timer()
-        (timer, timer_at) = self._timer.get(connection, (None, None))
-        if timer is not None and timer_at != next_timer_at:
-            timer.cancel()
-            timer = None
-        if timer is None and timer_at is not None:
-            timer = self._loop.call_at(
-                next_timer_at, partial(self._handle_timer, connection)
-            )
-        self._timer[connection] = (timer, next_timer_at)
+                    )
 
 
 class SessionTicketStore:

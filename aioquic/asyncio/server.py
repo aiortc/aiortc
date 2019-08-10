@@ -33,8 +33,8 @@ class QuicServer(asyncio.DatagramProtocol):
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         self._configuration = configuration
-        self._protocols: Dict[bytes, QuicConnectionProtocol] = {}
         self._loop = asyncio.get_event_loop()
+        self._protocols: Dict[bytes, QuicConnectionProtocol] = {}
         self._session_ticket_fetcher = session_ticket_fetcher
         self._session_ticket_handler = session_ticket_handler
         self._transport: Optional[asyncio.DatagramTransport] = None
@@ -114,6 +114,8 @@ class QuicServer(asyncio.DatagramProtocol):
             protocol = QuicConnectionProtocol(
                 connection, stream_handler=self._stream_handler
             )
+            protocol.connection_made(self._transport)
+
             protocol._connection_id_issued_handler = partial(
                 self._connection_id_issued, protocol=protocol
             )
@@ -122,8 +124,6 @@ class QuicServer(asyncio.DatagramProtocol):
             )
 
             self._protocols[header.destination_cid] = protocol
-            protocol.connection_made(self._transport)
-
             self._protocols[connection.host_cid] = protocol
 
         if protocol is not None:
