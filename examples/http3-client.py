@@ -57,7 +57,7 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, path: str) -> Deque[Event]:
+    async def get(self, netloc: str, path: str) -> Deque[Event]:
         """
         Perform a GET request.
         """
@@ -71,7 +71,7 @@ class HttpClient(QuicConnectionProtocol):
             headers=[
                 (b":method", b"GET"),
                 (b":scheme", b"https"),
-                (b":authority", self._quic.configuration.server_name.encode("utf8")),
+                (b":authority", netloc.encode("utf8")),
                 (b":path", path.encode("utf8")),
             ],
         )
@@ -148,7 +148,7 @@ async def run(url: str, legacy_http: bool, **kwargs) -> None:
 
     # perform request
     start = time.time()
-    http_events = await client.get(parsed.path)
+    http_events = await client.get(parsed.netloc, parsed.path)
     elapsed = time.time() - start
 
     # print speed

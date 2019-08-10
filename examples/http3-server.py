@@ -233,7 +233,7 @@ async def handle_http_request(
     method = ""
     for header, value in event.headers:
         if header == b":authority":
-            headers.append((b"host", value + ":{}".format(args.port).encode("utf8")))
+            headers.append((b"host", value))
         elif header == b":method":
             method = value.decode("utf8")
         elif header == b":path":
