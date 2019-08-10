@@ -217,23 +217,44 @@ async def handle_http_request(
     """
     Pass HTTP requests to the ASGI application.
     """
-    headers = dict(event.headers)
     stream_id = event.stream_id
 
+    headers = []
+    raw_path = b""
+    method = ""
+    for header, value in event.headers:
+        if header == b":authority":
+            headers.append((b"host", value + ":{}".format(args.port).encode("utf8")))
+        elif header == b":method":
+            method = value.decode("utf8")
+        elif header == b":path":
+            raw_path = value
+        elif header and not header.startswith(b":"):
+            headers.append((header, value))
+
+    if b"?" in raw_path:
+        path_bytes, query_string = raw_path.split(b"?", maxsplit=1)
+    else:
+        path_bytes, query_string = raw_path, b""
+
     scope = {
-        "headers": event.headers,
-        "http_version": "3",
-        "method": headers[b":method"].decode("utf8"),
-        "path": headers[b":path"].decode("utf8"),
-        "query_string": b"",
-        "raw_path": headers[b":path"],
+        "headers": headers,
+        "http_version": "0.9" if isinstance(connection, H0Connection) else "3",
+        "method": method,
+        "path": path_bytes.decode("utf8"),
+        "query_string": query_string,
+        "raw_path": raw_path,
         "root_path": "",
         "scheme": "https",
         "type": "http",
     }
 
-    async def receive(x):
-        pass
+    # FIXME: actually handle request body
+    queue: asyncio.Queue[Dict] = asyncio.Queue()
+    queue.put_nowait({"type": "http.request", "body": b"", "more_body": False})
+
+    async def receive():
+        return await queue.get()
 
     async def send(event):
         if event["type"] == "http.response.start":
