@@ -265,10 +265,12 @@ async def handle_http_request(
             )
         elif event["type"] == "http.response.body":
             connection.send_data(
-                stream_id=stream_id, data=event["body"], end_stream=True
+                stream_id=stream_id, data=event["body"], end_stream=False
             )
 
     await application(scope, receive, send)
+
+    connection.send_data(stream_id=stream_id, data=b"", end_stream=True)
 
 
 if __name__ == "__main__":
