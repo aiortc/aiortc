@@ -4,6 +4,8 @@ import importlib
 import json
 import logging
 import os
+import time
+from email.utils import formatdate
 from typing import Callable, Dict, Optional, Text, Union, cast
 
 from cryptography import x509
@@ -241,7 +243,11 @@ async def handle_http_request(
         if event["type"] == "http.response.start":
             connection.send_headers(
                 stream_id=stream_id,
-                headers=[(b":status", str(event["status"]).encode("ascii"))]
+                headers=[
+                    (b":status", str(event["status"]).encode("ascii")),
+                    (b"server", b"aioquic"),
+                    (b"date", formatdate(time.time(), usegmt=True).encode()),
+                ]
                 + [(k, v) for k, v in event["headers"]],
             )
         elif event["type"] == "http.response.body":
