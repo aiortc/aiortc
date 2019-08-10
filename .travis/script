@@ -6,7 +6,7 @@ if [ "$BUILD" = "lint" ]; then
     flake8 aioquic examples tests
     isort -c -df -rc aioquic examples tests
     black --check --diff aioquic examples tests
-    mypy aioquic examples
+    mypy aioquic
 elif [ "$BUILD" = "sdist" ]; then
     python3 setup.py sdist
     if [ -n "$TRAVIS_TAG" ]; then
