@@ -68,6 +68,7 @@ git you can run:
 .. code-block:: console
 
    $ pip install -e .
+   $ pip install aiofiles starlette
 
 You can now run the example server, which handles both HTTP/0.9 and HTTP/3:
 
