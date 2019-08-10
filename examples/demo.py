@@ -5,10 +5,16 @@
 import os
 
 from starlette.applications import Starlette
-from starlette.responses import PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
 
 app = Starlette()
+
+
+@app.route("/echo", methods=["POST"])
+async def echo(request):
+    content = await request.body()
+    return Response(content)
 
 
 @app.route("/{size:int}")
