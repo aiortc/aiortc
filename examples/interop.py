@@ -13,6 +13,7 @@ from typing import Optional
 
 from aioquic.asyncio import connect
 from aioquic.h3.connection import H3Connection
+from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
 
@@ -111,15 +112,26 @@ async def http3_request(connection, authority, path):
 
 
 async def test_version_negotiation(config, **kwargs):
+    quic_logger = QuicLogger()
     async with connect(
         config.host,
         config.port,
+        quic_logger=quic_logger,
         supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
         **kwargs
     ) as connection:
         await connection.ping()
-        if connection._quic._version_negotiation_count == 1:
-            config.result |= Result.V
+
+        # check log
+        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
+            "events"
+        ]:
+            if (
+                category == "TRANSPORT"
+                and event == "PACKET_RECEIVED"
+                and data["type"] == "VERSION_NEGOTIATION"
+            ):
+                config.result |= Result.V
 
 
 async def test_handshake_and_close(config, **kwargs):
@@ -130,10 +142,22 @@ async def test_handshake_and_close(config, **kwargs):
 
 
 async def test_stateless_retry(config, **kwargs):
-    async with connect(config.host, config.retry_port, **kwargs) as connection:
+    quic_logger = QuicLogger()
+    async with connect(
+        config.host, config.retry_port, quic_logger=quic_logger, **kwargs
+    ) as connection:
         await connection.ping()
-        if connection._quic._stateless_retry_count == 1:
-            config.result |= Result.S
+
+        # check log
+        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
+            "events"
+        ]:
+            if (
+                category == "TRANSPORT"
+                and event == "PACKET_RECEIVED"
+                and data["type"] == "RETRY"
+            ):
+                config.result |= Result.S
 
 
 async def test_http_0(config, **kwargs):

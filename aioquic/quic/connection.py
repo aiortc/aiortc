@@ -281,7 +281,6 @@ class QuicConnection:
         # counters for debugging
         self._quic_logger = configuration.quic_logger
         self._stateless_retry_count = 0
-        self._version_negotiation_count = 0
 
         # configuration
         self._configuration = configuration
@@ -683,8 +682,12 @@ class QuicConnection:
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
                         category="transport",
-                        event="version_negotation",
-                        data={"type": "retry", "header": {}, "frames": []},
+                        event="packet_received",
+                        data={
+                            "type": "VERSION_NEGOTIATION",
+                            "header": {},
+                            "frames": [],
+                        },
                     )
                 common = set(self._configuration.supported_versions).intersection(
                     versions
@@ -699,7 +702,6 @@ class QuicConnection:
                     self._close_end()
                     return
                 self._version = QuicProtocolVersion(max(common))
-                self._version_negotiation_count += 1
                 self._logger.info("Retrying with %s", self._version)
                 self._connect(now=now)
                 return
@@ -721,7 +723,7 @@ class QuicConnection:
                         self._quic_logger.log_event(
                             category="transport",
                             event="packet_received",
-                            data={"type": "retry", "header": {}, "frames": []},
+                            data={"type": "RETRY", "header": {}, "frames": []},
                         )
 
                     self._original_connection_id = self._peer_cid
