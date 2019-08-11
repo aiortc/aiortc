@@ -239,6 +239,7 @@ class QuicReceiveContext:
     epoch: tls.Epoch
     host_cid: bytes
     network_path: QuicNetworkPath
+    quic_logger_frames: Optional[List[Any]]
     time: float
 
 
@@ -769,6 +770,7 @@ class QuicConnection:
 
             # log packet
             if self._quic_logger is not None:
+                quic_logger_frames = []
                 self._quic_logger.log_event(
                     category="transport",
                     event="packet_received",
@@ -778,9 +780,11 @@ class QuicConnection:
                             "packet_number": packet_number,
                             "packet_size": end_off - start_off,
                         },
-                        "frames": [],
+                        "frames": quic_logger_frames,
                     },
                 )
+            else:
+                quic_logger_frames = None
 
             # discard initial keys and packet space
             if not self._is_client and epoch == tls.Epoch.HANDSHAKE:
@@ -815,6 +819,7 @@ class QuicConnection:
                 epoch=epoch,
                 host_cid=header.destination_cid,
                 network_path=network_path,
+                quic_logger_frames=quic_logger_frames,
                 time=now,
             )
             try:
@@ -1144,6 +1149,18 @@ class QuicConnection:
             buf.pull_uint_var()
             buf.pull_uint_var()
             buf.pull_uint_var()
+
+        # log frame
+        if context.quic_logger_frames is not None:
+            context.quic_logger_frames.append(
+                {
+                    "ack_delay": str(
+                        (ack_delay_encoded << self._loss.ack_delay_exponent) // 1000
+                    ),
+                    "acked_ranges": [[x.start, x.stop - 1] for x in ack_rangeset],
+                    "type": "ack",
+                }
+            )
 
         self._loss.on_ack_received(
             space=self._spaces[context.epoch],

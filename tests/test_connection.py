@@ -50,6 +50,7 @@ def client_receive_context(client, epoch=tls.Epoch.ONE_RTT):
         epoch=epoch,
         host_cid=client.host_cid,
         network_path=client._network_paths[0],
+        quic_logger_frames=[],
         time=asyncio.get_event_loop().time(),
     )
 
