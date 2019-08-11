@@ -84,7 +84,7 @@ class HttpClient(QuicConnectionProtocol):
 
         return await asyncio.shield(waiter)
 
-    def _handle_event(self, event: QuicEvent):
+    def quic_event_received(self, event: QuicEvent):
         #  pass event to the HTTP layer
         for http_event in self._http.handle_event(event):
             if (

@@ -187,7 +187,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
         self._http: Optional[HttpConnection] = None
         self._server = server
 
-    def _handle_event(self, event: QuicEvent):
+    def quic_event_received(self, event: QuicEvent):
         if isinstance(event, aioquic.quic.events.ConnectionTerminated):
             # remove the connection
             for cid, protocol in list(self._server._protocols.items()):

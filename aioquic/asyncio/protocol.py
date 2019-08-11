@@ -112,18 +112,9 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._quic.receive_datagram(cast(bytes, data), addr, now=self._loop.time())
         self._send_pending()
 
-    # private
+    # overridable
 
-    def _create_stream(
-        self, stream_id: int
-    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        adapter = QuicStreamAdapter(self, stream_id)
-        reader = asyncio.StreamReader()
-        writer = asyncio.StreamWriter(adapter, None, reader, None)
-        self._stream_readers[stream_id] = reader
-        return reader, writer
-
-    def _handle_event(self, event: events.QuicEvent) -> None:
+    def quic_event_received(self, event: events.QuicEvent) -> None:
         if isinstance(event, events.ConnectionIdIssued):
             self._connection_id_issued_handler(event.connection_id)
         elif isinstance(event, events.ConnectionIdRetired):
@@ -149,6 +140,17 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
             if event.end_stream:
                 reader.feed_eof()
 
+    # private
+
+    def _create_stream(
+        self, stream_id: int
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        adapter = QuicStreamAdapter(self, stream_id)
+        reader = asyncio.StreamReader()
+        writer = asyncio.StreamWriter(adapter, None, reader, None)
+        self._stream_readers[stream_id] = reader
+        return reader, writer
+
     def _handle_timer(self) -> None:
         now = max(self._timer_at, self._loop.time())
         self._timer = None
@@ -162,7 +164,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         # process events
         event = self._quic.next_event()
         while event is not None:
-            self._handle_event(event)
+            self.quic_event_received(event)
             event = self._quic.next_event()
 
         # send datagrams
