@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, Event, ResponseReceived
+from aioquic.h3.events import DataReceived, HttpEvent, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
 from aioquic.quic.events import ConnectionTerminated, QuicEvent
@@ -49,15 +49,15 @@ class HttpClient(QuicConnectionProtocol):
         self._http: HttpConnection
         self._server_addr = server_addr
 
-        self._request_events: Dict[int, Deque[Event]] = {}
-        self._request_waiter: Dict[int, asyncio.Future[Deque[Event]]] = {}
+        self._request_events: Dict[int, Deque[HttpEvent]] = {}
+        self._request_waiter: Dict[int, asyncio.Future[Deque[HttpEvent]]] = {}
 
         if configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, netloc: str, path: str) -> Deque[Event]:
+    async def get(self, netloc: str, path: str) -> Deque[HttpEvent]:
         """
         Perform a GET request.
         """

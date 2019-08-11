@@ -17,7 +17,7 @@ from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.buffer import Buffer
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, Event, RequestReceived
+from aioquic.h3.events import DataReceived, HttpEvent, RequestReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
 from aioquic.quic.events import QuicEvent
@@ -208,9 +208,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
         #  pass event to the HTTP layer
         if self._http is not None:
             for http_event in self._http.handle_event(event):
-                self.handle_http_event(http_event)
+                self.http_event_received(http_event)
 
-    def handle_http_event(self, event: Event) -> None:
+    def http_event_received(self, event: HttpEvent) -> None:
         if isinstance(event, RequestReceived):
             headers = []
             raw_path = b""

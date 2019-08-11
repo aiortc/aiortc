@@ -7,8 +7,8 @@ from pylsqpack import Decoder, Encoder, StreamBlocked
 from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
 from aioquic.h3.events import (
     DataReceived,
-    Event,
     Headers,
+    HttpEvent,
     RequestReceived,
     ResponseReceived,
 )
@@ -108,7 +108,7 @@ class H3Connection:
 
         self._init_connection()
 
-    def handle_event(self, event: QuicEvent) -> List[Event]:
+    def handle_event(self, event: QuicEvent) -> List[HttpEvent]:
         """
         Handle a QUIC event and return a list of HTTP events.
 
@@ -191,11 +191,11 @@ class H3Connection:
 
     def _receive_stream_data_bidi(
         self, stream_id: int, data: bytes, stream_ended: bool
-    ) -> List[Event]:
+    ) -> List[HttpEvent]:
         """
         Client-initiated bidirectional streams carry requests and responses.
         """
-        http_events: List[Event] = []
+        http_events: List[HttpEvent] = []
 
         stream = self._stream[stream_id]
         stream.buffer += data
@@ -285,8 +285,8 @@ class H3Connection:
 
         return http_events
 
-    def _receive_stream_data_uni(self, stream_id: int, data: bytes) -> List[Event]:
-        http_events: List[Event] = []
+    def _receive_stream_data_uni(self, stream_id: int, data: bytes) -> List[HttpEvent]:
+        http_events: List[HttpEvent] = []
 
         stream = self._stream[stream_id]
         stream.buffer += data

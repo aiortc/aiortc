@@ -4,7 +4,7 @@ from typing import List, Tuple
 Headers = List[Tuple[bytes, bytes]]
 
 
-class Event:
+class HttpEvent:
     """
     Base class for HTTP/3 events.
     """
@@ -13,7 +13,7 @@ class Event:
 
 
 @dataclass
-class DataReceived(Event):
+class DataReceived(HttpEvent):
     """
     The DataReceived event is fired whenever data is received on a stream from
     the remote peer.
@@ -30,7 +30,7 @@ class DataReceived(Event):
 
 
 @dataclass
-class RequestReceived(Event):
+class RequestReceived(HttpEvent):
     """
     The RequestReceived event is fired whenever request headers are received.
     """
@@ -46,7 +46,7 @@ class RequestReceived(Event):
 
 
 @dataclass
-class ResponseReceived(Event):
+class ResponseReceived(HttpEvent):
     """
     The ResponseReceived event is fired whenever response headers are received.
     """
