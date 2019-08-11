@@ -13,6 +13,7 @@ from typing import Optional
 
 from aioquic.asyncio import connect
 from aioquic.h3.connection import H3Connection
+from aioquic.quic.packet import QuicProtocolVersion
 
 
 class Result(Flag):
@@ -111,7 +112,10 @@ async def http3_request(connection, authority, path):
 
 async def test_version_negotiation(config, **kwargs):
     async with connect(
-        config.host, config.port, protocol_version=0x1A2A3A4A, **kwargs
+        config.host,
+        config.port,
+        supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
+        **kwargs
     ) as connection:
         await connection.ping()
         if connection._quic._version_negotiation_count == 1:

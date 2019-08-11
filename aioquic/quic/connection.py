@@ -440,9 +440,7 @@ class QuicConnection:
             )
             self._close_pending = True
 
-    def connect(
-        self, addr: NetworkAddress, now: float, protocol_version: Optional[int] = None
-    ) -> None:
+    def connect(self, addr: NetworkAddress, now: float) -> None:
         """
         Initiate the TLS handshake.
 
@@ -453,7 +451,6 @@ class QuicConnection:
 
         :param addr: The network address of the remote peer.
         :param now: The current time.
-        :param protocol_version: An optional QUIC protocol version.
         """
         assert (
             self._is_client and not self._connect_called
@@ -461,10 +458,7 @@ class QuicConnection:
         self._connect_called = True
 
         self._network_paths = [QuicNetworkPath(addr, is_validated=True)]
-        if protocol_version is not None:
-            self._version = protocol_version
-        else:
-            self._version = max(self._configuration.supported_versions)
+        self._version = self._configuration.supported_versions[0]
         self._connect(now=now)
 
     def datagrams_to_send(self, now: float) -> List[Tuple[bytes, NetworkAddress]]:

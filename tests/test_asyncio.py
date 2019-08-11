@@ -7,6 +7,7 @@ from unittest.mock import patch
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.server import serve
 from aioquic.quic.logger import QuicLogger
+from aioquic.quic.packet import QuicProtocolVersion
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
 
@@ -177,7 +178,9 @@ class HighLevelTest(TestCase):
             asyncio.gather(
                 run_server(),
                 run_client(
-                    "127.0.0.1", protocol_version=0x1A2A3A4A, quic_logger=QuicLogger()
+                    "127.0.0.1",
+                    quic_logger=QuicLogger(),
+                    supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
                 ),
             )
         )

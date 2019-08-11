@@ -20,12 +20,12 @@ async def connect(
     *,
     alpn_protocols: Optional[List[str]] = None,
     idle_timeout: Optional[float] = None,
-    protocol_version: Optional[int] = None,
     quic_logger: Optional[QuicLogger] = None,
     secrets_log_file: Optional[TextIO] = None,
     session_ticket: Optional[SessionTicket] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
+    supported_versions: Optional[List[int]] = None,
 ) -> AsyncGenerator[QuicConnectionProtocol, None]:
     """
     Connect to a QUIC server at the given `host` and `port`.
@@ -73,6 +73,8 @@ async def connect(
     )
     if idle_timeout is not None:
         configuration.idle_timeout = idle_timeout
+    if supported_versions is not None:
+        configuration.supported_versions = supported_versions
 
     connection = QuicConnection(
         configuration=configuration, session_ticket_handler=session_ticket_handler
@@ -84,7 +86,7 @@ async def connect(
         local_addr=("::", 0),
     )
     protocol = cast(QuicConnectionProtocol, protocol)
-    protocol.connect(addr, protocol_version)
+    protocol.connect(addr)
     await protocol.wait_connected()
     try:
         yield protocol
