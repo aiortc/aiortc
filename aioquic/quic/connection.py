@@ -769,6 +769,7 @@ class QuicConnection:
                 space.expected_packet_number = packet_number + 1
 
             # log packet
+            quic_logger_frames: Optional[List[Dict]] = None
             if self._quic_logger is not None:
                 quic_logger_frames = []
                 self._quic_logger.log_event(
@@ -783,8 +784,6 @@ class QuicConnection:
                         "frames": quic_logger_frames,
                     },
                 )
-            else:
-                quic_logger_frames = None
 
             # discard initial keys and packet space
             if not self._is_client and epoch == tls.Epoch.HANDSHAKE:

@@ -71,6 +71,6 @@ class QuicConfiguration:
     The TLS session ticket which should be used for session resumption.
     """
 
-    supported_versions: List[QuicProtocolVersion] = field(
+    supported_versions: List[int] = field(
         default_factory=lambda: [QuicProtocolVersion.DRAFT_22]
     )

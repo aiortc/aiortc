@@ -177,9 +177,7 @@ def encode_quic_retry(
 
 
 def encode_quic_version_negotiation(
-    source_cid: bytes,
-    destination_cid: bytes,
-    supported_versions: List[QuicProtocolVersion],
+    source_cid: bytes, destination_cid: bytes, supported_versions: List[int]
 ) -> bytes:
     buf = Buffer(
         capacity=7
