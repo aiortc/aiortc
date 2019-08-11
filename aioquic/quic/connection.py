@@ -343,7 +343,6 @@ class QuicConnection:
         self._remote_max_streams_uni = 0
         self._spaces: Dict[tls.Epoch, QuicPacketSpace] = {}
         self._spin_bit = False
-        self._spin_bit_peer = False
         self._spin_highest_pn = 0
         self._state = QuicConnectionState.FIRSTFLIGHT
         self._streams: Dict[int, QuicStream] = {}
@@ -797,11 +796,11 @@ class QuicConnection:
 
             # update spin bit
             if not header.is_long_header and packet_number > self._spin_highest_pn:
-                self._spin_bit_peer = get_spin_bit(plain_header[0])
+                spin_bit = get_spin_bit(plain_header[0])
                 if self._is_client:
-                    self._spin_bit = not self._spin_bit_peer
+                    self._spin_bit = not spin_bit
                 else:
-                    self._spin_bit = self._spin_bit_peer
+                    self._spin_bit = spin_bit
                 self._spin_highest_pn = packet_number
 
                 if self._quic_logger is not None:

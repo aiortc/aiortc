@@ -230,11 +230,20 @@ async def test_key_update(config, **kwargs):
 
 
 async def test_spin_bit(config, **kwargs):
-    async with connect(config.host, config.port, **kwargs) as connection:
-        spin_bits = set()
+    quic_logger = QuicLogger()
+    async with connect(
+        config.host, config.port, quic_logger=quic_logger, **kwargs
+    ) as connection:
         for i in range(5):
             await connection.ping()
-            spin_bits.add(connection._quic._spin_bit_peer)
+
+        # check log
+        spin_bits = set()
+        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
+            "events"
+        ]:
+            if category == "CONNECTIVITY" and event == "SPIN_BIT_UPDATE":
+                spin_bits.add(data["state"])
         if len(spin_bits) == 2:
             config.result |= Result.P
 
