@@ -18,14 +18,9 @@ async def connect(
     host: str,
     port: int,
     *,
-    alpn_protocols: Optional[List[str]] = None,
-    idle_timeout: Optional[float] = None,
-    quic_logger: Optional[QuicLogger] = None,
-    secrets_log_file: Optional[TextIO] = None,
-    session_ticket: Optional[SessionTicket] = None,
+    configuration: Optional[QuicConfiguration] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
-    supported_versions: Optional[List[int]] = None,
 ) -> AsyncGenerator[QuicConnectionProtocol, None]:
     """
     Connect to a QUIC server at the given `host` and `port`.
@@ -36,12 +31,7 @@ async def connect(
 
     :func:`connect` also accepts the following optional arguments:
 
-    * ``alpn_protocols`` is a list of ALPN protocols to offer in the
-      ClientHello.
-    * ``secrets_log_file`` is a file-like object in which to log traffic
-      secrets. This is useful to analyze traffic captures with Wireshark.
-    * ``session_ticket`` is a TLS session ticket which should be used for
-      resumption.
+    * ``configuration`` is a QUIC configuration object.
     * ``session_ticket_handler`` is a callback which is invoked by the TLS
       engine when a new session ticket is received.
     * ``stream_handler`` is a callback which is invoked whenever a stream is
@@ -63,18 +53,10 @@ async def connect(
     if len(addr) == 2:
         addr = ("::ffff:" + addr[0], addr[1], 0, 0)
 
-    configuration = QuicConfiguration(
-        alpn_protocols=alpn_protocols,
-        is_client=True,
-        quic_logger=quic_logger,
-        secrets_log_file=secrets_log_file,
-        server_name=server_name,
-        session_ticket=session_ticket,
-    )
-    if idle_timeout is not None:
-        configuration.idle_timeout = idle_timeout
-    if supported_versions is not None:
-        configuration.supported_versions = supported_versions
+    if configuration is None:
+        configuration = QuicConfiguration(is_client=True)
+    if server_name is not None:
+        configuration.server_name = server_name
 
     connection = QuicConnection(
         configuration=configuration, session_ticket_handler=session_ticket_handler

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.server import serve
+from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
@@ -83,8 +84,8 @@ class HighLevelTest(TestCase):
         server.close()
 
     def test_connect_and_serve_writelines(self):
-        async def run_client_writelines(host, port=4433, **kwargs):
-            async with connect(host, port, **kwargs) as client:
+        async def run_client_writelines(host, port=4433):
+            async with connect(host, port) as client:
                 reader, writer = await client.create_stream()
                 assert writer.can_write_eof() is True
 
@@ -113,8 +114,9 @@ class HighLevelTest(TestCase):
                 ),
                 run_client(
                     "127.0.0.1",
-                    idle_timeout=300.0,
-                    quic_logger=QuicLogger(),
+                    configuration=QuicConfiguration(
+                        is_client=True, idle_timeout=300.0, quic_logger=QuicLogger()
+                    ),
                     request=data,
                 ),
             )
@@ -146,7 +148,12 @@ class HighLevelTest(TestCase):
         server, response = run(
             asyncio.gather(
                 run_server(session_ticket_fetcher=store.pop),
-                run_client("127.0.0.1", session_ticket=client_ticket),
+                run_client(
+                    "127.0.0.1",
+                    configuration=QuicConfiguration(
+                        is_client=True, session_ticket=client_ticket
+                    ),
+                ),
             )
         )
         self.assertEqual(response, b"gnip")
@@ -170,7 +177,12 @@ class HighLevelTest(TestCase):
 
         server = run(run_server(stateless_retry=True))
         with self.assertRaises(ConnectionError):
-            run(run_client("127.0.0.1", idle_timeout=4.0))
+            run(
+                run_client(
+                    "127.0.0.1",
+                    configuration=QuicConfiguration(is_client=True, idle_timeout=4.0),
+                )
+            )
         server.close()
 
     def test_connect_and_serve_with_version_negotiation(self):
@@ -179,8 +191,11 @@ class HighLevelTest(TestCase):
                 run_server(),
                 run_client(
                     "127.0.0.1",
-                    quic_logger=QuicLogger(),
-                    supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
+                    configuration=QuicConfiguration(
+                        is_client=True,
+                        quic_logger=QuicLogger(),
+                        supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
+                    ),
                 ),
             )
         )
@@ -189,11 +204,17 @@ class HighLevelTest(TestCase):
 
     def test_connect_timeout(self):
         with self.assertRaises(ConnectionError):
-            run(run_client("127.0.0.1", port=4400, idle_timeout=5))
+            run(
+                run_client(
+                    "127.0.0.1",
+                    port=4400,
+                    configuration=QuicConfiguration(is_client=True, idle_timeout=5),
+                )
+            )
 
     def test_change_connection_id(self):
-        async def run_client_key_update(host, **kwargs):
-            async with connect(host, 4433, **kwargs) as client:
+        async def run_client_key_update(host, port=4433):
+            async with connect(host, port) as client:
                 await client.ping()
                 client.change_connection_id()
                 await client.ping()
@@ -206,8 +227,8 @@ class HighLevelTest(TestCase):
         server.close()
 
     def test_key_update(self):
-        async def run_client_key_update(host, **kwargs):
-            async with connect(host, 4433, **kwargs) as client:
+        async def run_client_key_update(host, port=4433):
+            async with connect(host, port) as client:
                 await client.ping()
                 client.request_key_update()
                 await client.ping()
@@ -220,8 +241,8 @@ class HighLevelTest(TestCase):
         server.close()
 
     def test_ping(self):
-        async def run_client_ping(host, **kwargs):
-            async with connect(host, 4433, **kwargs) as client:
+        async def run_client_ping(host, port=4433):
+            async with connect(host, port) as client:
                 await client.ping()
                 await client.ping()
 

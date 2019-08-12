@@ -14,6 +14,7 @@ from typing import Optional
 from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h3.connection import H3Connection
+from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
@@ -112,21 +113,18 @@ async def http3_request(connection: QuicConnectionProtocol, authority: str, path
     return await reader.read()
 
 
-async def test_version_negotiation(server: Server, **kwargs):
-    quic_logger = QuicLogger()
+async def test_version_negotiation(server: Server, configuration: QuicConfiguration):
+    configuration.supported_versions = [0x1A2A3A4A, QuicProtocolVersion.DRAFT_22]
+
     async with connect(
-        server.host,
-        server.port,
-        quic_logger=quic_logger,
-        supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
-        **kwargs
+        server.host, server.port, configuration=configuration
     ) as connection:
         await connection.ping()
 
         # check log
-        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
-            "events"
-        ]:
+        for stamp, category, event, data in configuration.quic_logger.to_dict()[
+            "traces"
+        ][0]["events"]:
             if (
                 category == "TRANSPORT"
                 and event == "PACKET_RECEIVED"
@@ -135,24 +133,25 @@ async def test_version_negotiation(server: Server, **kwargs):
                 server.result |= Result.V
 
 
-async def test_handshake_and_close(server: Server, **kwargs):
-    async with connect(server.host, server.port, **kwargs) as connection:
+async def test_handshake_and_close(server: Server, configuration: QuicConfiguration):
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as connection:
         await connection.ping()
         server.result |= Result.H
     server.result |= Result.C
 
 
-async def test_stateless_retry(server: Server, **kwargs):
-    quic_logger = QuicLogger()
+async def test_stateless_retry(server: Server, configuration: QuicConfiguration):
     async with connect(
-        server.host, server.retry_port, quic_logger=quic_logger, **kwargs
+        server.host, server.retry_port, configuration=configuration
     ) as connection:
         await connection.ping()
 
         # check log
-        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
-            "events"
-        ]:
+        for stamp, category, event, data in configuration.quic_logger.to_dict()[
+            "traces"
+        ][0]["events"]:
             if (
                 category == "TRANSPORT"
                 and event == "PACKET_RECEIVED"
@@ -161,30 +160,34 @@ async def test_stateless_retry(server: Server, **kwargs):
                 server.result |= Result.S
 
 
-async def test_http_0(server: Server, **kwargs):
+async def test_http_0(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    kwargs["alpn_protocols"] = ["hq-22"]
-    async with connect(server.host, server.port, **kwargs) as connection:
+    configuration.alpn_protocols = ["hq-22"]
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as connection:
         response = await http_request(connection, server.path)
         if response:
             server.result |= Result.D
 
 
-async def test_http_3(server: Server, **kwargs):
+async def test_http_3(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    kwargs["alpn_protocols"] = ["h3-22"]
-    async with connect(server.host, server.port, **kwargs) as connection:
+    configuration.alpn_protocols = ["h3-22"]
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as connection:
         response = await http3_request(connection, server.host, server.path)
         if response:
             server.result |= Result.D
             server.result |= Result.three
 
 
-async def test_session_resumption(server: Server, **kwargs):
+async def test_session_resumption(server: Server, configuration: QuicConfiguration):
     saved_ticket = None
 
     def session_ticket_handler(ticket):
@@ -195,15 +198,16 @@ async def test_session_resumption(server: Server, **kwargs):
     async with connect(
         server.host,
         server.port,
+        configuration=configuration,
         session_ticket_handler=session_ticket_handler,
-        **kwargs
     ) as connection:
         await connection.ping()
 
     # connect a second time, with the ticket
     if saved_ticket is not None:
+        configuration.session_ticket = saved_ticket
         async with connect(
-            server.host, server.port, session_ticket=saved_ticket, **kwargs
+            server.host, server.port, configuration=configuration
         ) as connection:
             await connection.ping()
 
@@ -216,8 +220,10 @@ async def test_session_resumption(server: Server, **kwargs):
                 server.result |= Result.Z
 
 
-async def test_key_update(server: Server, **kwargs):
-    async with connect(server.host, server.port, **kwargs) as connection:
+async def test_key_update(server: Server, configuration: QuicConfiguration):
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as connection:
         # cause some traffic
         await connection.ping()
 
@@ -230,19 +236,18 @@ async def test_key_update(server: Server, **kwargs):
         server.result |= Result.U
 
 
-async def test_spin_bit(server: Server, **kwargs):
-    quic_logger = QuicLogger()
+async def test_spin_bit(server: Server, configuration: QuicConfiguration):
     async with connect(
-        server.host, server.port, quic_logger=quic_logger, **kwargs
+        server.host, server.port, configuration=configuration
     ) as connection:
         for i in range(5):
             await connection.ping()
 
         # check log
         spin_bits = set()
-        for stamp, category, event, data in quic_logger.to_dict()["traces"][0][
-            "events"
-        ]:
+        for stamp, category, event, data in configuration.quic_logger.to_dict()[
+            "traces"
+        ][0]["events"]:
             if category == "CONNECTIVITY" and event == "SPIN_BIT_UPDATE":
                 spin_bits.add(data["state"])
         if len(spin_bits) == 2:
@@ -255,12 +260,17 @@ def print_result(server: Server) -> None:
     print("%s%s%s" % (server.name, " " * (20 - len(server.name)), result))
 
 
-async def run(servers, tests, **kwargs) -> None:
+async def run(servers, tests) -> None:
     for server in servers:
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
+            configuration = QuicConfiguration(
+                alpn_protocols=["hq-22", "h3-22"],
+                is_client=True,
+                quic_logger=QuicLogger(),
+            )
             try:
-                await asyncio.wait_for(test_func(server, **kwargs), timeout=5)
+                await asyncio.wait_for(test_func(server, configuration), timeout=5)
             except Exception as exc:
                 print(exc)
         print("")
@@ -305,11 +315,4 @@ if __name__ == "__main__":
         tests = list(filter(lambda x: x[0] == args.test, tests))
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        run(
-            alpn_protocols=["hq-22", "h3-22"],
-            servers=servers,
-            tests=tests,
-            secrets_log_file=secrets_log_file,
-        )
-    )
+    loop.run_until_complete(run(servers=servers, tests=tests))
