@@ -55,12 +55,17 @@ def handle_stream(reader, writer):
     asyncio.ensure_future(serve())
 
 
-async def run_server(**kwargs):
+async def run_server(configuration=None, **kwargs):
+    if configuration is None:
+        configuration = QuicConfiguration(
+            certificate=SERVER_CERTIFICATE,
+            private_key=SERVER_PRIVATE_KEY,
+            is_client=False,
+        )
     return await serve(
         host="::",
         port="4433",
-        certificate=SERVER_CERTIFICATE,
-        private_key=SERVER_PRIVATE_KEY,
+        configuration=configuration,
         stream_handler=handle_stream,
         **kwargs
     )
@@ -110,7 +115,14 @@ class HighLevelTest(TestCase):
         server, response = run(
             asyncio.gather(
                 run_server(
-                    idle_timeout=300.0, quic_logger=QuicLogger(), stateless_retry=True
+                    configuration=QuicConfiguration(
+                        certificate=SERVER_CERTIFICATE,
+                        idle_timeout=300.0,
+                        is_client=False,
+                        private_key=SERVER_PRIVATE_KEY,
+                        quic_logger=QuicLogger(),
+                    ),
+                    stateless_retry=True,
                 ),
                 run_client(
                     "127.0.0.1",

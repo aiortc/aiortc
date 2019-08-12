@@ -33,6 +33,10 @@ async def connect(
 
     * ``configuration`` is a :class:`~aioquic.quic.configuration.QuicConfiguration`
       configuration object.
+    * ``create_protocol`` allows customizing the :class:`~asyncio.Protocol` that
+      manages the connection. It should be a callable or class accepting the same
+      arguments as :class:`~aioquic.asyncio.QuicConnectionProtocol` and returning
+      an instance of :class:`~aioquic.asyncio.QuicConnectionProtocol` or a subclass.
     * ``session_ticket_handler`` is a callback which is invoked by the TLS
       engine when a new session ticket is received.
     * ``stream_handler`` is a callback which is invoked whenever a stream is

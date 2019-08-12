@@ -1,12 +1,11 @@
 import asyncio
 import os
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Text, TextIO, Union, cast
+from typing import Callable, Dict, Optional, Text, Union, cast
 
 from ..buffer import Buffer
 from ..quic.configuration import QuicConfiguration
 from ..quic.connection import NetworkAddress, QuicConnection
-from ..quic.logger import QuicLogger
 from ..quic.packet import (
     PACKET_TYPE_INITIAL,
     encode_quic_retry,
@@ -152,33 +151,25 @@ async def serve(
     host: str,
     port: int,
     *,
-    certificate: Any,
-    private_key: Any,
-    alpn_protocols: Optional[List[str]] = None,
+    configuration: QuicConfiguration,
     create_protocol: Callable = QuicConnectionProtocol,
-    idle_timeout: Optional[float] = None,
-    quic_logger: Optional[QuicLogger] = None,
-    stream_handler: QuicStreamHandler = None,
-    secrets_log_file: Optional[TextIO] = None,
     session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stateless_retry: bool = False,
+    stream_handler: QuicStreamHandler = None,
 ) -> QuicServer:
     """
     Start a QUIC server at the given `host` and `port`.
 
-    :func:`serve` requires a TLS certificate and private key, which can be
-    specified using the following arguments:
-
-    * ``certificate`` is the server's TLS certificate.
-      See :func:`cryptography.x509.load_pem_x509_certificate`.
-    * ``private_key`` is the server's private key.
-      See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
+    :func:`serve` requires a :class:`~aioquic.quic.configuration.QuicConfiguration`
+    containing TLS certificate and private key as the ``configuration`` argument.
 
     :func:`serve` also accepts the following optional arguments:
 
-    * ``secrets_log_file`` is  a file-like object in which to log traffic
-      secrets. This is useful to analyze traffic captures with Wireshark.
+    * ``create_protocol`` allows customizing the :class:`~asyncio.Protocol` that
+      manages the connection. It should be a callable or class accepting the same
+      arguments as :class:`~aioquic.asyncio.QuicConnectionProtocol` and returning
+      an instance of :class:`~aioquic.asyncio.QuicConnectionProtocol` or a subclass.
     * ``session_ticket_fetcher`` is a callback which is invoked by the TLS
       engine when a session ticket is presented by the peer. It should return
       the session ticket with the specified ID or `None` if it is not found.
@@ -193,17 +184,6 @@ async def serve(
     """
 
     loop = asyncio.get_event_loop()
-
-    configuration = QuicConfiguration(
-        alpn_protocols=alpn_protocols,
-        certificate=certificate,
-        is_client=False,
-        private_key=private_key,
-        quic_logger=quic_logger,
-        secrets_log_file=secrets_log_file,
-    )
-    if idle_timeout is not None:
-        configuration.idle_timeout = idle_timeout
 
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
