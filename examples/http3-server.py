@@ -11,8 +11,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
-from aioquic.asyncio.protocol import QuicConnectionProtocol
-from aioquic.asyncio.server import QuicServer
+from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HttpEvent, RequestReceived
@@ -257,15 +256,14 @@ if __name__ == "__main__":
         uvloop.install()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        loop.create_datagram_endpoint(
-            lambda: QuicServer(
-                configuration=configuration,
-                create_protocol=HttpServerProtocol,
-                session_ticket_fetcher=ticket_store.pop,
-                session_ticket_handler=ticket_store.add,
-                stateless_retry=args.stateless_retry,
-            ),
-            local_addr=(args.host, args.port),
+        serve(
+            args.host,
+            args.port,
+            configuration=configuration,
+            create_protocol=HttpServerProtocol,
+            session_ticket_fetcher=ticket_store.pop,
+            session_ticket_handler=ticket_store.add,
+            stateless_retry=args.stateless_retry,
         )
     )
     try:
