@@ -12,6 +12,7 @@ from enum import Flag
 from typing import Optional
 
 from aioquic.asyncio import connect
+from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h3.connection import H3Connection
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
@@ -53,7 +54,7 @@ class Result(Flag):
 
 
 @dataclass
-class Config:
+class Server:
     name: str
     host: str
     port: int = 4433
@@ -62,28 +63,28 @@ class Config:
     result: Result = field(default_factory=lambda: Result(0))
 
 
-CONFIGS = [
-    Config("aioquic", "quic.aiortc.org"),
-    Config("ats", "quic.ogre.com"),
-    Config("f5", "f5quic.com", retry_port=4433),
-    Config("gquic", "quic.rocks", retry_port=None),
-    Config("lsquic", "http3-test.litespeedtech.com"),
-    Config("mvfst", "fb.mvfst.net"),
-    Config("ngtcp2", "nghttp2.org"),
-    Config("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
-    Config("pandora", "pandora.cm.in.tum.de"),
-    Config("picoquic", "test.privateoctopus.com"),
-    Config("quant", "quant.eggert.org"),
-    Config("quic-go", "quic.seemann.io", port=443, retry_port=443),
-    Config("quiche", "quic.tech", retry_port=4433),
-    Config("quicker", "quicker.edm.uhasselt.be", retry_port=None),
-    Config("quicly", "kazuhooku.com"),
-    Config("quinn", "ralith.com"),
-    Config("winquic", "quic.westus.cloudapp.azure.com"),
+SERVERS = [
+    Server("aioquic", "quic.aiortc.org"),
+    Server("ats", "quic.ogre.com"),
+    Server("f5", "f5quic.com", retry_port=4433),
+    Server("gquic", "quic.rocks", retry_port=None),
+    Server("lsquic", "http3-test.litespeedtech.com"),
+    Server("mvfst", "fb.mvfst.net"),
+    Server("ngtcp2", "nghttp2.org"),
+    Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
+    Server("pandora", "pandora.cm.in.tum.de"),
+    Server("picoquic", "test.privateoctopus.com"),
+    Server("quant", "quant.eggert.org"),
+    Server("quic-go", "quic.seemann.io", port=443, retry_port=443),
+    Server("quiche", "quic.tech", retry_port=4433),
+    Server("quicker", "quicker.edm.uhasselt.be", retry_port=None),
+    Server("quicly", "kazuhooku.com"),
+    Server("quinn", "ralith.com"),
+    Server("winquic", "quic.westus.cloudapp.azure.com"),
 ]
 
 
-async def http_request(connection, path):
+async def http_request(connection: QuicConnectionProtocol, path: str):
     # perform HTTP/0.9 request
     reader, writer = await connection.create_stream()
     writer.write(("GET %s\r\n" % path).encode("utf8"))
@@ -92,7 +93,7 @@ async def http_request(connection, path):
     return await reader.read()
 
 
-async def http3_request(connection, authority, path):
+async def http3_request(connection: QuicConnectionProtocol, authority: str, path: str):
     reader, writer = await connection.create_stream()
     stream_id = writer.get_extra_info("stream_id")
 
@@ -111,11 +112,11 @@ async def http3_request(connection, authority, path):
     return await reader.read()
 
 
-async def test_version_negotiation(config, **kwargs):
+async def test_version_negotiation(server: Server, **kwargs):
     quic_logger = QuicLogger()
     async with connect(
-        config.host,
-        config.port,
+        server.host,
+        server.port,
         quic_logger=quic_logger,
         supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
         **kwargs
@@ -131,20 +132,20 @@ async def test_version_negotiation(config, **kwargs):
                 and event == "PACKET_RECEIVED"
                 and data["type"] == "VERSION_NEGOTIATION"
             ):
-                config.result |= Result.V
+                server.result |= Result.V
 
 
-async def test_handshake_and_close(config, **kwargs):
-    async with connect(config.host, config.port, **kwargs) as connection:
+async def test_handshake_and_close(server: Server, **kwargs):
+    async with connect(server.host, server.port, **kwargs) as connection:
         await connection.ping()
-        config.result |= Result.H
-    config.result |= Result.C
+        server.result |= Result.H
+    server.result |= Result.C
 
 
-async def test_stateless_retry(config, **kwargs):
+async def test_stateless_retry(server: Server, **kwargs):
     quic_logger = QuicLogger()
     async with connect(
-        config.host, config.retry_port, quic_logger=quic_logger, **kwargs
+        server.host, server.retry_port, quic_logger=quic_logger, **kwargs
     ) as connection:
         await connection.ping()
 
@@ -157,33 +158,33 @@ async def test_stateless_retry(config, **kwargs):
                 and event == "PACKET_RECEIVED"
                 and data["type"] == "RETRY"
             ):
-                config.result |= Result.S
+                server.result |= Result.S
 
 
-async def test_http_0(config, **kwargs):
-    if config.path is None:
+async def test_http_0(server: Server, **kwargs):
+    if server.path is None:
         return
 
     kwargs["alpn_protocols"] = ["hq-22"]
-    async with connect(config.host, config.port, **kwargs) as connection:
-        response = await http_request(connection, config.path)
+    async with connect(server.host, server.port, **kwargs) as connection:
+        response = await http_request(connection, server.path)
         if response:
-            config.result |= Result.D
+            server.result |= Result.D
 
 
-async def test_http_3(config, **kwargs):
-    if config.path is None:
+async def test_http_3(server: Server, **kwargs):
+    if server.path is None:
         return
 
     kwargs["alpn_protocols"] = ["h3-22"]
-    async with connect(config.host, config.port, **kwargs) as connection:
-        response = await http3_request(connection, config.host, config.path)
+    async with connect(server.host, server.port, **kwargs) as connection:
+        response = await http3_request(connection, server.host, server.path)
         if response:
-            config.result |= Result.D
-            config.result |= Result.three
+            server.result |= Result.D
+            server.result |= Result.three
 
 
-async def test_session_resumption(config, **kwargs):
+async def test_session_resumption(server: Server, **kwargs):
     saved_ticket = None
 
     def session_ticket_handler(ticket):
@@ -192,8 +193,8 @@ async def test_session_resumption(config, **kwargs):
 
     # connect a first time, receive a ticket
     async with connect(
-        config.host,
-        config.port,
+        server.host,
+        server.port,
         session_ticket_handler=session_ticket_handler,
         **kwargs
     ) as connection:
@@ -202,21 +203,21 @@ async def test_session_resumption(config, **kwargs):
     # connect a second time, with the ticket
     if saved_ticket is not None:
         async with connect(
-            config.host, config.port, session_ticket=saved_ticket, **kwargs
+            server.host, server.port, session_ticket=saved_ticket, **kwargs
         ) as connection:
             await connection.ping()
 
             # check session was resumed
             if connection._quic.tls.session_resumed:
-                config.result |= Result.R
+                server.result |= Result.R
 
             # check early data was accepted
             if connection._quic.tls.early_data_accepted:
-                config.result |= Result.Z
+                server.result |= Result.Z
 
 
-async def test_key_update(config, **kwargs):
-    async with connect(config.host, config.port, **kwargs) as connection:
+async def test_key_update(server: Server, **kwargs):
+    async with connect(server.host, server.port, **kwargs) as connection:
         # cause some traffic
         await connection.ping()
 
@@ -226,13 +227,13 @@ async def test_key_update(config, **kwargs):
         # cause more traffic
         await connection.ping()
 
-        config.result |= Result.U
+        server.result |= Result.U
 
 
-async def test_spin_bit(config, **kwargs):
+async def test_spin_bit(server: Server, **kwargs):
     quic_logger = QuicLogger()
     async with connect(
-        config.host, config.port, quic_logger=quic_logger, **kwargs
+        server.host, server.port, quic_logger=quic_logger, **kwargs
     ) as connection:
         for i in range(5):
             await connection.ping()
@@ -245,39 +246,37 @@ async def test_spin_bit(config, **kwargs):
             if category == "CONNECTIVITY" and event == "SPIN_BIT_UPDATE":
                 spin_bits.add(data["state"])
         if len(spin_bits) == 2:
-            config.result |= Result.P
+            server.result |= Result.P
 
 
-def print_result(config: Config) -> None:
-    result = str(config.result).replace("three", "3")
+def print_result(server: Server) -> None:
+    result = str(server.result).replace("three", "3")
     result = result[0:7] + " " + result[7:13] + " " + result[13:]
-    print("%s%s%s" % (config.name, " " * (20 - len(config.name)), result))
+    print("%s%s%s" % (server.name, " " * (20 - len(server.name)), result))
 
 
-async def run(configs, tests, **kwargs) -> None:
-    for config in configs:
+async def run(servers, tests, **kwargs) -> None:
+    for server in servers:
         for test_name, test_func in tests:
-            print("\n=== %s %s ===\n" % (config.name, test_name))
+            print("\n=== %s %s ===\n" % (server.name, test_name))
             try:
-                await asyncio.wait_for(test_func(config, **kwargs), timeout=5)
+                await asyncio.wait_for(test_func(server, **kwargs), timeout=5)
             except Exception as exc:
                 print(exc)
         print("")
-        print_result(config)
+        print_result(server)
 
     # print summary
-    if len(configs) > 1:
+    if len(servers) > 1:
         print("SUMMARY")
-        for config in configs:
-            print_result(config)
+        for server in servers:
+            print_result(server)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QUIC client")
+    parser = argparse.ArgumentParser(description="QUIC interop client")
     parser.add_argument(
-        "--implementation",
-        type=str,
-        help="only test against the specified implementation.",
+        "--server", type=str, help="only run against the specified server."
     )
     parser.add_argument("--test", type=str, help="only run the specifed test.")
     parser.add_argument(
@@ -298,10 +297,10 @@ if __name__ == "__main__":
         secrets_log_file = None
 
     # determine what to run
-    configs = CONFIGS
+    servers = SERVERS
     tests = list(filter(lambda x: x[0].startswith("test_"), globals().items()))
-    if args.implementation:
-        configs = list(filter(lambda x: x.name == args.implementation, configs))
+    if args.server:
+        servers = list(filter(lambda x: x.name == args.server, servers))
     if args.test:
         tests = list(filter(lambda x: x[0] == args.test, tests))
 
@@ -309,7 +308,7 @@ if __name__ == "__main__":
     loop.run_until_complete(
         run(
             alpn_protocols=["hq-22", "h3-22"],
-            configs=configs,
+            servers=servers,
             tests=tests,
             secrets_log_file=secrets_log_file,
         )
