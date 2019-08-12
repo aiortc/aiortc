@@ -32,7 +32,7 @@ Events
 
 .. automodule:: aioquic.quic.events
 
-    .. autoclass:: Event
+    .. autoclass:: QuicEvent
         :members:
 
     .. autoclass:: ConnectionTerminated

@@ -19,7 +19,7 @@ Events
 
 .. automodule:: aioquic.h3.events
 
-    .. autoclass:: Event
+    .. autoclass:: HttpEvent
         :members:
 
     .. autoclass:: DataReceived

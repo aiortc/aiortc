@@ -1,12 +1,11 @@
 import asyncio
 import ipaddress
 import socket
-from typing import AsyncGenerator, List, Optional, TextIO, cast
+from typing import AsyncGenerator, Optional, cast
 
 from ..quic.configuration import QuicConfiguration
 from ..quic.connection import QuicConnection
-from ..quic.logger import QuicLogger
-from ..tls import SessionTicket, SessionTicketHandler
+from ..tls import SessionTicketHandler
 from .compat import asynccontextmanager
 from .protocol import QuicConnectionProtocol, QuicStreamHandler
 
@@ -31,7 +30,8 @@ async def connect(
 
     :func:`connect` also accepts the following optional arguments:
 
-    * ``configuration`` is a QUIC configuration object.
+    * ``configuration`` is a :class:`~aioquic.quic.configuration.QuicConfiguration`
+      configuration object.
     * ``session_ticket_handler`` is a callback which is invoked by the TLS
       engine when a new session ticket is received.
     * ``stream_handler`` is a callback which is invoked whenever a stream is
@@ -53,11 +53,11 @@ async def connect(
     if len(addr) == 2:
         addr = ("::ffff:" + addr[0], addr[1], 0, 0)
 
+    # prepare QUIC connection
     if configuration is None:
         configuration = QuicConfiguration(is_client=True)
     if server_name is not None:
         configuration.server_name = server_name
-
     connection = QuicConnection(
         configuration=configuration, session_ticket_handler=session_ticket_handler
     )
