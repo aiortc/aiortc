@@ -11,14 +11,13 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
-import aioquic.quic.events
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.asyncio.server import QuicServer
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HttpEvent, RequestReceived
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.events import QuicEvent
+from aioquic.quic.events import ProtocolNegotiated, QuicEvent
 from aioquic.quic.logger import QuicLogger
 from aioquic.tls import SessionTicket
 
@@ -79,24 +78,6 @@ class HttpServerProtocol(QuicConnectionProtocol):
         self._handlers: Dict[int, HttpRequestHandler] = {}
         self._http: Optional[HttpConnection] = None
 
-    def quic_event_received(self, event: QuicEvent):
-        if isinstance(event, aioquic.quic.events.ConnectionIdIssued):
-            self._connection_id_issued_handler(event.connection_id)
-        elif isinstance(event, aioquic.quic.events.ConnectionIdRetired):
-            self._connection_id_retired_handler(event.connection_id)
-        elif isinstance(event, aioquic.quic.events.ConnectionTerminated):
-            self._connection_terminated_handler()
-        elif isinstance(event, aioquic.quic.events.ProtocolNegotiated):
-            if event.alpn_protocol == "h3-22":
-                self._http = H3Connection(self._quic)
-            elif event.alpn_protocol == "hq-22":
-                self._http = H0Connection(self._quic)
-
-        #  pass event to the HTTP layer
-        if self._http is not None:
-            for http_event in self._http.handle_event(event):
-                self.http_event_received(http_event)
-
     def http_event_received(self, event: HttpEvent) -> None:
         if isinstance(event, RequestReceived):
             headers = []
@@ -146,6 +127,18 @@ class HttpServerProtocol(QuicConnectionProtocol):
                     "more_body": not event.stream_ended,
                 }
             )
+
+    def quic_event_received(self, event: QuicEvent):
+        if isinstance(event, ProtocolNegotiated):
+            if event.alpn_protocol == "h3-22":
+                self._http = H3Connection(self._quic)
+            elif event.alpn_protocol == "hq-22":
+                self._http = H0Connection(self._quic)
+
+        #  pass event to the HTTP layer
+        if self._http is not None:
+            for http_event in self._http.handle_event(event):
+                self.http_event_received(http_event)
 
 
 class SessionTicketStore:

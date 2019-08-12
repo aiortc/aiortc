@@ -15,7 +15,7 @@ from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HttpEvent, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.events import ConnectionTerminated, HandshakeCompleted, QuicEvent
+from aioquic.quic.events import QuicEvent
 from aioquic.quic.logger import QuicLogger
 
 try:
@@ -79,11 +79,6 @@ class HttpClient(QuicConnectionProtocol):
         if self._http is not None:
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)
-
-        if isinstance(event, ConnectionTerminated):
-            self._closed.set()
-        elif isinstance(event, HandshakeCompleted):
-            self._connected_waiter.set_result(None)
 
 
 def save_session_ticket(ticket):

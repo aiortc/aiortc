@@ -155,6 +155,7 @@ async def serve(
     certificate: Any,
     private_key: Any,
     alpn_protocols: Optional[List[str]] = None,
+    create_protocol: Callable = QuicConnectionProtocol,
     idle_timeout: Optional[float] = None,
     quic_logger: Optional[QuicLogger] = None,
     stream_handler: QuicStreamHandler = None,
@@ -207,6 +208,7 @@ async def serve(
     _, protocol = await loop.create_datagram_endpoint(
         lambda: QuicServer(
             configuration=configuration,
+            create_protocol=create_protocol,
             session_ticket_fetcher=session_ticket_fetcher,
             session_ticket_handler=session_ticket_handler,
             stateless_retry=stateless_retry,

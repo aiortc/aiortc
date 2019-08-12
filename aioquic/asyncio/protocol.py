@@ -114,22 +114,6 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
     # overridable
 
     def quic_event_received(self, event: events.QuicEvent) -> None:
-        if isinstance(event, events.ConnectionIdIssued):
-            self._connection_id_issued_handler(event.connection_id)
-        elif isinstance(event, events.ConnectionIdRetired):
-            self._connection_id_retired_handler(event.connection_id)
-        elif isinstance(event, events.ConnectionTerminated):
-            self._connection_terminated_handler()
-            if not self._connected_waiter.done():
-                self._connected_waiter.set_exception(ConnectionError)
-            self._closed.set()
-        elif isinstance(event, events.HandshakeCompleted):
-            self._connected_waiter.set_result(None)
-        elif isinstance(event, events.PingAcknowledged):
-            waiter = self._ping_waiter
-            self._ping_waiter = None
-            waiter.set_result(None)
-
         # FIXME: move this to a subclass
         if isinstance(event, events.ConnectionTerminated):
             for reader in self._stream_readers.values():
@@ -167,6 +151,21 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         # process events
         event = self._quic.next_event()
         while event is not None:
+            if isinstance(event, events.ConnectionIdIssued):
+                self._connection_id_issued_handler(event.connection_id)
+            elif isinstance(event, events.ConnectionIdRetired):
+                self._connection_id_retired_handler(event.connection_id)
+            elif isinstance(event, events.ConnectionTerminated):
+                self._connection_terminated_handler()
+                if not self._connected_waiter.done():
+                    self._connected_waiter.set_exception(ConnectionError)
+                self._closed.set()
+            elif isinstance(event, events.HandshakeCompleted):
+                self._connected_waiter.set_result(None)
+            elif isinstance(event, events.PingAcknowledged):
+                waiter = self._ping_waiter
+                self._ping_waiter = None
+                waiter.set_result(None)
             self.quic_event_received(event)
             event = self._quic.next_event()
 
