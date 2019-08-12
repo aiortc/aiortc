@@ -18,7 +18,6 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import NetworkAddress, QuicConnection
 from aioquic.quic.events import ConnectionTerminated, QuicEvent
 from aioquic.quic.logger import QuicLogger
-from aioquic.tls import SessionTicketHandler
 
 try:
     import uvloop
@@ -31,22 +30,11 @@ HttpConnection = Union[H0Connection, H3Connection]
 
 
 class HttpClient(QuicConnectionProtocol):
-    def __init__(
-        self,
-        *,
-        configuration: QuicConfiguration,
-        server_addr: NetworkAddress,
-        session_ticket_handler: Optional[SessionTicketHandler] = None
-    ):
-        super().__init__(
-            quic=QuicConnection(
-                configuration=configuration,
-                session_ticket_handler=session_ticket_handler,
-            )
-        )
+    def __init__(self, quic: QuicConnection, server_addr: NetworkAddress):
+        super().__init__(quic)
 
         self._connect_called = False
-        self._http: HttpConnection
+        self._http: Optional[HttpConnection] = None
         self._server_addr = server_addr
 
         self._request_events: Dict[int, Deque[HttpEvent]] = {}
@@ -57,7 +45,7 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, netloc: str, path: str) -> Deque[HttpEvent]:
+    async def get(self, authority: str, path: str) -> Deque[HttpEvent]:
         """
         Perform a GET request.
         """
@@ -71,7 +59,7 @@ class HttpClient(QuicConnectionProtocol):
             headers=[
                 (b":method", b"GET"),
                 (b":scheme", b"https"),
-                (b":authority", netloc.encode("utf8")),
+                (b":authority", authority.encode("utf8")),
                 (b":path", path.encode("utf8")),
             ],
         )
@@ -84,19 +72,21 @@ class HttpClient(QuicConnectionProtocol):
 
         return await asyncio.shield(waiter)
 
+    def http_event_received(self, event: HttpEvent):
+        if (
+            isinstance(event, (ResponseReceived, DataReceived))
+            and event.stream_id in self._request_events
+        ):
+            self._request_events[event.stream_id].append(event)
+            if event.stream_ended:
+                request_waiter = self._request_waiter.pop(event.stream_id)
+                request_waiter.set_result(self._request_events.pop(event.stream_id))
+
     def quic_event_received(self, event: QuicEvent):
         #  pass event to the HTTP layer
-        for http_event in self._http.handle_event(event):
-            if (
-                isinstance(http_event, (ResponseReceived, DataReceived))
-                and http_event.stream_id in self._request_events
-            ):
-                self._request_events[http_event.stream_id].append(http_event)
-                if http_event.stream_ended:
-                    request_waiter = self._request_waiter.pop(http_event.stream_id)
-                    request_waiter.set_result(
-                        self._request_events.pop(http_event.stream_id)
-                    )
+        if self._http is not None:
+            for http_event in self._http.handle_event(event):
+                self.http_event_received(http_event)
 
         if isinstance(event, ConnectionTerminated):
             self._closed.set()
@@ -113,7 +103,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(url: str, legacy_http: bool, **kwargs) -> None:
+async def run(url: str, configuration: QuicConfiguration) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
@@ -131,18 +121,14 @@ async def run(url: str, legacy_http: bool, **kwargs) -> None:
         server_addr = ("::ffff:" + server_addr[0], server_addr[1], 0, 0)
 
     # prepare QUIC connection
+    configuration.server_name = server_name
+    connection = QuicConnection(
+        configuration=configuration, session_ticket_handler=save_session_ticket
+    )
+
+    # connect
     _, client = await loop.create_datagram_endpoint(
-        lambda: HttpClient(
-            configuration=QuicConfiguration(
-                alpn_protocols=["hq-22" if legacy_http else "h3-22"],
-                is_client=True,
-                server_name=server_name,
-                **kwargs
-            ),
-            server_addr=server_addr,
-            session_ticket_handler=save_session_ticket,
-        ),
-        local_addr=("::", 0),
+        lambda: HttpClient(connection, server_addr=server_addr), local_addr=("::", 0)
     )
     client = cast(HttpClient, client)
 
@@ -208,24 +194,18 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
-    # create QUIC logger
+    # prepare configuration
+    configuration = QuicConfiguration(
+        is_client=True, alpn_protocols=["hq-22" if args.legacy_http else "h3-22"]
+    )
     if args.quic_log:
-        quic_logger = QuicLogger()
-    else:
-        quic_logger = None
-
-    # open SSL log file
+        configuration.quic_logger = QuicLogger()
     if args.secrets_log:
-        secrets_log_file = open(args.secrets_log, "a")
-    else:
-        secrets_log_file = None
-
-    # load session ticket
-    session_ticket = None
+        configuration.secrets_log_file = open(args.secrets_log, "a")
     if args.session_ticket:
         try:
             with open(args.session_ticket, "rb") as fp:
-                session_ticket = pickle.load(fp)
+                configuration.session_ticket = pickle.load(fp)
         except FileNotFoundError:
             pass
 
@@ -233,16 +213,8 @@ if __name__ == "__main__":
         uvloop.install()
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(
-            run(
-                url=args.url,
-                legacy_http=args.legacy_http,
-                quic_logger=quic_logger,
-                secrets_log_file=secrets_log_file,
-                session_ticket=session_ticket,
-            )
-        )
+        loop.run_until_complete(run(url=args.url, configuration=configuration))
     finally:
-        if quic_logger is not None:
+        if configuration.quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:
-                json.dump(quic_logger.to_dict(), logger_fp, indent=4)
+                json.dump(configuration.quic_logger.to_dict(), logger_fp, indent=4)
