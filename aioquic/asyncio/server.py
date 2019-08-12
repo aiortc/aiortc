@@ -19,20 +19,20 @@ from .protocol import QuicConnectionProtocol, QuicStreamHandler
 
 __all__ = ["serve"]
 
-QuicConnectionHandler = Callable[[QuicConnectionProtocol], None]
-
 
 class QuicServer(asyncio.DatagramProtocol):
     def __init__(
         self,
         *,
         configuration: QuicConfiguration,
+        create_protocol: Callable = QuicConnectionProtocol,
         session_ticket_fetcher: Optional[SessionTicketFetcher] = None,
         session_ticket_handler: Optional[SessionTicketHandler] = None,
         stateless_retry: bool = False,
         stream_handler: Optional[QuicStreamHandler] = None,
     ) -> None:
         self._configuration = configuration
+        self._create_protocol = create_protocol
         self._loop = asyncio.get_event_loop()
         self._protocols: Dict[bytes, QuicConnectionProtocol] = {}
         self._session_ticket_fetcher = session_ticket_fetcher
@@ -111,16 +111,20 @@ class QuicServer(asyncio.DatagramProtocol):
                 session_ticket_fetcher=self._session_ticket_fetcher,
                 session_ticket_handler=self._session_ticket_handler,
             )
-            protocol = QuicConnectionProtocol(
+            protocol = self._create_protocol(
                 connection, stream_handler=self._stream_handler
             )
             protocol.connection_made(self._transport)
 
+            # register callbacks
             protocol._connection_id_issued_handler = partial(
                 self._connection_id_issued, protocol=protocol
             )
             protocol._connection_id_retired_handler = partial(
                 self._connection_id_retired, protocol=protocol
+            )
+            protocol._connection_terminated_handler = partial(
+                self._connection_terminated, protocol=protocol
             )
 
             self._protocols[header.destination_cid] = protocol
@@ -137,6 +141,11 @@ class QuicServer(asyncio.DatagramProtocol):
     ) -> None:
         assert self._protocols[cid] == protocol
         del self._protocols[cid]
+
+    def _connection_terminated(self, protocol: QuicConnectionProtocol):
+        for cid, proto in list(self._protocols.items()):
+            if proto == protocol:
+                del self._protocols[cid]
 
 
 async def serve(

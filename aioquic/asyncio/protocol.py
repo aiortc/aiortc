@@ -28,6 +28,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         # callbacks
         self._connection_id_issued_handler: QuicConnectionIdHandler = lambda c: None
         self._connection_id_retired_handler: QuicConnectionIdHandler = lambda c: None
+        self._connection_terminated_handler: Callable[[], None] = lambda: None
         if stream_handler is not None:
             self._stream_handler = stream_handler
         else:
@@ -118,8 +119,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         elif isinstance(event, events.ConnectionIdRetired):
             self._connection_id_retired_handler(event.connection_id)
         elif isinstance(event, events.ConnectionTerminated):
-            for reader in self._stream_readers.values():
-                reader.feed_eof()
+            self._connection_terminated_handler()
             if not self._connected_waiter.done():
                 self._connected_waiter.set_exception(ConnectionError)
             self._closed.set()
@@ -129,6 +129,11 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
             waiter = self._ping_waiter
             self._ping_waiter = None
             waiter.set_result(None)
+
+        # FIXME: move this to a subclass
+        if isinstance(event, events.ConnectionTerminated):
+            for reader in self._stream_readers.values():
+                reader.feed_eof()
         elif isinstance(event, events.StreamDataReceived):
             reader = self._stream_readers.get(event.stream_id, None)
             if reader is None:
