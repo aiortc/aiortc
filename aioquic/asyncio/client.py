@@ -1,7 +1,7 @@
 import asyncio
 import ipaddress
 import socket
-from typing import AsyncGenerator, Optional, cast
+from typing import AsyncGenerator, Callable, Optional, cast
 
 from ..quic.configuration import QuicConfiguration
 from ..quic.connection import QuicConnection
@@ -18,6 +18,7 @@ async def connect(
     port: int,
     *,
     configuration: Optional[QuicConfiguration] = None,
+    create_protocol: Optional[Callable] = QuicConnectionProtocol,
     session_ticket_handler: Optional[SessionTicketHandler] = None,
     stream_handler: Optional[QuicStreamHandler] = None,
 ) -> AsyncGenerator[QuicConnectionProtocol, None]:
@@ -64,7 +65,7 @@ async def connect(
 
     # connect
     _, protocol = await loop.create_datagram_endpoint(
-        lambda: QuicConnectionProtocol(connection, stream_handler=stream_handler),
+        lambda: create_protocol(connection, stream_handler=stream_handler),
         local_addr=("::", 0),
     )
     protocol = cast(QuicConnectionProtocol, protocol)

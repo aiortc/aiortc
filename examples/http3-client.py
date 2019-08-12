@@ -3,20 +3,19 @@ import asyncio
 import json
 import logging
 import pickle
-import socket
 import sys
 import time
 from collections import deque
 from typing import Deque, Dict, Optional, Union, cast
 from urllib.parse import urlparse
 
+from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HttpEvent, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.connection import NetworkAddress, QuicConnection
-from aioquic.quic.events import ConnectionTerminated, QuicEvent
+from aioquic.quic.events import ConnectionTerminated, HandshakeCompleted, QuicEvent
 from aioquic.quic.logger import QuicLogger
 
 try:
@@ -30,13 +29,10 @@ HttpConnection = Union[H0Connection, H3Connection]
 
 
 class HttpClient(QuicConnectionProtocol):
-    def __init__(self, quic: QuicConnection, server_addr: NetworkAddress):
-        super().__init__(quic)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        self._connect_called = False
         self._http: Optional[HttpConnection] = None
-        self._server_addr = server_addr
-
         self._request_events: Dict[int, Deque[HttpEvent]] = {}
         self._request_waiter: Dict[int, asyncio.Future[Deque[HttpEvent]]] = {}
 
@@ -49,10 +45,6 @@ class HttpClient(QuicConnectionProtocol):
         """
         Perform a GET request.
         """
-        if not self._connect_called:
-            self._quic.connect(self._server_addr, now=self._loop.time())
-            self._connect_called = True
-
         stream_id = self._quic.get_next_available_stream_id()
         self._http.send_headers(
             stream_id=stream_id,
@@ -90,6 +82,8 @@ class HttpClient(QuicConnectionProtocol):
 
         if isinstance(event, ConnectionTerminated):
             self._closed.set()
+        elif isinstance(event, HandshakeCompleted):
+            self._connected_waiter.set_result(None)
 
 
 def save_session_ticket(ticket):
@@ -108,61 +102,48 @@ async def run(url: str, configuration: QuicConfiguration) -> None:
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
     if ":" in parsed.netloc:
-        server_name, port_str = parsed.netloc.split(":")
+        host, port_str = parsed.netloc.split(":")
         port = int(port_str)
     else:
-        server_name = parsed.netloc
+        host = parsed.netloc
         port = 443
 
-    # lookup remote address
-    infos = await loop.getaddrinfo(server_name, port, type=socket.SOCK_DGRAM)
-    server_addr = infos[0][4]
-    if len(server_addr) == 2:
-        server_addr = ("::ffff:" + server_addr[0], server_addr[1], 0, 0)
+    async with connect(
+        host,
+        port,
+        configuration=configuration,
+        create_protocol=HttpClient,
+        session_ticket_handler=save_session_ticket,
+    ) as client:
+        client = cast(HttpClient, client)
 
-    # prepare QUIC connection
-    configuration.server_name = server_name
-    connection = QuicConnection(
-        configuration=configuration, session_ticket_handler=save_session_ticket
-    )
+        # perform request
+        start = time.time()
+        http_events = await client.get(parsed.netloc, parsed.path)
+        elapsed = time.time() - start
 
-    # connect
-    _, client = await loop.create_datagram_endpoint(
-        lambda: HttpClient(connection, server_addr=server_addr), local_addr=("::", 0)
-    )
-    client = cast(HttpClient, client)
+        # print speed
+        octets = 0
+        for http_event in http_events:
+            if isinstance(http_event, DataReceived):
+                octets += len(http_event.data)
+        logger.info(
+            "Received %d bytes in %.1f s (%.3f Mbps)"
+            % (octets, elapsed, octets * 8 / elapsed / 1000000)
+        )
 
-    # perform request
-    start = time.time()
-    http_events = await client.get(parsed.netloc, parsed.path)
-    elapsed = time.time() - start
-
-    # print speed
-    octets = 0
-    for http_event in http_events:
-        if isinstance(http_event, DataReceived):
-            octets += len(http_event.data)
-    logger.info(
-        "Received %d bytes in %.1f s (%.3f Mbps)"
-        % (octets, elapsed, octets * 8 / elapsed / 1000000)
-    )
-
-    # print response
-    for http_event in http_events:
-        if isinstance(http_event, ResponseReceived):
-            headers = b""
-            for k, v in http_event.headers:
-                headers += k + b": " + v + b"\r\n"
-            if headers:
-                sys.stderr.buffer.write(headers + b"\r\n")
-                sys.stderr.buffer.flush()
-        elif isinstance(http_event, DataReceived):
-            sys.stdout.buffer.write(http_event.data)
-            sys.stdout.buffer.flush()
-
-    # close QUIC connection
-    client.close()
-    await client.wait_closed()
+        # print response
+        for http_event in http_events:
+            if isinstance(http_event, ResponseReceived):
+                headers = b""
+                for k, v in http_event.headers:
+                    headers += k + b": " + v + b"\r\n"
+                if headers:
+                    sys.stderr.buffer.write(headers + b"\r\n")
+                    sys.stderr.buffer.flush()
+            elif isinstance(http_event, DataReceived):
+                sys.stdout.buffer.write(http_event.data)
+                sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
