@@ -16,6 +16,7 @@ setuptools.setup(
     author='Jeremy Lainé',
     author_email='jeremy.laine@m4x.org',
     license='BSD',
+    include_package_data=True,
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
