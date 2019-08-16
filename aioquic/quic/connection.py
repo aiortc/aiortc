@@ -1808,25 +1808,18 @@ class QuicConnection:
             if self._handshake_complete:
                 # ACK
                 if space.ack_at is not None and space.ack_at <= now:
-                    ack_delay = 0.0
                     builder.start_frame(
                         QuicFrameType.ACK,
                         self._on_ack_delivery,
                         (space, space.largest_received_packet),
                     )
-                    push_ack_frame(
-                        buf,
-                        space.ack_queue,
-                        int(ack_delay / 1000000) >> self._local_ack_delay_exponent,
-                    )
+                    push_ack_frame(buf, space.ack_queue, 0)
                     space.ack_at = None
 
                     # log frame
                     if self._quic_logger is not None:
                         builder._packet.quic_logger_frames.append(
-                            self._quic_logger.encode_ack_frame(
-                                space.ack_queue, ack_delay
-                            )
+                            self._quic_logger.encode_ack_frame(space.ack_queue, 0.0)
                         )
 
                 # PATH CHALLENGE
@@ -1953,6 +1946,12 @@ class QuicConnection:
                 builder.start_frame(QuicFrameType.ACK)
                 push_ack_frame(buf, space.ack_queue, 0)
                 space.ack_at = None
+
+                # log frame
+                if self._quic_logger is not None:
+                    builder._packet.quic_logger_frames.append(
+                        self._quic_logger.encode_ack_frame(space.ack_queue, 0.0)
+                    )
 
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:
