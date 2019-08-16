@@ -223,8 +223,8 @@ class QuicPacketRecovery:
 
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
-                    category="recovery",
-                    event="metric_update",
+                    category="RECOVERY",
+                    event="METRIC_UPDATE",
                     data={
                         "latest_rtt": int(self._rtt_latest * 1000),
                         "min_rtt": int(self._rtt_min * 1000),
@@ -289,11 +289,11 @@ class QuicPacketRecovery:
 
         if self._quic_logger is not None:
             self._quic_logger.log_event(
-                category="recovery",
-                event="packet_lost",
+                category="RECOVERY",
+                event="PACKET_LOST",
                 data={
                     "type": self._quic_logger.packet_type(packet.packet_type),
-                    "packet_number": packet.packet_number,
+                    "packet_number": str(packet.packet_number),
                 },
             )
             self._log_metric_update()
@@ -338,5 +338,5 @@ class QuicPacketRecovery:
             data["ssthresh"] = self._ssthresh
 
         self._quic_logger.log_event(
-            category="recovery", event="metric_update", data=data
+            category="RECOVERY", event="METRIC_UPDATE", data=data
         )

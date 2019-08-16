@@ -25,6 +25,7 @@ from .packet import (
     QuicStreamFrame,
     QuicTransportParameters,
     get_spin_bit,
+    is_long_header,
     pull_ack_frame,
     pull_application_close_frame,
     pull_crypto_frame,
@@ -543,13 +544,19 @@ class QuicConnection:
                 # log packet
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="transport",
-                        event="packet_sent",
+                        category="TRANSPORT",
+                        event="PACKET_SENT",
                         data={
-                            "type": self._quic_logger.packet_type(packet.packet_type),
+                            "packet_type": self._quic_logger.packet_type(
+                                packet.packet_type
+                            ),
                             "header": {
-                                "packet_number": packet.packet_number,
+                                "packet_number": str(packet.packet_number),
                                 "packet_size": packet.sent_bytes,
+                                "scid": dump_cid(self.host_cid)
+                                if is_long_header(packet.packet_type)
+                                else "",
+                                "dcid": dump_cid(self._peer_cid),
                             },
                             "frames": [],
                         },
@@ -568,8 +575,8 @@ class QuicConnection:
 
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
-                    category="transport",
-                    event="datagram_sent",
+                    category="TRANSPORT",
+                    event="DATAGRAM_SENT",
                     data={"byte_length": byte_length, "count": 1},
                 )
         return ret
@@ -651,8 +658,8 @@ class QuicConnection:
         data = cast(bytes, data)
         if self._quic_logger is not None:
             self._quic_logger.log_event(
-                category="transport",
-                event="datagram_received",
+                category="TRANSPORT",
+                event="DATAGRAM_RECEIVED",
                 data={"byte_length": len(data), "count": 1},
             )
 
@@ -681,11 +688,14 @@ class QuicConnection:
                     versions.append(buf.pull_uint32())
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="transport",
-                        event="packet_received",
+                        category="TRANSPORT",
+                        event="PACKET_RECEIVED",
                         data={
-                            "type": "VERSION_NEGOTIATION",
-                            "header": {},
+                            "packet_type": "VERSION_NEGOTIATION",
+                            "header": {
+                                "scid": dump_cid(header.source_cid),
+                                "dcid": dump_cid(header.destination_cid),
+                            },
                             "frames": [],
                         },
                     )
@@ -721,9 +731,16 @@ class QuicConnection:
                 ):
                     if self._quic_logger is not None:
                         self._quic_logger.log_event(
-                            category="transport",
-                            event="packet_received",
-                            data={"type": "RETRY", "header": {}, "frames": []},
+                            category="TRANSPORT",
+                            event="PACKET_RECEIVED",
+                            data={
+                                "packet_type": "RETRY",
+                                "header": {
+                                    "scid": dump_cid(header.source_cid),
+                                    "dcid": dump_cid(header.destination_cid),
+                                },
+                                "frames": [],
+                            },
                         )
 
                     self._original_connection_id = self._peer_cid
@@ -773,13 +790,17 @@ class QuicConnection:
             if self._quic_logger is not None:
                 quic_logger_frames = []
                 self._quic_logger.log_event(
-                    category="transport",
-                    event="packet_received",
+                    category="TRANSPORT",
+                    event="PACKET_RECEIVED",
                     data={
-                        "type": self._quic_logger.packet_type(header.packet_type),
+                        "packet_type": self._quic_logger.packet_type(
+                            header.packet_type
+                        ),
                         "header": {
-                            "packet_number": packet_number,
+                            "packet_number": str(packet_number),
                             "packet_size": end_off - start_off,
+                            "dcid": dump_cid(header.destination_cid),
+                            "scid": dump_cid(header.source_cid),
                         },
                         "frames": quic_logger_frames,
                     },
@@ -808,8 +829,8 @@ class QuicConnection:
 
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="connectivity",
-                        event="spin_bit_update",
+                        category="CONNECTIVITY",
+                        event="SPIN_BIT_UPDATE",
                         data={"state": self._spin_bit},
                     )
 
@@ -1156,8 +1177,10 @@ class QuicConnection:
                     "ack_delay": str(
                         (ack_delay_encoded << self._loss.ack_delay_exponent) // 1000
                     ),
-                    "acked_ranges": [[x.start, x.stop - 1] for x in ack_rangeset],
-                    "type": "ack",
+                    "acked_ranges": [
+                        [str(x.start), str(x.stop - 1)] for x in ack_rangeset
+                    ],
+                    "frame_type": "ACK",
                 }
             )
 

@@ -101,7 +101,7 @@ async def test_version_negotiation(server: Server, configuration: QuicConfigurat
             if (
                 category == "TRANSPORT"
                 and event == "PACKET_RECEIVED"
-                and data["type"] == "VERSION_NEGOTIATION"
+                and data["packet_type"] == "VERSION_NEGOTIATION"
             ):
                 server.result |= Result.V
 
@@ -128,7 +128,7 @@ async def test_stateless_retry(server: Server, configuration: QuicConfiguration)
             if (
                 category == "TRANSPORT"
                 and event == "PACKET_RECEIVED"
-                and data["type"] == "RETRY"
+                and data["packet_type"] == "RETRY"
             ):
                 server.result |= Result.S
 

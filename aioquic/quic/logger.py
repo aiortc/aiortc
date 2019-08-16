@@ -52,8 +52,8 @@ class QuicLogger:
                     map(
                         lambda event: (
                             "%d" % ((event[0] - reference_time) * 1000),
-                            event[1].upper(),  # draft-00
-                            event[2].upper(),  # draft-00
+                            event[1],
+                            event[2],
                             event[3],
                         ),
                         self._events,
