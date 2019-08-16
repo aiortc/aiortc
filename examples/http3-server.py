@@ -35,20 +35,20 @@ class HttpRequestHandler:
         *,
         connection: HttpConnection,
         scope: Dict,
-        send_pending: Callable[[], None],
         stream_id: int,
+        transmit: Callable[[], None],
     ):
         self.connection = connection
         self.queue: asyncio.Queue[Dict] = asyncio.Queue()
         self.scope = scope
-        self.send_pending = send_pending
         self.stream_id = stream_id
+        self.transmit = transmit
 
     async def run_asgi(self, app: AsgiApplication) -> None:
         await application(self.scope, self.receive, self.send)
 
         self.connection.send_data(stream_id=self.stream_id, data=b"", end_stream=True)
-        self.send_pending()
+        self.transmit()
 
     async def receive(self) -> Dict:
         return await self.queue.get()
@@ -68,7 +68,7 @@ class HttpRequestHandler:
             self.connection.send_data(
                 stream_id=self.stream_id, data=message["body"], end_stream=False
             )
-        self.send_pending()
+        self.transmit()
 
 
 class HttpServerProtocol(QuicConnectionProtocol):
@@ -112,8 +112,8 @@ class HttpServerProtocol(QuicConnectionProtocol):
             handler = HttpRequestHandler(
                 connection=self._http,
                 scope=scope,
-                send_pending=self._send_pending,
                 stream_id=event.stream_id,
+                transmit=self.transmit,
             )
             self._handlers[event.stream_id] = handler
             asyncio.ensure_future(handler.run_asgi(application))

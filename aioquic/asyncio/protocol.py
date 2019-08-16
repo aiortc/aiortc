@@ -19,10 +19,10 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._loop = loop
         self._ping_waiter: Optional[asyncio.Future[None]] = None
         self._quic = quic
-        self._send_task: Optional[asyncio.Handle] = None
         self._stream_readers: Dict[int, asyncio.StreamReader] = {}
         self._timer: Optional[asyncio.TimerHandle] = None
         self._timer_at: Optional[float] = None
+        self._transmit_task: Optional[asyncio.Handle] = None
         self._transport: Optional[asyncio.DatagramTransport] = None
 
         # callbacks
@@ -41,14 +41,14 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         The previous connection ID will be retired.
         """
         self._quic.change_connection_id()
-        self._send_pending()
+        self.transmit()
 
     def close(self) -> None:
         """
         Close the connection.
         """
         self._quic.close()
-        self._send_pending()
+        self.transmit()
 
     def connect(self, addr: NetworkAddress) -> None:
         """
@@ -57,7 +57,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         This method can only be called for clients and a single time.
         """
         self._quic.connect(addr, now=self._loop.time())
-        self._send_pending()
+        self.transmit()
 
     async def create_stream(
         self, is_unidirectional: bool = False
@@ -78,17 +78,36 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         Request an update of the encryption keys.
         """
         self._quic.request_key_update()
-        self._send_pending()
+        self.transmit()
 
     async def ping(self) -> None:
         """
-        Pings the remote host and waits for the response.
+        Ping the peer and wait for the response.
         """
         assert self._ping_waiter is None, "already await a ping"
         self._ping_waiter = self._loop.create_future()
         self._quic.send_ping(id(self._ping_waiter))
-        self._send_pending()
+        self.transmit()
         await asyncio.shield(self._ping_waiter)
+
+    def transmit(self) -> None:
+        """
+        Send pending datagrams to the peer.
+        """
+        self._transmit_task = None
+
+        # send datagrams
+        for data, addr in self._quic.datagrams_to_send(now=self._loop.time()):
+            self._transport.sendto(data, addr)
+
+        # re-arm timer
+        timer_at = self._quic.get_timer()
+        if self._timer is not None and self._timer_at != timer_at:
+            self._timer.cancel()
+            self._timer = None
+        if self._timer is None and timer_at is not None:
+            self._timer = self._loop.call_at(timer_at, self._handle_timer)
+        self._timer_at = timer_at
 
     async def wait_closed(self) -> None:
         """
@@ -109,7 +128,8 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
         self._quic.receive_datagram(cast(bytes, data), addr, now=self._loop.time())
-        self._send_pending()
+        self._process_events()
+        self.transmit()
 
     # overridable
 
@@ -143,12 +163,10 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._timer = None
         self._timer_at = None
         self._quic.handle_timer(now=now)
-        self._send_pending()
+        self._process_events()
+        self.transmit()
 
-    def _send_pending(self) -> None:
-        self._send_task = None
-
-        # process events
+    def _process_events(self) -> None:
         event = self._quic.next_event()
         while event is not None:
             if isinstance(event, events.ConnectionIdIssued):
@@ -169,22 +187,9 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
             self.quic_event_received(event)
             event = self._quic.next_event()
 
-        # send datagrams
-        for data, addr in self._quic.datagrams_to_send(now=self._loop.time()):
-            self._transport.sendto(data, addr)
-
-        # re-arm timer
-        timer_at = self._quic.get_timer()
-        if self._timer is not None and self._timer_at != timer_at:
-            self._timer.cancel()
-            self._timer = None
-        if self._timer is None and timer_at is not None:
-            self._timer = self._loop.call_at(timer_at, self._handle_timer)
-        self._timer_at = timer_at
-
-    def _send_soon(self) -> None:
-        if self._send_task is None:
-            self._send_task = self._loop.call_soon(self._send_pending)
+    def _transmit_soon(self) -> None:
+        if self._transmit_task is None:
+            self._transmit_task = self._loop.call_soon(self.transmit)
 
 
 class QuicStreamAdapter(asyncio.Transport):
@@ -204,8 +209,8 @@ class QuicStreamAdapter(asyncio.Transport):
 
     def write(self, data):
         self.protocol._quic.send_stream_data(self.stream_id, data)
-        self.protocol._send_soon()
+        self.protocol._transmit_soon()
 
     def write_eof(self):
         self.protocol._quic.send_stream_data(self.stream_id, b"", end_stream=True)
-        self.protocol._send_soon()
+        self.protocol._transmit_soon()

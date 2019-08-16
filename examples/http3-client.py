@@ -60,7 +60,7 @@ class HttpClient(QuicConnectionProtocol):
         waiter = self._loop.create_future()
         self._request_events[stream_id] = deque()
         self._request_waiter[stream_id] = waiter
-        self._send_pending()
+        self.transmit()
 
         return await asyncio.shield(waiter)
 
