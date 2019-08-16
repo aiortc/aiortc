@@ -221,6 +221,23 @@ async def test_key_update(server: Server, configuration: QuicConfiguration):
         server.result |= Result.U
 
 
+async def test_rebinding(server: Server, configuration: QuicConfiguration):
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as protocol:
+        # cause some traffic
+        await protocol.ping()
+
+        # replace transport
+        protocol._transport.close()
+        await loop.create_datagram_endpoint(lambda: protocol, local_addr=("::", 0))
+
+        # cause more traffic
+        await protocol.ping()
+
+        server.result |= Result.B
+
+
 async def test_spin_bit(server: Server, configuration: QuicConfiguration):
     async with connect(
         server.host, server.port, configuration=configuration
@@ -245,7 +262,7 @@ def print_result(server: Server) -> None:
     print("%s%s%s" % (server.name, " " * (20 - len(server.name)), result))
 
 
-async def run(servers, tests) -> None:
+async def run(servers, tests, secrets_log_file=None) -> None:
     for server in servers:
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
@@ -253,6 +270,7 @@ async def run(servers, tests) -> None:
                 alpn_protocols=["hq-22", "h3-22"],
                 is_client=True,
                 quic_logger=QuicLogger(),
+                secrets_log_file=secrets_log_file,
             )
             try:
                 await asyncio.wait_for(test_func(server, configuration), timeout=5)
@@ -300,4 +318,6 @@ if __name__ == "__main__":
         tests = list(filter(lambda x: x[0] == args.test, tests))
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(run(servers=servers, tests=tests))
+    loop.run_until_complete(
+        run(servers=servers, tests=tests, secrets_log_file=secrets_log_file)
+    )
