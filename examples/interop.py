@@ -221,6 +221,35 @@ async def test_key_update(server: Server, configuration: QuicConfiguration):
         server.result |= Result.U
 
 
+async def test_migration(server: Server, configuration: QuicConfiguration):
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as protocol:
+        # cause some traffic
+        await protocol.ping()
+
+        # change connection ID
+        protocol.change_connection_id()
+        await asyncio.sleep(0.1)
+
+        # cause more traffic
+        await protocol.ping()
+
+        # check log
+        dcids = set()
+        for stamp, category, event, data in configuration.quic_logger.to_dict()[
+            "traces"
+        ][0]["events"]:
+            if (
+                category == "TRANSPORT"
+                and event == "PACKET_RECEIVED"
+                and data["packet_type"] == "1RTT"
+            ):
+                dcids.add(data["header"]["dcid"])
+        if len(dcids) == 2:
+            server.result |= Result.M
+
+
 async def test_rebinding(server: Server, configuration: QuicConfiguration):
     async with connect(
         server.host, server.port, configuration=configuration
