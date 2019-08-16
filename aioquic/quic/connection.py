@@ -308,6 +308,7 @@ class QuicConnection:
         ]
         self.host_cid = self._host_cids[0].cid
         self._host_cid_seq = 1
+        self._local_ack_delay_exponent = 3
         self._local_active_connection_id_limit = 8
         self._local_max_data = MAX_DATA_WINDOW
         self._local_max_data_sent = MAX_DATA_WINDOW
@@ -334,6 +335,7 @@ class QuicConnection:
         self._peer_cid_seq: Optional[int] = None
         self._peer_cid_available: List[QuicConnectionId] = []
         self._peer_token = b""
+        self._remote_ack_delay_exponent = 3
         self._remote_active_connection_id_limit = 0
         self._remote_idle_timeout = 0.0  # seconds
         self._remote_max_data = 0
@@ -558,7 +560,7 @@ class QuicConnection:
                                 else "",
                                 "dcid": dump_cid(self._peer_cid),
                             },
-                            "frames": [],
+                            "frames": packet.quic_logger_frames,
                         },
                     )
 
@@ -1169,25 +1171,18 @@ class QuicConnection:
             buf.pull_uint_var()
             buf.pull_uint_var()
             buf.pull_uint_var()
+        ack_delay = (ack_delay_encoded << self._remote_ack_delay_exponent) / 1000000
 
         # log frame
-        if context.quic_logger_frames is not None:
+        if self._quic_logger is not None:
             context.quic_logger_frames.append(
-                {
-                    "ack_delay": str(
-                        (ack_delay_encoded << self._loss.ack_delay_exponent) // 1000
-                    ),
-                    "acked_ranges": [
-                        [str(x.start), str(x.stop - 1)] for x in ack_rangeset
-                    ],
-                    "frame_type": "ACK",
-                }
+                self._quic_logger.encode_ack_frame(ack_rangeset, ack_delay)
             )
 
         self._loss.on_ack_received(
             space=self._spaces[context.epoch],
             ack_rangeset=ack_rangeset,
-            ack_delay_encoded=ack_delay_encoded,
+            ack_delay=ack_delay,
             now=context.time,
         )
 
@@ -1687,16 +1682,16 @@ class QuicConnection:
             )
 
         # store remote parameters
+        if quic_transport_parameters.ack_delay_exponent is not None:
+            self._remote_ack_delay_exponent = self._remote_ack_delay_exponent
         if quic_transport_parameters.active_connection_id_limit is not None:
             self._remote_active_connection_id_limit = (
                 quic_transport_parameters.active_connection_id_limit
             )
         if quic_transport_parameters.idle_timeout is not None:
             self._remote_idle_timeout = quic_transport_parameters.idle_timeout / 1000.0
-        for param in ["ack_delay_exponent", "max_ack_delay"]:
-            value = getattr(quic_transport_parameters, param)
-            if value is not None:
-                setattr(self._loss, param, value)
+        if quic_transport_parameters.max_ack_delay is not None:
+            self._loss.max_ack_delay = quic_transport_parameters.max_ack_delay / 1000.0
         for param in [
             "max_data",
             "max_stream_data_bidi_local",
@@ -1711,6 +1706,7 @@ class QuicConnection:
 
     def _serialize_transport_parameters(self) -> bytes:
         quic_transport_parameters = QuicTransportParameters(
+            ack_delay_exponent=self._local_ack_delay_exponent,
             active_connection_id_limit=self._local_active_connection_id_limit,
             idle_timeout=int(self._configuration.idle_timeout * 1000),
             initial_max_data=self._local_max_data,
@@ -1719,7 +1715,7 @@ class QuicConnection:
             initial_max_stream_data_uni=self._local_max_stream_data_uni,
             initial_max_streams_bidi=self._local_max_streams_bidi,
             initial_max_streams_uni=self._local_max_streams_uni,
-            ack_delay_exponent=10,
+            max_ack_delay=25,
         )
         if not self._is_client:
             quic_transport_parameters.original_connection_id = (
@@ -1812,13 +1808,26 @@ class QuicConnection:
             if self._handshake_complete:
                 # ACK
                 if space.ack_at is not None and space.ack_at <= now:
+                    ack_delay = 0.0
                     builder.start_frame(
                         QuicFrameType.ACK,
                         self._on_ack_delivery,
                         (space, space.largest_received_packet),
                     )
-                    push_ack_frame(buf, space.ack_queue, 0)
+                    push_ack_frame(
+                        buf,
+                        space.ack_queue,
+                        int(ack_delay / 1000000) >> self._local_ack_delay_exponent,
+                    )
                     space.ack_at = None
+
+                    # log frame
+                    if self._quic_logger is not None:
+                        builder._packet.quic_logger_frames.append(
+                            self._quic_logger.encode_ack_frame(
+                                space.ack_queue, ack_delay
+                            )
+                        )
 
                 # PATH CHALLENGE
                 if (

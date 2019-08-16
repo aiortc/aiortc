@@ -10,6 +10,7 @@ from .packet import (
     PACKET_TYPE_RETRY,
     PACKET_TYPE_ZERO_RTT,
 )
+from .rangeset import RangeSet
 
 PACKET_TYPE_NAMES = {
     PACKET_TYPE_INITIAL: "INITIAL",
@@ -31,6 +32,13 @@ class QuicLogger:
 
     def __init__(self) -> None:
         self._events: Deque[Tuple[float, str, str, Dict[str, Any]]] = deque()
+
+    def encode_ack_frame(self, rangeset: RangeSet, delay: float):
+        return {
+            "ack_delay": str(int(delay * 1000)),  # convert to ms
+            "acked_ranges": [[str(x.start), str(x.stop - 1)] for x in rangeset],
+            "frame_type": "ACK",
+        }
 
     def log_event(self, *, category: str, event: str, data: Dict) -> None:
         self._events.append((time.time(), category, event, data))

@@ -311,7 +311,7 @@ class QuicConnectionTest(TestCase):
         now = 1.1
         server.receive_datagram(items[0][0], CLIENT_ADDR, now=now)
         items = server.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [1280, 1079])
+        self.assertEqual(datagram_sizes(items), [1280, 1084])
         self.assertEqual(server.get_timer(), 2.1)
         self.assertEqual(len(server._loss.spaces[0].sent_packets), 1)
         self.assertEqual(len(server._loss.spaces[1].sent_packets), 2)
@@ -376,7 +376,7 @@ class QuicConnectionTest(TestCase):
         now = 0.1
         server.receive_datagram(items[0][0], CLIENT_ADDR, now=now)
         items = server.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [1280, 1079])
+        self.assertEqual(datagram_sizes(items), [1280, 1084])
         self.assertEqual(server.get_timer(), 1.1)
         self.assertEqual(len(server._loss.spaces[0].sent_packets), 1)
         self.assertEqual(len(server._loss.spaces[1].sent_packets), 2)
@@ -408,7 +408,7 @@ class QuicConnectionTest(TestCase):
         now = server.get_timer()
         server.handle_timer(now=now)
         items = server.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [1280, 900])
+        self.assertEqual(datagram_sizes(items), [1280, 905])
         self.assertAlmostEqual(server.get_timer(), 3.1)
         self.assertEqual(len(server._loss.spaces[0].sent_packets), 0)
         self.assertEqual(len(server._loss.spaces[1].sent_packets), 2)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..buffer import Buffer, size_uint_var
 from ..tls import Epoch
@@ -43,6 +43,7 @@ class QuicSentPacket:
     delivery_handlers: List[Tuple[QuicDeliveryHandler, Any]] = field(
         default_factory=list
     )
+    quic_logger_frames: List[Dict] = field(default_factory=list)
 
 
 class QuicPacketBuilderStop(Exception):

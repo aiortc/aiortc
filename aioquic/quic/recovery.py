@@ -43,9 +43,8 @@ class QuicPacketRecovery:
         send_probe: Callable[[], None],
         quic_logger: Optional[QuicLogger] = None,
     ) -> None:
-        self.ack_delay_exponent = 3
         self.is_client_without_1rtt = is_client_without_1rtt
-        self.max_ack_delay = 25  # ms
+        self.max_ack_delay = 0.025
         self.spaces: List[QuicPacketSpace] = []
 
         # callbacks
@@ -140,7 +139,7 @@ class QuicPacketRecovery:
                 timeout = (
                     self._rtt_smoothed
                     + max(4 * self._rtt_variance, K_GRANULARITY)
-                    + self.max_ack_delay / 1000
+                    + self.max_ack_delay
                 ) * (2 ** self._pto_count)
             return self._time_of_last_sent_ack_eliciting_packet + timeout
 
@@ -150,14 +149,14 @@ class QuicPacketRecovery:
         return (
             self._rtt_smoothed
             + max(4 * self._rtt_variance, K_GRANULARITY)
-            + self.max_ack_delay / 1000
+            + self.max_ack_delay
         )
 
     def on_ack_received(
         self,
         space: QuicPacketSpace,
         ack_rangeset: RangeSet,
-        ack_delay_encoded: int,
+        ack_delay: float,
         now: float,
     ) -> None:
         """
@@ -196,11 +195,8 @@ class QuicPacketRecovery:
         if largest_acked == largest_newly_acked and is_ack_eliciting:
             latest_rtt = now - largest_sent_time
 
-            # decode ACK delay into seconds
-            ack_delay = max(
-                (ack_delay_encoded << self.ack_delay_exponent) / 1000000,
-                self.max_ack_delay / 1000,
-            )
+            # limit ACK delay to max_ack_delay
+            ack_delay = min(ack_delay, self.max_ack_delay)
 
             # update RTT estimate, which cannot be < 1 ms
             self._rtt_latest = max(latest_rtt, 0.001)
