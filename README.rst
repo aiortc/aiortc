@@ -74,19 +74,19 @@ You can now run the example server, which handles both HTTP/0.9 and HTTP/3:
 
 .. code-block:: console
 
-   $ python examples/http3-server.py --certificate tests/ssl_cert.pem --private-key tests/ssl_key.pem
+   $ python examples/http3_server.py --certificate tests/ssl_cert.pem --private-key tests/ssl_key.pem
 
 You can also run the example client to perform an HTTP/3 request:
 
 .. code-block:: console
 
-  $ python examples/http3-client.py https://localhost:4433/
+  $ python examples/http3_client.py https://localhost:4433/
 
 Alternatively you can perform an HTTP/0.9 request:
 
 .. code-block:: console
 
-  $ python examples/http3-client.py --legacy-http https://localhost:4433/
+  $ python examples/http3_client.py --legacy-http https://localhost:4433/
 
 
 License

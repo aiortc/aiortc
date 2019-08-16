@@ -36,7 +36,7 @@ class HttpClient(QuicConnectionProtocol):
         self._request_events: Dict[int, Deque[HttpEvent]] = {}
         self._request_waiter: Dict[int, asyncio.Future[Deque[HttpEvent]]] = {}
 
-        if configuration.alpn_protocols[0].startswith("hq-"):
+        if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
         else:
             self._http = H3Connection(self._quic)

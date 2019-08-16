@@ -1,5 +1,5 @@
 #
-# demo application for http3-server.py
+# demo application for http3_server.py
 #
 
 import os
