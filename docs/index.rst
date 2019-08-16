@@ -32,6 +32,7 @@ APIs:
 .. toctree::
    :maxdepth: 2
 
+   design
    quic
    h3
    asyncio
