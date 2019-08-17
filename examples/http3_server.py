@@ -7,6 +7,8 @@ import time
 from email.utils import formatdate
 from typing import Callable, Dict, Optional, Union
 
+import wsproto
+import wsproto.events
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -44,6 +46,16 @@ class HttpRequestHandler:
         self.stream_id = stream_id
         self.transmit = transmit
 
+    def http_event_received(self, event: HttpEvent):
+        if isinstance(event, DataReceived):
+            self.queue.put_nowait(
+                {
+                    "type": "http.request",
+                    "body": event.data,
+                    "more_body": not event.stream_ended,
+                }
+            )
+
     async def run_asgi(self, app: AsgiApplication) -> None:
         await application(self.scope, self.receive, self.send)
 
@@ -71,17 +83,96 @@ class HttpRequestHandler:
         self.transmit()
 
 
+class WebSocketHandler:
+    def __init__(
+        self,
+        *,
+        connection: HttpConnection,
+        scope: Dict,
+        stream_id: int,
+        transmit: Callable[[], None],
+    ):
+        self.connection = connection
+        self.queue: asyncio.Queue[Dict] = asyncio.Queue()
+        self.scope = scope
+        self.stream_id = stream_id
+        self.transmit = transmit
+        self.websocket: Optional[wsproto.Connection] = None
+
+    def http_event_received(self, event: HttpEvent) -> None:
+        if isinstance(event, DataReceived):
+            self.websocket.receive_data(event.data)
+
+        for ws_event in self.websocket.events():
+            self.websocket_event_received(ws_event)
+
+    def websocket_event_received(self, event: wsproto.events.Event) -> None:
+        if isinstance(event, wsproto.events.TextMessage):
+            self.queue.put_nowait({"type": "websocket.receive", "text": event.data})
+        elif isinstance(event, wsproto.events.Message):
+            self.queue.put_nowait({"type": "websocket.receive", "bytes": event.data})
+
+    async def run_asgi(self, app: AsgiApplication) -> None:
+        self.queue.put_nowait({"type": "websocket.connect"})
+
+        await application(self.scope, self.receive, self.send)
+
+        self.connection.send_data(stream_id=self.stream_id, data=b"", end_stream=True)
+        self.transmit()
+
+    async def receive(self) -> Dict:
+        return await self.queue.get()
+
+    async def send(self, message: Dict):
+        data = b""
+        if message["type"] == "websocket.accept":
+            self.websocket = wsproto.Connection(wsproto.ConnectionType.SERVER)
+
+            self.connection.send_headers(
+                stream_id=self.stream_id,
+                headers=[
+                    (b":status", b"200"),
+                    (b"server", b"aioquic"),
+                    (b"date", formatdate(time.time(), usegmt=True).encode()),
+                ],
+            )
+        elif message["type"] == "websocket.close":
+            data = self.websocket.send(
+                wsproto.events.CloseConnection(code=message["code"])
+            )
+        elif message["type"] == "websocket.send":
+            if message.get("text") is not None:
+                data = self.websocket.send(
+                    wsproto.events.TextMessage(data=message["text"])
+                )
+            elif message.get("bytes") is not None:
+                data = self.websocket.send(
+                    wsproto.events.Message(data=message["bytes"])
+                )
+
+        if data:
+            self.connection.send_data(
+                stream_id=self.stream_id, data=data, end_stream=False
+            )
+
+        self.transmit()
+
+
+Handler = Union[HttpRequestHandler, WebSocketHandler]
+
+
 class HttpServerProtocol(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._handlers: Dict[int, HttpRequestHandler] = {}
+        self._handlers: Dict[int, Handler] = {}
         self._http: Optional[HttpConnection] = None
 
     def http_event_received(self, event: HttpEvent) -> None:
-        if isinstance(event, RequestReceived):
+        if isinstance(event, RequestReceived) and event.stream_id not in self._handlers:
             headers = []
             raw_path = b""
             method = ""
+            protocol = None
             for header, value in event.headers:
                 if header == b":authority":
                     headers.append((b"host", value))
@@ -89,6 +180,8 @@ class HttpServerProtocol(QuicConnectionProtocol):
                     method = value.decode("utf8")
                 elif header == b":path":
                     raw_path = value
+                elif header == b":protocol":
+                    protocol = value.decode("utf8")
                 elif header and not header.startswith(b":"):
                     headers.append((header, value))
 
@@ -97,35 +190,52 @@ class HttpServerProtocol(QuicConnectionProtocol):
             else:
                 path_bytes, query_string = raw_path, b""
 
-            scope = {
-                "headers": headers,
-                "http_version": "0.9" if isinstance(self._http, H0Connection) else "3",
-                "method": method,
-                "path": path_bytes.decode("utf8"),
-                "query_string": query_string,
-                "raw_path": raw_path,
-                "root_path": "",
-                "scheme": "https",
-                "type": "http",
-            }
-
-            handler = HttpRequestHandler(
-                connection=self._http,
-                scope=scope,
-                stream_id=event.stream_id,
-                transmit=self.transmit,
-            )
+            handler: Handler
+            if method == "CONNECT" and protocol == "websocket":
+                scope = {
+                    "headers": headers,
+                    "http_version": "0.9"
+                    if isinstance(self._http, H0Connection)
+                    else "3",
+                    "method": method,
+                    "path": path_bytes.decode("utf8"),
+                    "query_string": query_string,
+                    "raw_path": raw_path,
+                    "root_path": "",
+                    "scheme": "wss",
+                    "type": "websocket",
+                }
+                handler = WebSocketHandler(
+                    connection=self._http,
+                    scope=scope,
+                    stream_id=event.stream_id,
+                    transmit=self.transmit,
+                )
+            else:
+                scope = {
+                    "headers": headers,
+                    "http_version": "0.9"
+                    if isinstance(self._http, H0Connection)
+                    else "3",
+                    "method": method,
+                    "path": path_bytes.decode("utf8"),
+                    "query_string": query_string,
+                    "raw_path": raw_path,
+                    "root_path": "",
+                    "scheme": "https",
+                    "type": "http",
+                }
+                handler = HttpRequestHandler(
+                    connection=self._http,
+                    scope=scope,
+                    stream_id=event.stream_id,
+                    transmit=self.transmit,
+                )
             self._handlers[event.stream_id] = handler
             asyncio.ensure_future(handler.run_asgi(application))
-        elif isinstance(event, DataReceived):
+        elif isinstance(event, DataReceived) and event.stream_id in self._handlers:
             handler = self._handlers[event.stream_id]
-            handler.queue.put_nowait(
-                {
-                    "type": "http.request",
-                    "body": event.data,
-                    "more_body": not event.stream_ended,
-                }
-            )
+            handler.http_event_received(event)
 
     def quic_event_received(self, event: QuicEvent):
         if isinstance(event, ProtocolNegotiated):

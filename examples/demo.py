@@ -13,6 +13,9 @@ app = Starlette()
 
 @app.route("/echo", methods=["POST"])
 async def echo(request):
+    """
+    HTTP echo endpoint.
+    """
     content = await request.body()
     return Response(content)
 
@@ -24,6 +27,17 @@ def padding(request):
     """
     size = min(50000000, request.path_params["size"])
     return PlainTextResponse("Z" * size)
+
+
+@app.websocket_route("/ws")
+async def ws(websocket):
+    """
+    WebSocket echo endpoint.
+    """
+    await websocket.accept()
+    message = await websocket.receive_text()
+    await websocket.send_text(message)
+    await websocket.close()
 
 
 app.mount(

@@ -6,8 +6,11 @@ import pickle
 import sys
 import time
 from collections import deque
-from typing import Deque, Dict, Optional, Union, cast
+from typing import Callable, Deque, Dict, Optional, Union, cast
 from urllib.parse import urlparse
+
+import wsproto
+import wsproto.events
 
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
@@ -28,6 +31,56 @@ logger = logging.getLogger("client")
 HttpConnection = Union[H0Connection, H3Connection]
 
 
+class WebSocket:
+    def __init__(
+        self, http: HttpConnection, stream_id: int, transmit: Callable[[], None]
+    ) -> None:
+        self.http = http
+        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.stream_id = stream_id
+        self.transmit = transmit
+        self.websocket = wsproto.Connection(wsproto.ConnectionType.CLIENT)
+
+    async def close(self, code=1000, reason=""):
+        """
+        Perform the closing handshake.
+        """
+        data = self.websocket.send(
+            wsproto.events.ConnectionClose(code=code, reason=reason)
+        )
+        self.http.send_data(stream_id=self.stream_id, data=data, end_stream=False)
+        self.transmit()
+
+    async def recv(self) -> str:
+        """
+        Receive the next message.
+        """
+        return await self.queue.get()
+
+    async def send(self, message: str):
+        """
+        Send a message.
+        """
+        assert isinstance(message, str)
+
+        data = self.websocket.send(wsproto.events.TextMessage(data=message))
+        self.http.send_data(stream_id=self.stream_id, data=data, end_stream=False)
+        self.transmit()
+
+    def http_event_received(self, event: HttpEvent):
+        if isinstance(event, ResponseReceived):
+            pass
+        elif isinstance(event, DataReceived):
+            self.websocket.receive_data(event.data)
+
+        for ws_event in self.websocket.events():
+            self.websocket_event_received(ws_event)
+
+    def websocket_event_received(self, event: wsproto.events.Event) -> None:
+        if isinstance(event, wsproto.events.TextMessage):
+            self.queue.put_nowait(event.data)
+
+
 class HttpClient(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -35,6 +88,7 @@ class HttpClient(QuicConnectionProtocol):
         self._http: Optional[HttpConnection] = None
         self._request_events: Dict[int, Deque[HttpEvent]] = {}
         self._request_waiter: Dict[int, asyncio.Future[Deque[HttpEvent]]] = {}
+        self._websockets: Dict[int, WebSocket] = {}
 
         if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
@@ -64,15 +118,42 @@ class HttpClient(QuicConnectionProtocol):
 
         return await asyncio.shield(waiter)
 
+    async def websocket(self, authority: str, path: str) -> WebSocket:
+        stream_id = self._quic.get_next_available_stream_id()
+        websocket = WebSocket(
+            http=self._http, stream_id=stream_id, transmit=self.transmit
+        )
+
+        self._websockets[stream_id] = websocket
+
+        self._http.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"CONNECT"),
+                (b":scheme", b"https"),
+                (b":authority", authority.encode("utf8")),
+                (b":path", path.encode("utf8")),
+                (b":protocol", b"websocket"),
+            ],
+        )
+        self.transmit()
+
+        return websocket
+
     def http_event_received(self, event: HttpEvent):
-        if (
-            isinstance(event, (ResponseReceived, DataReceived))
-            and event.stream_id in self._request_events
-        ):
-            self._request_events[event.stream_id].append(event)
-            if event.stream_ended:
-                request_waiter = self._request_waiter.pop(event.stream_id)
-                request_waiter.set_result(self._request_events.pop(event.stream_id))
+        if isinstance(event, (ResponseReceived, DataReceived)):
+            stream_id = event.stream_id
+            if stream_id in self._request_events:
+                # http
+                self._request_events[event.stream_id].append(event)
+                if event.stream_ended:
+                    request_waiter = self._request_waiter.pop(stream_id)
+                    request_waiter.set_result(self._request_events.pop(stream_id))
+
+            elif stream_id in self._websockets:
+                # websocket
+                websocket = self._websockets[stream_id]
+                websocket.http_event_received(event)
 
     def quic_event_received(self, event: QuicEvent):
         #  pass event to the HTTP layer
@@ -92,7 +173,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(url: str, configuration: QuicConfiguration) -> None:
+async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only HTTPS URLs are supported."
@@ -112,33 +193,39 @@ async def run(url: str, configuration: QuicConfiguration) -> None:
     ) as client:
         client = cast(HttpClient, client)
 
-        # perform request
-        start = time.time()
-        http_events = await client.get(parsed.netloc, parsed.path)
-        elapsed = time.time() - start
+        if websocket:
+            ws = await client.websocket(parsed.netloc, parsed.path)
+            await ws.send("Hello, WebSocket!")
+            message = await ws.recv()
+            print(message)
+        else:
+            # perform request
+            start = time.time()
+            http_events = await client.get(parsed.netloc, parsed.path)
+            elapsed = time.time() - start
 
-        # print speed
-        octets = 0
-        for http_event in http_events:
-            if isinstance(http_event, DataReceived):
-                octets += len(http_event.data)
-        logger.info(
-            "Received %d bytes in %.1f s (%.3f Mbps)"
-            % (octets, elapsed, octets * 8 / elapsed / 1000000)
-        )
+            # print speed
+            octets = 0
+            for http_event in http_events:
+                if isinstance(http_event, DataReceived):
+                    octets += len(http_event.data)
+            logger.info(
+                "Received %d bytes in %.1f s (%.3f Mbps)"
+                % (octets, elapsed, octets * 8 / elapsed / 1000000)
+            )
 
-        # print response
-        for http_event in http_events:
-            if isinstance(http_event, ResponseReceived):
-                headers = b""
-                for k, v in http_event.headers:
-                    headers += k + b": " + v + b"\r\n"
-                if headers:
-                    sys.stderr.buffer.write(headers + b"\r\n")
-                    sys.stderr.buffer.flush()
-            elif isinstance(http_event, DataReceived):
-                sys.stdout.buffer.write(http_event.data)
-                sys.stdout.buffer.flush()
+            # print response
+            for http_event in http_events:
+                if isinstance(http_event, ResponseReceived):
+                    headers = b""
+                    for k, v in http_event.headers:
+                        headers += k + b": " + v + b"\r\n"
+                    if headers:
+                        sys.stderr.buffer.write(headers + b"\r\n")
+                        sys.stderr.buffer.flush()
+                elif isinstance(http_event, DataReceived):
+                    sys.stdout.buffer.write(http_event.data)
+                    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
@@ -163,6 +250,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="increase logging verbosity"
     )
+    parser.add_argument(
+        "-w", "--websocket", action="store_true", help="open a WebSocket"
+    )
+
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -189,7 +280,9 @@ if __name__ == "__main__":
         uvloop.install()
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(url=args.url, configuration=configuration))
+        loop.run_until_complete(
+            run(configuration=configuration, url=args.url, websocket=args.websocket)
+        )
     finally:
         if configuration.quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:
