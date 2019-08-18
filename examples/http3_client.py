@@ -6,7 +6,7 @@ import pickle
 import sys
 import time
 from collections import deque
-from typing import Callable, Deque, Dict, Optional, Union, cast
+from typing import Callable, Deque, Dict, List, Optional, Union, cast
 from urllib.parse import urlparse
 
 import wsproto
@@ -38,6 +38,7 @@ class WebSocket:
         self.http = http
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.stream_id = stream_id
+        self.subprotocol: Optional[str] = None
         self.transmit = transmit
         self.websocket = wsproto.Connection(wsproto.ConnectionType.CLIENT)
 
@@ -69,7 +70,9 @@ class WebSocket:
 
     def http_event_received(self, event: HttpEvent):
         if isinstance(event, ResponseReceived):
-            pass
+            for header, value in event.headers:
+                if header == b"sec-websocket-protocol":
+                    self.subprotocol = value.decode("utf8")
         elif isinstance(event, DataReceived):
             self.websocket.receive_data(event.data)
 
@@ -118,7 +121,9 @@ class HttpClient(QuicConnectionProtocol):
 
         return await asyncio.shield(waiter)
 
-    async def websocket(self, authority: str, path: str) -> WebSocket:
+    async def websocket(
+        self, authority: str, path: str, subprotocols: List[str] = []
+    ) -> WebSocket:
         stream_id = self._quic.get_next_available_stream_id()
         websocket = WebSocket(
             http=self._http, stream_id=stream_id, transmit=self.transmit
@@ -126,16 +131,19 @@ class HttpClient(QuicConnectionProtocol):
 
         self._websockets[stream_id] = websocket
 
-        self._http.send_headers(
-            stream_id=stream_id,
-            headers=[
-                (b":method", b"CONNECT"),
-                (b":scheme", b"https"),
-                (b":authority", authority.encode("utf8")),
-                (b":path", path.encode("utf8")),
-                (b":protocol", b"websocket"),
-            ],
-        )
+        headers = [
+            (b":method", b"CONNECT"),
+            (b":scheme", b"https"),
+            (b":authority", authority.encode("utf8")),
+            (b":path", path.encode("utf8")),
+            (b":protocol", b"websocket"),
+        ]
+        if subprotocols:
+            headers.append(
+                (b"sec-websocket-protocol", ", ".join(subprotocols).encode("utf8"))
+            )
+        self._http.send_headers(stream_id=stream_id, headers=headers)
+
         self.transmit()
 
         return websocket
@@ -194,7 +202,9 @@ async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> No
         client = cast(HttpClient, client)
 
         if websocket:
-            ws = await client.websocket(parsed.netloc, parsed.path)
+            ws = await client.websocket(
+                parsed.netloc, parsed.path, subprotocols=["chat", "superchat"]
+            )
             await ws.send("Hello, WebSocket!")
             message = await ws.recv()
             print(message)

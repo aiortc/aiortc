@@ -34,7 +34,12 @@ async def ws(websocket):
     """
     WebSocket echo endpoint.
     """
-    await websocket.accept()
+    if "chat" in websocket.scope["subprotocols"]:
+        subprotocol = "chat"
+    else:
+        subprotocol = None
+    await websocket.accept(subprotocol=subprotocol)
+
     message = await websocket.receive_text()
     await websocket.send_text(message)
     await websocket.close()

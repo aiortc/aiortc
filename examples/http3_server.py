@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from email.utils import formatdate
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import wsproto
 import wsproto.events
@@ -126,16 +126,18 @@ class WebSocketHandler:
     async def send(self, message: Dict):
         data = b""
         if message["type"] == "websocket.accept":
+            subprotocol = message.get("subprotocol")
+
             self.websocket = wsproto.Connection(wsproto.ConnectionType.SERVER)
 
-            self.connection.send_headers(
-                stream_id=self.stream_id,
-                headers=[
-                    (b":status", b"200"),
-                    (b"server", b"aioquic"),
-                    (b"date", formatdate(time.time(), usegmt=True).encode()),
-                ],
-            )
+            headers = [
+                (b":status", b"200"),
+                (b"server", b"aioquic"),
+                (b"date", formatdate(time.time(), usegmt=True).encode()),
+            ]
+            if subprotocol is not None:
+                headers.append((b"sec-websocket-protocol", subprotocol.encode("utf8")))
+            self.connection.send_headers(stream_id=self.stream_id, headers=headers)
         elif message["type"] == "websocket.close":
             data = self.websocket.send(
                 wsproto.events.CloseConnection(code=message["code"])
@@ -192,6 +194,12 @@ class HttpServerProtocol(QuicConnectionProtocol):
 
             handler: Handler
             if method == "CONNECT" and protocol == "websocket":
+                subprotocols: List[str] = []
+                for header, value in event.headers:
+                    if header == b"sec-websocket-protocol":
+                        subprotocols = [
+                            x.strip() for x in value.decode("utf8").split(",")
+                        ]
                 scope = {
                     "headers": headers,
                     "http_version": "0.9"
@@ -203,6 +211,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
                     "raw_path": raw_path,
                     "root_path": "",
                     "scheme": "wss",
+                    "subprotocols": subprotocols,
                     "type": "websocket",
                 }
                 handler = WebSocketHandler(
