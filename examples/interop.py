@@ -78,7 +78,7 @@ SERVERS = [
     Server("picoquic", "test.privateoctopus.com"),
     Server("quant", "quant.eggert.org"),
     Server("quic-go", "quic.seemann.io", port=443, retry_port=443),
-    Server("quiche", "quic.tech", retry_port=4433),
+    Server("quiche", "quic.tech", port=8443, retry_port=4433),
     Server("quicker", "quicker.edm.uhasselt.be", retry_port=None),
     Server("quicly", "kazuhooku.com"),
     Server("quinn", "ralith.com"),
