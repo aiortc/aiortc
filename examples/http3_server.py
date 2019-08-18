@@ -112,6 +112,8 @@ class WebSocketHandler:
             self.queue.put_nowait({"type": "websocket.receive", "text": event.data})
         elif isinstance(event, wsproto.events.Message):
             self.queue.put_nowait({"type": "websocket.receive", "bytes": event.data})
+        elif isinstance(event, wsproto.events.CloseConnection):
+            self.queue.put_nowait({"type": "websocket.disconnect", "code": event.code})
 
     async def run_asgi(self, app: AsgiApplication) -> None:
         self.queue.put_nowait({"type": "websocket.connect"})

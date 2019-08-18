@@ -7,6 +7,7 @@ import os
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
+from starlette.websockets import WebSocketDisconnect
 
 app = Starlette()
 
@@ -40,9 +41,12 @@ async def ws(websocket):
         subprotocol = None
     await websocket.accept(subprotocol=subprotocol)
 
-    message = await websocket.receive_text()
-    await websocket.send_text(message)
-    await websocket.close()
+    try:
+        while True:
+            message = await websocket.receive_text()
+            await websocket.send_text(message)
+    except WebSocketDisconnect:
+        pass
 
 
 app.mount(
