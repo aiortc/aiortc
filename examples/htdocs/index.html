@@ -22,6 +22,10 @@
             <li><strong>GET /</strong> returns the homepage</li>
             <li><strong>GET /NNNNN</strong> returns NNNNN bytes of plain text</li>
             <li><strong>POST /echo</strong> returns the request data</li>
+            <li>
+                <strong>CONNECT /ws</strong> runs a WebSocket echo service.
+                You must set the <em>:protocol</em> pseudo-header to <em>"websocket"</em>.
+            </li>
         </ul>
     </body>
 </html>
