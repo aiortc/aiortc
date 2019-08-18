@@ -205,9 +205,16 @@ async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> No
             ws = await client.websocket(
                 parsed.netloc, parsed.path, subprotocols=["chat", "superchat"]
             )
-            await ws.send("Hello, WebSocket!")
-            message = await ws.recv()
-            print(message)
+
+            # send some messages and receive reply
+            for i in range(2):
+                message = "Hello {}, WebSocket!".format(i)
+                print("> " + message)
+                await ws.send(message)
+
+                message = await ws.recv()
+                print("< " + message)
+
             await ws.close()
         else:
             # perform request
