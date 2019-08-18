@@ -92,6 +92,7 @@ class WebSocketHandler:
         stream_id: int,
         transmit: Callable[[], None],
     ):
+        self.closed = False
         self.connection = connection
         self.queue: asyncio.Queue[Dict] = asyncio.Queue()
         self.scope = scope
@@ -115,16 +116,18 @@ class WebSocketHandler:
     async def run_asgi(self, app: AsgiApplication) -> None:
         self.queue.put_nowait({"type": "websocket.connect"})
 
-        await application(self.scope, self.receive, self.send)
-
-        self.connection.send_data(stream_id=self.stream_id, data=b"", end_stream=True)
-        self.transmit()
+        try:
+            await application(self.scope, self.receive, self.send)
+        finally:
+            if not self.closed:
+                await self.send({"type": "websocket.close", "code": 1000})
 
     async def receive(self) -> Dict:
         return await self.queue.get()
 
     async def send(self, message: Dict):
         data = b""
+        end_stream = False
         if message["type"] == "websocket.accept":
             subprotocol = message.get("subprotocol")
 
@@ -142,6 +145,7 @@ class WebSocketHandler:
             data = self.websocket.send(
                 wsproto.events.CloseConnection(code=message["code"])
             )
+            end_stream = True
         elif message["type"] == "websocket.send":
             if message.get("text") is not None:
                 data = self.websocket.send(
@@ -154,9 +158,10 @@ class WebSocketHandler:
 
         if data:
             self.connection.send_data(
-                stream_id=self.stream_id, data=data, end_stream=False
+                stream_id=self.stream_id, data=data, end_stream=end_stream
             )
-
+        if end_stream:
+            self.closed = True
         self.transmit()
 
 
@@ -172,6 +177,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
     def http_event_received(self, event: HttpEvent) -> None:
         if isinstance(event, RequestReceived) and event.stream_id not in self._handlers:
             headers = []
+            http_version = "0.9" if isinstance(self._http, H0Connection) else "3"
             raw_path = b""
             method = ""
             protocol = None
@@ -191,6 +197,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 path_bytes, query_string = raw_path.split(b"?", maxsplit=1)
             else:
                 path_bytes, query_string = raw_path, b""
+            path = path_bytes.decode("utf8")
 
             handler: Handler
             if method == "CONNECT" and protocol == "websocket":
@@ -202,11 +209,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
                         ]
                 scope = {
                     "headers": headers,
-                    "http_version": "0.9"
-                    if isinstance(self._http, H0Connection)
-                    else "3",
+                    "http_version": http_version,
                     "method": method,
-                    "path": path_bytes.decode("utf8"),
+                    "path": path,
                     "query_string": query_string,
                     "raw_path": raw_path,
                     "root_path": "",
@@ -223,11 +228,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
             else:
                 scope = {
                     "headers": headers,
-                    "http_version": "0.9"
-                    if isinstance(self._http, H0Connection)
-                    else "3",
+                    "http_version": http_version,
                     "method": method,
-                    "path": path_bytes.decode("utf8"),
+                    "path": path,
                     "query_string": query_string,
                     "raw_path": raw_path,
                     "root_path": "",
