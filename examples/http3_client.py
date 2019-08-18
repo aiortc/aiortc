@@ -42,14 +42,14 @@ class WebSocket:
         self.transmit = transmit
         self.websocket = wsproto.Connection(wsproto.ConnectionType.CLIENT)
 
-    async def close(self, code=1000, reason=""):
+    async def close(self, code=1000, reason="") -> None:
         """
         Perform the closing handshake.
         """
         data = self.websocket.send(
-            wsproto.events.ConnectionClose(code=code, reason=reason)
+            wsproto.events.CloseConnection(code=code, reason=reason)
         )
-        self.http.send_data(stream_id=self.stream_id, data=data, end_stream=False)
+        self.http.send_data(stream_id=self.stream_id, data=data, end_stream=True)
         self.transmit()
 
     async def recv(self) -> str:
@@ -208,6 +208,7 @@ async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> No
             await ws.send("Hello, WebSocket!")
             message = await ws.recv()
             print(message)
+            await ws.close()
         else:
             # perform request
             start = time.time()
