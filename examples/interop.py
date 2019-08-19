@@ -7,14 +7,17 @@
 import argparse
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Flag
 from typing import Optional, cast
 
+import requests
+import urllib3
 from http3_client import HttpClient
 
 from aioquic.asyncio import connect
-from aioquic.h3.events import ResponseReceived
+from aioquic.h3.events import DataReceived, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
@@ -60,6 +63,7 @@ class Server:
     name: str
     host: str
     port: int = 4433
+    http3: bool = True
     retry_port: Optional[int] = 4434
     path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
@@ -76,7 +80,7 @@ SERVERS = [
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
     Server("pandora", "pandora.cm.in.tum.de"),
     Server("picoquic", "test.privateoctopus.com"),
-    Server("quant", "quant.eggert.org"),
+    Server("quant", "quant.eggert.org", http3=False),
     Server("quic-go", "quic.seemann.io", port=443, retry_port=443),
     Server("quiche", "quic.tech", port=8443, retry_port=4433),
     Server("quicker", "quicker.edm.uhasselt.be", retry_port=None),
@@ -286,6 +290,55 @@ async def test_spin_bit(server: Server, configuration: QuicConfiguration):
             server.result |= Result.P
 
 
+async def test_throughput(server: Server, configuration: QuicConfiguration):
+    failures = 0
+
+    for size in [5000000, 10000000]:
+        print("Testing %d bytes download" % size)
+        path = "/%d" % size
+
+        # perform HTTP request over TCP
+        start = time.time()
+        response = requests.get("https://" + server.host + path, verify=False)
+        tcp_octets = len(response.content)
+        tcp_elapsed = time.time() - start
+        assert tcp_octets == size, "HTTP/TCP response size mismatch"
+
+        # perform HTTP request over QUIC
+        if server.http3:
+            configuration.alpn_protocols = ["h3-22"]
+        else:
+            configuration.alpn_protocols = ["hq-22"]
+        start = time.time()
+        async with connect(
+            server.host,
+            server.port,
+            configuration=configuration,
+            create_protocol=HttpClient,
+        ) as protocol:
+            protocol = cast(HttpClient, protocol)
+
+            http_events = await protocol.get(server.host, path)
+            quic_elapsed = time.time() - start
+            quic_octets = 0
+            for http_event in http_events:
+                if isinstance(http_event, DataReceived):
+                    quic_octets += len(http_event.data)
+        assert quic_octets == size, "HTTP/QUIC response size mismatch"
+
+        print(" - HTTP/TCP  completed in %.3f s" % tcp_elapsed)
+        print(" - HTTP/QUIC completed in %.3f s" % quic_elapsed)
+
+        if quic_elapsed > 1.1 * tcp_elapsed:
+            failures += 1
+            print(" => FAIL")
+        else:
+            print(" => PASS")
+
+    if failures == 0:
+        server.result |= Result.T
+
+
 def print_result(server: Server) -> None:
     result = str(server.result).replace("three", "3")
     result = result[0:7] + " " + result[7:13] + " " + result[13:]
@@ -302,8 +355,14 @@ async def run(servers, tests, secrets_log_file=None) -> None:
                 quic_logger=QuicLogger(),
                 secrets_log_file=secrets_log_file,
             )
+            if test_name == "test_throughput":
+                timeout = 60
+            else:
+                timeout = 5
             try:
-                await asyncio.wait_for(test_func(server, configuration), timeout=5)
+                await asyncio.wait_for(
+                    test_func(server, configuration), timeout=timeout
+                )
             except Exception as exc:
                 print(exc)
         print("")
@@ -346,6 +405,9 @@ if __name__ == "__main__":
         servers = list(filter(lambda x: x.name == args.server, servers))
     if args.test:
         tests = list(filter(lambda x: x[0] == args.test, tests))
+
+    # disable requests SSL warnings
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
