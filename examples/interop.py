@@ -228,9 +228,10 @@ async def test_migration(server: Server, configuration: QuicConfiguration):
         # cause some traffic
         await protocol.ping()
 
-        # change connection ID
+        # change connection ID and replace transport
         protocol.change_connection_id()
-        await asyncio.sleep(0.1)
+        protocol._transport.close()
+        await loop.create_datagram_endpoint(lambda: protocol, local_addr=("::", 0))
 
         # cause more traffic
         await protocol.ping()
