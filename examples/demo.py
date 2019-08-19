@@ -18,7 +18,8 @@ async def echo(request):
     HTTP echo endpoint.
     """
     content = await request.body()
-    return Response(content)
+    media_type = request.headers.get("content-type")
+    return Response(content, media_type=media_type)
 
 
 @app.route("/{size:int}")
