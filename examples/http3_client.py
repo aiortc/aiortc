@@ -181,10 +181,13 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> None:
+async def run(configuration: QuicConfiguration, url: str) -> None:
     # parse URL
     parsed = urlparse(url)
-    assert parsed.scheme == "https", "Only HTTPS URLs are supported."
+    assert parsed.scheme in (
+        "https",
+        "wss",
+    ), "Only https:// or wss:// URLs are supported."
     if ":" in parsed.netloc:
         host, port_str = parsed.netloc.split(":")
         port = int(port_str)
@@ -201,7 +204,7 @@ async def run(configuration: QuicConfiguration, url: str, websocket: bool) -> No
     ) as client:
         client = cast(HttpClient, client)
 
-        if websocket:
+        if parsed.scheme == "wss":
             ws = await client.websocket(
                 parsed.netloc, parsed.path, subprotocols=["chat", "superchat"]
             )
@@ -268,9 +271,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="increase logging verbosity"
     )
-    parser.add_argument(
-        "-w", "--websocket", action="store_true", help="open a WebSocket"
-    )
 
     args = parser.parse_args()
 
@@ -298,9 +298,7 @@ if __name__ == "__main__":
         uvloop.install()
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(
-            run(configuration=configuration, url=args.url, websocket=args.websocket)
-        )
+        loop.run_until_complete(run(configuration=configuration, url=args.url))
     finally:
         if configuration.quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:

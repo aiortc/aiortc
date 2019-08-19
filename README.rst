@@ -70,13 +70,19 @@ git you can run:
    $ pip install -e .
    $ pip install aiofiles starlette wsproto
 
-You can now run the example server, which handles both HTTP/0.9 and HTTP/3:
+HTTP/3 server
+.............
+
+You can run the example server, which handles both HTTP/0.9 and HTTP/3:
 
 .. code-block:: console
 
    $ python examples/http3_server.py --certificate tests/ssl_cert.pem --private-key tests/ssl_key.pem
 
-You can also run the example client to perform an HTTP/3 request:
+HTTP/3 client
+.............
+
+You can run the example client to perform an HTTP/3 request:
 
 .. code-block:: console
 
@@ -88,6 +94,11 @@ Alternatively you can perform an HTTP/0.9 request:
 
   $ python examples/http3_client.py --legacy-http https://localhost:4433/
 
+You can also open a WebSocket over HTTP/3:
+
+.. code-block:: console
+
+  $ python examples/http3_client.py wss://localhost:4433/ws
 
 License
 -------
