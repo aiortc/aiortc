@@ -1,3 +1,5 @@
+#define PY_SSIZE_T_CLEAN
+
 #include <Python.h>
 
 #define MODULE_NAME "aioquic._buffer"
@@ -30,7 +32,7 @@ Buffer_init(BufferObject *self, PyObject *args, PyObject *kwargs)
     const char *kwlist[] = {"capacity", "data", NULL};
     int capacity = 0;
     const unsigned char *data = NULL;
-    int data_len = 0;
+    Py_ssize_t data_len = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|iy#", (char**)kwlist, &capacity, &data, &data_len))
         return -1;
@@ -186,7 +188,7 @@ static PyObject *
 Buffer_push_bytes(BufferObject *self, PyObject *args)
 {
     const unsigned char *data;
-    int data_len;
+    Py_ssize_t data_len;
     if (!PyArg_ParseTuple(args, "y#", &data, &data_len))
         return NULL;
 

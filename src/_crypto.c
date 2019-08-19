@@ -1,3 +1,5 @@
+#define PY_SSIZE_T_CLEAN
+
 #include <Python.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -66,7 +68,7 @@ AEAD_init(AEADObject *self, PyObject *args, PyObject *kwargs)
 {
     const char *cipher_name;
     const unsigned char *key, *iv;
-    int cipher_name_len, key_len, iv_len;
+    Py_ssize_t cipher_name_len, key_len, iv_len;
 
     if (!PyArg_ParseTuple(args, "y#y#y#", &cipher_name, &cipher_name_len, &key, &key_len, &iv, &iv_len))
         return -1;
@@ -108,7 +110,8 @@ static PyObject*
 AEAD_decrypt(AEADObject *self, PyObject *args)
 {
     const unsigned char *data, *associated;
-    int data_len, associated_len, outlen, outlen2, res;
+    Py_ssize_t data_len, associated_len;
+    int outlen, outlen2, res;
     uint64_t pn;
 
     if (!PyArg_ParseTuple(args, "y#y#K", &data, &data_len, &associated, &associated_len, &pn))
@@ -149,7 +152,8 @@ static PyObject*
 AEAD_encrypt(AEADObject *self, PyObject *args)
 {
     const unsigned char *data, *associated;
-    int data_len, associated_len, outlen, outlen2, res;
+    Py_ssize_t data_len, associated_len;
+    int outlen, outlen2, res;
     uint64_t pn;
 
     if (!PyArg_ParseTuple(args, "y#y#K", &data, &data_len, &associated, &associated_len, &pn))
@@ -246,7 +250,8 @@ HeaderProtection_init(HeaderProtectionObject *self, PyObject *args, PyObject *kw
 {
     const char *cipher_name;
     const unsigned char *key;
-    int cipher_name_len, key_len, res;
+    Py_ssize_t cipher_name_len, key_len;
+    int res;
 
     if (!PyArg_ParseTuple(args, "y#y#", &cipher_name, &cipher_name_len, &key, &key_len))
         return -1;
@@ -297,7 +302,8 @@ static PyObject*
 HeaderProtection_apply(HeaderProtectionObject *self, PyObject *args)
 {
     const unsigned char *header, *payload;
-    int header_len, payload_len, res;
+    Py_ssize_t header_len, payload_len;
+    int res;
 
     if (!PyArg_ParseTuple(args, "y#y#", &header, &header_len, &payload, &payload_len))
         return NULL;
@@ -328,7 +334,8 @@ static PyObject*
 HeaderProtection_remove(HeaderProtectionObject *self, PyObject *args)
 {
     const unsigned char *packet;
-    int pn_offset, packet_len, res;
+    Py_ssize_t packet_len;
+    int pn_offset, res;
 
     if (!PyArg_ParseTuple(args, "y#I", &packet, &packet_len, &pn_offset))
         return NULL;
