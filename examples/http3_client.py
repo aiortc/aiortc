@@ -137,6 +137,7 @@ class HttpClient(QuicConnectionProtocol):
             (b":authority", authority.encode("utf8")),
             (b":path", path.encode("utf8")),
             (b":protocol", b"websocket"),
+            (b"sec-websocket-version", b"13"),
         ]
         if subprotocols:
             headers.append(
