@@ -63,7 +63,9 @@ def consume_events(connection):
 
 
 def create_standalone_client(self):
-    client = QuicConnection(configuration=QuicConfiguration(is_client=True))
+    client = QuicConnection(
+        configuration=QuicConfiguration(is_client=True, quic_logger=QuicLogger())
+    )
     client._ack_delay = 0
 
     # kick-off handshake
@@ -85,7 +87,9 @@ def client_and_server(
     transport_options={},
 ):
     client = QuicConnection(
-        configuration=QuicConfiguration(is_client=True, **client_options),
+        configuration=QuicConfiguration(
+            is_client=True, quic_logger=QuicLogger(), **client_options
+        ),
         **client_kwargs
     )
     client._ack_delay = 0
@@ -96,6 +100,7 @@ def client_and_server(
             is_client=False,
             certificate=SERVER_CERTIFICATE,
             private_key=SERVER_PRIVATE_KEY,
+            quic_logger=QuicLogger(),
             **server_options
         ),
         **server_kwargs
@@ -204,6 +209,14 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(event.reason_phrase, "")
             self.assertIsNone(server.next_event())
 
+            # check client log
+            client_log = client.configuration.quic_logger.to_dict()
+            self.assertGreater(len(client_log["traces"][0]["events"]), 20)
+
+            # check server log
+            server_log = server.configuration.quic_logger.to_dict()
+            self.assertGreater(len(server_log["traces"][0]["events"]), 20)
+
     def test_connect_with_alpn(self):
         with client_and_server(
             client_options={"alpn_protocols": ["hq-22", "h3-22"]},
@@ -229,25 +242,6 @@ class QuicConnectionTest(TestCase):
             for i in range(7):
                 self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(server.next_event())
-
-    def test_connect_with_qlog(self):
-        # open logs
-        client_logger = QuicLogger()
-        server_logger = QuicLogger()
-
-        with client_and_server(
-            client_options={"quic_logger": client_logger},
-            server_options={"quic_logger": server_logger},
-        ) as (client, server):
-            pass
-
-        # check client log
-        client_log = client_logger.to_dict()
-        self.assertGreater(len(client_log["traces"][0]["events"]), 20)
-
-        # check server log
-        server_log = server_logger.to_dict()
-        self.assertGreater(len(server_log["traces"][0]["events"]), 20)
 
     def test_connect_with_secrets_log(self):
         client_log_file = io.StringIO()
