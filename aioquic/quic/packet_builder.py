@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from ..buffer import Buffer, size_uint_var
 from ..tls import Epoch
 from .crypto import CryptoPair
+from .logger import QuicLogger
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_NUMBER_MAX_SIZE,
@@ -64,6 +65,7 @@ class QuicPacketBuilder:
         pad_first_datagram: bool = False,
         packet_number: int = 0,
         peer_token: bytes = b"",
+        quic_logger: Optional[QuicLogger] = None,
         spin_bit: bool = False,
     ):
         self.max_flight_bytes: Optional[int] = None
@@ -73,6 +75,7 @@ class QuicPacketBuilder:
         self._pad_first_datagram = pad_first_datagram
         self._peer_cid = peer_cid
         self._peer_token = peer_token
+        self._quic_logger = quic_logger
         self._spin_bit = spin_bit
         self._version = version
 
@@ -224,8 +227,15 @@ class QuicPacketBuilder:
 
             # pad initial datagram
             if self._pad_first_datagram:
-                buf.push_bytes(bytes(self.remaining_space))
-                packet_size = buf.tell() - self._packet_start
+                if self.remaining_space:
+                    buf.push_bytes(bytes(self.remaining_space))
+                    packet_size = buf.tell() - self._packet_start
+
+                    # log frame
+                    if self._quic_logger is not None:
+                        self._packet.quic_logger_frames.append(
+                            self._quic_logger.encode_padding_frame()
+                        )
                 self._pad_first_datagram = False
 
             # write header

@@ -6,6 +6,7 @@ from aioquic.quic import packet
 from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
+    QuicNewConnectionIdFrame,
     QuicProtocolVersion,
     QuicTransportParameters,
     decode_packet_number,
@@ -315,17 +316,19 @@ class FrameTest(TestCase):
         frame = packet.pull_new_connection_id_frame(buf)
         self.assertEqual(
             frame,
-            (
-                2,
-                0,
-                binascii.unhexlify("7813f3d9e45e0cacbb491b4b66b039f204"),
-                binascii.unhexlify("06f68fede38ec4c31aba8ab1245244e8"),
+            QuicNewConnectionIdFrame(
+                sequence_number=2,
+                retire_prior_to=0,
+                connection_id=binascii.unhexlify("7813f3d9e45e0cacbb491b4b66b039f204"),
+                stateless_reset_token=binascii.unhexlify(
+                    "06f68fede38ec4c31aba8ab1245244e8"
+                ),
             ),
         )
 
         # serialize
         buf = Buffer(capacity=len(data))
-        packet.push_new_connection_id_frame(buf, *frame)
+        packet.push_new_connection_id_frame(buf, frame)
         self.assertEqual(buf.data, data)
 
     def test_transport_close(self):

@@ -324,6 +324,21 @@ PROBING_FRAME_TYPES = frozenset(
 )
 
 
+@dataclass
+class QuicNewConnectionIdFrame:
+    sequence_number: int
+    retire_prior_to: int
+    connection_id: bytes
+    stateless_reset_token: bytes
+
+
+@dataclass
+class QuicStreamFrame:
+    data: bytes = b""
+    fin: bool = False
+    offset: int = 0
+
+
 def pull_ack_frame(buf: Buffer) -> Tuple[RangeSet, int]:
     rangeset = RangeSet()
     end = buf.pull_uint_var()  # largest acknowledged
@@ -356,13 +371,6 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
         start = r.start
 
 
-@dataclass
-class QuicStreamFrame:
-    data: bytes = b""
-    fin: bool = False
-    offset: int = 0
-
-
 def pull_new_token_frame(buf: Buffer) -> bytes:
     length = buf.pull_uint_var()
     return buf.pull_bytes(length)
@@ -373,28 +381,27 @@ def push_new_token_frame(buf: Buffer, token: bytes) -> None:
     buf.push_bytes(token)
 
 
-def pull_new_connection_id_frame(buf: Buffer) -> Tuple[int, int, bytes, bytes]:
+def pull_new_connection_id_frame(buf: Buffer) -> QuicNewConnectionIdFrame:
     sequence_number = buf.pull_uint_var()
     retire_prior_to = buf.pull_uint_var()
     length = buf.pull_uint8()
     connection_id = buf.pull_bytes(length)
     stateless_reset_token = buf.pull_bytes(16)
-    return (sequence_number, retire_prior_to, connection_id, stateless_reset_token)
+    return QuicNewConnectionIdFrame(
+        sequence_number=sequence_number,
+        retire_prior_to=retire_prior_to,
+        connection_id=connection_id,
+        stateless_reset_token=stateless_reset_token,
+    )
 
 
-def push_new_connection_id_frame(
-    buf: Buffer,
-    sequence_number: int,
-    retire_prior_to: int,
-    connection_id: bytes,
-    stateless_reset_token: bytes,
-) -> None:
-    assert len(stateless_reset_token) == 16
-    buf.push_uint_var(sequence_number)
-    buf.push_uint_var(retire_prior_to)
-    buf.push_uint8(len(connection_id))
-    buf.push_bytes(connection_id)
-    buf.push_bytes(stateless_reset_token)
+def push_new_connection_id_frame(buf: Buffer, frame: QuicNewConnectionIdFrame) -> None:
+    assert len(frame.stateless_reset_token) == 16
+    buf.push_uint_var(frame.sequence_number)
+    buf.push_uint_var(frame.retire_prior_to)
+    buf.push_uint8(len(frame.connection_id))
+    buf.push_bytes(frame.connection_id)
+    buf.push_bytes(frame.stateless_reset_token)
 
 
 def decode_reason_phrase(reason_bytes: bytes) -> str:
