@@ -363,12 +363,6 @@ class QuicStreamFrame:
     offset: int = 0
 
 
-def pull_crypto_frame(buf: Buffer) -> QuicStreamFrame:
-    offset = buf.pull_uint_var()
-    length = buf.pull_uint_var()
-    return QuicStreamFrame(offset=offset, data=buf.pull_bytes(length))
-
-
 def pull_new_token_frame(buf: Buffer) -> bytes:
     length = buf.pull_uint_var()
     return buf.pull_bytes(length)

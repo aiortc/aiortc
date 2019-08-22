@@ -28,7 +28,6 @@ from .packet import (
     is_long_header,
     pull_ack_frame,
     pull_application_close_frame,
-    pull_crypto_frame,
     pull_new_connection_id_frame,
     pull_new_token_frame,
     pull_quic_header,
@@ -115,63 +114,6 @@ def write_close_frame(
         buf.push_uint_var(frame_type)
         buf.push_uint_var(len(reason_bytes))
         buf.push_bytes(reason_bytes)
-
-
-def write_crypto_frame(
-    builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
-) -> None:
-    buf = builder.buffer
-
-    frame_overhead = 3 + size_uint_var(stream.next_send_offset)
-    frame = stream.get_frame(builder.remaining_space - frame_overhead)
-    if frame is not None:
-        builder.start_frame(
-            QuicFrameType.CRYPTO,
-            stream.on_data_delivery,
-            (frame.offset, frame.offset + len(frame.data)),
-        )
-        buf.push_uint_var(frame.offset)
-        buf.push_uint16(len(frame.data) | 0x4000)
-        buf.push_bytes(frame.data)
-
-
-def write_stream_frame(
-    builder: QuicPacketBuilder,
-    space: QuicPacketSpace,
-    stream: QuicStream,
-    max_offset: int,
-) -> int:
-    buf = builder.buffer
-
-    # the frame data size is constrained by our peer's MAX_DATA and
-    # the space available in the current packet
-    frame_overhead = (
-        3
-        + size_uint_var(stream.stream_id)
-        + (size_uint_var(stream.next_send_offset) if stream.next_send_offset else 0)
-    )
-    previous_send_highest = stream._send_highest
-    frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)
-
-    if frame is not None:
-        frame_type = QuicFrameType.STREAM_BASE | 2  # length
-        if frame.offset:
-            frame_type |= 4
-        if frame.fin:
-            frame_type |= 1
-        builder.start_frame(
-            frame_type,
-            stream.on_data_delivery,
-            (frame.offset, frame.offset + len(frame.data)),
-        )
-        buf.push_uint_var(stream.stream_id)
-        if frame.offset:
-            buf.push_uint_var(frame.offset)
-        buf.push_uint16(len(frame.data) | 0x4000)
-        buf.push_bytes(frame.data)
-        return stream._send_highest - previous_send_highest
-    else:
-        return 0
 
 
 def stream_is_client_initiated(stream_id: int) -> bool:
@@ -282,6 +224,8 @@ class QuicConnection:
 
         # counters for debugging
         self._quic_logger = configuration.quic_logger
+        if self._quic_logger is not None:
+            self._quic_logger.start_trace(is_client=configuration.is_client)
         self._stateless_retry_count = 0
 
         # configuration
@@ -368,7 +312,7 @@ class QuicConnection:
         # frame handlers
         self.__frame_handlers = [
             (self._handle_padding_frame, EPOCHS("IZHO")),
-            (self._handle_padding_frame, EPOCHS("ZO")),
+            (self._handle_ping_frame, EPOCHS("ZO")),
             (self._handle_ack_frame, EPOCHS("IHO")),
             (self._handle_ack_frame, EPOCHS("IHO")),
             (self._handle_reset_stream_frame, EPOCHS("ZO")),
@@ -1220,8 +1164,18 @@ class QuicConnection:
         """
         Handle a CRYPTO frame.
         """
+        offset = buf.pull_uint_var()
+        length = buf.pull_uint_var()
+        frame = QuicStreamFrame(offset=offset, data=buf.pull_bytes(length))
+
+        # log frame
+        if self._quic_logger is not None:
+            context.quic_logger_frames.append(
+                self._quic_logger.encode_crypto_frame(frame)
+            )
+
         stream = self._crypto_streams[context.epoch]
-        stream.add_frame(pull_crypto_frame(buf))
+        stream.add_frame(frame)
         data = stream.pull_data()
         if data:
             # pass data to TLS layer
@@ -1374,9 +1328,13 @@ class QuicConnection:
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
     ) -> None:
         """
-        Handle a PADDING or PING frame.
+        Handle a PADDING frame.
         """
-        pass
+        buf.seek(buf.capacity)
+
+        # log frame
+        if self._quic_logger is not None:
+            context.quic_logger_frames.append(self._quic_logger.encode_padding_frame())
 
     def _handle_path_challenge_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1404,6 +1362,16 @@ class QuicConnection:
             "Network path %s validated by challenge", context.network_path.addr
         )
         context.network_path.is_validated = True
+
+    def _handle_ping_frame(
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a PING frame.
+        """
+        # log frame
+        if self._quic_logger is not None:
+            context.quic_logger_frames.append(self._quic_logger.encode_ping_frame())
 
     def _handle_reset_stream_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
@@ -1485,6 +1453,12 @@ class QuicConnection:
         frame = QuicStreamFrame(
             offset=offset, data=buf.pull_bytes(length), fin=bool(frame_type & 1)
         )
+
+        # log frame
+        if self._quic_logger is not None:
+            context.quic_logger_frames.append(
+                self._quic_logger.encode_stream_frame(frame, stream_id=stream_id)
+            )
 
         # check stream direction
         self._assert_stream_can_receive(frame_type, stream_id)
@@ -1618,15 +1592,14 @@ class QuicConnection:
                 )
 
             # handle the frame
-            if frame_type != QuicFrameType.PADDING:
-                try:
-                    frame_handler(context, frame_type, buf)
-                except BufferReadError:
-                    raise QuicConnectionError(
-                        error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
-                        frame_type=frame_type,
-                        reason_phrase="Failed to parse frame",
-                    )
+            try:
+                frame_handler(context, frame_type, buf)
+            except BufferReadError:
+                raise QuicConnectionError(
+                    error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                    frame_type=frame_type,
+                    reason_phrase="Failed to parse frame",
+                )
 
             # update ACK only / probing flags
             if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
@@ -1808,19 +1781,7 @@ class QuicConnection:
             if self._handshake_complete:
                 # ACK
                 if space.ack_at is not None and space.ack_at <= now:
-                    builder.start_frame(
-                        QuicFrameType.ACK,
-                        self._on_ack_delivery,
-                        (space, space.largest_received_packet),
-                    )
-                    push_ack_frame(buf, space.ack_queue, 0)
-                    space.ack_at = None
-
-                    # log frame
-                    if self._quic_logger is not None:
-                        builder._packet.quic_logger_frames.append(
-                            self._quic_logger.encode_ack_frame(space.ack_queue, 0.0)
-                        )
+                    self._write_ack_frame(builder=builder, space=space)
 
                 # PATH CHALLENGE
                 if (
@@ -1890,27 +1851,25 @@ class QuicConnection:
             # PING (user-request)
             if self._ping_pending:
                 self._logger.info("Sending PING in packet %d", builder.packet_number)
-                builder.start_frame(
-                    QuicFrameType.PING,
-                    self._on_ping_delivery,
-                    (tuple(self._ping_pending),),
-                )
+                self._write_ping_frame(builder, self._ping_pending)
                 self._ping_pending.clear()
 
             # PING (probe)
             if self._probe_pending:
                 self._logger.info("Sending probe")
-                builder.start_frame(QuicFrameType.PING)
+                self._write_ping_frame(builder)
                 self._probe_pending = False
 
             # CRYPTO
             if crypto_stream is not None and not crypto_stream.send_buffer_is_empty:
-                write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
+                self._write_crypto_frame(
+                    builder=builder, space=space, stream=crypto_stream
+                )
 
             for stream in self._streams.values():
                 # STREAM
                 if not stream.is_blocked and not stream.send_buffer_is_empty:
-                    self._remote_max_data_used += write_stream_frame(
+                    self._remote_max_data_used += self._write_stream_frame(
                         builder=builder,
                         space=space,
                         stream=stream,
@@ -1943,19 +1902,13 @@ class QuicConnection:
 
             # ACK
             if space.ack_at is not None:
-                builder.start_frame(QuicFrameType.ACK)
-                push_ack_frame(buf, space.ack_queue, 0)
-                space.ack_at = None
-
-                # log frame
-                if self._quic_logger is not None:
-                    builder._packet.quic_logger_frames.append(
-                        self._quic_logger.encode_ack_frame(space.ack_queue, 0.0)
-                    )
+                self._write_ack_frame(builder=builder, space=space)
 
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:
-                write_crypto_frame(builder=builder, space=space, stream=crypto_stream)
+                self._write_crypto_frame(
+                    builder=builder, space=space, stream=crypto_stream
+                )
 
             # PADDING (anti-deadlock packet)
             if self._probe_pending and self._is_client and epoch == tls.Epoch.HANDSHAKE:
@@ -1964,6 +1917,21 @@ class QuicConnection:
 
             if not builder.end_packet():
                 break
+
+    def _write_ack_frame(self, builder: QuicPacketBuilder, space: QuicPacketSpace):
+        builder.start_frame(
+            QuicFrameType.ACK,
+            self._on_ack_delivery,
+            (space, space.largest_received_packet),
+        )
+        push_ack_frame(builder.buffer, space.ack_queue, 0)
+        space.ack_at = None
+
+        # log frame
+        if self._quic_logger is not None:
+            builder._packet.quic_logger_frames.append(
+                self._quic_logger.encode_ack_frame(space.ack_queue, 0.0)
+            )
 
     def _write_connection_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace
@@ -1976,6 +1944,86 @@ class QuicConnection:
             builder.start_frame(QuicFrameType.MAX_DATA, self._on_max_data_delivery)
             builder.buffer.push_uint_var(self._local_max_data)
             self._local_max_data_sent = self._local_max_data
+
+    def _write_crypto_frame(
+        self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
+    ) -> None:
+        buf = builder.buffer
+
+        frame_overhead = 3 + size_uint_var(stream.next_send_offset)
+        frame = stream.get_frame(builder.remaining_space - frame_overhead)
+        if frame is not None:
+            builder.start_frame(
+                QuicFrameType.CRYPTO,
+                stream.on_data_delivery,
+                (frame.offset, frame.offset + len(frame.data)),
+            )
+            buf.push_uint_var(frame.offset)
+            buf.push_uint16(len(frame.data) | 0x4000)
+            buf.push_bytes(frame.data)
+
+            # log frame
+            if self._quic_logger is not None:
+                builder._packet.quic_logger_frames.append(
+                    self._quic_logger.encode_crypto_frame(frame)
+                )
+
+    def _write_ping_frame(self, builder: QuicPacketBuilder, uids: List[int] = []):
+        builder.start_frame(QuicFrameType.PING, self._on_ping_delivery, (tuple(uids),))
+
+        # log frame
+        if self._quic_logger is not None:
+            builder._packet.quic_logger_frames.append(
+                self._quic_logger.encode_ping_frame()
+            )
+
+    def _write_stream_frame(
+        self,
+        builder: QuicPacketBuilder,
+        space: QuicPacketSpace,
+        stream: QuicStream,
+        max_offset: int,
+    ) -> int:
+        buf = builder.buffer
+
+        # the frame data size is constrained by our peer's MAX_DATA and
+        # the space available in the current packet
+        frame_overhead = (
+            3
+            + size_uint_var(stream.stream_id)
+            + (size_uint_var(stream.next_send_offset) if stream.next_send_offset else 0)
+        )
+        previous_send_highest = stream._send_highest
+        frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)
+
+        if frame is not None:
+            frame_type = QuicFrameType.STREAM_BASE | 2  # length
+            if frame.offset:
+                frame_type |= 4
+            if frame.fin:
+                frame_type |= 1
+            builder.start_frame(
+                frame_type,
+                stream.on_data_delivery,
+                (frame.offset, frame.offset + len(frame.data)),
+            )
+            buf.push_uint_var(stream.stream_id)
+            if frame.offset:
+                buf.push_uint_var(frame.offset)
+            buf.push_uint16(len(frame.data) | 0x4000)
+            buf.push_bytes(frame.data)
+
+            # log frame
+            if self._quic_logger is not None:
+                builder._packet.quic_logger_frames.append(
+                    self._quic_logger.encode_stream_frame(
+                        frame, stream_id=stream.stream_id
+                    )
+                )
+
+            return stream._send_highest - previous_send_highest
+        else:
+            return 0
 
     def _write_stream_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
