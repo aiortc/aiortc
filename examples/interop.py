@@ -6,6 +6,7 @@
 
 import argparse
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -103,9 +104,9 @@ async def test_version_negotiation(server: Server, configuration: QuicConfigurat
             "traces"
         ][0]["events"]:
             if (
-                category == "TRANSPORT"
-                and event == "PACKET_RECEIVED"
-                and data["packet_type"] == "VERSION_NEGOTIATION"
+                category == "transport"
+                and event == "packet_received"
+                and data["packet_type"] == "version_negotiation"
             ):
                 server.result |= Result.V
 
@@ -130,9 +131,9 @@ async def test_stateless_retry(server: Server, configuration: QuicConfiguration)
             "traces"
         ][0]["events"]:
             if (
-                category == "TRANSPORT"
-                and event == "PACKET_RECEIVED"
-                and data["packet_type"] == "RETRY"
+                category == "transport"
+                and event == "packet_received"
+                and data["packet_type"] == "retry"
             ):
                 server.result |= Result.S
 
@@ -246,8 +247,8 @@ async def test_migration(server: Server, configuration: QuicConfiguration):
             "traces"
         ][0]["events"]:
             if (
-                category == "TRANSPORT"
-                and event == "PACKET_RECEIVED"
+                category == "transport"
+                and event == "packet_received"
                 and data["packet_type"] == "1RTT"
             ):
                 dcids.add(data["header"]["dcid"])
@@ -284,7 +285,7 @@ async def test_spin_bit(server: Server, configuration: QuicConfiguration):
         for stamp, category, event, data in configuration.quic_logger.to_dict()[
             "traces"
         ][0]["events"]:
-            if category == "CONNECTIVITY" and event == "SPIN_BIT_UPDATE":
+            if category == "connectivity" and event == "spin_bit_update":
                 spin_bits.add(data["state"])
         if len(spin_bits) == 2:
             server.result |= Result.P

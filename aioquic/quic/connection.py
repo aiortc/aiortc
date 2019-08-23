@@ -469,8 +469,8 @@ class QuicConnection:
                 # log packet
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="TRANSPORT",
-                        event="PACKET_SENT",
+                        category="transport",
+                        event="packet_sent",
                         data={
                             "packet_type": self._quic_logger.packet_type(
                                 packet.packet_type
@@ -500,8 +500,8 @@ class QuicConnection:
 
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
-                    category="TRANSPORT",
-                    event="DATAGRAM_SENT",
+                    category="transport",
+                    event="datagram_sent",
                     data={"byte_length": byte_length, "count": 1},
                 )
         return ret
@@ -583,8 +583,8 @@ class QuicConnection:
         data = cast(bytes, data)
         if self._quic_logger is not None:
             self._quic_logger.log_event(
-                category="TRANSPORT",
-                event="DATAGRAM_RECEIVED",
+                category="transport",
+                event="datagram_received",
                 data={"byte_length": len(data), "count": 1},
             )
 
@@ -613,10 +613,10 @@ class QuicConnection:
                     versions.append(buf.pull_uint32())
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="TRANSPORT",
-                        event="PACKET_RECEIVED",
+                        category="transport",
+                        event="packet_received",
                         data={
-                            "packet_type": "VERSION_NEGOTIATION",
+                            "packet_type": "version_negotiation",
                             "header": {
                                 "scid": dump_cid(header.source_cid),
                                 "dcid": dump_cid(header.destination_cid),
@@ -656,10 +656,10 @@ class QuicConnection:
                 ):
                     if self._quic_logger is not None:
                         self._quic_logger.log_event(
-                            category="TRANSPORT",
-                            event="PACKET_RECEIVED",
+                            category="transport",
+                            event="packet_received",
                             data={
-                                "packet_type": "RETRY",
+                                "packet_type": "retry",
                                 "header": {
                                     "scid": dump_cid(header.source_cid),
                                     "dcid": dump_cid(header.destination_cid),
@@ -715,8 +715,8 @@ class QuicConnection:
             if self._quic_logger is not None:
                 quic_logger_frames = []
                 self._quic_logger.log_event(
-                    category="TRANSPORT",
-                    event="PACKET_RECEIVED",
+                    category="transport",
+                    event="packet_received",
                     data={
                         "packet_type": self._quic_logger.packet_type(
                             header.packet_type
@@ -754,8 +754,8 @@ class QuicConnection:
 
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
-                        category="CONNECTIVITY",
-                        event="SPIN_BIT_UPDATE",
+                        category="connectivity",
+                        event="spin_bit_update",
                         data={"state": self._spin_bit},
                     )
 
@@ -1880,7 +1880,7 @@ class QuicConnection:
 
                     # log frame
                     if self._quic_logger is not None:
-                        builder._packet.quic_logger_frames.append(
+                        builder.quic_logger_frames.append(
                             self._quic_logger.encode_path_challenge_frame(
                                 data=network_path.local_challenge
                             )
@@ -1895,7 +1895,7 @@ class QuicConnection:
 
                     # log frame
                     if self._quic_logger is not None:
-                        builder._packet.quic_logger_frames.append(
+                        builder.quic_logger_frames.append(
                             self._quic_logger.encode_path_response_frame(data=challenge)
                         )
 
@@ -2019,7 +2019,7 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
+            builder.quic_logger_frames.append(
                 self._quic_logger.encode_ack_frame(ranges=space.ack_queue, delay=0.0)
             )
 
@@ -2048,7 +2048,7 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
+            builder.quic_logger_frames.append(
                 self._quic_logger.encode_connection_close_frame(
                     error_code=error_code,
                     frame_type=frame_type,
@@ -2070,7 +2070,7 @@ class QuicConnection:
 
             # log frame
             if self._quic_logger is not None:
-                builder._packet.quic_logger_frames.append(
+                builder.quic_logger_frames.append(
                     self._quic_logger.encode_max_data_frame(self._local_max_data)
                 )
 
@@ -2093,7 +2093,7 @@ class QuicConnection:
 
             # log frame
             if self._quic_logger is not None:
-                builder._packet.quic_logger_frames.append(
+                builder.quic_logger_frames.append(
                     self._quic_logger.encode_crypto_frame(frame)
                 )
 
@@ -2117,7 +2117,7 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
+            builder.quic_logger_frames.append(
                 self._quic_logger.encode_new_connection_id_frame(frame)
             )
 
@@ -2126,9 +2126,7 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
-                self._quic_logger.encode_ping_frame()
-            )
+            builder.quic_logger_frames.append(self._quic_logger.encode_ping_frame())
 
     def _write_retire_connection_id_frame(
         self, builder: QuicPacketBuilder, sequence_number: int
@@ -2142,7 +2140,7 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
+            builder.quic_logger_frames.append(
                 self._quic_logger.encode_retire_connection_id_frame(sequence_number)
             )
 
@@ -2184,7 +2182,7 @@ class QuicConnection:
 
             # log frame
             if self._quic_logger is not None:
-                builder._packet.quic_logger_frames.append(
+                builder.quic_logger_frames.append(
                     self._quic_logger.encode_stream_frame(
                         frame, stream_id=stream.stream_id
                     )
@@ -2217,7 +2215,7 @@ class QuicConnection:
 
             # log frame
             if self._quic_logger is not None:
-                builder._packet.quic_logger_frames.append(
+                builder.quic_logger_frames.append(
                     self._quic_logger.encode_max_stream_data_frame(
                         maximum=stream.max_stream_data_local, stream_id=stream.stream_id
                     )
@@ -2231,6 +2229,6 @@ class QuicConnection:
 
         # log frame
         if self._quic_logger is not None:
-            builder._packet.quic_logger_frames.append(
+            builder.quic_logger_frames.append(
                 self._quic_logger.encode_streams_blocked_frame(limit=limit)
             )

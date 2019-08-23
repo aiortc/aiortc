@@ -36,28 +36,28 @@ specification drafts and is regularly tested for interoperability against other
 
 To learn more about ``aioquic`` please `read the documentation`_.
 
-Design and features
--------------------
+Why should I use ``aioquic``?
+-----------------------------
 
-TLS 1.3
-.......
-
-``aioquic`` features a minimal TLS 1.3 implementation built upon the
-`cryptography`_ library. This is because QUIC requires some APIs which are
-currently unavailable in mainstream TLS implementations such as OpenSSL:
-
-- the ability to extract traffic secrets
-
-- the ability to operate directly on TLS messages, without using the TLS
-  record layer
-
-Sans-IO APIs
-............
+``aioquic`` has been designed to be embedded into Python client and server
+libraries wishing to support QUIC and / or HTTP/3. The goal is to provide a
+common codebase for Python libraries in the hope of avoiding duplicated effort.
 
 Both the QUIC and the HTTP/3 APIs follow the "bring your own I/O" pattern,
 leaving actual I/O operations to the API user. This approach has a number of
 advantages including making the code testable and allowing integration with
 different concurrency models.
+
+Features
+--------
+
+- QUIC stack conforming with draft-22
+- HTTP/3 stack conforming with draft-22
+- minimal TLS 1.3 implementation
+- IPv4 and IPv6 support
+- connection migration and NAT rebinding
+- logging TLS traffic secrets
+- logging QUIC events in QLOG format
 
 Running the examples
 --------------------

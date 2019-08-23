@@ -70,6 +70,7 @@ class QuicPacketBuilder:
     ):
         self.max_flight_bytes: Optional[int] = None
         self.max_total_bytes: Optional[int] = None
+        self.quic_logger_frames: Optional[List[Dict]] = None
 
         self._host_cid = host_cid
         self._pad_first_datagram = pad_first_datagram
@@ -210,6 +211,7 @@ class QuicPacketBuilder:
         self._packet_long_header = packet_long_header
         self._packet_start = packet_start
         self._packet_type = packet_type
+        self.quic_logger_frames = self._packet.quic_logger_frames
 
         buf.seek(self._packet_start + self._header_size)
 
@@ -305,6 +307,7 @@ class QuicPacketBuilder:
             buf.seek(self._packet_start)
 
         self._packet = None
+        self.quic_logger_frames = None
 
         return not empty
 
