@@ -346,7 +346,7 @@ def print_result(server: Server) -> None:
     print("%s%s%s" % (server.name, " " * (20 - len(server.name)), result))
 
 
-async def run(servers, tests, secrets_log_file=None) -> None:
+async def run(servers, tests, quic_log=False, secrets_log_file=None) -> None:
     for server in servers:
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
@@ -366,6 +366,11 @@ async def run(servers, tests, secrets_log_file=None) -> None:
                 )
             except Exception as exc:
                 print(exc)
+
+            if quic_log:
+                with open("%s-%s.qlog" % (server.name, test_name), "w") as logger_fp:
+                    json.dump(configuration.quic_logger.to_dict(), logger_fp, indent=4)
+
         print("")
         print_result(server)
 
@@ -378,6 +383,12 @@ async def run(servers, tests, secrets_log_file=None) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QUIC interop client")
+    parser.add_argument(
+        "-q",
+        "--quic-log",
+        action="store_true",
+        help="log QUIC events to a file in QLOG format",
+    )
     parser.add_argument(
         "--server", type=str, help="only run against the specified server."
     )
@@ -412,5 +423,10 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        run(servers=servers, tests=tests, secrets_log_file=secrets_log_file)
+        run(
+            servers=servers,
+            tests=tests,
+            quic_log=args.quic_log,
+            secrets_log_file=secrets_log_file,
+        )
     )
