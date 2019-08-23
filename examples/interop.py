@@ -399,10 +399,16 @@ if __name__ == "__main__":
         type=str,
         help="log secrets to a file, for use with Wireshark",
     )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="increase logging verbosity"
+    )
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
+    )
 
     # open SSL log file
     if args.secrets_log:
