@@ -332,13 +332,16 @@ class QuicConnection:
         """
         if self._peer_cid_available:
             # retire previous CID
+            self._logger.debug(
+                "Retiring %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
+            )
             self._retire_connection_ids.append(self._peer_cid_seq)
 
             # assign new CID
             connection_id = self._peer_cid_available.pop(0)
             self._peer_cid_seq = connection_id.sequence_number
             self._peer_cid = connection_id.cid
-            self._logger.info(
+            self._logger.debug(
                 "Migrating to %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
             )
 
@@ -790,7 +793,7 @@ class QuicConnection:
                 and context.host_cid != self.host_cid
                 and epoch == tls.Epoch.ONE_RTT
             ):
-                self._logger.info(
+                self._logger.debug(
                     "Peer migrating to %s (%d)",
                     dump_cid(context.host_cid),
                     destination_cid_seq,
@@ -800,7 +803,7 @@ class QuicConnection:
 
             # update network path
             if not network_path.is_validated and epoch == tls.Epoch.HANDSHAKE:
-                self._logger.info(
+                self._logger.debug(
                     "Network path %s validated by handshake", network_path.addr
                 )
                 network_path.is_validated = True
@@ -809,7 +812,7 @@ class QuicConnection:
                 self._network_paths.append(network_path)
             idx = self._network_paths.index(network_path)
             if idx and not is_probing and packet_number > space.largest_received_packet:
-                self._logger.info("Network path %s promoted", network_path.addr)
+                self._logger.debug("Network path %s promoted", network_path.addr)
                 self._network_paths.pop(idx)
                 self._network_paths.insert(0, network_path)
 
@@ -967,7 +970,7 @@ class QuicConnection:
 
         # new network path
         network_path = QuicNetworkPath(addr)
-        self._logger.info("Network path %s discovered", network_path.addr)
+        self._logger.debug("Network path %s discovered", network_path.addr)
         return network_path
 
     def _get_or_create_stream(self, frame_type: int, stream_id: int) -> QuicStream:
@@ -1405,7 +1408,7 @@ class QuicConnection:
                 frame_type=frame_type,
                 reason_phrase="Response does not match challenge",
             )
-        self._logger.info(
+        self._logger.debug(
             "Network path %s validated by challenge", context.network_path.addr
         )
         context.network_path.is_validated = True
@@ -1473,6 +1476,11 @@ class QuicConnection:
                         frame_type=frame_type,
                         reason_phrase="Cannot retire current connection ID",
                     )
+                self._logger.debug(
+                    "Peer retiring %s (%d)",
+                    dump_cid(connection_id.cid),
+                    connection_id.sequence_number,
+                )
                 del self._host_cids[index]
                 self._events.append(
                     events.ConnectionIdRetired(connection_id=connection_id.cid)
@@ -1871,7 +1879,7 @@ class QuicConnection:
                     not network_path.is_validated
                     and network_path.local_challenge is None
                 ):
-                    self._logger.info(
+                    self._logger.debug(
                         "Network path %s sending challenge", network_path.addr
                     )
                     network_path.local_challenge = os.urandom(8)
