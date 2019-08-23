@@ -808,7 +808,7 @@ class QuicConnection:
             if network_path not in self._network_paths:
                 self._network_paths.append(network_path)
             idx = self._network_paths.index(network_path)
-            if idx and not is_probing:
+            if idx and not is_probing and packet_number > space.largest_received_packet:
                 self._logger.info("Network path %s promoted", network_path.addr)
                 self._network_paths.pop(idx)
                 self._network_paths.insert(0, network_path)
