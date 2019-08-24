@@ -80,7 +80,11 @@ class QuicServer(asyncio.DatagramProtocol):
 
         protocol = self._protocols.get(header.destination_cid, None)
         original_connection_id: Optional[bytes] = None
-        if protocol is None and header.packet_type == PACKET_TYPE_INITIAL:
+        if (
+            protocol is None
+            and len(data) >= 1200
+            and header.packet_type == PACKET_TYPE_INITIAL
+        ):
             # stateless retry
             if self._retry is not None:
                 if not header.token:
