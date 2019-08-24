@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import random
 import socket
 from unittest import TestCase
@@ -263,4 +264,9 @@ class HighLevelTest(TestCase):
                 run_server(stateless_retry=False), run_client_ping("127.0.0.1")
             )
         )
+        server.close()
+
+    def test_server_receives_garbage(self):
+        server = run(run_server(stateless_retry=False))
+        server.datagram_received(binascii.unhexlify("c00000000080"), ("1.2.3.4", 1234))
         server.close()

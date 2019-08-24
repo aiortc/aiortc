@@ -57,7 +57,11 @@ class QuicServer(asyncio.DatagramProtocol):
     def datagram_received(self, data: Union[bytes, Text], addr: NetworkAddress) -> None:
         data = cast(bytes, data)
         buf = Buffer(data=data)
-        header = pull_quic_header(buf, host_cid_length=8)
+
+        try:
+            header = pull_quic_header(buf, host_cid_length=8)
+        except ValueError:
+            return
 
         # version negotiation
         if (
