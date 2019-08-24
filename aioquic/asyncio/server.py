@@ -106,6 +106,7 @@ class QuicServer(asyncio.DatagramProtocol):
             # create new connection
             connection = QuicConnection(
                 configuration=self._configuration,
+                logger_connection_id=original_connection_id or header.destination_cid,
                 original_connection_id=original_connection_id,
                 session_ticket_fetcher=self._session_ticket_fetcher,
                 session_ticket_handler=self._session_ticket_handler,

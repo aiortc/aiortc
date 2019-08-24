@@ -123,7 +123,7 @@ class QuicConnectionError(Exception):
 
 class QuicConnectionAdapter(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: Any) -> Tuple[str, Any]:
-        return "[%s] %s" % (self.extra["host_cid"], msg), kwargs
+        return "[%s] %s" % (self.extra["id"], msg), kwargs
 
 
 @dataclass
@@ -184,6 +184,7 @@ class QuicConnection:
         self,
         *,
         configuration: QuicConfiguration,
+        logger_connection_id: Optional[bytes] = None,
         original_connection_id: Optional[bytes] = None,
         session_ticket_fetcher: Optional[tls.SessionTicketFetcher] = None,
         session_ticket_handler: Optional[tls.SessionTicketHandler] = None,
@@ -199,12 +200,6 @@ class QuicConnection:
             assert (
                 configuration.private_key is not None
             ), "SSL private key is required for a server"
-
-        # counters for debugging
-        self._quic_logger = configuration.quic_logger
-        if self._quic_logger is not None:
-            self._quic_logger.start_trace(is_client=configuration.is_client)
-        self._stateless_retry_count = 0
 
         # configuration
         self._configuration = configuration
@@ -240,14 +235,6 @@ class QuicConnection:
         self._local_max_stream_data_uni = MAX_DATA_WINDOW
         self._local_max_streams_bidi = 128
         self._local_max_streams_uni = 128
-        self._logger = QuicConnectionAdapter(
-            logger, {"host_cid": dump_cid(self.host_cid)}
-        )
-        self._loss = QuicPacketRecovery(
-            is_client_without_1rtt=self._is_client,
-            quic_logger=self._quic_logger,
-            send_probe=self._send_probe,
-        )
         self._loss_at: Optional[float] = None
         self._network_paths: List[QuicNetworkPath] = []
         self._original_connection_id = original_connection_id
@@ -271,10 +258,30 @@ class QuicConnection:
         self._spin_bit = False
         self._spin_highest_pn = 0
         self._state = QuicConnectionState.FIRSTFLIGHT
+        self._stateless_retry_count = 0
         self._streams: Dict[int, QuicStream] = {}
         self._streams_blocked_bidi: List[QuicStream] = []
         self._streams_blocked_uni: List[QuicStream] = []
         self._version: Optional[int] = None
+
+        # logging
+        if logger_connection_id is None:
+            logger_connection_id = self._peer_cid
+        self._logger = QuicConnectionAdapter(
+            logger, {"id": dump_cid(logger_connection_id)}
+        )
+        self._quic_logger = configuration.quic_logger
+        if self._quic_logger is not None:
+            self._quic_logger.start_trace(
+                is_client=configuration.is_client, odcid=logger_connection_id
+            )
+
+        # loss recovery
+        self._loss = QuicPacketRecovery(
+            is_client_without_1rtt=self._is_client,
+            quic_logger=self._quic_logger,
+            send_probe=self._send_probe,
+        )
 
         # things to send
         self._close_pending = False

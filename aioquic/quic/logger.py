@@ -38,6 +38,7 @@ class QuicLogger:
     """
 
     def __init__(self) -> None:
+        self._odcid: bytes = b""
         self._events: Deque[Tuple[float, str, str, Dict[str, Any]]] = deque()
         self._vantage_point = {"name": "aioquic", "type": "unknown"}
 
@@ -163,7 +164,8 @@ class QuicLogger:
     def packet_type(self, packet_type: int) -> str:
         return PACKET_TYPE_NAMES.get(packet_type & PACKET_TYPE_MASK, "1RTT")
 
-    def start_trace(self, is_client: bool) -> None:
+    def start_trace(self, is_client: bool, odcid: bytes) -> None:
+        self._odcid = odcid
         self._vantage_point["type"] = "client" if is_client else "server"
 
     def to_dict(self) -> Dict[str, Any]:
@@ -174,7 +176,10 @@ class QuicLogger:
         if self._events:
             reference_time = self._events[0][0]
             trace = {
-                "common_fields": {"reference_time": "%d" % (reference_time * 1000)},
+                "common_fields": {
+                    "ODCID": hexdump(self._odcid),
+                    "reference_time": "%d" % (reference_time * 1000),
+                },
                 "event_fields": ["relative_time", "category", "event_type", "data"],
                 "events": list(
                     map(
