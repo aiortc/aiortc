@@ -1,5 +1,6 @@
+import ipaddress
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import List, Optional, Tuple
 
@@ -200,11 +201,15 @@ def encode_quic_version_negotiation(
 
 
 @dataclass
-class QuicTransportParameters:
-    initial_version: Optional[QuicProtocolVersion] = None
-    negotiated_version: Optional[QuicProtocolVersion] = None
-    supported_versions: List[QuicProtocolVersion] = field(default_factory=list)
+class QuicPreferredAddress:
+    ipv4_address: Optional[Tuple[str, int]]
+    ipv6_address: Optional[Tuple[str, int]]
+    connection_id: bytes
+    stateless_reset_token: bytes
 
+
+@dataclass
+class QuicTransportParameters:
     original_connection_id: Optional[bytes] = None
     idle_timeout: Optional[int] = None
     stateless_reset_token: Optional[bytes] = None
@@ -218,7 +223,7 @@ class QuicTransportParameters:
     ack_delay_exponent: Optional[int] = None
     max_ack_delay: Optional[int] = None
     disable_migration: Optional[bool] = False
-    preferred_address: Optional[bytes] = None
+    preferred_address: Optional[QuicPreferredAddress] = None
     active_connection_id_limit: Optional[int] = None
 
 
@@ -236,9 +241,54 @@ PARAMS = [
     ("ack_delay_exponent", int),
     ("max_ack_delay", int),
     ("disable_migration", bool),
-    ("preferred_address", bytes),
+    ("preferred_address", QuicPreferredAddress),
     ("active_connection_id_limit", int),
 ]
+
+
+def pull_quic_preferred_address(buf: Buffer) -> QuicPreferredAddress:
+    ipv4_address = None
+    ipv4_host = buf.pull_bytes(4)
+    ipv4_port = buf.pull_uint16()
+    if ipv4_host != bytes(4):
+        ipv4_address = (str(ipaddress.IPv4Address(ipv4_host)), ipv4_port)
+
+    ipv6_address = None
+    ipv6_host = buf.pull_bytes(16)
+    ipv6_port = buf.pull_uint16()
+    if ipv6_host != bytes(16):
+        ipv6_address = (str(ipaddress.IPv6Address(ipv6_host)), ipv6_port)
+
+    connection_id_length = buf.pull_uint8()
+    connection_id = buf.pull_bytes(connection_id_length)
+    stateless_reset_token = buf.pull_bytes(16)
+
+    return QuicPreferredAddress(
+        ipv4_address=ipv4_address,
+        ipv6_address=ipv6_address,
+        connection_id=connection_id,
+        stateless_reset_token=stateless_reset_token,
+    )
+
+
+def push_quic_preferred_address(
+    buf: Buffer, preferred_address: QuicPreferredAddress
+) -> None:
+    if preferred_address.ipv4_address is not None:
+        buf.push_bytes(ipaddress.IPv4Address(preferred_address.ipv4_address[0]).packed)
+        buf.push_uint16(preferred_address.ipv4_address[1])
+    else:
+        buf.push_bytes(bytes(6))
+
+    if preferred_address.ipv6_address is not None:
+        buf.push_bytes(ipaddress.IPv6Address(preferred_address.ipv6_address[0]).packed)
+        buf.push_uint16(preferred_address.ipv6_address[1])
+    else:
+        buf.push_bytes(bytes(18))
+
+    buf.push_uint8(len(preferred_address.connection_id))
+    buf.push_bytes(preferred_address.connection_id)
+    buf.push_bytes(preferred_address.stateless_reset_token)
 
 
 def pull_quic_transport_parameters(buf: Buffer) -> QuicTransportParameters:
@@ -257,6 +307,8 @@ def pull_quic_transport_parameters(buf: Buffer) -> QuicTransportParameters:
                     setattr(params, param_name, buf.pull_uint_var())
                 elif param_type == bytes:
                     setattr(params, param_name, buf.pull_bytes(param_len))
+                elif param_type == QuicPreferredAddress:
+                    setattr(params, param_name, pull_quic_preferred_address(buf))
                 else:
                     setattr(params, param_name, True)
             else:
@@ -280,6 +332,8 @@ def push_quic_transport_parameters(
                         buf.push_uint_var(param_value)
                     elif param_type == bytes:
                         buf.push_bytes(param_value)
+                    elif param_type == QuicPreferredAddress:
+                        push_quic_preferred_address(buf, param_value)
 
 
 # FRAMES

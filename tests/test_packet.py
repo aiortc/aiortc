@@ -7,12 +7,15 @@ from aioquic.quic.packet import (
     PACKET_TYPE_INITIAL,
     PACKET_TYPE_RETRY,
     QuicNewConnectionIdFrame,
+    QuicPreferredAddress,
     QuicProtocolVersion,
     QuicTransportParameters,
     decode_packet_number,
     encode_quic_version_negotiation,
     pull_quic_header,
+    pull_quic_preferred_address,
     pull_quic_transport_parameters,
+    push_quic_preferred_address,
     push_quic_transport_parameters,
 )
 
@@ -193,6 +196,44 @@ class ParamsTest(TestCase):
         push_quic_transport_parameters(buf, params)
         self.assertEqual(buf.data, data)
 
+    def test_params_preferred_address(self):
+        data = binascii.unhexlify(
+            "008b000100048000753000020010191adf238f8041a56a5fa7a88ddd14f3000"
+            "400048010000000050004800400000006000480040000000700048004000000"
+            "08000240640009000103000d003b8ba27b8611532400890200000000f03c91f"
+            "ffe69a45411531262c4518d63013f0c287ed3573efa9095603746b2e02d4548"
+            "0ba6643e5c6e7d48ecb4000e000107"
+        )
+
+        # parse
+        buf = Buffer(data=data)
+        params = pull_quic_transport_parameters(buf)
+        self.assertEqual(
+            params,
+            QuicTransportParameters(
+                idle_timeout=30000,
+                stateless_reset_token=b"\x19\x1a\xdf#\x8f\x80A\xa5j_\xa7\xa8\x8d\xdd\x14\xf3",
+                initial_max_data=1048576,
+                initial_max_stream_data_bidi_local=262144,
+                initial_max_stream_data_bidi_remote=262144,
+                initial_max_stream_data_uni=262144,
+                initial_max_streams_bidi=100,
+                initial_max_streams_uni=3,
+                preferred_address=QuicPreferredAddress(
+                    ipv4_address=("139.162.123.134", 4435),
+                    ipv6_address=("2400:8902::f03c:91ff:fe69:a454", 4435),
+                    connection_id=b"b\xc4Q\x8dc\x01?\x0c(~\xd3W>\xfa\x90\x95`7",
+                    stateless_reset_token=b"F\xb2\xe0-EH\x0b\xa6d>\\n}H\xec\xb4",
+                ),
+                active_connection_id_limit=7,
+            ),
+        )
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        push_quic_transport_parameters(buf, params)
+        self.assertEqual(buf.data, data)
+
     def test_params_unknown(self):
         # fb.mvfst.net sends a proprietary parameter 65280
         data = binascii.unhexlify(
@@ -220,6 +261,54 @@ class ParamsTest(TestCase):
                 ack_delay_exponent=3,
             ),
         )
+
+    def test_preferred_address_ipv4_only(self):
+        data = binascii.unhexlify(
+            "8ba27b8611530000000000000000000000000000000000001262c4518d63013"
+            "f0c287ed3573efa9095603746b2e02d45480ba6643e5c6e7d48ecb4"
+        )
+
+        # parse
+        buf = Buffer(data=data)
+        preferred_address = pull_quic_preferred_address(buf)
+        self.assertEqual(
+            preferred_address,
+            QuicPreferredAddress(
+                ipv4_address=("139.162.123.134", 4435),
+                ipv6_address=None,
+                connection_id=b"b\xc4Q\x8dc\x01?\x0c(~\xd3W>\xfa\x90\x95`7",
+                stateless_reset_token=b"F\xb2\xe0-EH\x0b\xa6d>\\n}H\xec\xb4",
+            ),
+        )
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        push_quic_preferred_address(buf, preferred_address)
+        self.assertEqual(buf.data, data)
+
+    def test_preferred_address_ipv6_only(self):
+        data = binascii.unhexlify(
+            "0000000000002400890200000000f03c91fffe69a45411531262c4518d63013"
+            "f0c287ed3573efa9095603746b2e02d45480ba6643e5c6e7d48ecb4"
+        )
+
+        # parse
+        buf = Buffer(data=data)
+        preferred_address = pull_quic_preferred_address(buf)
+        self.assertEqual(
+            preferred_address,
+            QuicPreferredAddress(
+                ipv4_address=None,
+                ipv6_address=("2400:8902::f03c:91ff:fe69:a454", 4435),
+                connection_id=b"b\xc4Q\x8dc\x01?\x0c(~\xd3W>\xfa\x90\x95`7",
+                stateless_reset_token=b"F\xb2\xe0-EH\x0b\xa6d>\\n}H\xec\xb4",
+            ),
+        )
+
+        # serialize
+        buf = Buffer(capacity=len(data))
+        push_quic_preferred_address(buf, preferred_address)
+        self.assertEqual(buf.data, data)
 
 
 class FrameTest(TestCase):
