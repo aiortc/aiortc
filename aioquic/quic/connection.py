@@ -217,7 +217,7 @@ class QuicConnection:
         self._handshake_confirmed = False
         self._host_cids = [
             QuicConnectionId(
-                cid=os.urandom(8),
+                cid=os.urandom(configuration.connection_id_length),
                 sequence_number=0,
                 stateless_reset_token=os.urandom(16),
                 was_sent=True,
@@ -240,7 +240,7 @@ class QuicConnection:
         self._original_connection_id = original_connection_id
         self._packet_number = 0
         self._parameters_received = False
-        self._peer_cid = os.urandom(8)
+        self._peer_cid = os.urandom(configuration.connection_id_length)
         self._peer_cid_seq: Optional[int] = None
         self._peer_cid_available: List[QuicConnectionId] = []
         self._peer_token = b""
@@ -602,7 +602,9 @@ class QuicConnection:
         while not buf.eof():
             start_off = buf.tell()
             try:
-                header = pull_quic_header(buf, host_cid_length=len(self.host_cid))
+                header = pull_quic_header(
+                    buf, host_cid_length=self._configuration.connection_id_length
+                )
             except ValueError:
                 return
 
@@ -1717,7 +1719,7 @@ class QuicConnection:
         while len(self._host_cids) < min(8, self._remote_active_connection_id_limit):
             self._host_cids.append(
                 QuicConnectionId(
-                    cid=os.urandom(8),
+                    cid=os.urandom(self._configuration.connection_id_length),
                     sequence_number=self._host_cid_seq,
                     stateless_reset_token=os.urandom(16),
                 )

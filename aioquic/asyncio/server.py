@@ -59,7 +59,9 @@ class QuicServer(asyncio.DatagramProtocol):
         buf = Buffer(data=data)
 
         try:
-            header = pull_quic_header(buf, host_cid_length=8)
+            header = pull_quic_header(
+                buf, host_cid_length=self._configuration.connection_id_length
+            )
         except ValueError:
             return
 

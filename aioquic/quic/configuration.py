@@ -26,6 +26,11 @@ class QuicConfiguration:
     .. note:: This is only used by servers.
     """
 
+    connection_id_length: int = 8
+    """
+    The length in bytes of local connection IDs.
+    """
+
     idle_timeout: float = 60.0
     """
     The idle timeout in seconds.
