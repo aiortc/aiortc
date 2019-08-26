@@ -825,6 +825,30 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
             self.assertEqual(cm.exception.frame_type, QuicFrameType.PATH_RESPONSE)
 
+    def test_handle_padding_frame(self):
+        client = create_standalone_client(self)
+
+        # no more padding
+        buf = Buffer(data=b"")
+        client._handle_padding_frame(
+            client_receive_context(client), QuicFrameType.PADDING, buf
+        )
+        self.assertEqual(buf.tell(), 0)
+
+        # padding until end
+        buf = Buffer(data=bytes(10))
+        client._handle_padding_frame(
+            client_receive_context(client), QuicFrameType.PADDING, buf
+        )
+        self.assertEqual(buf.tell(), 10)
+
+        # padding then something else
+        buf = Buffer(data=bytes(10) + b"\x01")
+        client._handle_padding_frame(
+            client_receive_context(client), QuicFrameType.PADDING, buf
+        )
+        self.assertEqual(buf.tell(), 10)
+
     def test_handle_reset_stream_frame(self):
         with client_and_server() as (client, server):
             # client creates bidirectional stream 0

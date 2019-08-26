@@ -1375,7 +1375,13 @@ class QuicConnection:
         """
         Handle a PADDING frame.
         """
-        buf.seek(buf.capacity)
+        # consume padding
+        pos = buf.tell()
+        for byte in buf.data_slice(pos, buf.capacity):
+            if byte:
+                break
+            pos += 1
+        buf.seek(pos)
 
         # log frame
         if self._quic_logger is not None:
