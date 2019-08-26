@@ -3,10 +3,7 @@ import datetime
 from unittest import TestCase
 from unittest.mock import patch
 
-from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from aioquic import tls
@@ -39,7 +36,7 @@ from aioquic.tls import (
     verify_certificate,
 )
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, load
+from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, generate_ec_certificate, load
 
 CERTIFICATE_DATA = load("tls_certificate.bin")[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load("tls_certificate_verify.bin")[-384:]
@@ -82,33 +79,6 @@ def create_buffers():
         tls.Epoch.HANDSHAKE: Buffer(capacity=4096),
         tls.Epoch.ONE_RTT: Buffer(capacity=4096),
     }
-
-
-def generate_ec_certificate(common_name, curve, alternative_names=[]):
-    key = ec.generate_private_key(backend=default_backend(), curve=curve)
-
-    subject = issuer = x509.Name(
-        [x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)]
-    )
-
-    builder = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
-    )
-    if alternative_names:
-        builder = builder.add_extension(
-            x509.SubjectAlternativeName(
-                [x509.DNSName(name) for name in alternative_names]
-            ),
-            critical=False,
-        )
-    cert = builder.sign(key, hashes.SHA256(), default_backend())
-    return cert, key
 
 
 def merge_buffers(buffers):

@@ -11,7 +11,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, run
+from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, generate_ec_certificate, run
 
 real_sendto = socket.socket.sendto
 
@@ -75,6 +75,25 @@ async def run_server(configuration=None, **kwargs):
 class HighLevelTest(TestCase):
     def test_connect_and_serve(self):
         server, response = run(asyncio.gather(run_server(), run_client("127.0.0.1")))
+        self.assertEqual(response, b"gnip")
+        server.close()
+
+    def test_connect_and_serve_ec_certificate(self):
+        certificate, private_key = generate_ec_certificate(common_name="localhost")
+
+        server, response = run(
+            asyncio.gather(
+                run_server(
+                    configuration=QuicConfiguration(
+                        certificate=certificate,
+                        private_key=private_key,
+                        is_client=False,
+                    )
+                ),
+                run_client("127.0.0.1"),
+            )
+        )
+
         self.assertEqual(response, b"gnip")
         server.close()
 
