@@ -1,6 +1,7 @@
 import binascii
 import datetime
 from unittest import TestCase
+from unittest.mock import patch
 
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -35,6 +36,7 @@ from aioquic.tls import (
     push_finished,
     push_new_session_ticket,
     push_server_hello,
+    verify_certificate,
 )
 
 from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, load
@@ -82,14 +84,14 @@ def create_buffers():
     }
 
 
-def generate_ec_certificate(curve):
+def generate_ec_certificate(common_name, curve, alternative_names=[]):
     key = ec.generate_private_key(backend=default_backend(), curve=curve)
 
     subject = issuer = x509.Name(
-        [x509.NameAttribute(x509.NameOID.COMMON_NAME, "example.com")]
+        [x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)]
     )
 
-    cert = (
+    builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
@@ -97,8 +99,15 @@ def generate_ec_certificate(curve):
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.utcnow())
         .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
-        .sign(key, hashes.SHA256(), default_backend())
     )
+    if alternative_names:
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(
+                [x509.DNSName(name) for name in alternative_names]
+            ),
+            critical=False,
+        )
+    cert = builder.sign(key, hashes.SHA256(), default_backend())
     return cert, key
 
 
@@ -367,7 +376,7 @@ class ContextTest(TestCase):
         client = self.create_client()
         server = self.create_server()
         server.certificate, server.certificate_private_key = generate_ec_certificate(
-            ec.SECP256R1
+            common_name="example.com", curve=ec.SECP256R1
         )
 
         self._handshake(client, server)
@@ -1212,3 +1221,84 @@ class TlsTest(TestCase):
         buf = Buffer(128)
         push_finished(buf, finished)
         self.assertEqual(buf.data, load("tls_finished.bin"))
+
+
+class VerifyCertificateTest(TestCase):
+    def test_verify_dates(self):
+        certificate, _ = generate_ec_certificate(
+            common_name="example.com", curve=ec.SECP256R1
+        )
+
+        #  too early
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = (
+                certificate.not_valid_before - datetime.timedelta(seconds=1)
+            )
+            with self.assertRaises(tls.AlertCertificateExpired) as cm:
+                verify_certificate(certificate, server_name="example.com")
+            self.assertEqual(str(cm.exception), "Certificate is not valid yet")
+
+        # valid
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_before
+            verify_certificate(certificate, server_name="example.com")
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_after
+            verify_certificate(certificate, server_name="example.com")
+
+        # too late
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_after + datetime.timedelta(
+                seconds=1
+            )
+            with self.assertRaises(tls.AlertCertificateExpired) as cm:
+                verify_certificate(certificate, server_name="example.com")
+            self.assertEqual(str(cm.exception), "Certificate is no longer valid")
+
+    def test_verify_subject(self):
+        certificate, _ = generate_ec_certificate(
+            common_name="example.com", curve=ec.SECP256R1
+        )
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_before
+
+            # valid
+            verify_certificate(certificate, server_name="example.com")
+
+            # invalid
+            with self.assertRaises(tls.AlertBadCertificate) as cm:
+                verify_certificate(certificate, server_name="test.example.com")
+            self.assertEqual(
+                str(cm.exception),
+                "hostname 'test.example.com' doesn't match 'example.com'",
+            )
+
+            with self.assertRaises(tls.AlertBadCertificate) as cm:
+                verify_certificate(certificate, server_name="acme.com")
+            self.assertEqual(
+                str(cm.exception), "hostname 'acme.com' doesn't match 'example.com'"
+            )
+
+    def test_verify_subject_with_subjaltname(self):
+        certificate, _ = generate_ec_certificate(
+            alternative_names=["*.example.com", "example.com"],
+            common_name="example.com",
+            curve=ec.SECP256R1,
+        )
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_before
+
+            # valid
+            verify_certificate(certificate, server_name="example.com")
+            verify_certificate(certificate, server_name="test.example.com")
+
+            # invalid
+            with self.assertRaises(tls.AlertBadCertificate) as cm:
+                verify_certificate(certificate, server_name="acme.com")
+            self.assertEqual(
+                str(cm.exception),
+                "hostname 'acme.com' doesn't match either of '*.example.com', 'example.com'",
+            )

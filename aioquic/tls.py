@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import ssl
 import struct
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -37,6 +38,9 @@ TLS_VERSION_1_3_DRAFT_26 = 0x7F1A
 
 T = TypeVar("T")
 
+# facilitate mocking for the test suite
+utcnow = datetime.datetime.utcnow
+
 
 class AlertDescription(IntEnum):
     close_notify = 0
@@ -70,6 +74,14 @@ class AlertDescription(IntEnum):
 
 class Alert(Exception):
     description: AlertDescription
+
+
+class AlertBadCertificate(Alert):
+    description = AlertDescription.bad_certificate
+
+
+class AlertCertificateExpired(Alert):
+    description = AlertDescription.certificate_expired
 
 
 class AlertDecryptError(Alert):
@@ -150,6 +162,38 @@ def hkdf_extract(
     h = hmac.HMAC(salt, algorithm, backend=default_backend())
     h.update(key_material)
     return h.finalize()
+
+
+def verify_certificate(
+    certificate: x509.Certificate, server_name: Optional[str]
+) -> None:
+    # verify dates
+    now = utcnow()
+    if now < certificate.not_valid_before:
+        raise AlertCertificateExpired("Certificate is not valid yet")
+    if now > certificate.not_valid_after:
+        raise AlertCertificateExpired("Certificate is no longer valid")
+
+    # verify subject
+    if server_name is not None:
+        subject = []
+        subjectAltName: List[Tuple[str, str]] = []
+        for attr in certificate.subject:
+            if attr.oid == x509.NameOID.COMMON_NAME:
+                subject.append((("commonName", attr.value),))
+        for ext in certificate.extensions:
+            if ext.oid == x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                for name in ext.value:
+                    if isinstance(name, x509.DNSName):
+                        subjectAltName.append(("DNS", name.value))
+
+        try:
+            ssl.match_hostname(
+                {"subject": tuple(subject), "subjectAltName": tuple(subjectAltName)},
+                server_name,
+            )
+        except ssl.CertificateError as exc:
+            raise AlertBadCertificate("\n".join(exc.args)) from exc
 
 
 class CipherSuite(IntEnum):
@@ -997,12 +1041,12 @@ class SessionTicket:
 
     @property
     def is_valid(self) -> bool:
-        now = datetime.datetime.now()
+        now = utcnow()
         return now > self.not_valid_before and now < self.not_valid_after
 
     @property
     def obfuscated_age(self) -> int:
-        age = int((datetime.datetime.now() - self.not_valid_before).total_seconds())
+        age = int((utcnow() - self.not_valid_before).total_seconds())
         return (age + self.age_add) % (1 << 32)
 
 
@@ -1177,7 +1221,7 @@ class Context:
             length=self.key_schedule.algorithm.digest_size,
         )
 
-        timestamp = datetime.datetime.now()
+        timestamp = utcnow()
         return SessionTicket(
             age_add=new_session_ticket.ticket_age_add,
             cipher_suite=self.key_schedule.cipher_suite,
