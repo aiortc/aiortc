@@ -62,8 +62,13 @@ Features
 Running the examples
 --------------------
 
-``aioquic`` requires Python 3.6 or better. After checking out the code using
-git you can run:
+``aioquic`` requires Python 3.6 or better, and the OpenSSL development headers.
+
+.. code-block:: console
+
+   $ sudo apt install libssl-dev python3-dev
+
+After checking out the code using git you can run:
 
 .. code-block:: console
 
