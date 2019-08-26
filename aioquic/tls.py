@@ -1042,7 +1042,7 @@ class SessionTicket:
     @property
     def is_valid(self) -> bool:
         now = utcnow()
-        return now > self.not_valid_before and now < self.not_valid_after
+        return now >= self.not_valid_before and now <= self.not_valid_after
 
     @property
     def obfuscated_age(self) -> int:
