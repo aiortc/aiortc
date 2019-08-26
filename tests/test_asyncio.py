@@ -6,6 +6,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from aioquic.asyncio.client import connect
+from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.asyncio.server import serve
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
@@ -201,6 +202,22 @@ class HighLevelTest(TestCase):
             asyncio.gather(run_server(stateless_retry=True), run_client("127.0.0.1"))
         )
         self.assertEqual(response, b"gnip")
+        server.close()
+
+    def test_connect_and_serve_with_stateless_retry_bad_original_connection_id(self):
+        """
+        If the server's transport parameters do not have the correct
+        original_connection_id the connection fail.
+        """
+
+        def create_protocol(*args, **kwargs):
+            protocol = QuicConnectionProtocol(*args, **kwargs)
+            protocol._quic._original_connection_id = None
+            return protocol
+
+        server = run(run_server(create_protocol=create_protocol, stateless_retry=True))
+        with self.assertRaises(ConnectionError):
+            run(run_client("127.0.0.1"))
         server.close()
 
     @patch("aioquic.quic.retry.QuicRetryTokenHandler.validate_token")
