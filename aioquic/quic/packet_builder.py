@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from ..buffer import Buffer, size_uint_var
 from ..tls import Epoch
 from .crypto import CryptoPair
-from .logger import QuicLogger
+from .logger import QuicLoggerTrace
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_NUMBER_MAX_SIZE,
@@ -65,7 +65,7 @@ class QuicPacketBuilder:
         pad_first_datagram: bool = False,
         packet_number: int = 0,
         peer_token: bytes = b"",
-        quic_logger: Optional[QuicLogger] = None,
+        quic_logger: Optional[QuicLoggerTrace] = None,
         spin_bit: bool = False,
     ):
         self.max_flight_bytes: Optional[int] = None

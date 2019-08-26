@@ -11,6 +11,7 @@ from ..buffer import Buffer, BufferReadError, size_uint_var
 from . import events
 from .configuration import QuicConfiguration
 from .crypto import CryptoError, CryptoPair
+from .logger import QuicLoggerTrace
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
     PACKET_TYPE_HANDSHAKE,
@@ -244,6 +245,7 @@ class QuicConnection:
         self._peer_cid_seq: Optional[int] = None
         self._peer_cid_available: List[QuicConnectionId] = []
         self._peer_token = b""
+        self._quic_logger: Optional[QuicLoggerTrace] = None
         self._remote_ack_delay_exponent = 3
         self._remote_active_connection_id_limit = 0
         self._remote_idle_timeout = 0.0  # seconds
@@ -270,9 +272,8 @@ class QuicConnection:
         self._logger = QuicConnectionAdapter(
             logger, {"id": dump_cid(logger_connection_id)}
         )
-        self._quic_logger = configuration.quic_logger
-        if self._quic_logger is not None:
-            self._quic_logger.start_trace(
+        if configuration.quic_logger:
+            self._quic_logger = configuration.quic_logger.start_trace(
                 is_client=configuration.is_client, odcid=logger_connection_id
             )
 
@@ -921,6 +922,11 @@ class QuicConnection:
             self._discard_epoch(epoch)
         self._events.append(self._close_event)
         self._set_state(QuicConnectionState.TERMINATED)
+
+        # signal log end
+        if self._quic_logger is not None:
+            self._configuration.quic_logger.end_trace(self._quic_logger)
+            self._quic_logger = None
 
     def _connect(self, now: float) -> None:
         """

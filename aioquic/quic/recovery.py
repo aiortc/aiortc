@@ -1,7 +1,7 @@
 import math
 from typing import Callable, Dict, List, Optional
 
-from .logger import QuicLogger
+from .logger import QuicLoggerTrace
 from .packet_builder import QuicDeliveryState, QuicSentPacket
 from .rangeset import RangeSet
 
@@ -41,7 +41,7 @@ class QuicPacketRecovery:
         self,
         is_client_without_1rtt: bool,
         send_probe: Callable[[], None],
-        quic_logger: Optional[QuicLogger] = None,
+        quic_logger: Optional[QuicLoggerTrace] = None,
     ) -> None:
         self.is_client_without_1rtt = is_client_without_1rtt
         self.max_ack_delay = 0.025

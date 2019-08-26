@@ -1,7 +1,7 @@
 import binascii
 import time
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from .packet import (
     PACKET_TYPE_HANDSHAKE,
@@ -28,19 +28,22 @@ def hexdump(data: bytes) -> str:
     return binascii.hexlify(data).decode("ascii")
 
 
-class QuicLogger:
+class QuicLoggerTrace:
     """
-    A QUIC event logger.
+    A QUIC event trace.
 
     Events are logged in the format defined by qlog draft-01.
 
-    See: https://quiclog.github.io/internet-drafts/draft-marx-qlog-main-schema.html
+    See: https://quiclog.github.io/internet-drafts/draft-marx-qlog-event-definitions-quic-h3.html
     """
 
-    def __init__(self) -> None:
-        self._odcid: bytes = b""
+    def __init__(self, *, is_client: bool, odcid: bytes) -> None:
+        self._odcid = odcid
         self._events: Deque[Tuple[float, str, str, Dict[str, Any]]] = deque()
-        self._vantage_point = {"name": "aioquic", "type": "unknown"}
+        self._vantage_point = {
+            "name": "aioquic",
+            "type": "client" if is_client else "server",
+        }
 
     def encode_ack_frame(self, ranges: RangeSet, delay: float) -> Dict:
         return {
@@ -164,36 +167,60 @@ class QuicLogger:
     def packet_type(self, packet_type: int) -> str:
         return PACKET_TYPE_NAMES.get(packet_type & PACKET_TYPE_MASK, "1RTT")
 
-    def start_trace(self, is_client: bool, odcid: bytes) -> None:
-        self._odcid = odcid
-        self._vantage_point["type"] = "client" if is_client else "server"
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Return the trace as a dictionary which can be written as JSON.
         """
-        traces = []
         if self._events:
             reference_time = self._events[0][0]
-            trace = {
-                "common_fields": {
-                    "ODCID": hexdump(self._odcid),
-                    "reference_time": "%d" % (reference_time * 1000),
-                },
-                "event_fields": ["relative_time", "category", "event_type", "data"],
-                "events": list(
-                    map(
-                        lambda event: (
-                            "%d" % ((event[0] - reference_time) * 1000),
-                            event[1],
-                            event[2],
-                            event[3],
-                        ),
-                        self._events,
-                    )
-                ),
-                "vantage_point": self._vantage_point,
-            }
-            traces.append(trace)
+        else:
+            reference_time = 0.0
+        return {
+            "common_fields": {
+                "ODCID": hexdump(self._odcid),
+                "reference_time": "%d" % (reference_time * 1000),
+            },
+            "event_fields": ["relative_time", "category", "event_type", "data"],
+            "events": list(
+                map(
+                    lambda event: (
+                        "%d" % ((event[0] - reference_time) * 1000),
+                        event[1],
+                        event[2],
+                        event[3],
+                    ),
+                    self._events,
+                )
+            ),
+            "vantage_point": self._vantage_point,
+        }
 
-        return {"qlog_version": "draft-01", "traces": traces}
+
+class QuicLogger:
+    """
+    A QUIC event logger.
+
+    Serves as a container for traces in the format defined by qlog draft-01.
+
+    See: https://quiclog.github.io/internet-drafts/draft-marx-qlog-main-schema.html
+    """
+
+    def __init__(self) -> None:
+        self._traces: List[QuicLoggerTrace] = []
+
+    def start_trace(self, is_client: bool, odcid: bytes) -> QuicLoggerTrace:
+        trace = QuicLoggerTrace(is_client=is_client, odcid=odcid)
+        self._traces.append(trace)
+        return trace
+
+    def end_trace(self, trace: QuicLoggerTrace) -> None:
+        assert trace in self._traces, "QuicLoggerTrace does not belong to QuicLogger"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Return the traces as a dictionary which can be written as JSON.
+        """
+        return {
+            "qlog_version": "draft-01",
+            "traces": [trace.to_dict() for trace in self._traces],
+        }
