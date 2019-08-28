@@ -59,9 +59,6 @@ class HttpRequestHandler:
     async def run_asgi(self, app: AsgiApplication) -> None:
         await application(self.scope, self.receive, self.send)
 
-        self.connection.send_data(stream_id=self.stream_id, data=b"", end_stream=True)
-        self.transmit()
-
     async def receive(self) -> Dict:
         return await self.queue.get()
 
@@ -78,7 +75,9 @@ class HttpRequestHandler:
             )
         elif message["type"] == "http.response.body":
             self.connection.send_data(
-                stream_id=self.stream_id, data=message["body"], end_stream=False
+                stream_id=self.stream_id,
+                data=message.get("body", b""),
+                end_stream=not message.get("more_body", False),
             )
         self.transmit()
 
