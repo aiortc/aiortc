@@ -142,7 +142,9 @@ class H3Connection:
             stream_id, encode_frame(FrameType.DATA, data), end_stream
         )
 
-    def send_headers(self, stream_id: int, headers: Headers) -> None:
+    def send_headers(
+        self, stream_id: int, headers: Headers, end_stream: bool = False
+    ) -> None:
         """
         Send headers on the given stream.
 
@@ -152,10 +154,13 @@ class H3Connection:
 
         :param stream_id: The stream ID on which to send the headers.
         :param headers: The HTTP headers to send.
+        :param end_stream: Whether to end the stream.
         """
         encoder, header = self._encoder.encode(stream_id, 0, headers)
         self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
-        self._quic.send_stream_data(stream_id, encode_frame(FrameType.HEADERS, header))
+        self._quic.send_stream_data(
+            stream_id, encode_frame(FrameType.HEADERS, header), end_stream
+        )
 
     def _create_uni_stream(self, stream_type: int) -> int:
         """

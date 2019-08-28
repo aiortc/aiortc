@@ -147,6 +147,73 @@ class H3ConnectionTest(TestCase):
             # make third request -> dynamic table
             self._make_request(h3_client, h3_server)
 
+    def test_headers_only(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
+        ) as (quic_client, quic_server):
+            h3_client = H3Connection(quic_client)
+            h3_server = H3Connection(quic_server)
+
+            # send request
+            stream_id = quic_client.get_next_available_stream_id()
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"HEAD"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                    (b"x-foo", b"client"),
+                ],
+                end_stream=True,
+            )
+
+            # receive request
+            events = h3_transfer(quic_client, h3_server)
+            self.assertEqual(len(events), 1)
+
+            self.assertTrue(isinstance(events[0], RequestReceived))
+            self.assertEqual(
+                events[0].headers,
+                [
+                    (b":method", b"HEAD"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                    (b"x-foo", b"client"),
+                ],
+            )
+            self.assertEqual(events[0].stream_id, stream_id)
+            self.assertEqual(events[0].stream_ended, True)
+
+            # send response
+            h3_server.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":status", b"200"),
+                    (b"content-type", b"text/html; charset=utf-8"),
+                    (b"x-foo", b"server"),
+                ],
+                end_stream=True,
+            )
+
+            # receive response
+            events = h3_transfer(quic_server, h3_client)
+            self.assertEqual(len(events), 1)
+
+            self.assertTrue(isinstance(events[0], ResponseReceived))
+            self.assertEqual(
+                events[0].headers,
+                [
+                    (b":status", b"200"),
+                    (b"content-type", b"text/html; charset=utf-8"),
+                    (b"x-foo", b"server"),
+                ],
+            )
+            self.assertEqual(events[0].stream_id, stream_id)
+            self.assertEqual(events[0].stream_ended, True)
+
     def test_fragmented_frame(self):
         quic_client = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=True)

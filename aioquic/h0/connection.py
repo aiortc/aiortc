@@ -1,6 +1,12 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
-from aioquic.h3.events import DataReceived, HttpEvent, RequestReceived, ResponseReceived
+from aioquic.h3.events import (
+    DataReceived,
+    Headers,
+    HttpEvent,
+    RequestReceived,
+    ResponseReceived,
+)
 from aioquic.quic.connection import QuicConnection
 from aioquic.quic.events import QuicEvent, StreamDataReceived
 
@@ -50,11 +56,12 @@ class H0Connection:
     def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
         self._quic.send_stream_data(stream_id, data, end_stream)
 
-    def send_headers(self, stream_id: int, headers: List[Tuple[bytes, bytes]]) -> None:
+    def send_headers(
+        self, stream_id: int, headers: Headers, end_stream: bool = False
+    ) -> None:
         if self._is_client:
             headers_dict = dict(headers)
-            self._quic.send_stream_data(
-                stream_id,
-                headers_dict[b":method"] + b" " + headers_dict[b":path"] + b"\r\n",
-                False,
-            )
+            data = headers_dict[b":method"] + b" " + headers_dict[b":path"] + b"\r\n"
+        else:
+            data = b""
+        self._quic.send_stream_data(stream_id, data, end_stream)
