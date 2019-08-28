@@ -37,6 +37,7 @@ class HttpRequestHandler:
         *,
         connection: HttpConnection,
         scope: Dict,
+        stream_ended: bool,
         stream_id: int,
         transmit: Callable[[], None],
     ):
@@ -45,6 +46,9 @@ class HttpRequestHandler:
         self.scope = scope
         self.stream_id = stream_id
         self.transmit = transmit
+
+        if stream_ended:
+            self.queue.put_nowait({"type": "http.request"})
 
     def http_event_received(self, event: HttpEvent):
         if isinstance(event, DataReceived):
@@ -241,6 +245,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 handler = HttpRequestHandler(
                     connection=self._http,
                     scope=scope,
+                    stream_ended=event.stream_ended,
                     stream_id=event.stream_id,
                     transmit=self.transmit,
                 )
