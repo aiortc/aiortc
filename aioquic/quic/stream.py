@@ -189,6 +189,7 @@ class QuicStream:
             if stop > start:
                 self._send_pending.add(start, stop)
             if stop == self._send_buffer_fin:
+                self.send_buffer_empty = False
                 self._send_pending_eof = True
 
     def write(self, data: bytes, end_stream: bool = False) -> None:
@@ -206,5 +207,6 @@ class QuicStream:
             self._send_buffer += data
             self._send_buffer_stop += size
         if end_stream:
+            self.send_buffer_is_empty = False
             self._send_buffer_fin = self._send_buffer_stop
             self._send_pending_eof = True
