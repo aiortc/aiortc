@@ -1,8 +1,20 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.h3.connection import ErrorCode, FrameType, H3Connection, encode_frame
-from aioquic.h3.events import DataReceived, RequestReceived, ResponseReceived
+from aioquic.buffer import encode_uint_var
+from aioquic.h3.connection import (
+    ErrorCode,
+    FrameType,
+    H3Connection,
+    StreamType,
+    encode_frame,
+)
+from aioquic.h3.events import (
+    DataReceived,
+    PushPromiseReceived,
+    RequestReceived,
+    ResponseReceived,
+)
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnectionError
 from aioquic.quic.events import StreamDataReceived
@@ -12,7 +24,11 @@ from .test_connection import client_and_server, transfer
 
 def h3_transfer(quic_sender, h3_receiver):
     quic_receiver = h3_receiver._quic
-    transfer(quic_sender, quic_receiver)
+    if hasattr(quic_sender, "stream_queue"):
+        quic_receiver._events.extend(quic_sender.stream_queue)
+        quic_sender.stream_queue.clear()
+    else:
+        transfer(quic_sender, quic_receiver)
 
     # process QUIC events
     http_events = []
@@ -27,6 +43,7 @@ class FakeQuicConnection:
     def __init__(self, configuration):
         self.configuration = configuration
         self.stream_queue = []
+        self._events = []
         self._next_stream_bidi = 0 if configuration.is_client else 1
         self._next_stream_uni = 2 if configuration.is_client else 3
 
@@ -38,6 +55,12 @@ class FakeQuicConnection:
             stream_id = self._next_stream_bidi
             self._next_stream_bidi += 4
         return stream_id
+
+    def next_event(self):
+        try:
+            return self._events.pop(0)
+        except IndexError:
+            return None
 
     def send_stream_data(self, stream_id, data, end_stream=False):
         # chop up data into individual bytes
@@ -54,6 +77,8 @@ class FakeQuicConnection:
 
 
 class H3ConnectionTest(TestCase):
+    maxDiff = None
+
     def _make_request(self, h3_client, h3_server):
         quic_client = h3_client._quic
         quic_server = h3_server._quic
@@ -123,15 +148,20 @@ class H3ConnectionTest(TestCase):
                 (b"x-foo", b"server"),
             ],
         )
+        self.assertEqual(events[0].push_id, None)
         self.assertEqual(events[0].stream_id, stream_id)
         self.assertEqual(events[0].stream_ended, False)
 
         self.assertTrue(isinstance(events[1], DataReceived))
         self.assertEqual(events[1].data, b"<html><body>hello</body></html>")
+        self.assertEqual(events[1].push_id, None)
         self.assertEqual(events[1].stream_id, stream_id)
         self.assertEqual(events[1].stream_ended, True)
 
-    def test_handle_control_frame_wrong_frame_type(self):
+    def test_handle_control_frame_headers(self):
+        """
+        We should not receive HEADERS on the control stream.
+        """
         quic_server = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=False)
         )
@@ -139,6 +169,37 @@ class H3ConnectionTest(TestCase):
 
         with self.assertRaises(QuicConnectionError) as cm:
             h3_server._handle_control_frame(FrameType.HEADERS, b"")
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+
+    def test_handle_control_frame_max_push_id_from_server(self):
+        """
+        A client should not receive MAX_PUSH_ID on the control stream.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_client._handle_control_frame(FrameType.MAX_PUSH_ID, encode_uint_var(0))
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+
+    def test_handle_push_frame_wrong_frame_type(self):
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=15,
+                    data=encode_uint_var(StreamType.PUSH)
+                    + encode_uint_var(0)  # push ID
+                    + encode_frame(FrameType.SETTINGS, b""),
+                    end_stream=False,
+                )
+            )
         self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
 
     def test_handle_request_frame_wrong_frame_type(self):
@@ -238,6 +299,7 @@ class H3ConnectionTest(TestCase):
                     (b"x-foo", b"server"),
                 ],
             )
+            self.assertEqual(events[0].push_id, None)
             self.assertEqual(events[0].stream_id, stream_id)
             self.assertEqual(events[0].stream_ended, True)
 
@@ -252,7 +314,7 @@ class H3ConnectionTest(TestCase):
         h3_client = H3Connection(quic_client)
         h3_server = H3Connection(quic_server)
 
-        # send headers
+        # send request
         stream_id = quic_client.get_next_available_stream_id()
         h3_client.send_headers(
             stream_id=stream_id,
@@ -264,12 +326,12 @@ class H3ConnectionTest(TestCase):
                 (b"x-foo", b"client"),
             ],
         )
-        http_events = []
-        for event in quic_client.stream_queue:
-            http_events.extend(h3_server.handle_event(event))
-        quic_client.stream_queue.clear()
+        h3_client.send_data(stream_id=stream_id, data=b"hello", end_stream=True)
+
+        # receive request
+        events = h3_transfer(quic_client, h3_server)
         self.assertEqual(
-            http_events,
+            events,
             [
                 RequestReceived(
                     headers=[
@@ -279,21 +341,9 @@ class H3ConnectionTest(TestCase):
                         (b":path", b"/"),
                         (b"x-foo", b"client"),
                     ],
-                    stream_id=0,
+                    stream_id=stream_id,
                     stream_ended=False,
-                )
-            ],
-        )
-
-        # send body
-        h3_client.send_data(stream_id=stream_id, data=b"hello", end_stream=True)
-        http_events = []
-        for event in quic_client.stream_queue:
-            http_events.extend(h3_server.handle_event(event))
-        quic_client.stream_queue.clear()
-        self.assertEqual(
-            http_events,
-            [
+                ),
                 DataReceived(data=b"h", stream_id=0, stream_ended=False),
                 DataReceived(data=b"e", stream_id=0, stream_ended=False),
                 DataReceived(data=b"l", stream_id=0, stream_ended=False),
@@ -302,6 +352,274 @@ class H3ConnectionTest(TestCase):
                 DataReceived(data=b"", stream_id=0, stream_ended=True),
             ],
         )
+
+        # send push promise
+        push_stream_id = h3_server.push_promise(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"localhost"),
+                (b":path", b"/app.txt"),
+            ],
+        )
+        self.assertEqual(push_stream_id, 15)
+
+        # send response
+        h3_server.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":status", b"200"),
+                (b"content-type", b"text/html; charset=utf-8"),
+            ],
+            end_stream=False,
+        )
+        h3_server.send_data(stream_id=stream_id, data=b"html", end_stream=True)
+
+        #  fulfill push promise
+        h3_server.send_headers(
+            stream_id=push_stream_id,
+            headers=[(b":status", b"200"), (b"content-type", b"text/plain")],
+            end_stream=False,
+        )
+        h3_server.send_data(stream_id=push_stream_id, data=b"text", end_stream=True)
+
+        # receive push promise / reponse
+        events = h3_transfer(quic_server, h3_client)
+        self.assertEqual(
+            events,
+            [
+                PushPromiseReceived(
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/app.txt"),
+                    ],
+                    push_id=0,
+                    stream_id=stream_id,
+                ),
+                ResponseReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"content-type", b"text/html; charset=utf-8"),
+                    ],
+                    stream_id=0,
+                    stream_ended=False,
+                ),
+                DataReceived(data=b"h", stream_id=0, stream_ended=False),
+                DataReceived(data=b"t", stream_id=0, stream_ended=False),
+                DataReceived(data=b"m", stream_id=0, stream_ended=False),
+                DataReceived(data=b"l", stream_id=0, stream_ended=False),
+                DataReceived(data=b"", stream_id=0, stream_ended=True),
+                ResponseReceived(
+                    headers=[(b":status", b"200"), (b"content-type", b"text/plain")],
+                    stream_id=15,
+                    stream_ended=False,
+                    push_id=0,
+                ),
+                DataReceived(data=b"text", stream_id=15, stream_ended=False, push_id=0),
+            ],
+        )
+
+    def test_request_with_server_push(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
+        ) as (quic_client, quic_server):
+            h3_client = H3Connection(quic_client)
+            h3_server = H3Connection(quic_server)
+
+            # send request
+            stream_id = quic_client.get_next_available_stream_id()
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                ],
+                end_stream=True,
+            )
+
+            # receive request
+            events = h3_transfer(quic_client, h3_server)
+            self.assertEqual(len(events), 1)
+
+            self.assertTrue(isinstance(events[0], RequestReceived))
+            self.assertEqual(
+                events[0].headers,
+                [
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                ],
+            )
+            self.assertEqual(events[0].stream_id, stream_id)
+            self.assertEqual(events[0].stream_ended, True)
+
+            # send push promises
+            push_stream_id_css = h3_server.push_promise(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/app.css"),
+                ],
+            )
+            self.assertEqual(push_stream_id_css, 15)
+
+            push_stream_id_js = h3_server.push_promise(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/app.js"),
+                ],
+            )
+            self.assertEqual(push_stream_id_js, 19)
+
+            # send response
+            h3_server.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":status", b"200"),
+                    (b"content-type", b"text/html; charset=utf-8"),
+                ],
+                end_stream=False,
+            )
+            h3_server.send_data(
+                stream_id=stream_id,
+                data=b"<html><body>hello</body></html>",
+                end_stream=True,
+            )
+
+            #  fulfill push promises
+            h3_server.send_headers(
+                stream_id=push_stream_id_css,
+                headers=[(b":status", b"200"), (b"content-type", b"text/css")],
+                end_stream=False,
+            )
+            h3_server.send_data(
+                stream_id=push_stream_id_css,
+                data=b"body { color: pink }",
+                end_stream=True,
+            )
+
+            h3_server.send_headers(
+                stream_id=push_stream_id_js,
+                headers=[
+                    (b":status", b"200"),
+                    (b"content-type", b"application/javascript"),
+                ],
+                end_stream=False,
+            )
+            h3_server.send_data(
+                stream_id=push_stream_id_js, data=b"alert('howdee');", end_stream=True
+            )
+
+            # receive push promises, response and push responses
+
+            events = h3_transfer(quic_server, h3_client)
+            self.assertEqual(len(events), 8)
+
+            # css push promise
+            self.assertEqual(
+                events[1],
+                PushPromiseReceived(
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/app.js"),
+                    ],
+                    push_id=1,
+                    stream_id=stream_id,
+                ),
+            )
+
+            # js push promise
+            self.assertEqual(
+                events[1],
+                PushPromiseReceived(
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/app.js"),
+                    ],
+                    push_id=1,
+                    stream_id=stream_id,
+                ),
+            )
+
+            # response
+            self.assertEqual(
+                events[2],
+                ResponseReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"content-type", b"text/html; charset=utf-8"),
+                    ],
+                    stream_id=stream_id,
+                    stream_ended=False,
+                ),
+            )
+            self.assertEqual(
+                events[3],
+                DataReceived(
+                    data=b"<html><body>hello</body></html>",
+                    stream_id=stream_id,
+                    stream_ended=True,
+                ),
+            )
+
+            # css push
+            self.assertEqual(
+                events[4],
+                ResponseReceived(
+                    headers=[(b":status", b"200"), (b"content-type", b"text/css")],
+                    push_id=0,
+                    stream_id=push_stream_id_css,
+                    stream_ended=False,
+                ),
+            )
+            self.assertEqual(
+                events[5],
+                DataReceived(
+                    data=b"body { color: pink }",
+                    push_id=0,
+                    stream_id=push_stream_id_css,
+                    stream_ended=True,
+                ),
+            )
+
+            # js push
+            self.assertEqual(
+                events[6],
+                ResponseReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"content-type", b"application/javascript"),
+                    ],
+                    push_id=1,
+                    stream_id=push_stream_id_js,
+                    stream_ended=False,
+                ),
+            )
+            self.assertEqual(
+                events[7],
+                DataReceived(
+                    data=b"alert('howdee');",
+                    push_id=1,
+                    stream_id=push_stream_id_js,
+                    stream_ended=True,
+                ),
+            )
 
     def test_blocked_stream(self):
         quic_client = FakeQuicConnection(

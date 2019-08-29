@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 Headers = List[Tuple[bytes, bytes]]
 
@@ -27,6 +27,26 @@ class DataReceived(HttpEvent):
 
     stream_ended: bool
     "Whether the STREAM frame had the FIN bit set."
+
+    push_id: Optional[int] = None
+    "The Push ID or `None` if this is not a push."
+
+
+@dataclass
+class PushPromiseReceived(HttpEvent):
+    """
+    The PushedStreamReceived event is fired whenever a pushed stream has been
+    received from the remote peer.
+    """
+
+    headers: Headers
+    "The request headers."
+
+    push_id: int
+    "The Push ID of the push promise."
+
+    stream_id: int
+    "The Stream ID of the stream that the push is related to."
 
 
 @dataclass
@@ -59,3 +79,6 @@ class ResponseReceived(HttpEvent):
 
     stream_ended: bool
     "Whether the STREAM frame had the FIN bit set."
+
+    push_id: Optional[int] = None
+    "The Push ID or `None` if this is not a push."

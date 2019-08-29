@@ -9,6 +9,7 @@ from aioquic.h3.events import (
     DataReceived,
     Headers,
     HttpEvent,
+    PushPromiseReceived,
     RequestReceived,
     ResponseReceived,
 )
@@ -85,6 +86,13 @@ def encode_settings(settings: Dict[int, int]) -> bytes:
     return buf.data
 
 
+def parse_max_push_id(data: bytes) -> int:
+    buf = Buffer(data=data)
+    max_push_id = buf.pull_uint_var()
+    assert buf.eof()
+    return max_push_id
+
+
 def parse_settings(data: bytes) -> Dict[int, int]:
     buf = Buffer(data=data)
     settings = []
@@ -102,6 +110,7 @@ class H3Stream:
         self.ended = False
         self.frame_size: Optional[int] = None
         self.frame_type: Optional[int] = None
+        self.push_id: Optional[int] = None
         self.stream_type: Optional[int] = None
 
 
@@ -121,6 +130,9 @@ class H3Connection:
         self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
         self._encoder = Encoder()
         self._stream: Dict[int, H3Stream] = {}
+
+        self._max_push_id: Optional[int] = 8 if self._is_client else None
+        self._next_push_id: int = 0
 
         self._local_control_stream_id: Optional[int] = None
         self._local_decoder_stream_id: Optional[int] = None
@@ -147,8 +159,39 @@ class H3Connection:
                     stream_id, event.data, event.end_stream
                 )
             elif stream_is_unidirectional(stream_id):
-                return self._receive_stream_data_uni(stream_id, event.data)
+                return self._receive_stream_data_uni(
+                    stream_id, event.data, event.end_stream
+                )
         return []
+
+    def push_promise(self, stream_id: int, headers: Headers) -> int:
+        """
+        Send a push promise related to the specified stream.
+
+        Returns the stream ID on which headers and data can be sent.
+
+        :param stream_id: The stream ID on which to send the data.
+        :param headers: The HTTP request headers for this push.
+        """
+        assert not self._is_client, "Only servers may send a push promise."
+        assert self._max_push_id is not None and self._next_push_id < self._max_push_id
+
+        # send push promise
+        push_id = self._next_push_id
+        self._next_push_id += 1
+        self._quic.send_stream_data(
+            stream_id,
+            encode_frame(
+                FrameType.PUSH_PROMISE,
+                encode_uint_var(push_id) + self._encode_headers(stream_id, headers),
+            ),
+        )
+
+        #  create push stream
+        push_stream_id = self._create_uni_stream(StreamType.PUSH)
+        self._quic.send_stream_data(push_stream_id, encode_uint_var(push_id))
+
+        return push_stream_id
 
     def send_data(self, stream_id: int, data: bytes, end_stream: bool) -> None:
         """
@@ -220,6 +263,14 @@ class H3Connection:
                 blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
             )
             self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+        elif frame_type == FrameType.MAX_PUSH_ID:
+            if self._is_client:
+                raise QuicConnectionError(
+                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
+                    frame_type=None,
+                    reason_phrase="Servers must not send MAX_PUSH_ID",
+                )
+            self._max_push_id = parse_max_push_id(frame_data)
         elif frame_type in (
             FrameType.DATA,
             FrameType.HEADERS,
@@ -231,6 +282,55 @@ class H3Connection:
                 frame_type=None,
                 reason_phrase="Invalid frame type on control stream",
             )
+
+    def _handle_push_frame(
+        self,
+        frame_type: int,
+        frame_data: bytes,
+        push_id: int,
+        stream_id: int,
+        stream_ended: bool,
+    ) -> List[HttpEvent]:
+        """
+        Handle a frame received on a push stream.
+        """
+        http_events: List[HttpEvent] = []
+
+        if frame_type == FrameType.DATA:
+            http_events.append(
+                DataReceived(
+                    data=frame_data,
+                    push_id=push_id,
+                    stream_ended=stream_ended,
+                    stream_id=stream_id,
+                )
+            )
+        elif frame_type == FrameType.HEADERS:
+            headers = self._decode_headers(stream_id, frame_data)
+            http_events.append(
+                ResponseReceived(
+                    headers=headers,
+                    push_id=push_id,
+                    stream_id=stream_id,
+                    stream_ended=stream_ended,
+                )
+            )
+        elif frame_type in (
+            FrameType.PRIORITY,
+            FrameType.CANCEL_PUSH,
+            FrameType.SETTINGS,
+            FrameType.PUSH_PROMISE,
+            FrameType.GOAWAY,
+            FrameType.MAX_PUSH_ID,
+            FrameType.DUPLICATE_PUSH,
+        ):
+            raise QuicConnectionError(
+                error_code=ErrorCode.HTTP_WRONG_STREAM,
+                frame_type=None,
+                reason_phrase="Invalid frame type on push stream",
+            )
+
+        return http_events
 
     def _init_connection(self) -> None:
         # send our settings
@@ -247,6 +347,11 @@ class H3Connection:
                 ),
             ),
         )
+        if self._is_client:
+            self._quic.send_stream_data(
+                self._local_control_stream_id,
+                encode_frame(FrameType.MAX_PUSH_ID, encode_uint_var(self._max_push_id)),
+            )
 
         # create encoder and decoder streams
         self._local_encoder_stream_id = self._create_uni_stream(
@@ -273,8 +378,8 @@ class H3Connection:
 
         # shortcut DATA frame bits
         if (
-            stream.frame_size is not None
-            and stream.frame_type == FrameType.DATA
+            stream.frame_type == FrameType.DATA
+            and stream.frame_size is not None
             and len(stream.buffer) < stream.frame_size
         ):
             http_events.append(
@@ -308,10 +413,7 @@ class H3Connection:
 
             # check how much data is available
             chunk_size = min(stream.frame_size, buf.capacity - consumed)
-            if (
-                stream.frame_type == FrameType.HEADERS
-                and chunk_size < stream.frame_size
-            ):
+            if stream.frame_type != FrameType.DATA and chunk_size < stream.frame_size:
                 break
 
             # read available data
@@ -345,6 +447,17 @@ class H3Connection:
                         stream_ended=stream_ended and buf.eof(),
                     )
                 )
+            elif stream.frame_type == FrameType.PUSH_PROMISE:
+                frame_buf = Buffer(data=frame_data)
+                push_id = frame_buf.pull_uint_var()
+                headers = self._decode_headers(
+                    stream_id, frame_data[frame_buf.tell() :]
+                )
+                http_events.append(
+                    PushPromiseReceived(
+                        headers=headers, push_id=push_id, stream_id=stream_id
+                    )
+                )
             elif stream.frame_type in (
                 FrameType.PRIORITY,
                 FrameType.CANCEL_PUSH,
@@ -363,11 +476,15 @@ class H3Connection:
 
         return http_events
 
-    def _receive_stream_data_uni(self, stream_id: int, data: bytes) -> List[HttpEvent]:
+    def _receive_stream_data_uni(
+        self, stream_id: int, data: bytes, stream_ended: bool
+    ) -> List[HttpEvent]:
         http_events: List[HttpEvent] = []
 
         stream = self._stream[stream_id]
         stream.buffer += data
+        if stream_ended:
+            stream.ended = True
 
         buf = Buffer(data=stream.buffer)
         consumed = 0
@@ -403,6 +520,33 @@ class H3Connection:
                 consumed = buf.tell()
 
                 self._handle_control_frame(frame_type, frame_data)
+            elif stream.stream_type == StreamType.PUSH:
+                # fetch push id
+                if stream.push_id is None:
+                    try:
+                        stream.push_id = buf.pull_uint_var()
+                    except BufferReadError:
+                        break
+                    consumed = buf.tell()
+
+                # fetch next frame
+                try:
+                    frame_type = buf.pull_uint_var()
+                    frame_length = buf.pull_uint_var()
+                    frame_data = buf.pull_bytes(frame_length)
+                except BufferReadError:
+                    break
+                consumed = buf.tell()
+
+                http_events.extend(
+                    self._handle_push_frame(
+                        frame_type=frame_type,
+                        frame_data=frame_data,
+                        push_id=stream.push_id,
+                        stream_id=stream_id,
+                        stream_ended=stream.ended and buf.eof(),
+                    )
+                )
             else:
                 # fetch unframed data
                 data = buf.pull_bytes(buf.capacity - buf.tell())
