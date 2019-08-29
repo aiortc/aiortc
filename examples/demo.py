@@ -53,7 +53,7 @@ async def ws(websocket):
         pass
 
 
-app.mount("/b", WsgiToAsgi(httpbin.app))
+app.mount("/httpbin", WsgiToAsgi(httpbin.app))
 
 app.mount(
     "/",
