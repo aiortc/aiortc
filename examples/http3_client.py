@@ -196,6 +196,10 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
         host = parsed.netloc
         port = 443
 
+    path = parsed.path
+    if parsed.query:
+        path += "?" + parsed.query
+
     async with connect(
         host,
         port,
@@ -207,7 +211,7 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
 
         if parsed.scheme == "wss":
             ws = await client.websocket(
-                parsed.netloc, parsed.path, subprotocols=["chat", "superchat"]
+                parsed.netloc, path, subprotocols=["chat", "superchat"]
             )
 
             # send some messages and receive reply
@@ -223,7 +227,7 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
         else:
             # perform request
             start = time.time()
-            http_events = await client.get(parsed.netloc, parsed.path)
+            http_events = await client.get(parsed.netloc, path)
             elapsed = time.time() - start
 
             # print speed
