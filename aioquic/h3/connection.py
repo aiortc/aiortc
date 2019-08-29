@@ -19,15 +19,15 @@ logger = logging.getLogger("http3")
 
 
 class FrameType(IntEnum):
-    DATA = 0
-    HEADERS = 1
-    PRIORITY = 2
-    CANCEL_PUSH = 3
-    SETTINGS = 4
-    PUSH_PROMISE = 5
-    GOAWAY = 6
-    MAX_PUSH_ID = 7
-    DUPLICATE_PUSH = 8
+    DATA = 0x0
+    HEADERS = 0x1
+    PRIORITY = 0x2
+    CANCEL_PUSH = 0x3
+    SETTINGS = 0x4
+    PUSH_PROMISE = 0x5
+    GOAWAY = 0x7
+    MAX_PUSH_ID = 0xD
+    DUPLICATE_PUSH = 0xE
 
 
 class Setting(IntEnum):
