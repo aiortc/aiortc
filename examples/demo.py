@@ -4,10 +4,13 @@
 
 import os
 
+import httpbin
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocketDisconnect
+
+from wsgi import WsgiToAsgi
 
 app = Starlette()
 
@@ -49,6 +52,8 @@ async def ws(websocket):
     except WebSocketDisconnect:
         pass
 
+
+app.mount("/b", WsgiToAsgi(httpbin.app))
 
 app.mount(
     "/",

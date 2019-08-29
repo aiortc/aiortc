@@ -73,7 +73,7 @@ After checking out the code using git you can run:
 .. code-block:: console
 
    $ pip install -e .
-   $ pip install aiofiles starlette wsproto
+   $ pip install aiofiles asgiref httpbin starlette wsproto
 
 HTTP/3 server
 .............
