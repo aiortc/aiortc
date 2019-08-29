@@ -9,7 +9,6 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocketDisconnect
-
 from wsgi import WsgiToAsgi
 
 app = Starlette()
