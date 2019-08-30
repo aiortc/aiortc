@@ -180,10 +180,9 @@ class H3Connection:
         :param headers: The HTTP headers to send.
         :param end_stream: Whether to end the stream.
         """
-        encoder, header = self._encoder.encode(stream_id, 0, headers)
-        self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+        frame_data = self._encode_headers(stream_id, headers)
         self._quic.send_stream_data(
-            stream_id, encode_frame(FrameType.HEADERS, header), end_stream
+            stream_id, encode_frame(FrameType.HEADERS, frame_data), end_stream
         )
 
     def _create_uni_stream(self, stream_type: int) -> int:
@@ -193,6 +192,22 @@ class H3Connection:
         stream_id = self._quic.get_next_available_stream_id(is_unidirectional=True)
         self._quic.send_stream_data(stream_id, encode_uint_var(stream_type))
         return stream_id
+
+    def _decode_headers(self, stream_id: int, frame_data: bytes) -> Headers:
+        """
+        Decode a HEADERS block and send decoder updates on the decoder stream.
+        """
+        decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+        self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
+        return headers
+
+    def _encode_headers(self, stream_id, headers: Headers) -> bytes:
+        """
+        Encode a HEADERS block and send encoder updates on the encoder stream.
+        """
+        encoder, frame_data = self._encoder.encode(stream_id, 0, headers)
+        self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+        return frame_data
 
     def _handle_control_frame(self, frame_type: int, frame_data: bytes) -> None:
         """
@@ -318,11 +333,10 @@ class H3Connection:
                 )
             elif stream.frame_type == FrameType.HEADERS:
                 try:
-                    decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+                    headers = self._decode_headers(stream_id, frame_data)
                 except StreamBlocked:
                     stream.blocked = True
                     break
-                self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
                 cls = ResponseReceived if self._is_client else RequestReceived
                 http_events.append(
                     cls(
