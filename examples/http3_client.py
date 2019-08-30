@@ -164,6 +164,10 @@ class HttpClient(QuicConnectionProtocol):
                 websocket = self._websockets[stream_id]
                 websocket.http_event_received(event)
 
+            else:
+                # push
+                print(event)
+
     def quic_event_received(self, event: QuicEvent):
         #  pass event to the HTTP layer
         if self._http is not None:
