@@ -12,10 +12,34 @@ from aioquic.h3.events import (
     RequestReceived,
     ResponseReceived,
 )
-from aioquic.quic.connection import QuicConnection, stream_is_unidirectional
+from aioquic.quic.connection import (
+    QuicConnection,
+    QuicConnectionError,
+    stream_is_unidirectional,
+)
 from aioquic.quic.events import QuicEvent, StreamDataReceived
 
 logger = logging.getLogger("http3")
+
+
+class ErrorCode(IntEnum):
+    HTTP_NO_ERROR = 0x00
+    HTTP_GENERAL_PROTOCOL_ERROR = 0x01
+    HTTP_INTERNAL_ERROR = 0x03
+    HTTP_REQUEST_CANCELLED = 0x05
+    HTTP_INCOMPLETE_REQUEST = 0x06
+    HTTP_CONNECT_ERROR = 0x07
+    HTTP_EXCESSIVE_LOAD = 0x08
+    HTTP_VERSION_FALLBACK = 0x09
+    HTTP_WRONG_STREAM = 0x0A
+    HTTP_ID_ERROR = 0x0B
+    HTTP_STREAM_CREATION_ERROR = 0x0D
+    HTTP_CLOSED_CRITICAL_STREAM = 0x0F
+    HTTP_EARLY_RESPONSE = 0x11
+    HTTP_MISSING_SETTINGS = 0x12
+    HTTP_UNEXPECTED_FRAME = 0x13
+    HTTP_REQUEST_REJECTED = 0x14
+    HTTP_SETTINGS_ERROR = 0xFF
 
 
 class FrameType(IntEnum):
@@ -170,6 +194,29 @@ class H3Connection:
         self._quic.send_stream_data(stream_id, encode_uint_var(stream_type))
         return stream_id
 
+    def _handle_control_frame(self, frame_type: int, frame_data: bytes) -> None:
+        """
+        Handle a frame received on the peer's control stream.
+        """
+        if frame_type == FrameType.SETTINGS:
+            settings = parse_settings(frame_data)
+            encoder = self._encoder.apply_settings(
+                max_table_capacity=settings.get(Setting.QPACK_MAX_TABLE_CAPACITY, 0),
+                blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
+            )
+            self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+        elif frame_type in (
+            FrameType.DATA,
+            FrameType.HEADERS,
+            FrameType.PUSH_PROMISE,
+            FrameType.DUPLICATE_PUSH,
+        ):
+            raise QuicConnectionError(
+                error_code=ErrorCode.HTTP_WRONG_STREAM,
+                frame_type=None,
+                reason_phrase="Invalid frame type on control stream",
+            )
+
     def _init_connection(self) -> None:
         # send our settings
         self._local_control_stream_id = self._create_uni_stream(StreamType.CONTROL)
@@ -284,6 +331,18 @@ class H3Connection:
                         stream_ended=stream_ended and buf.eof(),
                     )
                 )
+            elif stream.frame_type in (
+                FrameType.PRIORITY,
+                FrameType.CANCEL_PUSH,
+                FrameType.SETTINGS,
+                FrameType.GOAWAY,
+                FrameType.MAX_PUSH_ID,
+            ):
+                raise QuicConnectionError(
+                    error_code=ErrorCode.HTTP_WRONG_STREAM,
+                    frame_type=None,
+                    reason_phrase="Invalid frame type on request stream",
+                )
 
         # remove processed data from buffer
         stream.buffer = stream.buffer[consumed:]
@@ -329,16 +388,7 @@ class H3Connection:
                     break
                 consumed = buf.tell()
 
-                # unidirectional control stream
-                if frame_type == FrameType.SETTINGS:
-                    settings = parse_settings(frame_data)
-                    encoder = self._encoder.apply_settings(
-                        max_table_capacity=settings.get(
-                            Setting.QPACK_MAX_TABLE_CAPACITY, 0
-                        ),
-                        blocked_streams=settings.get(Setting.QPACK_BLOCKED_STREAMS, 0),
-                    )
-                    self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
+                self._handle_control_frame(frame_type, frame_data)
             else:
                 # fetch unframed data
                 data = buf.pull_bytes(buf.capacity - buf.tell())

@@ -1,9 +1,10 @@
 import binascii
 from unittest import TestCase
 
-from aioquic.h3.connection import H3Connection
+from aioquic.h3.connection import ErrorCode, FrameType, H3Connection, encode_frame
 from aioquic.h3.events import DataReceived, RequestReceived, ResponseReceived
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import QuicConnectionError
 from aioquic.quic.events import StreamDataReceived
 
 from .test_connection import client_and_server, transfer
@@ -130,7 +131,33 @@ class H3ConnectionTest(TestCase):
         self.assertEqual(events[1].stream_id, stream_id)
         self.assertEqual(events[1].stream_ended, True)
 
-    def test_connect(self):
+    def test_handle_control_frame_wrong_frame_type(self):
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_server._handle_control_frame(FrameType.HEADERS, b"")
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+
+    def test_handle_request_frame_wrong_frame_type(self):
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=encode_frame(FrameType.SETTINGS, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+
+    def test_request(self):
         with client_and_server(
             client_options={"alpn_protocols": ["h3-22"]},
             server_options={"alpn_protocols": ["h3-22"]},
@@ -147,7 +174,7 @@ class H3ConnectionTest(TestCase):
             # make third request -> dynamic table
             self._make_request(h3_client, h3_server)
 
-    def test_headers_only(self):
+    def test_request_headers_only(self):
         with client_and_server(
             client_options={"alpn_protocols": ["h3-22"]},
             server_options={"alpn_protocols": ["h3-22"]},
@@ -214,7 +241,7 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(events[0].stream_id, stream_id)
             self.assertEqual(events[0].stream_ended, True)
 
-    def test_fragmented_frame(self):
+    def test_request_fragmented_frame(self):
         quic_client = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=True)
         )
