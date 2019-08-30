@@ -499,6 +499,7 @@ class H3Connection:
                     break
                 consumed = buf.tell()
 
+                # check unicity
                 if stream.stream_type == StreamType.CONTROL:
                     assert self._peer_control_stream_id is None
                     self._peer_control_stream_id = stream_id
@@ -509,7 +510,7 @@ class H3Connection:
                     assert self._peer_encoder_stream_id is None
                     self._peer_encoder_stream_id = stream_id
 
-            if stream_id == self._peer_control_stream_id:
+            if stream.stream_type == StreamType.CONTROL:
                 # fetch next frame
                 try:
                     frame_type = buf.pull_uint_var()
@@ -547,16 +548,16 @@ class H3Connection:
                         stream_ended=stream.ended and buf.eof(),
                     )
                 )
-            else:
-                # fetch unframed data
+            elif stream.stream_type == StreamType.QPACK_DECODER:
+                # feed unframed data to decoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
                 consumed = buf.tell()
-
-                if stream_id == self._peer_decoder_stream_id:
-                    self._encoder.feed_decoder(data)
-
-                elif stream_id == self._peer_encoder_stream_id:
-                    unblocked_streams.update(self._decoder.feed_encoder(data))
+                self._encoder.feed_decoder(data)
+            elif stream.stream_type == StreamType.QPACK_ENCODER:
+                # feed unframed data to encoder
+                data = buf.pull_bytes(buf.capacity - buf.tell())
+                consumed = buf.tell()
+                unblocked_streams.update(self._decoder.feed_encoder(data))
 
         # remove processed data from buffer
         stream.buffer = stream.buffer[consumed:]
