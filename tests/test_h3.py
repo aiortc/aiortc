@@ -99,26 +99,23 @@ class H3ConnectionTest(TestCase):
 
         # receive request
         events = h3_transfer(quic_client, h3_server)
-        self.assertEqual(len(events), 2)
-
-        self.assertTrue(isinstance(events[0], RequestReceived))
         self.assertEqual(
-            events[0].headers,
+            events,
             [
-                (b":method", b"GET"),
-                (b":scheme", b"https"),
-                (b":authority", b"localhost"),
-                (b":path", b"/"),
-                (b"x-foo", b"client"),
+                RequestReceived(
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/"),
+                        (b"x-foo", b"client"),
+                    ],
+                    stream_id=stream_id,
+                    stream_ended=False,
+                ),
+                DataReceived(data=b"", stream_id=stream_id, stream_ended=True),
             ],
         )
-        self.assertEqual(events[0].stream_id, stream_id)
-        self.assertEqual(events[0].stream_ended, False)
-
-        self.assertTrue(isinstance(events[1], DataReceived))
-        self.assertEqual(events[1].data, b"")
-        self.assertEqual(events[1].stream_id, stream_id)
-        self.assertEqual(events[1].stream_ended, True)
 
         # send response
         h3_server.send_headers(
@@ -137,26 +134,25 @@ class H3ConnectionTest(TestCase):
 
         # receive response
         events = h3_transfer(quic_server, h3_client)
-        self.assertEqual(len(events), 2)
-
-        self.assertTrue(isinstance(events[0], ResponseReceived))
         self.assertEqual(
-            events[0].headers,
+            events,
             [
-                (b":status", b"200"),
-                (b"content-type", b"text/html; charset=utf-8"),
-                (b"x-foo", b"server"),
+                ResponseReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"content-type", b"text/html; charset=utf-8"),
+                        (b"x-foo", b"server"),
+                    ],
+                    stream_id=stream_id,
+                    stream_ended=False,
+                ),
+                DataReceived(
+                    data=b"<html><body>hello</body></html>",
+                    stream_id=stream_id,
+                    stream_ended=True,
+                ),
             ],
         )
-        self.assertEqual(events[0].push_id, None)
-        self.assertEqual(events[0].stream_id, stream_id)
-        self.assertEqual(events[0].stream_ended, False)
-
-        self.assertTrue(isinstance(events[1], DataReceived))
-        self.assertEqual(events[1].data, b"<html><body>hello</body></html>")
-        self.assertEqual(events[1].push_id, None)
-        self.assertEqual(events[1].stream_id, stream_id)
-        self.assertEqual(events[1].stream_ended, True)
 
     def test_handle_control_frame_headers(self):
         """
@@ -278,21 +274,22 @@ class H3ConnectionTest(TestCase):
 
             # receive request
             events = h3_transfer(quic_client, h3_server)
-            self.assertEqual(len(events), 1)
-
-            self.assertTrue(isinstance(events[0], RequestReceived))
             self.assertEqual(
-                events[0].headers,
+                events,
                 [
-                    (b":method", b"HEAD"),
-                    (b":scheme", b"https"),
-                    (b":authority", b"localhost"),
-                    (b":path", b"/"),
-                    (b"x-foo", b"client"),
+                    RequestReceived(
+                        headers=[
+                            (b":method", b"HEAD"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/"),
+                            (b"x-foo", b"client"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    )
                 ],
             )
-            self.assertEqual(events[0].stream_id, stream_id)
-            self.assertEqual(events[0].stream_ended, True)
 
             # send response
             h3_server.send_headers(
@@ -309,18 +306,20 @@ class H3ConnectionTest(TestCase):
             events = h3_transfer(quic_server, h3_client)
             self.assertEqual(len(events), 1)
 
-            self.assertTrue(isinstance(events[0], ResponseReceived))
-            self.assertEqual(
-                events[0].headers,
+            self.assertTrue(
+                events,
                 [
-                    (b":status", b"200"),
-                    (b"content-type", b"text/html; charset=utf-8"),
-                    (b"x-foo", b"server"),
+                    ResponseReceived(
+                        headers=[
+                            (b":status", b"200"),
+                            (b"content-type", b"text/html; charset=utf-8"),
+                            (b"x-foo", b"server"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    )
                 ],
             )
-            self.assertEqual(events[0].push_id, None)
-            self.assertEqual(events[0].stream_id, stream_id)
-            self.assertEqual(events[0].stream_ended, True)
 
     def test_request_fragmented_frame(self):
         quic_client = FakeQuicConnection(
@@ -464,20 +463,21 @@ class H3ConnectionTest(TestCase):
 
             # receive request
             events = h3_transfer(quic_client, h3_server)
-            self.assertEqual(len(events), 1)
-
-            self.assertTrue(isinstance(events[0], RequestReceived))
             self.assertEqual(
-                events[0].headers,
+                events,
                 [
-                    (b":method", b"GET"),
-                    (b":scheme", b"https"),
-                    (b":authority", b"localhost"),
-                    (b":path", b"/"),
+                    RequestReceived(
+                        headers=[
+                            (b":method", b"GET"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    )
                 ],
             )
-            self.assertEqual(events[0].stream_id, stream_id)
-            self.assertEqual(events[0].stream_ended, True)
 
             # send push promises
             push_stream_id_css = h3_server.push_promise(
@@ -545,99 +545,70 @@ class H3ConnectionTest(TestCase):
 
             events = h3_transfer(quic_server, h3_client)
             self.assertEqual(len(events), 8)
-
-            # css push promise
             self.assertEqual(
-                events[1],
-                PushPromiseReceived(
-                    headers=[
-                        (b":method", b"GET"),
-                        (b":scheme", b"https"),
-                        (b":authority", b"localhost"),
-                        (b":path", b"/app.js"),
-                    ],
-                    push_id=1,
-                    stream_id=stream_id,
-                ),
-            )
-
-            # js push promise
-            self.assertEqual(
-                events[1],
-                PushPromiseReceived(
-                    headers=[
-                        (b":method", b"GET"),
-                        (b":scheme", b"https"),
-                        (b":authority", b"localhost"),
-                        (b":path", b"/app.js"),
-                    ],
-                    push_id=1,
-                    stream_id=stream_id,
-                ),
-            )
-
-            # response
-            self.assertEqual(
-                events[2],
-                ResponseReceived(
-                    headers=[
-                        (b":status", b"200"),
-                        (b"content-type", b"text/html; charset=utf-8"),
-                    ],
-                    stream_id=stream_id,
-                    stream_ended=False,
-                ),
-            )
-            self.assertEqual(
-                events[3],
-                DataReceived(
-                    data=b"<html><body>hello</body></html>",
-                    stream_id=stream_id,
-                    stream_ended=True,
-                ),
-            )
-
-            # css push
-            self.assertEqual(
-                events[4],
-                ResponseReceived(
-                    headers=[(b":status", b"200"), (b"content-type", b"text/css")],
-                    push_id=0,
-                    stream_id=push_stream_id_css,
-                    stream_ended=False,
-                ),
-            )
-            self.assertEqual(
-                events[5],
-                DataReceived(
-                    data=b"body { color: pink }",
-                    push_id=0,
-                    stream_id=push_stream_id_css,
-                    stream_ended=True,
-                ),
-            )
-
-            # js push
-            self.assertEqual(
-                events[6],
-                ResponseReceived(
-                    headers=[
-                        (b":status", b"200"),
-                        (b"content-type", b"application/javascript"),
-                    ],
-                    push_id=1,
-                    stream_id=push_stream_id_js,
-                    stream_ended=False,
-                ),
-            )
-            self.assertEqual(
-                events[7],
-                DataReceived(
-                    data=b"alert('howdee');",
-                    push_id=1,
-                    stream_id=push_stream_id_js,
-                    stream_ended=True,
-                ),
+                events,
+                [
+                    PushPromiseReceived(
+                        headers=[
+                            (b":method", b"GET"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/app.css"),
+                        ],
+                        push_id=0,
+                        stream_id=stream_id,
+                    ),
+                    PushPromiseReceived(
+                        headers=[
+                            (b":method", b"GET"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/app.js"),
+                        ],
+                        push_id=1,
+                        stream_id=stream_id,
+                    ),
+                    ResponseReceived(
+                        headers=[
+                            (b":status", b"200"),
+                            (b"content-type", b"text/html; charset=utf-8"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=False,
+                    ),
+                    DataReceived(
+                        data=b"<html><body>hello</body></html>",
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    ),
+                    ResponseReceived(
+                        headers=[(b":status", b"200"), (b"content-type", b"text/css")],
+                        push_id=0,
+                        stream_id=push_stream_id_css,
+                        stream_ended=False,
+                    ),
+                    DataReceived(
+                        data=b"body { color: pink }",
+                        push_id=0,
+                        stream_id=push_stream_id_css,
+                        stream_ended=True,
+                    ),
+                    ResponseReceived(
+                        headers=[
+                            (b":status", b"200"),
+                            (b"content-type", b"application/javascript"),
+                        ],
+                        push_id=1,
+                        stream_id=push_stream_id_js,
+                        stream_ended=False,
+                    ),
+                    DataReceived(
+                        data=b"alert('howdee');",
+                        push_id=1,
+                        stream_id=push_stream_id_js,
+                        stream_ended=True,
+                    ),
+                ],
             )
 
     def test_blocked_stream(self):
