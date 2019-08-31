@@ -448,6 +448,12 @@ class H3Connection:
                     )
                 )
             elif stream.frame_type == FrameType.PUSH_PROMISE:
+                if not self._is_client:
+                    raise QuicConnectionError(
+                        error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
+                        frame_type=None,
+                        reason_phrase="Clients must not send PUSH_PROMISE",
+                    )
                 frame_buf = Buffer(data=frame_data)
                 push_id = frame_buf.pull_uint_var()
                 headers = self._decode_headers(

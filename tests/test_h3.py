@@ -202,6 +202,25 @@ class H3ConnectionTest(TestCase):
             )
         self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
 
+    def test_handle_request_frame_push_promise_from_client(self):
+        """
+        A server should not receive PUSH_PROMISE on a request stream.
+        """
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=encode_frame(FrameType.PUSH_PROMISE, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+
     def test_handle_request_frame_wrong_frame_type(self):
         quic_server = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=False)
