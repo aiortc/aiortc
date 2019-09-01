@@ -367,7 +367,7 @@ class H3ConnectionTest(TestCase):
         )
 
         # send push promise
-        push_stream_id = h3_server.push_promise(
+        push_stream_id = h3_server.send_push_promise(
             stream_id=stream_id,
             headers=[
                 (b":method", b"GET"),
@@ -475,7 +475,7 @@ class H3ConnectionTest(TestCase):
             )
 
             # send push promises
-            push_stream_id_css = h3_server.push_promise(
+            push_stream_id_css = h3_server.send_push_promise(
                 stream_id=stream_id,
                 headers=[
                     (b":method", b"GET"),
@@ -486,7 +486,7 @@ class H3ConnectionTest(TestCase):
             )
             self.assertEqual(push_stream_id_css, 15)
 
-            push_stream_id_js = h3_server.push_promise(
+            push_stream_id_js = h3_server.send_push_promise(
                 stream_id=stream_id,
                 headers=[
                     (b":method", b"GET"),

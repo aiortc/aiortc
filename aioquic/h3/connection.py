@@ -163,7 +163,7 @@ class H3Connection:
                 )
         return []
 
-    def push_promise(self, stream_id: int, headers: Headers) -> int:
+    def send_push_promise(self, stream_id: int, headers: Headers) -> int:
         """
         Send a push promise related to the specified stream.
 
