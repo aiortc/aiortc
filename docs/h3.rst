@@ -30,3 +30,15 @@ Events
 
     .. autoclass:: PushPromiseReceived
         :members:
+
+
+Exceptions
+----------
+
+.. automodule:: aioquic.h3.exceptions
+
+    .. autoclass:: H3Error
+        :members:
+
+    .. autoclass:: NoAvailablePushIDError
+        :members:

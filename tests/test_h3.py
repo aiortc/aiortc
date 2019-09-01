@@ -10,6 +10,7 @@ from aioquic.h3.connection import (
     encode_frame,
 )
 from aioquic.h3.events import DataReceived, HeadersReceived, PushPromiseReceived
+from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnectionError
 from aioquic.quic.events import StreamDataReceived
@@ -605,6 +606,69 @@ class H3ConnectionTest(TestCase):
                     ),
                 ],
             )
+
+    def test_request_with_server_push_max_push_id(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
+        ) as (quic_client, quic_server):
+            h3_client = H3Connection(quic_client)
+            h3_server = H3Connection(quic_server)
+
+            # send request
+            stream_id = quic_client.get_next_available_stream_id()
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                ],
+                end_stream=True,
+            )
+
+            # receive request
+            events = h3_transfer(quic_client, h3_server)
+            self.assertEqual(
+                events,
+                [
+                    HeadersReceived(
+                        headers=[
+                            (b":method", b"GET"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    )
+                ],
+            )
+
+            # send push promises
+            for i in range(0, 8):
+                h3_server.send_push_promise(
+                    stream_id=stream_id,
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", "/{}.css".format(i).encode("ascii")),
+                    ],
+                )
+
+            # send one too many
+            with self.assertRaises(NoAvailablePushIDError):
+                h3_server.send_push_promise(
+                    stream_id=stream_id,
+                    headers=[
+                        (b":method", b"GET"),
+                        (b":scheme", b"https"),
+                        (b":authority", b"localhost"),
+                        (b":path", b"/8.css"),
+                    ],
+                )
 
     def test_blocked_stream(self):
         quic_client = FakeQuicConnection(

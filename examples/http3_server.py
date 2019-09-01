@@ -18,6 +18,7 @@ from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
+from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
 from aioquic.quic.logger import QuicLogger, QuicLoggerTrace
@@ -36,13 +37,17 @@ class HttpRequestHandler:
     def __init__(
         self,
         *,
+        authority: bytes,
         connection: HttpConnection,
+        protocol: QuicConnectionProtocol,
         scope: Dict,
         stream_ended: bool,
         stream_id: int,
         transmit: Callable[[], None],
     ):
+        self.authority = authority
         self.connection = connection
+        self.protocol = protocol
         self.queue: asyncio.Queue[Dict] = asyncio.Queue()
         self.scope = scope
         self.stream_id = stream_id
@@ -83,6 +88,30 @@ class HttpRequestHandler:
                 stream_id=self.stream_id,
                 data=message.get("body", b""),
                 end_stream=not message.get("more_body", False),
+            )
+        elif message["type"] == "http.response.push" and isinstance(
+            self.connection, H3Connection
+        ):
+            request_headers = [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", self.authority),
+                (b":path", message["path"].encode("utf8")),
+            ] + [(k, v) for k, v in message["headers"]]
+
+            # send push promise
+            try:
+                push_stream_id = self.connection.send_push_promise(
+                    stream_id=self.stream_id, headers=request_headers
+                )
+            except NoAvailablePushIDError:
+                return
+
+            # fake request
+            self.protocol.http_event_received(
+                HeadersReceived(
+                    headers=request_headers, stream_ended=True, stream_id=push_stream_id
+                )
             )
         self.transmit()
 
@@ -182,6 +211,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
 
     def http_event_received(self, event: HttpEvent) -> None:
         if isinstance(event, HeadersReceived) and event.stream_id not in self._handlers:
+            authority = None
             headers = []
             http_version = "0.9" if isinstance(self._http, H0Connection) else "3"
             raw_path = b""
@@ -189,6 +219,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
             protocol = None
             for header, value in event.headers:
                 if header == b":authority":
+                    authority = value
                     headers.append((b"host", value))
                 elif header == b":method":
                     method = value.decode("utf8")
@@ -232,7 +263,11 @@ class HttpServerProtocol(QuicConnectionProtocol):
                     transmit=self.transmit,
                 )
             else:
+                extensions: Dict[str, Dict] = {}
+                if isinstance(self._http, H3Connection):
+                    extensions["http.response.push"] = {}
                 scope = {
+                    "extensions": extensions,
                     "headers": headers,
                     "http_version": http_version,
                     "method": method,
@@ -244,7 +279,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
                     "type": "http",
                 }
                 handler = HttpRequestHandler(
+                    authority=authority,
                     connection=self._http,
+                    protocol=self,
                     scope=scope,
                     stream_ended=event.stream_ended,
                     stream_id=event.stream_id,

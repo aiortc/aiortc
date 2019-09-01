@@ -12,6 +12,7 @@ from aioquic.h3.events import (
     HttpEvent,
     PushPromiseReceived,
 )
+from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.connection import (
     QuicConnection,
     QuicConnectionError,
@@ -173,7 +174,8 @@ class H3Connection:
         :param headers: The HTTP request headers for this push.
         """
         assert not self._is_client, "Only servers may send a push promise."
-        assert self._max_push_id is not None and self._next_push_id < self._max_push_id
+        if self._max_push_id is None or self._next_push_id >= self._max_push_id:
+            raise NoAvailablePushIDError
 
         # send push promise
         push_id = self._next_push_id
@@ -346,7 +348,7 @@ class H3Connection:
                 ),
             ),
         )
-        if self._is_client:
+        if self._is_client and self._max_push_id is not None:
             self._quic.send_stream_data(
                 self._local_control_stream_id,
                 encode_frame(FrameType.MAX_PUSH_ID, encode_uint_var(self._max_push_id)),
