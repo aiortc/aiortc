@@ -9,9 +9,20 @@ from asgiref.wsgi import WsgiToAsgi
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
 from starlette.websockets import WebSocketDisconnect
 
+templates = Jinja2Templates(directory="templates")
+
 app = Starlette()
+
+
+@app.route("/")
+async def homepage(request):
+    """
+    Simple homepage.
+    """
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.route("/echo", methods=["POST"])
