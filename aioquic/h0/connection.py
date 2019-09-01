@@ -1,12 +1,6 @@
 from typing import Dict, List
 
-from aioquic.h3.events import (
-    DataReceived,
-    Headers,
-    HttpEvent,
-    RequestReceived,
-    ResponseReceived,
-)
+from aioquic.h3.events import DataReceived, Headers, HeadersReceived, HttpEvent
 from aioquic.quic.connection import QuicConnection
 from aioquic.quic.events import QuicEvent, StreamDataReceived
 
@@ -29,14 +23,14 @@ class H0Connection:
             if not self._headers_received.get(event.stream_id, False):
                 if self._is_client:
                     http_events.append(
-                        ResponseReceived(
+                        HeadersReceived(
                             headers=[], stream_ended=False, stream_id=event.stream_id
                         )
                     )
                 else:
                     method, path = data.rstrip().split(b" ", 1)
                     http_events.append(
-                        RequestReceived(
+                        HeadersReceived(
                             headers=[(b":method", method), (b":path", path)],
                             stream_ended=False,
                             stream_id=event.stream_id,

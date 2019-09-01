@@ -8,10 +8,9 @@ from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
 from aioquic.h3.events import (
     DataReceived,
     Headers,
+    HeadersReceived,
     HttpEvent,
     PushPromiseReceived,
-    RequestReceived,
-    ResponseReceived,
 )
 from aioquic.quic.connection import (
     QuicConnection,
@@ -308,7 +307,7 @@ class H3Connection:
         elif frame_type == FrameType.HEADERS:
             headers = self._decode_headers(stream_id, frame_data)
             http_events.append(
-                ResponseReceived(
+                HeadersReceived(
                     headers=headers,
                     push_id=push_id,
                     stream_id=stream_id,
@@ -439,9 +438,8 @@ class H3Connection:
                 except StreamBlocked:
                     stream.blocked = True
                     break
-                cls = ResponseReceived if self._is_client else RequestReceived
                 http_events.append(
-                    cls(
+                    HeadersReceived(
                         headers=headers,
                         stream_id=stream_id,
                         stream_ended=stream_ended and buf.eof(),
@@ -573,9 +571,8 @@ class H3Connection:
             stream = self._stream[stream_id]
             decoder, headers = self._decoder.resume_header(stream_id)
             stream.blocked = False
-            cls = ResponseReceived if self._is_client else RequestReceived
             http_events.append(
-                cls(
+                HeadersReceived(
                     headers=headers,
                     stream_id=stream_id,
                     stream_ended=stream.ended and not stream.buffer,

@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from aioquic.h0.connection import H0Connection
-from aioquic.h3.events import DataReceived, RequestReceived, ResponseReceived
+from aioquic.h3.events import DataReceived, HeadersReceived
 
 from .test_connection import client_and_server, transfer
 
@@ -45,7 +45,7 @@ class H0ConnectionTest(TestCase):
             events = h0_transfer(quic_client, h0_server)
             self.assertEqual(len(events), 2)
 
-            self.assertTrue(isinstance(events[0], RequestReceived))
+            self.assertTrue(isinstance(events[0], HeadersReceived))
             self.assertEqual(
                 events[0].headers, [(b":method", b"GET"), (b":path", b"/")]
             )
@@ -75,7 +75,7 @@ class H0ConnectionTest(TestCase):
             events = h0_transfer(quic_server, h0_client)
             self.assertEqual(len(events), 2)
 
-            self.assertTrue(isinstance(events[0], ResponseReceived))
+            self.assertTrue(isinstance(events[0], HeadersReceived))
             self.assertEqual(events[0].headers, [])
             self.assertEqual(events[0].stream_id, stream_id)
             self.assertEqual(events[0].stream_ended, False)
@@ -110,7 +110,7 @@ class H0ConnectionTest(TestCase):
             events = h0_transfer(quic_client, h0_server)
             self.assertEqual(len(events), 2)
 
-            self.assertTrue(isinstance(events[0], RequestReceived))
+            self.assertTrue(isinstance(events[0], HeadersReceived))
             self.assertEqual(
                 events[0].headers, [(b":method", b"HEAD"), (b":path", b"/")]
             )
@@ -136,7 +136,7 @@ class H0ConnectionTest(TestCase):
             events = h0_transfer(quic_server, h0_client)
             self.assertEqual(len(events), 2)
 
-            self.assertTrue(isinstance(events[0], ResponseReceived))
+            self.assertTrue(isinstance(events[0], HeadersReceived))
             self.assertEqual(events[0].headers, [])
             self.assertEqual(events[0].stream_id, stream_id)
             self.assertEqual(events[0].stream_ended, False)

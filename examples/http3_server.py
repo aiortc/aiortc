@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, HttpEvent, RequestReceived
+from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
 from aioquic.quic.logger import QuicLogger
@@ -181,7 +181,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
         self._http: Optional[HttpConnection] = None
 
     def http_event_received(self, event: HttpEvent) -> None:
-        if isinstance(event, RequestReceived) and event.stream_id not in self._handlers:
+        if isinstance(event, HeadersReceived) and event.stream_id not in self._handlers:
             headers = []
             http_version = "0.9" if isinstance(self._http, H0Connection) else "3"
             raw_path = b""

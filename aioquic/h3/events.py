@@ -33,6 +33,25 @@ class DataReceived(HttpEvent):
 
 
 @dataclass
+class HeadersReceived(HttpEvent):
+    """
+    The HeadersReceived event is fired whenever headers are received.
+    """
+
+    headers: Headers
+    "The headers."
+
+    stream_id: int
+    "The ID of the stream the headers were received for."
+
+    stream_ended: bool
+    "Whether the STREAM frame had the FIN bit set."
+
+    push_id: Optional[int] = None
+    "The Push ID or `None` if this is not a push."
+
+
+@dataclass
 class PushPromiseReceived(HttpEvent):
     """
     The PushedStreamReceived event is fired whenever a pushed stream has been
@@ -49,36 +68,6 @@ class PushPromiseReceived(HttpEvent):
     "The Stream ID of the stream that the push is related to."
 
 
-@dataclass
-class RequestReceived(HttpEvent):
-    """
-    The RequestReceived event is fired whenever request headers are received.
-    """
+# backwards compatibility
 
-    headers: Headers
-    "The request headers."
-
-    stream_id: int
-    "The ID of the stream the headers were received for."
-
-    stream_ended: bool
-    "Whether the STREAM frame had the FIN bit set."
-
-
-@dataclass
-class ResponseReceived(HttpEvent):
-    """
-    The ResponseReceived event is fired whenever response headers are received.
-    """
-
-    headers: Headers
-    "The response headers."
-
-    stream_id: int
-    "The ID of the stream the headers were received for."
-
-    stream_ended: bool
-    "Whether the STREAM frame had the FIN bit set."
-
-    push_id: Optional[int] = None
-    "The Push ID or `None` if this is not a push."
+RequestReceived = ResponseReceived = HeadersReceived

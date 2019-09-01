@@ -18,7 +18,7 @@ import urllib3
 from http3_client import HttpClient
 
 from aioquic.asyncio import connect
-from aioquic.h3.events import DataReceived, ResponseReceived
+from aioquic.h3.events import DataReceived, HeadersReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
@@ -153,7 +153,7 @@ async def test_http_0(server: Server, configuration: QuicConfiguration):
 
         # perform HTTP request
         events = await protocol.get(server.host, server.path)
-        if events and isinstance(events[0], ResponseReceived):
+        if events and isinstance(events[0], HeadersReceived):
             server.result |= Result.D
 
 
@@ -172,7 +172,7 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
 
         # perform HTTP request
         events = await protocol.get(server.host, server.path)
-        if events and isinstance(events[0], ResponseReceived):
+        if events and isinstance(events[0], HeadersReceived):
             server.result |= Result.D
             server.result |= Result.three
 

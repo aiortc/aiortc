@@ -16,7 +16,7 @@ from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, HttpEvent, ResponseReceived
+from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.quic.logger import QuicLogger
@@ -69,7 +69,7 @@ class WebSocket:
         self.transmit()
 
     def http_event_received(self, event: HttpEvent):
-        if isinstance(event, ResponseReceived):
+        if isinstance(event, HeadersReceived):
             for header, value in event.headers:
                 if header == b"sec-websocket-protocol":
                     self.subprotocol = value.decode("utf8")
@@ -150,7 +150,7 @@ class HttpClient(QuicConnectionProtocol):
         return websocket
 
     def http_event_received(self, event: HttpEvent):
-        if isinstance(event, (ResponseReceived, DataReceived)):
+        if isinstance(event, (HeadersReceived, DataReceived)):
             stream_id = event.stream_id
             if stream_id in self._request_events:
                 # http
@@ -246,7 +246,7 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
 
             # print response
             for http_event in http_events:
-                if isinstance(http_event, ResponseReceived):
+                if isinstance(http_event, HeadersReceived):
                     headers = b""
                     for k, v in http_event.headers:
                         headers += k + b": " + v + b"\r\n"

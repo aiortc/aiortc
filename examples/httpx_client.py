@@ -17,7 +17,7 @@ from httpx.models import AsyncRequest, AsyncResponse
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, HttpEvent, ResponseReceived
+from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.quic.logger import QuicLogger
@@ -71,7 +71,7 @@ class H3Dispatcher(QuicConnectionProtocol, AsyncDispatcher):
         headers = []
         status_code = None
         for event in events:
-            if isinstance(event, ResponseReceived):
+            if isinstance(event, HeadersReceived):
                 for header, value in event.headers:
                     if header == b":status":
                         status_code = int(value.decode("ascii"))
@@ -90,7 +90,7 @@ class H3Dispatcher(QuicConnectionProtocol, AsyncDispatcher):
         )
 
     def http_event_received(self, event: HttpEvent):
-        if isinstance(event, (ResponseReceived, DataReceived)):
+        if isinstance(event, (HeadersReceived, DataReceived)):
             stream_id = event.stream_id
             if stream_id in self._request_events:
                 self._request_events[event.stream_id].append(event)

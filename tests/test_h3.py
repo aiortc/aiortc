@@ -9,12 +9,7 @@ from aioquic.h3.connection import (
     StreamType,
     encode_frame,
 )
-from aioquic.h3.events import (
-    DataReceived,
-    PushPromiseReceived,
-    RequestReceived,
-    ResponseReceived,
-)
+from aioquic.h3.events import DataReceived, HeadersReceived, PushPromiseReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnectionError
 from aioquic.quic.events import StreamDataReceived
@@ -102,7 +97,7 @@ class H3ConnectionTest(TestCase):
         self.assertEqual(
             events,
             [
-                RequestReceived(
+                HeadersReceived(
                     headers=[
                         (b":method", b"GET"),
                         (b":scheme", b"https"),
@@ -137,7 +132,7 @@ class H3ConnectionTest(TestCase):
         self.assertEqual(
             events,
             [
-                ResponseReceived(
+                HeadersReceived(
                     headers=[
                         (b":status", b"200"),
                         (b"content-type", b"text/html; charset=utf-8"),
@@ -277,7 +272,7 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(
                 events,
                 [
-                    RequestReceived(
+                    HeadersReceived(
                         headers=[
                             (b":method", b"HEAD"),
                             (b":scheme", b"https"),
@@ -309,7 +304,7 @@ class H3ConnectionTest(TestCase):
             self.assertTrue(
                 events,
                 [
-                    ResponseReceived(
+                    HeadersReceived(
                         headers=[
                             (b":status", b"200"),
                             (b"content-type", b"text/html; charset=utf-8"),
@@ -351,7 +346,7 @@ class H3ConnectionTest(TestCase):
         self.assertEqual(
             events,
             [
-                RequestReceived(
+                HeadersReceived(
                     headers=[
                         (b":method", b"GET"),
                         (b":scheme", b"https"),
@@ -417,7 +412,7 @@ class H3ConnectionTest(TestCase):
                     push_id=0,
                     stream_id=stream_id,
                 ),
-                ResponseReceived(
+                HeadersReceived(
                     headers=[
                         (b":status", b"200"),
                         (b"content-type", b"text/html; charset=utf-8"),
@@ -430,7 +425,7 @@ class H3ConnectionTest(TestCase):
                 DataReceived(data=b"m", stream_id=0, stream_ended=False),
                 DataReceived(data=b"l", stream_id=0, stream_ended=False),
                 DataReceived(data=b"", stream_id=0, stream_ended=True),
-                ResponseReceived(
+                HeadersReceived(
                     headers=[(b":status", b"200"), (b"content-type", b"text/plain")],
                     stream_id=15,
                     stream_ended=False,
@@ -466,7 +461,7 @@ class H3ConnectionTest(TestCase):
             self.assertEqual(
                 events,
                 [
-                    RequestReceived(
+                    HeadersReceived(
                         headers=[
                             (b":method", b"GET"),
                             (b":scheme", b"https"),
@@ -568,7 +563,7 @@ class H3ConnectionTest(TestCase):
                         push_id=1,
                         stream_id=stream_id,
                     ),
-                    ResponseReceived(
+                    HeadersReceived(
                         headers=[
                             (b":status", b"200"),
                             (b"content-type", b"text/html; charset=utf-8"),
@@ -581,7 +576,7 @@ class H3ConnectionTest(TestCase):
                         stream_id=stream_id,
                         stream_ended=True,
                     ),
-                    ResponseReceived(
+                    HeadersReceived(
                         headers=[(b":status", b"200"), (b"content-type", b"text/css")],
                         push_id=0,
                         stream_id=push_stream_id_css,
@@ -593,7 +588,7 @@ class H3ConnectionTest(TestCase):
                         stream_id=push_stream_id_css,
                         stream_ended=True,
                     ),
-                    ResponseReceived(
+                    HeadersReceived(
                         headers=[
                             (b":status", b"200"),
                             (b"content-type", b"application/javascript"),
@@ -661,7 +656,7 @@ class H3ConnectionTest(TestCase):
                 )
             ),
             [
-                ResponseReceived(
+                HeadersReceived(
                     headers=[
                         (b":status", b"200"),
                         (b"date", b"Mon, 22 Jul 2019 06:33:33 GMT"),
