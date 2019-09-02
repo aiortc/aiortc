@@ -562,6 +562,10 @@ class H3Connection:
                 data = buf.pull_bytes(buf.capacity - buf.tell())
                 consumed = buf.tell()
                 unblocked_streams.update(self._decoder.feed_encoder(data))
+            else:
+                # unknown stream type, discard data
+                buf.seek(buf.capacity)
+                consumed = buf.tell()
 
         # remove processed data from buffer
         stream.buffer = stream.buffer[consumed:]

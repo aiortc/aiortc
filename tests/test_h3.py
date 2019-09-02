@@ -676,6 +676,18 @@ class H3ConnectionTest(TestCase):
             ],
         )
 
+    def test_uni_stream_grease(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
+        ) as (quic_client, quic_server):
+            h3_server = H3Connection(quic_server)
+
+            quic_client.send_stream_data(
+                14, b"\xff\xff\xff\xff\xff\xff\xff\xfeGREASE is the word"
+            )
+            self.assertEqual(h3_transfer(quic_client, h3_server), [])
+
     def test_uni_stream_type(self):
         with client_and_server(
             client_options={"alpn_protocols": ["h3-22"]},
