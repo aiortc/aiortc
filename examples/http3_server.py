@@ -20,7 +20,7 @@ from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
-from aioquic.quic.logger import QuicLogger
+from aioquic.quic.logger import QuicLogger, QuicLoggerTrace
 from aioquic.tls import SessionTicket
 
 try:
@@ -289,13 +289,13 @@ class QuicLoggerCustom(QuicLogger):
     Custom QUIC logger which writes one trace per file.
     """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         if not os.path.isdir(path):
             raise ValueError("QUIC log output directory '%s' does not exist" % path)
         self.path = path
         super().__init__()
 
-    def end_trace(self, trace):
+    def end_trace(self, trace: QuicLoggerTrace) -> None:
         trace_dict = trace.to_dict()
         trace_path = os.path.join(
             self.path, trace_dict["common_fields"]["ODCID"] + ".qlog"
