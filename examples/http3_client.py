@@ -16,7 +16,7 @@ from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
+from aioquic.h3.events import DataReceived, H3Event, HeadersReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.quic.logger import QuicLogger
@@ -68,7 +68,7 @@ class WebSocket:
         self.http.send_data(stream_id=self.stream_id, data=data, end_stream=False)
         self.transmit()
 
-    def http_event_received(self, event: HttpEvent):
+    def http_event_received(self, event: H3Event):
         if isinstance(event, HeadersReceived):
             for header, value in event.headers:
                 if header == b"sec-websocket-protocol":
@@ -89,8 +89,8 @@ class HttpClient(QuicConnectionProtocol):
         super().__init__(*args, **kwargs)
 
         self._http: Optional[HttpConnection] = None
-        self._request_events: Dict[int, Deque[HttpEvent]] = {}
-        self._request_waiter: Dict[int, asyncio.Future[Deque[HttpEvent]]] = {}
+        self._request_events: Dict[int, Deque[H3Event]] = {}
+        self._request_waiter: Dict[int, asyncio.Future[Deque[H3Event]]] = {}
         self._websockets: Dict[int, WebSocket] = {}
 
         if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
@@ -98,7 +98,7 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, authority: str, path: str) -> Deque[HttpEvent]:
+    async def get(self, authority: str, path: str) -> Deque[H3Event]:
         """
         Perform a GET request.
         """
@@ -110,6 +110,7 @@ class HttpClient(QuicConnectionProtocol):
                 (b":scheme", b"https"),
                 (b":authority", authority.encode("utf8")),
                 (b":path", path.encode("utf8")),
+                (b"user-agent", b"aioquic"),
             ],
         )
         self._http.send_data(stream_id=stream_id, data=b"", end_stream=True)
@@ -149,7 +150,7 @@ class HttpClient(QuicConnectionProtocol):
 
         return websocket
 
-    def http_event_received(self, event: HttpEvent):
+    def http_event_received(self, event: H3Event):
         if isinstance(event, (HeadersReceived, DataReceived)):
             stream_id = event.stream_id
             if stream_id in self._request_events:

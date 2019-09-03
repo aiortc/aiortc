@@ -7,9 +7,9 @@ from pylsqpack import Decoder, Encoder, StreamBlocked
 from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
 from aioquic.h3.events import (
     DataReceived,
+    H3Event,
     Headers,
     HeadersReceived,
-    HttpEvent,
     PushPromiseReceived,
 )
 from aioquic.h3.exceptions import NoAvailablePushIDError
@@ -144,7 +144,7 @@ class H3Connection:
 
         self._init_connection()
 
-    def handle_event(self, event: QuicEvent) -> List[HttpEvent]:
+    def handle_event(self, event: QuicEvent) -> List[H3Event]:
         """
         Handle a QUIC event and return a list of HTTP events.
 
@@ -291,11 +291,11 @@ class H3Connection:
         push_id: int,
         stream_id: int,
         stream_ended: bool,
-    ) -> List[HttpEvent]:
+    ) -> List[H3Event]:
         """
         Handle a frame received on a push stream.
         """
-        http_events: List[HttpEvent] = []
+        http_events: List[H3Event] = []
 
         if frame_type == FrameType.DATA:
             http_events.append(
@@ -364,11 +364,11 @@ class H3Connection:
 
     def _receive_stream_data_bidi(
         self, stream_id: int, data: bytes, stream_ended: bool
-    ) -> List[HttpEvent]:
+    ) -> List[H3Event]:
         """
         Client-initiated bidirectional streams carry requests and responses.
         """
-        http_events: List[HttpEvent] = []
+        http_events: List[H3Event] = []
 
         stream = self._stream[stream_id]
         stream.buffer += data
@@ -484,8 +484,8 @@ class H3Connection:
 
     def _receive_stream_data_uni(
         self, stream_id: int, data: bytes, stream_ended: bool
-    ) -> List[HttpEvent]:
-        http_events: List[HttpEvent] = []
+    ) -> List[H3Event]:
+        http_events: List[H3Event] = []
 
         stream = self._stream[stream_id]
         stream.buffer += data

@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h0.connection import H0Connection
 from aioquic.h3.connection import H3Connection
-from aioquic.h3.events import DataReceived, HeadersReceived, HttpEvent
+from aioquic.h3.events import DataReceived, H3Event, HeadersReceived
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ProtocolNegotiated, QuicEvent
@@ -56,7 +56,7 @@ class HttpRequestHandler:
         if stream_ended:
             self.queue.put_nowait({"type": "http.request"})
 
-    def http_event_received(self, event: HttpEvent):
+    def http_event_received(self, event: H3Event):
         if isinstance(event, DataReceived):
             self.queue.put_nowait(
                 {
@@ -133,7 +133,7 @@ class WebSocketHandler:
         self.transmit = transmit
         self.websocket: Optional[wsproto.Connection] = None
 
-    def http_event_received(self, event: HttpEvent) -> None:
+    def http_event_received(self, event: H3Event) -> None:
         if isinstance(event, DataReceived):
             self.websocket.receive_data(event.data)
 
@@ -209,7 +209,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
         self._handlers: Dict[int, Handler] = {}
         self._http: Optional[HttpConnection] = None
 
-    def http_event_received(self, event: HttpEvent) -> None:
+    def http_event_received(self, event: H3Event) -> None:
         if isinstance(event, HeadersReceived) and event.stream_id not in self._handlers:
             authority = None
             headers = []

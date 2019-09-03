@@ -4,16 +4,14 @@ from typing import List, Optional, Tuple
 Headers = List[Tuple[bytes, bytes]]
 
 
-class HttpEvent:
+class H3Event:
     """
     Base class for HTTP/3 events.
     """
 
-    pass
-
 
 @dataclass
-class DataReceived(HttpEvent):
+class DataReceived(H3Event):
     """
     The DataReceived event is fired whenever data is received on a stream from
     the remote peer.
@@ -33,7 +31,7 @@ class DataReceived(HttpEvent):
 
 
 @dataclass
-class HeadersReceived(HttpEvent):
+class HeadersReceived(H3Event):
     """
     The HeadersReceived event is fired whenever headers are received.
     """
@@ -52,7 +50,7 @@ class HeadersReceived(HttpEvent):
 
 
 @dataclass
-class PushPromiseReceived(HttpEvent):
+class PushPromiseReceived(H3Event):
     """
     The PushedStreamReceived event is fired whenever a pushed stream has been
     received from the remote peer.
