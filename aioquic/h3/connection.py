@@ -585,7 +585,10 @@ class H3Connection:
         # process unblocked streams
         for stream_id in unblocked_streams:
             stream = self._stream[stream_id]
+
+            # decode headers
             decoder, headers = self._decoder.resume_header(stream_id)
+            self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
             stream.blocked = False
 
             # update state and emit headers
