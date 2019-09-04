@@ -752,6 +752,101 @@ class H3ConnectionTest(TestCase):
             )
             self.assertEqual(h3_transfer(quic_client, h3_server), [])
 
+    def test_request_with_trailers(self):
+        with client_and_server(
+            client_options={"alpn_protocols": ["h3-22"]},
+            server_options={"alpn_protocols": ["h3-22"]},
+        ) as (quic_client, quic_server):
+            h3_client = H3Connection(quic_client)
+            h3_server = H3Connection(quic_server)
+
+            # send request with trailers
+            stream_id = quic_client.get_next_available_stream_id()
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"GET"),
+                    (b":scheme", b"https"),
+                    (b":authority", b"localhost"),
+                    (b":path", b"/"),
+                ],
+                end_stream=False,
+            )
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[(b"x-some-trailer", b"foo")],
+                end_stream=True,
+            )
+
+            # receive request
+            events = h3_transfer(quic_client, h3_server)
+            self.assertEqual(
+                events,
+                [
+                    HeadersReceived(
+                        headers=[
+                            (b":method", b"GET"),
+                            (b":scheme", b"https"),
+                            (b":authority", b"localhost"),
+                            (b":path", b"/"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=False,
+                    ),
+                    HeadersReceived(
+                        headers=[(b"x-some-trailer", b"foo")],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    ),
+                ],
+            )
+
+            # send response
+            h3_server.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":status", b"200"),
+                    (b"content-type", b"text/html; charset=utf-8"),
+                ],
+                end_stream=False,
+            )
+            h3_server.send_data(
+                stream_id=stream_id,
+                data=b"<html><body>hello</body></html>",
+                end_stream=False,
+            )
+            h3_server.send_headers(
+                stream_id=stream_id,
+                headers=[(b"x-some-trailer", b"bar")],
+                end_stream=True,
+            )
+
+            # receive response
+            events = h3_transfer(quic_server, h3_client)
+            self.assertEqual(
+                events,
+                [
+                    HeadersReceived(
+                        headers=[
+                            (b":status", b"200"),
+                            (b"content-type", b"text/html; charset=utf-8"),
+                        ],
+                        stream_id=stream_id,
+                        stream_ended=False,
+                    ),
+                    DataReceived(
+                        data=b"<html><body>hello</body></html>",
+                        stream_id=stream_id,
+                        stream_ended=False,
+                    ),
+                    HeadersReceived(
+                        headers=[(b"x-some-trailer", b"bar")],
+                        stream_id=stream_id,
+                        stream_ended=True,
+                    ),
+                ],
+            )
+
     def test_uni_stream_type(self):
         with client_and_server(
             client_options={"alpn_protocols": ["h3-22"]},
