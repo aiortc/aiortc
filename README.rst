@@ -58,6 +58,7 @@ Features
 - connection migration and NAT rebinding
 - logging TLS traffic secrets
 - logging QUIC events in QLOG format
+- HTTP/3 server push support
 
 Running the examples
 --------------------
