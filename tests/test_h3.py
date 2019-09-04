@@ -358,9 +358,7 @@ class H3ConnectionTest(TestCase):
 
             # receive response
             events = h3_transfer(quic_server, h3_client)
-            self.assertEqual(len(events), 1)
-
-            self.assertTrue(
+            self.assertEqual(
                 events,
                 [
                     HeadersReceived(
@@ -491,6 +489,7 @@ class H3ConnectionTest(TestCase):
                     push_id=0,
                 ),
                 DataReceived(data=b"text", stream_id=15, stream_ended=False, push_id=0),
+                DataReceived(data=b"", stream_id=15, stream_ended=True, push_id=0),
             ],
         )
 
@@ -598,7 +597,6 @@ class H3ConnectionTest(TestCase):
             # receive push promises, response and push responses
 
             events = h3_transfer(quic_server, h3_client)
-            self.assertEqual(len(events), 8)
             self.assertEqual(
                 events,
                 [

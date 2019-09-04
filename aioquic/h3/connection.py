@@ -292,12 +292,7 @@ class H3Connection:
             )
 
     def _handle_request_or_push_frame(
-        self,
-        frame_type: int,
-        frame_data: bytes,
-        push_id: int,
-        stream_id: int,
-        stream_ended: bool,
+        self, frame_type: int, frame_data: bytes, stream_id: int, stream_ended: bool
     ) -> List[H3Event]:
         """
         Handle a frame received on a push stream.
@@ -318,7 +313,7 @@ class H3Connection:
                 http_events.append(
                     DataReceived(
                         data=frame_data,
-                        push_id=push_id,
+                        push_id=stream.push_id,
                         stream_ended=stream_ended,
                         stream_id=stream_id,
                     )
@@ -343,12 +338,12 @@ class H3Connection:
             http_events.append(
                 HeadersReceived(
                     headers=headers,
-                    push_id=push_id,
+                    push_id=stream.push_id,
                     stream_id=stream_id,
                     stream_ended=stream_ended,
                 )
             )
-        elif stream.frame_type == FrameType.PUSH_PROMISE and push_id is None:
+        elif stream.frame_type == FrameType.PUSH_PROMISE and stream.push_id is None:
             if not self._is_client:
                 raise QuicConnectionError(
                     error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
@@ -424,7 +419,7 @@ class H3Connection:
         if stream.blocked:
             return http_events
 
-        # shortcut DATA frame bits
+        # shortcut for DATA frame fragments
         if (
             stream.frame_type == FrameType.DATA
             and stream.frame_size is not None
@@ -432,17 +427,25 @@ class H3Connection:
         ):
             http_events.append(
                 DataReceived(
-                    data=stream.buffer, stream_id=stream_id, stream_ended=False
+                    data=stream.buffer,
+                    push_id=stream.push_id,
+                    stream_id=stream_id,
+                    stream_ended=False,
                 )
             )
             stream.frame_size -= len(stream.buffer)
             stream.buffer = b""
             return http_events
 
-        # some peers (e.g. f5) end the stream with no data
+        # handle lone FIN
         if stream_ended and not stream.buffer:
             http_events.append(
-                DataReceived(data=b"", stream_id=stream_id, stream_ended=True)
+                DataReceived(
+                    data=b"",
+                    push_id=stream.push_id,
+                    stream_id=stream_id,
+                    stream_ended=True,
+                )
             )
             return http_events
 
@@ -478,7 +481,6 @@ class H3Connection:
                     self._handle_request_or_push_frame(
                         frame_type=stream.frame_type,
                         frame_data=frame_data,
-                        push_id=None,
                         stream_id=stream_id,
                         stream_ended=stream.ended and buf.eof(),
                     )
@@ -506,7 +508,7 @@ class H3Connection:
         consumed = 0
         unblocked_streams: Set[int] = set()
 
-        while not buf.eof():
+        while stream.stream_type == StreamType.PUSH or not buf.eof():
             # fetch stream type for unidirectional streams
             if stream.stream_type is None:
                 try:
@@ -546,6 +548,17 @@ class H3Connection:
                         break
                     consumed = buf.tell()
 
+                # handle lone FIN
+                if stream_ended and buf.eof():
+                    http_events.append(
+                        DataReceived(
+                            data=b"",
+                            push_id=stream.push_id,
+                            stream_id=stream_id,
+                            stream_ended=True,
+                        )
+                    )
+
                 # fetch next frame
                 try:
                     frame_type = buf.pull_uint_var()
@@ -559,11 +572,14 @@ class H3Connection:
                     self._handle_request_or_push_frame(
                         frame_type=frame_type,
                         frame_data=frame_data,
-                        push_id=stream.push_id,
                         stream_id=stream_id,
                         stream_ended=stream.ended and buf.eof(),
                     )
                 )
+
+                # stop if there is no more data
+                if buf.eof():
+                    break
             elif stream.stream_type == StreamType.QPACK_DECODER:
                 # feed unframed data to decoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
