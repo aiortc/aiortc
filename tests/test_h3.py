@@ -194,6 +194,64 @@ class H3ConnectionTest(TestCase):
             )
         self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
 
+    def test_handle_request_frame_data_before_headers(self):
+        """
+        We should not receive DATA before receiving headers.
+        """
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=encode_frame(FrameType.DATA, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+
+    def test_handle_request_frame_headers_after_trailers(self):
+        """
+        We should not receive HEADERS after receiving trailers.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+
+        h3_client = H3Connection(quic_client)
+        h3_server = H3Connection(quic_server)
+
+        stream_id = quic_client.get_next_available_stream_id()
+        h3_client.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"localhost"),
+                (b":path", b"/"),
+            ],
+        )
+        h3_client.send_headers(
+            stream_id=stream_id, headers=[(b"x-some-trailer", b"foo")], end_stream=True
+        )
+        h3_transfer(quic_client, h3_server)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=encode_frame(FrameType.HEADERS, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+
     def test_handle_request_frame_push_promise_from_client(self):
         """
         A server should not receive PUSH_PROMISE on a request stream.
@@ -737,6 +795,104 @@ class H3ConnectionTest(TestCase):
                     stream_id=0,
                     stream_ended=True,
                 ),
+            ],
+        )
+
+    def test_blocked_stream_trailer(self):
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=3,
+                data=binascii.unhexlify(
+                    "0004170150000680020000074064091040bcc0000000faceb00c"
+                ),
+                end_stream=False,
+            )
+        )
+        h3_client.handle_event(
+            StreamDataReceived(stream_id=7, data=b"\x02", end_stream=False)
+        )
+        h3_client.handle_event(
+            StreamDataReceived(stream_id=11, data=b"\x03", end_stream=False)
+        )
+
+        self.assertEqual(
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=binascii.unhexlify(
+                        "011b0000d95696d07abe941094cb6d0a08017d403971966e32ca98b46f"
+                    ),
+                    end_stream=False,
+                )
+            ),
+            [
+                HeadersReceived(
+                    headers=[
+                        (b":status", b"200"),
+                        (b"date", b"Mon, 22 Jul 2019 06:33:33 GMT"),
+                    ],
+                    stream_id=0,
+                    stream_ended=False,
+                )
+            ],
+        )
+
+        self.assertEqual(
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=binascii.unhexlify(
+                        "00408d796f752072656163686564206d766673742e6e65742c20726561636820"
+                        "746865202f6563686f20656e64706f696e7420666f7220616e206563686f2072"
+                        "6573706f6e7365207175657279202f3c6e756d6265723e20656e64706f696e74"
+                        "7320666f722061207661726961626c652073697a6520726573706f6e73652077"
+                        "6974682072616e646f6d206279746573"
+                    ),
+                    end_stream=False,
+                )
+            ),
+            [
+                DataReceived(
+                    data=(
+                        b"you reached mvfst.net, reach the /echo endpoint for an "
+                        b"echo response query /<number> endpoints for a variable "
+                        b"size response with random bytes"
+                    ),
+                    stream_id=0,
+                    stream_ended=False,
+                )
+            ],
+        )
+
+        self.assertEqual(
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=0, data=binascii.unhexlify("0103028010"), end_stream=True
+                )
+            ),
+            [],
+        )
+
+        self.assertEqual(
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=7,
+                    data=binascii.unhexlify("6af2b20f49564d833505b38294e7"),
+                    end_stream=False,
+                )
+            ),
+            [
+                HeadersReceived(
+                    headers=[(b"x-some-trailer", b"foo")],
+                    stream_id=0,
+                    stream_ended=True,
+                    push_id=None,
+                )
             ],
         )
 

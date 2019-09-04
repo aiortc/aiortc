@@ -1,5 +1,5 @@
 import logging
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Dict, List, Optional, Set
 
 from pylsqpack import Decoder, Encoder, StreamBlocked
@@ -53,6 +53,12 @@ class FrameType(IntEnum):
     GOAWAY = 0x7
     MAX_PUSH_ID = 0xD
     DUPLICATE_PUSH = 0xE
+
+
+class HeadersState(Enum):
+    INITIAL = 0
+    AFTER_HEADERS = 1
+    AFTER_TRAILERS = 2
 
 
 class Setting(IntEnum):
@@ -110,6 +116,7 @@ class H3Stream:
         self.ended = False
         self.frame_size: Optional[int] = None
         self.frame_type: Optional[int] = None
+        self.headers_state: HeadersState = HeadersState.INITIAL
         self.push_id: Optional[int] = None
         self.stream_type: Optional[int] = None
 
@@ -284,7 +291,7 @@ class H3Connection:
                 reason_phrase="Invalid frame type on control stream",
             )
 
-    def _handle_push_frame(
+    def _handle_request_or_push_frame(
         self,
         frame_type: int,
         frame_data: bytes,
@@ -296,24 +303,64 @@ class H3Connection:
         Handle a frame received on a push stream.
         """
         http_events: List[H3Event] = []
+        stream = self._stream[stream_id]
 
         if frame_type == FrameType.DATA:
-            http_events.append(
-                DataReceived(
-                    data=frame_data,
-                    push_id=push_id,
-                    stream_ended=stream_ended,
-                    stream_id=stream_id,
+            # check DATA frame is allowed
+            if stream.headers_state != HeadersState.AFTER_HEADERS:
+                raise QuicConnectionError(
+                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
+                    frame_type=None,
+                    reason_phrase="DATA frame is not allowed in this state",
                 )
-            )
+
+            if stream_ended or frame_data:
+                http_events.append(
+                    DataReceived(
+                        data=frame_data,
+                        push_id=push_id,
+                        stream_ended=stream_ended,
+                        stream_id=stream_id,
+                    )
+                )
         elif frame_type == FrameType.HEADERS:
+            # check HEADERS frame is allowed
+            if stream.headers_state == HeadersState.AFTER_TRAILERS:
+                raise QuicConnectionError(
+                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
+                    frame_type=None,
+                    reason_phrase="HEADERS frame is not allowed in this state",
+                )
+
+            # try to decode HEADERS
             headers = self._decode_headers(stream_id, frame_data)
+
+            # update state and emit headers
+            if stream.headers_state == HeadersState.INITIAL:
+                stream.headers_state = HeadersState.AFTER_HEADERS
+            else:
+                stream.headers_state = HeadersState.AFTER_TRAILERS
             http_events.append(
                 HeadersReceived(
                     headers=headers,
                     push_id=push_id,
                     stream_id=stream_id,
                     stream_ended=stream_ended,
+                )
+            )
+        elif stream.frame_type == FrameType.PUSH_PROMISE and push_id is None:
+            if not self._is_client:
+                raise QuicConnectionError(
+                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
+                    frame_type=None,
+                    reason_phrase="Clients must not send PUSH_PROMISE",
+                )
+            frame_buf = Buffer(data=frame_data)
+            push_id = frame_buf.pull_uint_var()
+            headers = self._decode_headers(stream_id, frame_data[frame_buf.tell() :])
+            http_events.append(
+                PushPromiseReceived(
+                    headers=headers, push_id=push_id, stream_id=stream_id
                 )
             )
         elif frame_type in (
@@ -426,56 +473,19 @@ class H3Connection:
             if not stream.frame_size:
                 stream.frame_size = None
 
-            if stream.frame_type == FrameType.DATA and (stream_ended or frame_data):
-                http_events.append(
-                    DataReceived(
-                        data=frame_data,
+            try:
+                http_events.extend(
+                    self._handle_request_or_push_frame(
+                        frame_type=stream.frame_type,
+                        frame_data=frame_data,
+                        push_id=None,
                         stream_id=stream_id,
-                        stream_ended=stream_ended and buf.eof(),
+                        stream_ended=stream.ended and buf.eof(),
                     )
                 )
-            elif stream.frame_type == FrameType.HEADERS:
-                try:
-                    headers = self._decode_headers(stream_id, frame_data)
-                except StreamBlocked:
-                    stream.blocked = True
-                    break
-                http_events.append(
-                    HeadersReceived(
-                        headers=headers,
-                        stream_id=stream_id,
-                        stream_ended=stream_ended and buf.eof(),
-                    )
-                )
-            elif stream.frame_type == FrameType.PUSH_PROMISE:
-                if not self._is_client:
-                    raise QuicConnectionError(
-                        error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
-                        frame_type=None,
-                        reason_phrase="Clients must not send PUSH_PROMISE",
-                    )
-                frame_buf = Buffer(data=frame_data)
-                push_id = frame_buf.pull_uint_var()
-                headers = self._decode_headers(
-                    stream_id, frame_data[frame_buf.tell() :]
-                )
-                http_events.append(
-                    PushPromiseReceived(
-                        headers=headers, push_id=push_id, stream_id=stream_id
-                    )
-                )
-            elif stream.frame_type in (
-                FrameType.PRIORITY,
-                FrameType.CANCEL_PUSH,
-                FrameType.SETTINGS,
-                FrameType.GOAWAY,
-                FrameType.MAX_PUSH_ID,
-            ):
-                raise QuicConnectionError(
-                    error_code=ErrorCode.HTTP_WRONG_STREAM,
-                    frame_type=None,
-                    reason_phrase="Invalid frame type on request stream",
-                )
+            except StreamBlocked:
+                stream.blocked = True
+                break
 
         # remove processed data from buffer
         stream.buffer = stream.buffer[consumed:]
@@ -546,7 +556,7 @@ class H3Connection:
                 consumed = buf.tell()
 
                 http_events.extend(
-                    self._handle_push_frame(
+                    self._handle_request_or_push_frame(
                         frame_type=frame_type,
                         frame_data=frame_data,
                         push_id=stream.push_id,
@@ -577,6 +587,12 @@ class H3Connection:
             stream = self._stream[stream_id]
             decoder, headers = self._decoder.resume_header(stream_id)
             stream.blocked = False
+
+            # update state and emit headers
+            if stream.headers_state == HeadersState.INITIAL:
+                stream.headers_state = HeadersState.AFTER_HEADERS
+            else:
+                stream.headers_state = HeadersState.AFTER_TRAILERS
             http_events.append(
                 HeadersReceived(
                     headers=headers,
@@ -584,8 +600,11 @@ class H3Connection:
                     stream_ended=stream.ended and not stream.buffer,
                 )
             )
-            http_events.extend(
-                self._receive_stream_data_bidi(stream_id, b"", stream.ended)
-            )
+
+            # resume processing
+            if stream.buffer:
+                http_events.extend(
+                    self._receive_stream_data_bidi(stream_id, b"", stream.ended)
+                )
 
         return http_events
