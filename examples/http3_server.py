@@ -65,6 +65,10 @@ class HttpRequestHandler:
                     "more_body": not event.stream_ended,
                 }
             )
+        elif isinstance(event, HeadersReceived) and event.stream_ended:
+            self.queue.put_nowait(
+                {"type": "http.request", "body": b"", "more_body": False}
+            )
 
     async def run_asgi(self, app: AsgiApplication) -> None:
         await application(self.scope, self.receive, self.send)
@@ -289,7 +293,10 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 )
             self._handlers[event.stream_id] = handler
             asyncio.ensure_future(handler.run_asgi(application))
-        elif isinstance(event, DataReceived) and event.stream_id in self._handlers:
+        elif (
+            isinstance(event, (DataReceived, HeadersReceived))
+            and event.stream_id in self._handlers
+        ):
             handler = self._handlers[event.stream_id]
             handler.http_event_received(event)
 
