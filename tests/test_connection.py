@@ -853,13 +853,19 @@ class QuicConnectionTest(TestCase):
         with client_and_server() as (client, server):
             # client creates bidirectional stream 0
             client.send_stream_data(stream_id=0, data=b"hello")
+            consume_events(client)
 
             # client receives RESET_STREAM
             client._handle_reset_stream_frame(
                 client_receive_context(client),
                 QuicFrameType.RESET_STREAM,
-                Buffer(data=binascii.unhexlify("001100")),
+                Buffer(data=binascii.unhexlify("000100")),
             )
+
+            event = client.next_event()
+            self.assertEqual(type(event), events.StreamReset)
+            self.assertEqual(event.error_code, QuicErrorCode.INTERNAL_ERROR)
+            self.assertEqual(event.stream_id, 0)
 
     def test_handle_reset_stream_frame_send_only(self):
         with client_and_server() as (client, server):

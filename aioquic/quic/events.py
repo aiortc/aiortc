@@ -95,5 +95,8 @@ class StreamReset(QuicEvent):
     The StreamReset event is fired when the remote peer resets a stream.
     """
 
+    error_code: int
+    "The error code that triggered the reset."
+
     stream_id: int
     "The ID of the stream that was reset."

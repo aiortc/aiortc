@@ -1472,7 +1472,9 @@ class QuicConnection:
             final_size,
         )
         # stream = self._get_or_create_stream(frame_type, stream_id)
-        self._events.append(events.StreamReset(stream_id=stream_id))
+        self._events.append(
+            events.StreamReset(error_code=error_code, stream_id=stream_id)
+        )
 
     def _handle_retire_connection_id_frame(
         self, context: QuicReceiveContext, frame_type: int, buf: Buffer
