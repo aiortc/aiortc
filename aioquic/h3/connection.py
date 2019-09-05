@@ -170,6 +170,7 @@ class H3Connection:
         self._blocked_streams = 0x10
 
         self._is_client = quic.configuration.is_client
+        self._is_done = False
         self._quic = quic
         self._decoder = pylsqpack.Decoder(
             self._max_table_capacity, self._blocked_streams
@@ -196,17 +197,23 @@ class H3Connection:
 
         :param event: The QUIC event to handle.
         """
-        if isinstance(event, StreamDataReceived):
+        if isinstance(event, StreamDataReceived) and not self._is_done:
             stream_id = event.stream_id
             if stream_id not in self._stream:
                 self._stream[stream_id] = H3Stream()
-            if stream_id % 4 == 0:
-                return self._receive_request_or_push_data(
-                    stream_id, event.data, event.end_stream
-                )
-            elif stream_is_unidirectional(stream_id):
-                return self._receive_stream_data_uni(
-                    stream_id, event.data, event.end_stream
+            try:
+                if stream_id % 4 == 0:
+                    return self._receive_request_or_push_data(
+                        stream_id, event.data, event.end_stream
+                    )
+                elif stream_is_unidirectional(stream_id):
+                    return self._receive_stream_data_uni(
+                        stream_id, event.data, event.end_stream
+                    )
+            except ProtocolError as exc:
+                self._is_done = True
+                self._quic.close(
+                    error_code=exc.error_code, reason_phrase=exc.reason_phrase
                 )
         return []
 
