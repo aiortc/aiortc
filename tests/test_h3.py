@@ -193,6 +193,9 @@ class H3ConnectionTest(TestCase):
                 )
             )
         self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+        self.assertEqual(
+            str(cm.exception), "Error: 10, reason: Invalid frame type on push stream"
+        )
 
     def test_handle_request_frame_data_before_headers(self):
         """
@@ -286,6 +289,9 @@ class H3ConnectionTest(TestCase):
                 )
             )
         self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+        self.assertEqual(
+            str(cm.exception), "Error: 10, reason: Invalid frame type on request stream"
+        )
 
     def test_request(self):
         with client_and_server(
@@ -488,7 +494,10 @@ class H3ConnectionTest(TestCase):
                     stream_ended=False,
                     push_id=0,
                 ),
-                DataReceived(data=b"text", stream_id=15, stream_ended=False, push_id=0),
+                DataReceived(data=b"t", stream_id=15, stream_ended=False, push_id=0),
+                DataReceived(data=b"e", stream_id=15, stream_ended=False, push_id=0),
+                DataReceived(data=b"x", stream_id=15, stream_ended=False, push_id=0),
+                DataReceived(data=b"t", stream_id=15, stream_ended=False, push_id=0),
                 DataReceived(data=b"", stream_id=15, stream_ended=True, push_id=0),
             ],
         )

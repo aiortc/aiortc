@@ -162,7 +162,7 @@ class H3Connection:
             if stream_id not in self._stream:
                 self._stream[stream_id] = H3Stream()
             if stream_id % 4 == 0:
-                return self._receive_stream_data_bidi(
+                return self._receive_request_or_push_data(
                     stream_id, event.data, event.end_stream
                 )
             elif stream_is_unidirectional(stream_id):
@@ -295,7 +295,7 @@ class H3Connection:
         self, frame_type: int, frame_data: bytes, stream_id: int, stream_ended: bool
     ) -> List[H3Event]:
         """
-        Handle a frame received on a push stream.
+        Handle a frame received on a request or push stream.
         """
         http_events: List[H3Event] = []
         stream = self._stream[stream_id]
@@ -370,7 +370,9 @@ class H3Connection:
             raise QuicConnectionError(
                 error_code=ErrorCode.HTTP_WRONG_STREAM,
                 frame_type=None,
-                reason_phrase="Invalid frame type on push stream",
+                reason_phrase="Invalid frame type on request stream"
+                if stream.push_id is None
+                else "Invalid frame type on push stream",
             )
 
         return http_events
@@ -404,11 +406,11 @@ class H3Connection:
             StreamType.QPACK_DECODER
         )
 
-    def _receive_stream_data_bidi(
+    def _receive_request_or_push_data(
         self, stream_id: int, data: bytes, stream_ended: bool
     ) -> List[H3Event]:
         """
-        Client-initiated bidirectional streams carry requests and responses.
+        Handle data received on a request or push stream.
         """
         http_events: List[H3Event] = []
 
@@ -548,38 +550,10 @@ class H3Connection:
                         break
                     consumed = buf.tell()
 
-                # handle lone FIN
-                if stream_ended and buf.eof():
-                    http_events.append(
-                        DataReceived(
-                            data=b"",
-                            push_id=stream.push_id,
-                            stream_id=stream_id,
-                            stream_ended=True,
-                        )
-                    )
+                # remove processed data from buffer
+                stream.buffer = stream.buffer[consumed:]
 
-                # fetch next frame
-                try:
-                    frame_type = buf.pull_uint_var()
-                    frame_length = buf.pull_uint_var()
-                    frame_data = buf.pull_bytes(frame_length)
-                except BufferReadError:
-                    break
-                consumed = buf.tell()
-
-                http_events.extend(
-                    self._handle_request_or_push_frame(
-                        frame_type=frame_type,
-                        frame_data=frame_data,
-                        stream_id=stream_id,
-                        stream_ended=stream.ended and buf.eof(),
-                    )
-                )
-
-                # stop if there is no more data
-                if buf.eof():
-                    break
+                return self._receive_request_or_push_data(stream_id, b"", stream_ended)
             elif stream.stream_type == StreamType.QPACK_DECODER:
                 # feed unframed data to decoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
@@ -623,7 +597,7 @@ class H3Connection:
             # resume processing
             if stream.buffer:
                 http_events.extend(
-                    self._receive_stream_data_bidi(stream_id, b"", stream.ended)
+                    self._receive_request_or_push_data(stream_id, b"", stream.ended)
                 )
 
         return http_events
