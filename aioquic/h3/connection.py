@@ -2,7 +2,7 @@ import logging
 from enum import Enum, IntEnum
 from typing import Dict, List, Optional, Set
 
-from pylsqpack import Decoder, Encoder, StreamBlocked
+import pylsqpack
 
 from aioquic.buffer import Buffer, BufferReadError, encode_uint_var
 from aioquic.h3.events import (
@@ -13,11 +13,7 @@ from aioquic.h3.events import (
     PushPromiseReceived,
 )
 from aioquic.h3.exceptions import NoAvailablePushIDError
-from aioquic.quic.connection import (
-    QuicConnection,
-    QuicConnectionError,
-    stream_is_unidirectional,
-)
+from aioquic.quic.connection import QuicConnection, stream_is_unidirectional
 from aioquic.quic.events import QuicEvent, StreamDataReceived
 
 logger = logging.getLogger("http3")
@@ -41,6 +37,9 @@ class ErrorCode(IntEnum):
     HTTP_UNEXPECTED_FRAME = 0x13
     HTTP_REQUEST_REJECTED = 0x14
     HTTP_SETTINGS_ERROR = 0xFF
+    HTTP_QPACK_DECOMPRESSION_FAILED = 0x200
+    HTTP_QPACK_ENCODER_STREAM_ERROR = 0x201
+    HTTP_QPACK_DECODER_STREAM_ERROR = 0x202
 
 
 class FrameType(IntEnum):
@@ -73,6 +72,44 @@ class StreamType(IntEnum):
     PUSH = 1
     QPACK_ENCODER = 2
     QPACK_DECODER = 3
+
+
+class ProtocolError(Exception):
+    """
+    Base class for protocol errors.
+
+    These errors are not exposed to the API user, they are handled
+    in :meth:`H3Connection.handle_event`.
+    """
+
+    error_code = ErrorCode.HTTP_GENERAL_PROTOCOL_ERROR
+
+    def __init__(self, reason_phrase: str = ""):
+        self.reason_phrase = reason_phrase
+
+
+class QpackDecompressionFailed(ProtocolError):
+    error_code = ErrorCode.HTTP_QPACK_DECOMPRESSION_FAILED
+
+
+class QpackDecoderStreamError(ProtocolError):
+    error_code = ErrorCode.HTTP_QPACK_DECODER_STREAM_ERROR
+
+
+class QpackEncoderStreamError(ProtocolError):
+    error_code = ErrorCode.HTTP_QPACK_ENCODER_STREAM_ERROR
+
+
+class StreamCreationError(ProtocolError):
+    error_code = ErrorCode.HTTP_STREAM_CREATION_ERROR
+
+
+class UnexpectedFrame(ProtocolError):
+    error_code = ErrorCode.HTTP_UNEXPECTED_FRAME
+
+
+class WrongStream(ProtocolError):
+    error_code = ErrorCode.HTTP_WRONG_STREAM
 
 
 def encode_frame(frame_type: int, frame_data: bytes) -> bytes:
@@ -134,8 +171,10 @@ class H3Connection:
 
         self._is_client = quic.configuration.is_client
         self._quic = quic
-        self._decoder = Decoder(self._max_table_capacity, self._blocked_streams)
-        self._encoder = Encoder()
+        self._decoder = pylsqpack.Decoder(
+            self._max_table_capacity, self._blocked_streams
+        )
+        self._encoder = pylsqpack.Encoder()
         self._stream: Dict[int, H3Stream] = {}
 
         self._max_push_id: Optional[int] = 8 if self._is_client else None
@@ -248,8 +287,12 @@ class H3Connection:
         """
         Decode a HEADERS block and send decoder updates on the decoder stream.
         """
-        decoder, headers = self._decoder.feed_header(stream_id, frame_data)
-        self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
+        try:
+            decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+            self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
+        except pylsqpack.DecompressionFailed as exc:
+            raise QpackDecompressionFailed() from exc
+
         return headers
 
     def _encode_headers(self, stream_id, headers: Headers) -> bytes:
@@ -273,11 +316,7 @@ class H3Connection:
             self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
         elif frame_type == FrameType.MAX_PUSH_ID:
             if self._is_client:
-                raise QuicConnectionError(
-                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
-                    frame_type=None,
-                    reason_phrase="Servers must not send MAX_PUSH_ID",
-                )
+                raise UnexpectedFrame("Servers must not send MAX_PUSH_ID")
             self._max_push_id = parse_max_push_id(frame_data)
         elif frame_type in (
             FrameType.DATA,
@@ -285,11 +324,7 @@ class H3Connection:
             FrameType.PUSH_PROMISE,
             FrameType.DUPLICATE_PUSH,
         ):
-            raise QuicConnectionError(
-                error_code=ErrorCode.HTTP_WRONG_STREAM,
-                frame_type=None,
-                reason_phrase="Invalid frame type on control stream",
-            )
+            raise WrongStream("Invalid frame type on control stream")
 
     def _handle_request_or_push_frame(
         self, frame_type: int, frame_data: bytes, stream_id: int, stream_ended: bool
@@ -303,11 +338,7 @@ class H3Connection:
         if frame_type == FrameType.DATA:
             # check DATA frame is allowed
             if stream.headers_state != HeadersState.AFTER_HEADERS:
-                raise QuicConnectionError(
-                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
-                    frame_type=None,
-                    reason_phrase="DATA frame is not allowed in this state",
-                )
+                raise UnexpectedFrame("DATA frame is not allowed in this state")
 
             if stream_ended or frame_data:
                 http_events.append(
@@ -321,11 +352,7 @@ class H3Connection:
         elif frame_type == FrameType.HEADERS:
             # check HEADERS frame is allowed
             if stream.headers_state == HeadersState.AFTER_TRAILERS:
-                raise QuicConnectionError(
-                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
-                    frame_type=None,
-                    reason_phrase="HEADERS frame is not allowed in this state",
-                )
+                raise UnexpectedFrame("HEADERS frame is not allowed in this state")
 
             # try to decode HEADERS
             headers = self._decode_headers(stream_id, frame_data)
@@ -345,11 +372,7 @@ class H3Connection:
             )
         elif stream.frame_type == FrameType.PUSH_PROMISE and stream.push_id is None:
             if not self._is_client:
-                raise QuicConnectionError(
-                    error_code=ErrorCode.HTTP_UNEXPECTED_FRAME,
-                    frame_type=None,
-                    reason_phrase="Clients must not send PUSH_PROMISE",
-                )
+                raise UnexpectedFrame("Clients must not send PUSH_PROMISE")
             frame_buf = Buffer(data=frame_data)
             push_id = frame_buf.pull_uint_var()
             headers = self._decode_headers(stream_id, frame_data[frame_buf.tell() :])
@@ -367,12 +390,10 @@ class H3Connection:
             FrameType.MAX_PUSH_ID,
             FrameType.DUPLICATE_PUSH,
         ):
-            raise QuicConnectionError(
-                error_code=ErrorCode.HTTP_WRONG_STREAM,
-                frame_type=None,
-                reason_phrase="Invalid frame type on request stream"
+            raise WrongStream(
+                "Invalid frame type on request stream"
                 if stream.push_id is None
-                else "Invalid frame type on push stream",
+                else "Invalid frame type on push stream"
             )
 
         return http_events
@@ -487,7 +508,7 @@ class H3Connection:
                         stream_ended=stream.ended and buf.eof(),
                     )
                 )
-            except StreamBlocked:
+            except pylsqpack.StreamBlocked:
                 stream.blocked = True
                 break
 
@@ -521,13 +542,20 @@ class H3Connection:
 
                 # check unicity
                 if stream.stream_type == StreamType.CONTROL:
-                    assert self._peer_control_stream_id is None
+                    if self._peer_control_stream_id is not None:
+                        raise StreamCreationError("Only one control stream is allowed")
                     self._peer_control_stream_id = stream_id
                 elif stream.stream_type == StreamType.QPACK_DECODER:
-                    assert self._peer_decoder_stream_id is None
+                    if self._peer_decoder_stream_id is not None:
+                        raise StreamCreationError(
+                            "Only one QPACK decoder stream is allowed"
+                        )
                     self._peer_decoder_stream_id = stream_id
                 elif stream.stream_type == StreamType.QPACK_ENCODER:
-                    assert self._peer_encoder_stream_id is None
+                    if self._peer_encoder_stream_id is not None:
+                        raise StreamCreationError(
+                            "Only one QPACK encoder stream is allowed"
+                        )
                     self._peer_encoder_stream_id = stream_id
 
             if stream.stream_type == StreamType.CONTROL:
@@ -558,12 +586,18 @@ class H3Connection:
                 # feed unframed data to decoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
                 consumed = buf.tell()
-                self._encoder.feed_decoder(data)
+                try:
+                    self._encoder.feed_decoder(data)
+                except pylsqpack.DecoderStreamError as exc:
+                    raise QpackDecoderStreamError() from exc
             elif stream.stream_type == StreamType.QPACK_ENCODER:
                 # feed unframed data to encoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
                 consumed = buf.tell()
-                unblocked_streams.update(self._decoder.feed_encoder(data))
+                try:
+                    unblocked_streams.update(self._decoder.feed_encoder(data))
+                except pylsqpack.EncoderStreamError as exc:
+                    raise QpackEncoderStreamError() from exc
             else:
                 # unknown stream type, discard data
                 buf.seek(buf.capacity)

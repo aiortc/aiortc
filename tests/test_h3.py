@@ -3,16 +3,20 @@ from unittest import TestCase
 
 from aioquic.buffer import encode_uint_var
 from aioquic.h3.connection import (
-    ErrorCode,
     FrameType,
     H3Connection,
+    QpackDecoderStreamError,
+    QpackDecompressionFailed,
+    QpackEncoderStreamError,
+    StreamCreationError,
     StreamType,
+    UnexpectedFrame,
+    WrongStream,
     encode_frame,
 )
 from aioquic.h3.events import DataReceived, HeadersReceived, PushPromiseReceived
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.connection import QuicConnectionError
 from aioquic.quic.events import StreamDataReceived
 
 from .test_connection import client_and_server, transfer
@@ -159,9 +163,16 @@ class H3ConnectionTest(TestCase):
         )
         h3_server = H3Connection(quic_server)
 
-        with self.assertRaises(QuicConnectionError) as cm:
-            h3_server._handle_control_frame(FrameType.HEADERS, b"")
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
+        with self.assertRaises(WrongStream) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=2,
+                    data=encode_uint_var(StreamType.CONTROL)
+                    + encode_frame(FrameType.HEADERS, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "Invalid frame type on control stream")
 
     def test_handle_control_frame_max_push_id_from_server(self):
         """
@@ -172,17 +183,53 @@ class H3ConnectionTest(TestCase):
         )
         h3_client = H3Connection(quic_client)
 
-        with self.assertRaises(QuicConnectionError) as cm:
-            h3_client._handle_control_frame(FrameType.MAX_PUSH_ID, encode_uint_var(0))
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+        with self.assertRaises(UnexpectedFrame) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=3,
+                    data=encode_uint_var(StreamType.CONTROL)
+                    + encode_frame(FrameType.MAX_PUSH_ID, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "Servers must not send MAX_PUSH_ID")
+
+    def test_handle_control_stream_duplicate(self):
+        """
+        We must only receive a single control stream.
+        """
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        # receive a first control stream
+        h3_server.handle_event(
+            StreamDataReceived(
+                stream_id=2, data=encode_uint_var(StreamType.CONTROL), end_stream=False
+            )
+        )
+        with self.assertRaises(StreamCreationError) as cm:
+            # receive a second control stream
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=6,
+                    data=encode_uint_var(StreamType.CONTROL),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "Only one control stream is allowed")
 
     def test_handle_push_frame_wrong_frame_type(self):
+        """
+        We should not received SETTINGS on a push stream.
+        """
         quic_client = FakeQuicConnection(
             configuration=QuicConfiguration(is_client=True)
         )
         h3_client = H3Connection(quic_client)
 
-        with self.assertRaises(QuicConnectionError) as cm:
+        with self.assertRaises(WrongStream) as cm:
             h3_client.handle_event(
                 StreamDataReceived(
                     stream_id=15,
@@ -192,10 +239,116 @@ class H3ConnectionTest(TestCase):
                     end_stream=False,
                 )
             )
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
-        self.assertEqual(
-            str(cm.exception), "Error: 10, reason: Invalid frame type on push stream"
+        self.assertEqual(str(cm.exception), "Invalid frame type on push stream")
+
+    def test_handle_qpack_decoder_duplicate(self):
+        """
+        We must only receive a single QPACK decoder stream.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
         )
+        h3_client = H3Connection(quic_client)
+
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=11,
+                data=encode_uint_var(StreamType.QPACK_DECODER),
+                end_stream=False,
+            )
+        )
+        with self.assertRaises(StreamCreationError) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=15,
+                    data=encode_uint_var(StreamType.QPACK_DECODER),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "Only one QPACK decoder stream is allowed")
+
+    def test_handle_qpack_decoder_stream_error(self):
+        """
+        Receiving garbage on the QPACK decoder stream triggers an exception.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        with self.assertRaises(QpackDecoderStreamError) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=11,
+                    data=encode_uint_var(StreamType.QPACK_DECODER) + b"\x00",
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "")
+
+    def test_handle_qpack_encoder_duplicate(self):
+        """
+        We must only receive a single QPACK encoder stream.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        h3_client.handle_event(
+            StreamDataReceived(
+                stream_id=11,
+                data=encode_uint_var(StreamType.QPACK_ENCODER),
+                end_stream=False,
+            )
+        )
+        with self.assertRaises(StreamCreationError) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=15,
+                    data=encode_uint_var(StreamType.QPACK_ENCODER),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "Only one QPACK encoder stream is allowed")
+
+    def test_handle_qpack_encoder_stream_error(self):
+        """
+        Receiving garbage on the QPACK encoder stream triggers an exception.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        with self.assertRaises(QpackEncoderStreamError) as cm:
+            h3_client.handle_event(
+                StreamDataReceived(
+                    stream_id=7,
+                    data=encode_uint_var(StreamType.QPACK_ENCODER) + b"\x00",
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "")
+
+    def test_handle_request_frame_bad_headers(self):
+        """
+        We should not receive HEADERS which cannot be decoded.
+        """
+        quic_server = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=False)
+        )
+        h3_server = H3Connection(quic_server)
+
+        with self.assertRaises(QpackDecompressionFailed) as cm:
+            h3_server.handle_event(
+                StreamDataReceived(
+                    stream_id=0,
+                    data=encode_frame(FrameType.HEADERS, b""),
+                    end_stream=False,
+                )
+            )
+        self.assertEqual(str(cm.exception), "")
 
     def test_handle_request_frame_data_before_headers(self):
         """
@@ -206,7 +359,7 @@ class H3ConnectionTest(TestCase):
         )
         h3_server = H3Connection(quic_server)
 
-        with self.assertRaises(QuicConnectionError) as cm:
+        with self.assertRaises(UnexpectedFrame) as cm:
             h3_server.handle_event(
                 StreamDataReceived(
                     stream_id=0,
@@ -214,7 +367,7 @@ class H3ConnectionTest(TestCase):
                     end_stream=False,
                 )
             )
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+        self.assertEqual(str(cm.exception), "DATA frame is not allowed in this state")
 
     def test_handle_request_frame_headers_after_trailers(self):
         """
@@ -245,7 +398,7 @@ class H3ConnectionTest(TestCase):
         )
         h3_transfer(quic_client, h3_server)
 
-        with self.assertRaises(QuicConnectionError) as cm:
+        with self.assertRaises(UnexpectedFrame) as cm:
             h3_server.handle_event(
                 StreamDataReceived(
                     stream_id=0,
@@ -253,7 +406,9 @@ class H3ConnectionTest(TestCase):
                     end_stream=False,
                 )
             )
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+        self.assertEqual(
+            str(cm.exception), "HEADERS frame is not allowed in this state"
+        )
 
     def test_handle_request_frame_push_promise_from_client(self):
         """
@@ -264,7 +419,7 @@ class H3ConnectionTest(TestCase):
         )
         h3_server = H3Connection(quic_server)
 
-        with self.assertRaises(QuicConnectionError) as cm:
+        with self.assertRaises(UnexpectedFrame) as cm:
             h3_server.handle_event(
                 StreamDataReceived(
                     stream_id=0,
@@ -272,7 +427,7 @@ class H3ConnectionTest(TestCase):
                     end_stream=False,
                 )
             )
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_UNEXPECTED_FRAME)
+        self.assertEqual(str(cm.exception), "Clients must not send PUSH_PROMISE")
 
     def test_handle_request_frame_wrong_frame_type(self):
         quic_server = FakeQuicConnection(
@@ -280,7 +435,7 @@ class H3ConnectionTest(TestCase):
         )
         h3_server = H3Connection(quic_server)
 
-        with self.assertRaises(QuicConnectionError) as cm:
+        with self.assertRaises(WrongStream) as cm:
             h3_server.handle_event(
                 StreamDataReceived(
                     stream_id=0,
@@ -288,10 +443,7 @@ class H3ConnectionTest(TestCase):
                     end_stream=False,
                 )
             )
-        self.assertEqual(cm.exception.error_code, ErrorCode.HTTP_WRONG_STREAM)
-        self.assertEqual(
-            str(cm.exception), "Error: 10, reason: Invalid frame type on request stream"
-        )
+        self.assertEqual(str(cm.exception), "Invalid frame type on request stream")
 
     def test_request(self):
         with client_and_server(
