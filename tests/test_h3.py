@@ -13,6 +13,7 @@ from aioquic.h3.events import DataReceived, HeadersReceived, PushPromiseReceived
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import StreamDataReceived
+from aioquic.quic.logger import QuicLogger
 
 from .test_connection import client_and_server, transfer
 
@@ -42,6 +43,9 @@ class FakeQuicConnection:
         self._events = []
         self._next_stream_bidi = 0 if configuration.is_client else 1
         self._next_stream_uni = 2 if configuration.is_client else 3
+        self._quic_logger = QuicLogger().start_trace(
+            is_client=configuration.is_client, odcid=b""
+        )
 
     def close(self, error_code, reason_phrase):
         self.closed = (error_code, reason_phrase)

@@ -15,6 +15,7 @@ from aioquic.h3.events import (
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.connection import QuicConnection, stream_is_unidirectional
 from aioquic.quic.events import QuicEvent, StreamDataReceived
+from aioquic.quic.logger import QuicLoggerTrace
 
 logger = logging.getLogger("http3")
 
@@ -146,9 +147,48 @@ def parse_settings(data: bytes) -> Dict[int, int]:
     return dict(settings)
 
 
+def qlog_encode_data_frame(byte_length: int, stream_id: int) -> Dict:
+    return {
+        "byte_length": str(byte_length),
+        "frame": {"frame_type": "data"},
+        "stream_id": str(stream_id),
+    }
+
+
+def qlog_encode_headers(headers: Headers) -> List[Dict]:
+    return [
+        {"name": h[0].decode("utf8"), "value": h[1].decode("utf8")} for h in headers
+    ]
+
+
+def qlog_encode_headers_frame(
+    byte_length: int, headers: Headers, stream_id: int
+) -> Dict:
+    return {
+        "byte_length": str(byte_length),
+        "frame": {"frame_type": "headers", "fields": qlog_encode_headers(headers)},
+        "stream_id": str(stream_id),
+    }
+
+
+def qlog_encode_push_promise_frame(
+    byte_length: int, headers: Headers, push_id: int, stream_id: int
+) -> Dict:
+    return {
+        "byte_length": str(byte_length),
+        "frame": {
+            "frame_type": "push_promise",
+            "field": qlog_encode_headers(headers),
+            "id": str(push_id),
+        },
+        "stream_id": str(stream_id),
+    }
+
+
 class H3Stream:
     def __init__(self) -> None:
         self.blocked = False
+        self.blocked_frame_size: Optional[int] = None
         self.buffer = b""
         self.ended = False
         self.frame_size: Optional[int] = None
@@ -172,6 +212,7 @@ class H3Connection:
         self._is_client = quic.configuration.is_client
         self._is_done = False
         self._quic = quic
+        self._quic_logger: Optional[QuicLoggerTrace] = quic._quic_logger
         self._decoder = pylsqpack.Decoder(
             self._max_table_capacity, self._blocked_streams
         )
@@ -259,6 +300,14 @@ class H3Connection:
         :param data: The data to send.
         :param end_stream: Whether to end the stream.
         """
+        # log frame
+        if self._quic_logger is not None:
+            self._quic_logger.log_event(
+                category="HTTP",
+                event="frame_created",
+                data=qlog_encode_data_frame(byte_length=len(data), stream_id=stream_id),
+            )
+
         self._quic.send_stream_data(
             stream_id, encode_frame(FrameType.DATA, data), end_stream
         )
@@ -278,6 +327,17 @@ class H3Connection:
         :param end_stream: Whether to end the stream.
         """
         frame_data = self._encode_headers(stream_id, headers)
+
+        # log frame
+        if self._quic_logger is not None:
+            self._quic_logger.log_event(
+                category="HTTP",
+                event="frame_created",
+                data=qlog_encode_headers_frame(
+                    byte_length=len(frame_data), headers=headers, stream_id=stream_id
+                ),
+            )
+
         self._quic.send_stream_data(
             stream_id, encode_frame(FrameType.HEADERS, frame_data), end_stream
         )
@@ -373,6 +433,20 @@ class H3Connection:
             # try to decode HEADERS, may raise pylsqpack.StreamBlocked
             headers = self._decode_headers(stream_id, frame_data)
 
+            # log frame
+            if self._quic_logger is not None:
+                self._quic_logger.log_event(
+                    category="HTTP",
+                    event="frame_parsed",
+                    data=qlog_encode_headers_frame(
+                        byte_length=stream.blocked_frame_size
+                        if frame_data is None
+                        else len(frame_data),
+                        headers=headers,
+                        stream_id=stream_id,
+                    ),
+                )
+
             # update state and emit headers
             if stream.headers_state == HeadersState.INITIAL:
                 stream.headers_state = HeadersState.AFTER_HEADERS
@@ -392,6 +466,21 @@ class H3Connection:
             frame_buf = Buffer(data=frame_data)
             push_id = frame_buf.pull_uint_var()
             headers = self._decode_headers(stream_id, frame_data[frame_buf.tell() :])
+
+            # log frame
+            if self._quic_logger is not None:
+                self._quic_logger.log_event(
+                    category="HTTP",
+                    event="frame_parsed",
+                    data=qlog_encode_push_promise_frame(
+                        byte_length=len(frame_data),
+                        headers=headers,
+                        push_id=push_id,
+                        stream_id=stream_id,
+                    ),
+                )
+
+            # emit event
             http_events.append(
                 PushPromiseReceived(
                     headers=headers, push_id=push_id, stream_id=stream_id
@@ -501,6 +590,19 @@ class H3Connection:
                     break
                 consumed = buf.tell()
 
+                # log frame
+                if (
+                    self._quic_logger is not None
+                    and stream.frame_type == FrameType.DATA
+                ):
+                    self._quic_logger.log_event(
+                        category="HTTP",
+                        event="frame_parsed",
+                        data=qlog_encode_data_frame(
+                            byte_length=stream.frame_size, stream_id=stream_id
+                        ),
+                    )
+
             # check how much data is available
             chunk_size = min(stream.frame_size, buf.capacity - consumed)
             if stream.frame_type != FrameType.DATA and chunk_size < stream.frame_size:
@@ -526,6 +628,7 @@ class H3Connection:
                 )
             except pylsqpack.StreamBlocked:
                 stream.blocked = True
+                stream.blocked_frame_size = len(frame_data)
                 break
 
         # remove processed data from buffer
@@ -636,6 +739,7 @@ class H3Connection:
                 )
             )
             stream.blocked = False
+            stream.blocked_frame_size = None
 
             # resume processing
             if stream.buffer:
