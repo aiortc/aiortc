@@ -290,12 +290,17 @@ class H3Connection:
         self._quic.send_stream_data(stream_id, encode_uint_var(stream_type))
         return stream_id
 
-    def _decode_headers(self, stream_id: int, frame_data: bytes) -> Headers:
+    def _decode_headers(self, stream_id: int, frame_data: Optional[bytes]) -> Headers:
         """
         Decode a HEADERS block and send decoder updates on the decoder stream.
+
+        This is called with frame_data=None when a stream becomes unblocked.
         """
         try:
-            decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+            if frame_data is None:
+                decoder, headers = self._decoder.resume_header(stream_id)
+            else:
+                decoder, headers = self._decoder.feed_header(stream_id, frame_data)
             self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
         except pylsqpack.DecompressionFailed as exc:
             raise QpackDecompressionFailed() from exc
@@ -334,7 +339,11 @@ class H3Connection:
             raise WrongStream("Invalid frame type on control stream")
 
     def _handle_request_or_push_frame(
-        self, frame_type: int, frame_data: bytes, stream_id: int, stream_ended: bool
+        self,
+        frame_type: int,
+        frame_data: Optional[bytes],
+        stream_id: int,
+        stream_ended: bool,
     ) -> List[H3Event]:
         """
         Handle a frame received on a request or push stream.
@@ -361,7 +370,7 @@ class H3Connection:
             if stream.headers_state == HeadersState.AFTER_TRAILERS:
                 raise UnexpectedFrame("HEADERS frame is not allowed in this state")
 
-            # try to decode HEADERS
+            # try to decode HEADERS, may raise pylsqpack.StreamBlocked
             headers = self._decode_headers(stream_id, frame_data)
 
             # update state and emit headers
@@ -617,23 +626,16 @@ class H3Connection:
         for stream_id in unblocked_streams:
             stream = self._stream[stream_id]
 
-            # decode headers
-            decoder, headers = self._decoder.resume_header(stream_id)
-            self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
-            stream.blocked = False
-
-            # update state and emit headers
-            if stream.headers_state == HeadersState.INITIAL:
-                stream.headers_state = HeadersState.AFTER_HEADERS
-            else:
-                stream.headers_state = HeadersState.AFTER_TRAILERS
-            http_events.append(
-                HeadersReceived(
-                    headers=headers,
+            # resume headers
+            http_events.extend(
+                self._handle_request_or_push_frame(
+                    frame_type=FrameType.HEADERS,
+                    frame_data=None,
                     stream_id=stream_id,
                     stream_ended=stream.ended and not stream.buffer,
                 )
             )
+            stream.blocked = False
 
             # resume processing
             if stream.buffer:
