@@ -6,8 +6,6 @@ Changelog
 0.9.22
 ------
 
-*under development*
-
 DTLS
 ....
 
