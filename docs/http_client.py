@@ -2,10 +2,15 @@
 
 import asyncio
 import sys
+
 from aioquic.asyncio import connect
+from aioquic.quic.configuration import QuicConfiguration
+
 
 async def http_client(host, port):
-    async with connect(host, port) as connection:
+    configuration = QuicConfiguration(alpn_protocols=["hq-22"])
+
+    async with connect(host, port, configuration=configuration) as connection:
         reader, writer = await connection.create_stream()
         writer.write(b"GET /\r\n")
         writer.write_eof()
