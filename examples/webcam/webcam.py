@@ -38,12 +38,15 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)
 
-    # open webcam
-    options = {"framerate": "30", "video_size": "640x480"}
-    if platform.system() == "Darwin":
-        player = MediaPlayer("default:none", format="avfoundation", options=options)
+    # open media source
+    if args.play_from:
+        player = MediaPlayer(args.play_from)
     else:
-        player = MediaPlayer("/dev/video0", format="v4l2", options=options)
+        options = {"framerate": "30", "video_size": "640x480"}
+        if platform.system() == "Darwin":
+            player = MediaPlayer("default:none", format="avfoundation", options=options)
+        else:
+            player = MediaPlayer("/dev/video0", format="v4l2", options=options)
 
     await pc.setRemoteDescription(offer)
     for t in pc.getTransceivers():
@@ -77,6 +80,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WebRTC webcam demo")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
+    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
     parser.add_argument(
         "--port", type=int, default=8080, help="Port for HTTP server (default: 8080)"
     )

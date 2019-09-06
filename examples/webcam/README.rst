@@ -27,6 +27,15 @@ http://127.0.0.1:8080
 Once you click `Start` the server will send video from its webcam to the
 browser.
 
+Additional options
+------------------
+
+If you want to play a media file instead of using the webcam, run:
+
+.. code-block:: console
+
+   $ python server.py --play-from video.mp4
+
 Credits
 -------
 

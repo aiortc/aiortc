@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.22
+------
+
+*under development*
+
+Examples
+........
+
+  * `webcam` : make it possible to play media from a file.
+
 0.9.21
 ------
 
@@ -23,7 +33,7 @@ Examples
   * :class:`aiortc.contrib.signaling.ApprtcSignaling` : make AppRTC signaling available for more examples.
   * `datachannel-cli` : make uvloop optional.
   * `videostream-cli` : animate the flag with a wave effect.
-  * `webcam` : explicitly set frame rate to 30 fps.
+  * `webcam` : explicitly set frame rate to 30 fps for webcams.
 
 0.9.20
 ------
