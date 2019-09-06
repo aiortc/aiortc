@@ -8,10 +8,22 @@ Changelog
 
 *under development*
 
+DTLS
+....
+
+  * Display exception if data handler fails.
+
 Examples
 ........
 
+  * `server` and `webcam` : add playsinline attribute for iOS compatibility.
   * `webcam` : make it possible to play media from a file.
+
+Miscellaneous
+.............
+
+  * Use aioice >= 0.6.15 to not fail on mDNS candidates.
+  * Use pyee version 6.x.
 
 0.9.21
 ------
