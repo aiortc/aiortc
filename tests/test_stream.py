@@ -1,5 +1,6 @@
 from unittest import TestCase
 
+from aioquic.quic.events import StreamDataReceived
 from aioquic.quic.packet import QuicStreamFrame
 from aioquic.quic.packet_builder import QuicDeliveryState
 from aioquic.quic.stream import QuicStream
@@ -7,70 +8,54 @@ from aioquic.quic.stream import QuicStream
 
 class QuicStreamTest(TestCase):
     def test_recv_empty(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 0)
 
         # empty
-        self.assertEqual(stream.pull_data(), b"")
+        self.assertEqual(stream.add_frame(QuicStreamFrame(offset=0, data=b"")), None)
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 0)
 
     def test_recv_ordered(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
         # add data at start
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        self.assertEqual(bytes(stream._recv_buffer), b"01234567")
-        self.assertEqual(list(stream._recv_ranges), [range(0, 8)])
-        self.assertEqual(stream._recv_buffer_start, 0)
-
-        # pull data
-        self.assertEqual(stream.pull_data(), b"01234567")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"01234567", end_stream=False, stream_id=0),
+        )
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 8)
 
         # add more data
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345"))
-        self.assertEqual(bytes(stream._recv_buffer), b"89012345")
-        self.assertEqual(list(stream._recv_ranges), [range(8, 16)])
-        self.assertEqual(stream._recv_buffer_start, 8)
-
-        # pull data
-        self.assertEqual(stream.pull_data(), b"89012345")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345")),
+            StreamDataReceived(data=b"89012345", end_stream=False, stream_id=0),
+        )
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 16)
 
-    def test_recv_ordered_2(self):
-        stream = QuicStream()
-
-        # add data at start
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        self.assertEqual(bytes(stream._recv_buffer), b"01234567")
-        self.assertEqual(list(stream._recv_ranges), [range(0, 8)])
-        self.assertEqual(stream._recv_buffer_start, 0)
-
-        # add more data
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345"))
-        self.assertEqual(bytes(stream._recv_buffer), b"0123456789012345")
-        self.assertEqual(list(stream._recv_ranges), [range(0, 16)])
-        self.assertEqual(stream._recv_buffer_start, 0)
-
-        # pull data
-        self.assertEqual(stream.pull_data(), b"0123456789012345")
+        # add data and fin
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=16, data=b"67890123", fin=True)),
+            StreamDataReceived(data=b"67890123", end_stream=True, stream_id=0),
+        )
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
-        self.assertEqual(stream._recv_buffer_start, 16)
+        self.assertEqual(stream._recv_buffer_start, 24)
 
     def test_recv_unordered(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
         # add data at offset 8
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345"))
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345")), None
+        )
         self.assertEqual(
             bytes(stream._recv_buffer), b"\x00\x00\x00\x00\x00\x00\x00\x0089012345"
         )
@@ -78,28 +63,25 @@ class QuicStreamTest(TestCase):
         self.assertEqual(stream._recv_buffer_start, 0)
 
         # add data at offset 0
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        self.assertEqual(bytes(stream._recv_buffer), b"0123456789012345")
-        self.assertEqual(list(stream._recv_ranges), [range(0, 16)])
-        self.assertEqual(stream._recv_buffer_start, 0)
-
-        # pull data
-        self.assertEqual(stream.pull_data(), b"0123456789012345")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"0123456789012345", end_stream=False, stream_id=0),
+        )
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 16)
 
     def test_recv_offset_only(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
         # add data at offset 0
-        stream.add_frame(QuicStreamFrame(offset=0, data=b""))
+        self.assertEqual(stream.add_frame(QuicStreamFrame(offset=0, data=b"")), None)
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 0)
 
         # add data at offset 8
-        stream.add_frame(QuicStreamFrame(offset=8, data=b""))
+        self.assertEqual(stream.add_frame(QuicStreamFrame(offset=8, data=b"")), None)
         self.assertEqual(
             bytes(stream._recv_buffer), b"\x00\x00\x00\x00\x00\x00\x00\x00"
         )
@@ -107,46 +89,67 @@ class QuicStreamTest(TestCase):
         self.assertEqual(stream._recv_buffer_start, 0)
 
     def test_recv_already_fully_consumed(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        self.assertEqual(stream.pull_data(), b"01234567")
-
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
+        # add data at offset 0
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"01234567", end_stream=False, stream_id=0),
+        )
         self.assertEqual(bytes(stream._recv_buffer), b"")
         self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 8)
 
-        self.assertEqual(stream.pull_data(), b"")
+        # add data again at offset 0
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")), None
+        )
+        self.assertEqual(bytes(stream._recv_buffer), b"")
+        self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 8)
 
     def test_recv_already_partially_consumed(self):
-        stream = QuicStream()
+        stream = QuicStream(stream_id=0)
 
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        self.assertEqual(stream.pull_data(), b"01234567")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"01234567", end_stream=False, stream_id=0),
+        )
 
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"0123456789012345"))
-        self.assertEqual(bytes(stream._recv_buffer), b"89012345")
-        self.assertEqual(list(stream._recv_ranges), [range(8, 16)])
-        self.assertEqual(stream._recv_buffer_start, 8)
-
-        self.assertEqual(stream.pull_data(), b"89012345")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"0123456789012345")),
+            StreamDataReceived(data=b"89012345", end_stream=False, stream_id=0),
+        )
+        self.assertEqual(bytes(stream._recv_buffer), b"")
+        self.assertEqual(list(stream._recv_ranges), [])
         self.assertEqual(stream._recv_buffer_start, 16)
 
     def test_recv_fin(self):
         stream = QuicStream(stream_id=0)
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
 
-        self.assertEqual(stream.pull_data(), b"0123456789012345")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"01234567", end_stream=False, stream_id=0),
+        )
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True)),
+            StreamDataReceived(data=b"89012345", end_stream=True, stream_id=0),
+        )
 
     def test_recv_fin_out_of_order(self):
         stream = QuicStream(stream_id=0)
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
 
-        self.assertEqual(stream.pull_data(), b"0123456789012345")
+        # add data at offset 8 with FIN
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True)),
+            None,
+        )
+
+        # add data at offset 0
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"0123456789012345", end_stream=True, stream_id=0),
+        )
 
     def test_recv_fin_then_data(self):
         stream = QuicStream(stream_id=0)
@@ -157,17 +160,26 @@ class QuicStreamTest(TestCase):
 
     def test_recv_fin_twice(self):
         stream = QuicStream(stream_id=0)
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567"))
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
-        stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True))
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"01234567")),
+            StreamDataReceived(data=b"01234567", end_stream=False, stream_id=0),
+        )
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True)),
+            StreamDataReceived(data=b"89012345", end_stream=True, stream_id=0),
+        )
 
-        self.assertEqual(stream.pull_data(), b"0123456789012345")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=8, data=b"89012345", fin=True)),
+            StreamDataReceived(data=b"", end_stream=True, stream_id=0),
+        )
 
     def test_recv_fin_without_data(self):
         stream = QuicStream(stream_id=0)
-        stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True))
-
-        self.assertEqual(stream.pull_data(), b"")
+        self.assertEqual(
+            stream.add_frame(QuicStreamFrame(offset=0, data=b"", fin=True)),
+            StreamDataReceived(data=b"", end_stream=True, stream_id=0),
+        )
 
     def test_send_data(self):
         stream = QuicStream()

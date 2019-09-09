@@ -958,7 +958,6 @@ class QuicConnection:
 
         # create stream
         stream = self._streams[stream_id] = QuicStream(
-            connection=self,
             stream_id=stream_id,
             max_stream_data_local=max_stream_data_local,
             max_stream_data_remote=max_stream_data_remote,
@@ -1023,7 +1022,6 @@ class QuicConnection:
             # create stream
             self._logger.info("Stream %d created by peer" % stream_id)
             stream = self._streams[stream_id] = QuicStream(
-                connection=self,
                 stream_id=stream_id,
                 max_stream_data_local=max_stream_data_local,
                 max_stream_data_remote=max_stream_data_remote,
@@ -1183,12 +1181,11 @@ class QuicConnection:
             )
 
         stream = self._crypto_streams[context.epoch]
-        stream.add_frame(frame)
-        data = stream.pull_data()
-        if data:
+        event = stream.add_frame(frame)
+        if event is not None:
             # pass data to TLS layer
             try:
-                self.tls.handle_message(data, self._crypto_buffers)
+                self.tls.handle_message(event.data, self._crypto_buffers)
                 self._push_crypto_data()
             except tls.Alert as exc:
                 raise QuicConnectionError(
@@ -1586,7 +1583,9 @@ class QuicConnection:
                 reason_phrase="Over connection data limit",
             )
 
-        stream.add_frame(frame)
+        event = stream.add_frame(frame)
+        if event is not None:
+            self._events.append(event)
         self._local_max_data_used += newly_received
 
     def _handle_stream_data_blocked_frame(

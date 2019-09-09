@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Optional
 
 from . import events
 from .packet import QuicStreamFrame
@@ -10,11 +10,9 @@ class QuicStream:
     def __init__(
         self,
         stream_id: Optional[int] = None,
-        connection: Optional[Any] = None,
         max_stream_data_local: int = 0,
         max_stream_data_remote: int = 0,
     ) -> None:
-        self._connection = connection
         self.is_blocked = False
         self.max_stream_data_local = max_stream_data_local
         self.max_stream_data_local_sent = max_stream_data_local
@@ -44,7 +42,7 @@ class QuicStream:
 
     # reader
 
-    def add_frame(self, frame: QuicStreamFrame) -> None:
+    def add_frame(self, frame: QuicStreamFrame) -> Optional[events.StreamDataReceived]:
         """
         Add a frame of received data.
         """
@@ -55,43 +53,47 @@ class QuicStream:
         # we should receive no more data beyond FIN!
         if self._recv_buffer_fin is not None and frame_end > self._recv_buffer_fin:
             raise Exception("Data received beyond FIN")
-
-        if pos + count > 0:
-            # frame has been partially consumed
-            if pos < 0:
-                count += pos
-                frame.data = frame.data[-pos:]
-                frame.offset -= pos
-                pos = 0
-
-            # marked received
-            if count:
-                self._recv_ranges.add(frame.offset, frame_end)
-            if frame_end > self._recv_highest:
-                self._recv_highest = frame_end
-
-            # add data
-            gap = pos - len(self._recv_buffer)
-            if gap > 0:
-                self._recv_buffer += bytearray(gap)
-            self._recv_buffer[pos : pos + count] = frame.data
-
         if frame.fin:
             self._recv_buffer_fin = frame_end
+        if frame_end > self._recv_highest:
+            self._recv_highest = frame_end
 
-        if self._connection:
-            data = self.pull_data()
-            self._connection._events.append(
-                events.StreamDataReceived(
-                    data=data,
-                    end_stream=(self._recv_buffer_start == self._recv_buffer_fin),
-                    stream_id=self.__stream_id,
-                )
+        # fast path: new in-order chunk
+        if pos == 0 and count and not self._recv_buffer:
+            self._recv_buffer_start += count
+            return events.StreamDataReceived(
+                data=frame.data, end_stream=frame.fin, stream_id=self.__stream_id
             )
 
-    def pull_data(self) -> bytes:
+        # discard duplicate data
+        if pos < 0:
+            frame.data = frame.data[-pos:]
+            frame.offset -= pos
+            pos = 0
+
+        # marked received range
+        if frame_end > frame.offset:
+            self._recv_ranges.add(frame.offset, frame_end)
+
+        # add new data
+        gap = pos - len(self._recv_buffer)
+        if gap > 0:
+            self._recv_buffer += bytearray(gap)
+        self._recv_buffer[pos : pos + count] = frame.data
+
+        # return data from the front of the buffer
+        data = self._pull_data()
+        end_stream = self._recv_buffer_start == self._recv_buffer_fin
+        if data or end_stream:
+            return events.StreamDataReceived(
+                data=data, end_stream=end_stream, stream_id=self.__stream_id
+            )
+        else:
+            return None
+
+    def _pull_data(self) -> bytes:
         """
-        Pull received data.
+        Remove data from the front of the buffer.
         """
         try:
             has_data_to_read = self._recv_ranges[0].start == self._recv_buffer_start
