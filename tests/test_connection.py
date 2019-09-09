@@ -787,6 +787,21 @@ class QuicConnectionTest(TestCase):
                 Buffer(data=binascii.unhexlify("080102030405060708")),
             )
 
+    def test_handle_new_token_frame_from_client(self):
+        with client_and_server() as (client, server):
+            # server receives NEW_TOKEN
+            with self.assertRaises(QuicConnectionError) as cm:
+                server._handle_new_token_frame(
+                    client_receive_context(client),
+                    QuicFrameType.NEW_TOKEN,
+                    Buffer(data=binascii.unhexlify("080102030405060708")),
+                )
+            self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+            self.assertEqual(cm.exception.frame_type, QuicFrameType.NEW_TOKEN)
+            self.assertEqual(
+                cm.exception.reason_phrase, "Clients must not send NEW_TOKEN frames"
+            )
+
     def test_handle_path_challenge_frame(self):
         with client_and_server() as (client, server):
             # client changes address and sends some data

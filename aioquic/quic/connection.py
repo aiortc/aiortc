@@ -1369,6 +1369,13 @@ class QuicConnection:
         """
         token = pull_new_token_frame(buf)
 
+        if not self._is_client:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=frame_type,
+                reason_phrase="Clients must not send NEW_TOKEN frames",
+            )
+
         # log frame
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
