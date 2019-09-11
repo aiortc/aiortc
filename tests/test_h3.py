@@ -7,6 +7,7 @@ from aioquic.h3.connection import (
     FrameType,
     H3Connection,
     StreamType,
+    UnexpectedFrame,
     encode_frame,
 )
 from aioquic.h3.events import DataReceived, HeadersReceived, PushPromiseReceived
@@ -924,6 +925,73 @@ class H3ConnectionTest(TestCase):
                         (b":path", b"/8.css"),
                     ],
                 )
+
+    def test_send_data_after_trailers(self):
+        """
+        We should not send DATA after trailers.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        stream_id = quic_client.get_next_available_stream_id()
+        h3_client.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"localhost"),
+                (b":path", b"/"),
+            ],
+        )
+        h3_client.send_headers(
+            stream_id=stream_id, headers=[(b"x-some-trailer", b"foo")], end_stream=False
+        )
+        with self.assertRaises(UnexpectedFrame):
+            h3_client.send_data(stream_id=stream_id, data=b"hello", end_stream=False)
+
+    def test_send_data_before_headers(self):
+        """
+        We should not send DATA before headers.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        stream_id = quic_client.get_next_available_stream_id()
+        with self.assertRaises(UnexpectedFrame):
+            h3_client.send_data(stream_id=stream_id, data=b"hello", end_stream=False)
+
+    def test_send_headers_after_trailers(self):
+        """
+        We should not send HEADERS after trailers.
+        """
+        quic_client = FakeQuicConnection(
+            configuration=QuicConfiguration(is_client=True)
+        )
+        h3_client = H3Connection(quic_client)
+
+        stream_id = quic_client.get_next_available_stream_id()
+        h3_client.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":authority", b"localhost"),
+                (b":path", b"/"),
+            ],
+        )
+        h3_client.send_headers(
+            stream_id=stream_id, headers=[(b"x-some-trailer", b"foo")], end_stream=False
+        )
+        with self.assertRaises(UnexpectedFrame):
+            h3_client.send_headers(
+                stream_id=stream_id,
+                headers=[(b"x-other-trailer", b"foo")],
+                end_stream=False,
+            )
 
     def test_blocked_stream(self):
         quic_client = FakeQuicConnection(
