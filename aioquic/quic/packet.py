@@ -19,6 +19,7 @@ PACKET_TYPE_RETRY = PACKET_LONG_HEADER | PACKET_FIXED_BIT | 0x30
 PACKET_TYPE_ONE_RTT = PACKET_FIXED_BIT
 PACKET_TYPE_MASK = 0xF0
 
+CONNECTION_ID_MAX_SIZE = 20
 PACKET_NUMBER_MAX_SIZE = 4
 
 
@@ -95,9 +96,15 @@ def pull_quic_header(buf: Buffer, host_cid_length: Optional[int] = None) -> Quic
         version = buf.pull_uint32()
 
         destination_cid_length = buf.pull_uint8()
+        if destination_cid_length > CONNECTION_ID_MAX_SIZE:
+            raise ValueError(
+                "Destination CID is too long (%d bytes)" % destination_cid_length
+            )
         destination_cid = buf.pull_bytes(destination_cid_length)
 
         source_cid_length = buf.pull_uint8()
+        if source_cid_length > CONNECTION_ID_MAX_SIZE:
+            raise ValueError("Source CID is too long (%d bytes)" % source_cid_length)
         source_cid = buf.pull_bytes(source_cid_length)
 
         if version == QuicProtocolVersion.NEGOTIATION:

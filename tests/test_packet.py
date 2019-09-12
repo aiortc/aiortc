@@ -109,6 +109,28 @@ class PacketTest(TestCase):
         self.assertEqual(header.rest_length, 8)
         self.assertEqual(buf.tell(), 23)
 
+    def test_pull_long_header_dcid_too_long(self):
+        buf = Buffer(
+            data=binascii.unhexlify(
+                "c6ff0000161500000000000000000000000000000000000000000000004"
+                "01c514f99ec4bbf1f7a30f9b0c94fef717f1c1d07fec24c99a864da7ede"
+            )
+        )
+        with self.assertRaises(ValueError) as cm:
+            pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(str(cm.exception), "Destination CID is too long (21 bytes)")
+
+    def test_pull_long_header_scid_too_long(self):
+        buf = Buffer(
+            data=binascii.unhexlify(
+                "c2ff0000160015000000000000000000000000000000000000000000004"
+                "01cfcee99ec4bbf1f7a30f9b0c9417b8c263cdd8cc972a4439d68a46320"
+            )
+        )
+        with self.assertRaises(ValueError) as cm:
+            pull_quic_header(buf, host_cid_length=8)
+        self.assertEqual(str(cm.exception), "Source CID is too long (21 bytes)")
+
     def test_pull_long_header_no_fixed_bit(self):
         buf = Buffer(data=b"\x80\xff\x00\x00\x11\x00\x00")
         with self.assertRaises(ValueError) as cm:
