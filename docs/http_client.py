@@ -8,7 +8,7 @@ from aioquic.quic.configuration import QuicConfiguration
 
 
 async def http_client(host, port):
-    configuration = QuicConfiguration(alpn_protocols=["hq-22"])
+    configuration = QuicConfiguration(alpn_protocols=["hq-23"])
 
     async with connect(host, port, configuration=configuration) as connection:
         reader, writer = await connection.create_stream()

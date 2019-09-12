@@ -486,8 +486,8 @@ class H3ConnectionTest(TestCase):
 
     def test_request(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -503,8 +503,8 @@ class H3ConnectionTest(TestCase):
 
     def test_request_headers_only(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -695,8 +695,8 @@ class H3ConnectionTest(TestCase):
 
     def test_request_with_server_push(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -865,8 +865,8 @@ class H3ConnectionTest(TestCase):
 
     def test_request_with_server_push_max_push_id(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -1163,8 +1163,8 @@ class H3ConnectionTest(TestCase):
 
     def test_uni_stream_grease(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_server = H3Connection(quic_server)
 
@@ -1175,8 +1175,8 @@ class H3ConnectionTest(TestCase):
 
     def test_request_with_trailers(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_client = H3Connection(quic_client)
             h3_server = H3Connection(quic_server)
@@ -1270,8 +1270,8 @@ class H3ConnectionTest(TestCase):
 
     def test_uni_stream_type(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["h3-22"]},
-            server_options={"alpn_protocols": ["h3-22"]},
+            client_options={"alpn_protocols": ["h3-23"]},
+            server_options={"alpn_protocols": ["h3-23"]},
         ) as (quic_client, quic_server):
             h3_server = H3Connection(quic_server)
 

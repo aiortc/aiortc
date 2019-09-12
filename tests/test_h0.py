@@ -22,8 +22,8 @@ def h0_transfer(quic_sender, h0_receiver):
 class H0ConnectionTest(TestCase):
     def test_connect(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["hq-22"]},
-            server_options={"alpn_protocols": ["hq-22"]},
+            client_options={"alpn_protocols": ["hq-23"]},
+            server_options={"alpn_protocols": ["hq-23"]},
         ) as (quic_client, quic_server):
             h0_client = H0Connection(quic_client)
             h0_server = H0Connection(quic_server)
@@ -87,8 +87,8 @@ class H0ConnectionTest(TestCase):
 
     def test_headers_only(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["hq-22"]},
-            server_options={"alpn_protocols": ["hq-22"]},
+            client_options={"alpn_protocols": ["hq-23"]},
+            server_options={"alpn_protocols": ["hq-23"]},
         ) as (quic_client, quic_server):
             h0_client = H0Connection(quic_client)
             h0_server = H0Connection(quic_server)

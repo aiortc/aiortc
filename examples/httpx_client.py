@@ -185,7 +185,7 @@ if __name__ == "__main__":
     )
 
     # prepare configuration
-    configuration = QuicConfiguration(is_client=True, alpn_protocols=["h3-22"])
+    configuration = QuicConfiguration(is_client=True, alpn_protocols=["h3-23", "h3-22"])
     if args.quic_log:
         configuration.quic_logger = QuicLogger()
     if args.secrets_log:

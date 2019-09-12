@@ -302,9 +302,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
 
     def quic_event_received(self, event: QuicEvent):
         if isinstance(event, ProtocolNegotiated):
-            if event.alpn_protocol == "h3-22":
+            if event.alpn_protocol.startswith("h3-"):
                 self._http = H3Connection(self._quic)
-            elif event.alpn_protocol == "hq-22":
+            elif event.alpn_protocol.startswith("hq-"):
                 self._http = H0Connection(self._quic)
 
         #  pass event to the HTTP layer
@@ -437,7 +437,7 @@ if __name__ == "__main__":
         )
 
     configuration = QuicConfiguration(
-        alpn_protocols=["h3-22", "hq-22"],
+        alpn_protocols=["h3-23", "h3-22", "hq-23", "hq-22"],
         certificate=certificate,
         is_client=False,
         private_key=private_key,

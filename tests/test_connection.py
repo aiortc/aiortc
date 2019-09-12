@@ -219,26 +219,26 @@ class QuicConnectionTest(TestCase):
 
     def test_connect_with_alpn(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["hq-22", "h3-22"]},
-            server_options={"alpn_protocols": ["hq-22"]},
+            client_options={"alpn_protocols": ["h3-23", "hq-23"]},
+            server_options={"alpn_protocols": ["hq-23"]},
         ) as (client, server):
             # check handshake completed
             event = client.next_event()
             self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, "hq-22")
+            self.assertEqual(event.alpn_protocol, "hq-23")
             event = client.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, "hq-22")
+            self.assertEqual(event.alpn_protocol, "hq-23")
             for i in range(7):
                 self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(client.next_event())
 
             event = server.next_event()
             self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, "hq-22")
+            self.assertEqual(event.alpn_protocol, "hq-23")
             event = server.next_event()
             self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, "hq-22")
+            self.assertEqual(event.alpn_protocol, "hq-23")
             for i in range(7):
                 self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
             self.assertIsNone(server.next_event())

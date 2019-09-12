@@ -146,7 +146,7 @@ async def test_http_0(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    configuration.alpn_protocols = ["hq-22"]
+    configuration.alpn_protocols = ["hq-23", "hq-22"]
     async with connect(
         server.host,
         server.port,
@@ -165,7 +165,7 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    configuration.alpn_protocols = ["h3-22"]
+    configuration.alpn_protocols = ["h3-23", "h3-22"]
     async with connect(
         server.host,
         server.port,
@@ -311,9 +311,9 @@ async def test_throughput(server: Server, configuration: QuicConfiguration):
 
         # perform HTTP request over QUIC
         if server.http3:
-            configuration.alpn_protocols = ["h3-22"]
+            configuration.alpn_protocols = ["h3-23", "h3-22"]
         else:
-            configuration.alpn_protocols = ["hq-22"]
+            configuration.alpn_protocols = ["hq-23", "hq-22"]
         start = time.time()
         async with connect(
             server.host,
@@ -355,7 +355,7 @@ async def run(servers, tests, quic_log=False, secrets_log_file=None) -> None:
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
             configuration = QuicConfiguration(
-                alpn_protocols=["hq-22", "h3-22"],
+                alpn_protocols=["h3-23", "h3-22", "hq-23", "hq-22"],
                 is_client=True,
                 quic_logger=QuicLogger(),
                 secrets_log_file=secrets_log_file,

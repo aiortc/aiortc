@@ -291,7 +291,8 @@ if __name__ == "__main__":
 
     # prepare configuration
     configuration = QuicConfiguration(
-        is_client=True, alpn_protocols=["hq-22" if args.legacy_http else "h3-22"]
+        is_client=True,
+        alpn_protocols=["hq-23", "hq-22"] if args.legacy_http else ["h3-23", "h3-22"],
     )
     if args.quic_log:
         configuration.quic_logger = QuicLogger()
