@@ -243,7 +243,7 @@ class HighLevelTest(TestCase):
                     configuration=QuicConfiguration(
                         is_client=True,
                         quic_logger=QuicLogger(),
-                        supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_22],
+                        supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_23],
                     ),
                 ),
             )

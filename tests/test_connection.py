@@ -631,7 +631,7 @@ class QuicConnectionTest(TestCase):
 
         client.receive_datagram(
             encode_quic_retry(
-                version=QuicProtocolVersion.DRAFT_22,
+                version=QuicProtocolVersion.DRAFT_23,
                 source_cid=binascii.unhexlify("85abb547bf28be97"),
                 destination_cid=client.host_cid,
                 original_destination_cid=client._peer_cid,
@@ -647,7 +647,7 @@ class QuicConnectionTest(TestCase):
 
         client.receive_datagram(
             encode_quic_retry(
-                version=QuicProtocolVersion.DRAFT_22,
+                version=QuicProtocolVersion.DRAFT_23,
                 source_cid=binascii.unhexlify("85abb547bf28be97"),
                 destination_cid=binascii.unhexlify("c98343fe8f5f0ff4"),
                 original_destination_cid=client._peer_cid,
@@ -1354,7 +1354,7 @@ class QuicConnectionTest(TestCase):
             encode_quic_version_negotiation(
                 source_cid=client._peer_cid,
                 destination_cid=client.host_cid,
-                supported_versions=[QuicProtocolVersion.DRAFT_22],
+                supported_versions=[QuicProtocolVersion.DRAFT_23],
             ),
             SERVER_ADDR,
             now=time.time(),

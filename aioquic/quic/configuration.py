@@ -77,5 +77,8 @@ class QuicConfiguration:
     """
 
     supported_versions: List[int] = field(
-        default_factory=lambda: [QuicProtocolVersion.DRAFT_22]
+        default_factory=lambda: [
+            QuicProtocolVersion.DRAFT_23,
+            QuicProtocolVersion.DRAFT_22,
+        ]
     )
