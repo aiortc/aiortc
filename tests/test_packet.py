@@ -205,13 +205,13 @@ class ParamsTest(TestCase):
         push_quic_transport_parameters(buf, params)
         self.assertEqual(len(buf.data), len(data))
 
-    def test_params_disable_migration(self):
+    def test_params_disable_active_migration(self):
         data = binascii.unhexlify("0004000c0000")
 
         # parse
         buf = Buffer(data=data)
         params = pull_quic_transport_parameters(buf)
-        self.assertEqual(params, QuicTransportParameters(disable_migration=True))
+        self.assertEqual(params, QuicTransportParameters(disable_active_migration=True))
 
         # serialize
         buf = Buffer(capacity=len(data))

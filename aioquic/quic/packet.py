@@ -34,7 +34,6 @@ class QuicErrorCode(IntEnum):
     FRAME_ENCODING_ERROR = 0x7
     TRANSPORT_PARAMETER_ERROR = 0x8
     PROTOCOL_VIOLATION = 0xA
-    INVALID_MIGRATION = 0xC
     CRYPTO_BUFFER_EXCEEDED = 0xD
     CRYPTO_ERROR = 0x100
 
@@ -229,7 +228,7 @@ class QuicTransportParameters:
     initial_max_streams_uni: Optional[int] = None
     ack_delay_exponent: Optional[int] = None
     max_ack_delay: Optional[int] = None
-    disable_migration: Optional[bool] = False
+    disable_active_migration: Optional[bool] = False
     preferred_address: Optional[QuicPreferredAddress] = None
     active_connection_id_limit: Optional[int] = None
 
@@ -247,7 +246,7 @@ PARAMS = [
     ("initial_max_streams_uni", int),
     ("ack_delay_exponent", int),
     ("max_ack_delay", int),
-    ("disable_migration", bool),
+    ("disable_active_migration", bool),
     ("preferred_address", QuicPreferredAddress),
     ("active_connection_id_limit", int),
 ]
