@@ -21,23 +21,23 @@ logger = logging.getLogger("http3")
 
 
 class ErrorCode(IntEnum):
-    HTTP_NO_ERROR = 0x00
-    HTTP_GENERAL_PROTOCOL_ERROR = 0x01
-    HTTP_INTERNAL_ERROR = 0x03
-    HTTP_REQUEST_CANCELLED = 0x05
-    HTTP_INCOMPLETE_REQUEST = 0x06
-    HTTP_CONNECT_ERROR = 0x07
-    HTTP_EXCESSIVE_LOAD = 0x08
-    HTTP_VERSION_FALLBACK = 0x09
-    HTTP_WRONG_STREAM = 0x0A
-    HTTP_ID_ERROR = 0x0B
-    HTTP_STREAM_CREATION_ERROR = 0x0D
-    HTTP_CLOSED_CRITICAL_STREAM = 0x0F
-    HTTP_EARLY_RESPONSE = 0x11
-    HTTP_MISSING_SETTINGS = 0x12
-    HTTP_UNEXPECTED_FRAME = 0x13
-    HTTP_REQUEST_REJECTED = 0x14
-    HTTP_SETTINGS_ERROR = 0xFF
+    HTTP_NO_ERROR = 0x100
+    HTTP_GENERAL_PROTOCOL_ERROR = 0x101
+    HTTP_INTERNAL_ERROR = 0x102
+    HTTP_STREAM_CREATION_ERROR = 0x103
+    HTTP_CLOSED_CRITICAL_STREAM = 0x104
+    HTTP_FRAME_UNEXPECTED = 0x105
+    HTTP_FRAME_ERROR = 0x106
+    HTTP_EXCESSIVE_LOAD = 0x107
+    HTTP_ID_ERROR = 0x108
+    HTTP_SETTINGS_ERROR = 0x109
+    HTTP_MISSING_SETTINGS = 0x10A
+    HTTP_REQUEST_REJECTED = 0x10B
+    HTTP_REQUEST_CANCELLED = 0x10C
+    HTTP_REQUEST_INCOMPLETE = 0x10D
+    HTTP_EARLY_RESPONSE = 0x10E
+    HTTP_CONNECT_ERROR = 0x10F
+    HTTP_VERSION_FALLBACK = 0x110
     HTTP_QPACK_DECOMPRESSION_FAILED = 0x200
     HTTP_QPACK_ENCODER_STREAM_ERROR = 0x201
     HTTP_QPACK_DECODER_STREAM_ERROR = 0x202
@@ -105,12 +105,8 @@ class StreamCreationError(ProtocolError):
     error_code = ErrorCode.HTTP_STREAM_CREATION_ERROR
 
 
-class UnexpectedFrame(ProtocolError):
-    error_code = ErrorCode.HTTP_UNEXPECTED_FRAME
-
-
-class WrongStream(ProtocolError):
-    error_code = ErrorCode.HTTP_WRONG_STREAM
+class FrameUnexpected(ProtocolError):
+    error_code = ErrorCode.HTTP_FRAME_UNEXPECTED
 
 
 def encode_frame(frame_type: int, frame_data: bytes) -> bytes:
@@ -304,7 +300,7 @@ class H3Connection:
         # check DATA frame is allowed
         stream = self._get_or_create_stream(stream_id)
         if stream.headers_send_state != HeadersState.AFTER_HEADERS:
-            raise UnexpectedFrame("DATA frame is not allowed in this state")
+            raise FrameUnexpected("DATA frame is not allowed in this state")
 
         # log frame
         if self._quic_logger is not None:
@@ -335,7 +331,7 @@ class H3Connection:
         # check HEADERS frame is allowed
         stream = self._get_or_create_stream(stream_id)
         if stream.headers_send_state == HeadersState.AFTER_TRAILERS:
-            raise UnexpectedFrame("HEADERS frame is not allowed in this state")
+            raise FrameUnexpected("HEADERS frame is not allowed in this state")
 
         frame_data = self._encode_headers(stream_id, headers)
 
@@ -409,7 +405,7 @@ class H3Connection:
             self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
         elif frame_type == FrameType.MAX_PUSH_ID:
             if self._is_client:
-                raise UnexpectedFrame("Servers must not send MAX_PUSH_ID")
+                raise FrameUnexpected("Servers must not send MAX_PUSH_ID")
             self._max_push_id = parse_max_push_id(frame_data)
         elif frame_type in (
             FrameType.DATA,
@@ -417,7 +413,7 @@ class H3Connection:
             FrameType.PUSH_PROMISE,
             FrameType.DUPLICATE_PUSH,
         ):
-            raise WrongStream("Invalid frame type on control stream")
+            raise FrameUnexpected("Invalid frame type on control stream")
 
     def _handle_request_or_push_frame(
         self,
@@ -434,7 +430,7 @@ class H3Connection:
         if frame_type == FrameType.DATA:
             # check DATA frame is allowed
             if stream.headers_recv_state != HeadersState.AFTER_HEADERS:
-                raise UnexpectedFrame("DATA frame is not allowed in this state")
+                raise FrameUnexpected("DATA frame is not allowed in this state")
 
             if stream_ended or frame_data:
                 http_events.append(
@@ -448,7 +444,7 @@ class H3Connection:
         elif frame_type == FrameType.HEADERS:
             # check HEADERS frame is allowed
             if stream.headers_recv_state == HeadersState.AFTER_TRAILERS:
-                raise UnexpectedFrame("HEADERS frame is not allowed in this state")
+                raise FrameUnexpected("HEADERS frame is not allowed in this state")
 
             # try to decode HEADERS, may raise pylsqpack.StreamBlocked
             headers = self._decode_headers(stream.stream_id, frame_data)
@@ -482,7 +478,7 @@ class H3Connection:
             )
         elif stream.frame_type == FrameType.PUSH_PROMISE and stream.push_id is None:
             if not self._is_client:
-                raise UnexpectedFrame("Clients must not send PUSH_PROMISE")
+                raise FrameUnexpected("Clients must not send PUSH_PROMISE")
             frame_buf = Buffer(data=frame_data)
             push_id = frame_buf.pull_uint_var()
             headers = self._decode_headers(
@@ -517,7 +513,7 @@ class H3Connection:
             FrameType.MAX_PUSH_ID,
             FrameType.DUPLICATE_PUSH,
         ):
-            raise WrongStream(
+            raise FrameUnexpected(
                 "Invalid frame type on request stream"
                 if stream.push_id is None
                 else "Invalid frame type on push stream"
