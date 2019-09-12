@@ -617,7 +617,7 @@ class QuicConnectionTest(TestCase):
             version=0xFF000011,  # DRAFT_16
         )
         crypto = CryptoPair()
-        crypto.setup_initial(client.host_cid, is_client=False)
+        crypto.setup_initial(client.host_cid, is_client=False, version=client._version)
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         builder.buffer.push_bytes(bytes(1200))
         builder.end_packet()

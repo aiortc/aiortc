@@ -146,7 +146,7 @@ class CryptoPair:
             self._update_key()
         return self.send.encrypt_packet(plain_header, plain_payload, packet_number)
 
-    def setup_initial(self, cid: bytes, is_client: bool) -> None:
+    def setup_initial(self, cid: bytes, is_client: bool, version: int) -> None:
         if is_client:
             recv_label, send_label = b"server in", b"client in"
         else:

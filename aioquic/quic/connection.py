@@ -1093,7 +1093,7 @@ class QuicConnection:
         }
 
         self._cryptos[tls.Epoch.INITIAL].setup_initial(
-            cid=peer_cid, is_client=self._is_client
+            cid=peer_cid, is_client=self._is_client, version=self._version
         )
 
         self._loss.spaces = list(self._spaces.values())

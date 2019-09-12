@@ -16,28 +16,28 @@ from aioquic.quic.packet_builder import (
 from aioquic.tls import Epoch
 
 
-def create_builder():
+def create_builder(pad_first_datagram=False):
     return QuicPacketBuilder(
         host_cid=bytes(8),
         packet_number=0,
+        pad_first_datagram=pad_first_datagram,
         peer_cid=bytes(8),
         peer_token=b"",
         spin_bit=False,
-        version=QuicProtocolVersion.DRAFT_20,
+        version=QuicProtocolVersion.DRAFT_22,
     )
+
+
+def create_crypto():
+    crypto = CryptoPair()
+    crypto.setup_initial(bytes(8), is_client=True, version=QuicProtocolVersion.DRAFT_22)
+    return crypto
 
 
 class QuicPacketBuilderTest(TestCase):
     def test_long_header_empty(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
+        builder = create_builder()
+        crypto = create_crypto()
 
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1236)
@@ -53,17 +53,8 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(packets, [])
 
     def test_long_header_padding(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            pad_first_datagram=True,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        builder = create_builder(pad_first_datagram=True)
+        crypto = create_crypto()
 
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
@@ -93,16 +84,8 @@ class QuicPacketBuilderTest(TestCase):
         )
 
     def test_long_header_then_short_header(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        builder = create_builder()
+        crypto = create_crypto()
 
         # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
@@ -150,16 +133,8 @@ class QuicPacketBuilderTest(TestCase):
         )
 
     def test_long_header_then_long_header(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        builder = create_builder()
+        crypto = create_crypto()
 
         # INITIAL
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
@@ -226,15 +201,8 @@ class QuicPacketBuilderTest(TestCase):
         )
 
     def test_short_header_empty(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
+        builder = create_builder()
+        crypto = create_crypto()
 
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
@@ -251,16 +219,8 @@ class QuicPacketBuilderTest(TestCase):
         self.assertEqual(packets, [])
 
     def test_short_header_padding(self):
-        builder = QuicPacketBuilder(
-            host_cid=bytes(8),
-            packet_number=0,
-            peer_cid=bytes(8),
-            peer_token=b"",
-            spin_bit=False,
-            version=QuicProtocolVersion.DRAFT_20,
-        )
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        builder = create_builder()
+        crypto = create_crypto()
 
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
@@ -299,8 +259,7 @@ class QuicPacketBuilderTest(TestCase):
         builder = create_builder()
         builder.max_total_bytes = 11
 
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        crypto = create_crypto()
 
         with self.assertRaises(QuicPacketBuilderStop):
             builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
@@ -312,8 +271,7 @@ class QuicPacketBuilderTest(TestCase):
         builder = create_builder()
         builder.max_total_bytes = 800
 
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        crypto = create_crypto()
 
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 773)
@@ -327,8 +285,7 @@ class QuicPacketBuilderTest(TestCase):
         builder = create_builder()
         builder.max_total_bytes = 2000
 
-        crypto = CryptoPair()
-        crypto.setup_initial(bytes(8), is_client=True)
+        crypto = create_crypto()
 
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)

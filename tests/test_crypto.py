@@ -9,7 +9,7 @@ from aioquic.quic.crypto import (
     CryptoPair,
     derive_key_iv_hp,
 )
-from aioquic.quic.packet import PACKET_FIXED_BIT
+from aioquic.quic.packet import PACKET_FIXED_BIT, QuicProtocolVersion
 from aioquic.tls import CipherSuite
 
 CHACHA20_CLIENT_PACKET_NUMBER = 2
@@ -112,10 +112,12 @@ class CryptoTest(TestCase):
     https://tools.ietf.org/html/draft-ietf-quic-tls-18#appendix-A
     """
 
-    def create_crypto(self, is_client):
+    def create_crypto(self, is_client, version=QuicProtocolVersion.DRAFT_22):
         pair = CryptoPair()
         pair.setup_initial(
-            cid=binascii.unhexlify("8394c8f03e515708"), is_client=is_client
+            cid=binascii.unhexlify("8394c8f03e515708"),
+            is_client=is_client,
+            version=version,
         )
         return pair
 
