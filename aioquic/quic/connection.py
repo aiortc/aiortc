@@ -337,11 +337,14 @@ class QuicConnection:
         """
         Switch to the next available connection ID and retire
         the previous one.
+
+        After calling this method call :meth:`datagrams_to_send` to retrieve data
+        which needs to be sent.
         """
         if self._peer_cid_available:
             # retire previous CID
             self._logger.debug(
-                "Retiring %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
+                "Retiring CID %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
             )
             self._retire_connection_ids.append(self._peer_cid_seq)
 
@@ -350,7 +353,7 @@ class QuicConnection:
             self._peer_cid_seq = connection_id.sequence_number
             self._peer_cid = connection_id.cid
             self._logger.debug(
-                "Migrating to %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
+                "Switching to CID %s (%d)", dump_cid(self._peer_cid), self._peer_cid_seq
             )
 
     def close(
@@ -804,7 +807,7 @@ class QuicConnection:
                 and epoch == tls.Epoch.ONE_RTT
             ):
                 self._logger.debug(
-                    "Peer migrating to %s (%d)",
+                    "Peer switching to CID %s (%d)",
                     dump_cid(context.host_cid),
                     destination_cid_seq,
                 )
@@ -1504,7 +1507,7 @@ class QuicConnection:
                         reason_phrase="Cannot retire current connection ID",
                     )
                 self._logger.debug(
-                    "Peer retiring %s (%d)",
+                    "Peer retiring CID %s (%d)",
                     dump_cid(connection_id.cid),
                     connection_id.sequence_number,
                 )
