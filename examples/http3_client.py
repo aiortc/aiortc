@@ -31,6 +31,27 @@ logger = logging.getLogger("client")
 HttpConnection = Union[H0Connection, H3Connection]
 
 
+class URL:
+    def __init__(self, url: str):
+        parsed = urlparse(url)
+
+        self.authority = parsed.netloc
+        self.full_path = parsed.path
+        if parsed.query:
+            self.full_path += "?" + parsed.query
+        self.scheme = parsed.scheme
+
+
+class HttpRequest:
+    def __init__(
+        self, method: str, url: URL, content: bytes = b"", headers: Dict = {}
+    ) -> None:
+        self.content = content
+        self.headers = headers
+        self.method = method
+        self.url = url
+
+
 class WebSocket:
     def __init__(
         self, http: HttpConnection, stream_id: int, transmit: Callable[[], None]
@@ -98,22 +119,39 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, authority: str, path: str) -> Deque[H3Event]:
+    async def get(self, url: str, headers: Dict = {}) -> Deque[H3Event]:
         """
         Perform a GET request.
         """
+        return await self._request(
+            HttpRequest(method="GET", url=URL(url), headers=headers)
+        )
+
+    async def post(self, url: str, data: bytes, headers: Dict = {}) -> Deque[H3Event]:
+        """
+        Perform a POST request.
+        """
+        return await self._request(
+            HttpRequest(method="POST", url=URL(url), content=data, headers=headers)
+        )
+
+    async def _request(self, request: HttpRequest):
         stream_id = self._quic.get_next_available_stream_id()
         self._http.send_headers(
             stream_id=stream_id,
             headers=[
-                (b":method", b"GET"),
-                (b":scheme", b"https"),
-                (b":authority", authority.encode("utf8")),
-                (b":path", path.encode("utf8")),
+                (b":method", request.method.encode("utf8")),
+                (b":scheme", request.url.scheme.encode("utf8")),
+                (b":authority", str(request.url.authority).encode("utf8")),
+                (b":path", request.url.full_path.encode("utf8")),
                 (b"user-agent", b"aioquic"),
+            ]
+            + [
+                (k.encode("utf8"), v.encode("utf8"))
+                for (k, v) in request.headers.items()
             ],
         )
-        self._http.send_data(stream_id=stream_id, data=b"", end_stream=True)
+        self._http.send_data(stream_id=stream_id, data=request.content, end_stream=True)
 
         waiter = self._loop.create_future()
         self._request_events[stream_id] = deque()
@@ -187,7 +225,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(configuration: QuicConfiguration, url: str) -> None:
+async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme in (
@@ -232,7 +270,14 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
         else:
             # perform request
             start = time.time()
-            http_events = await client.get(parsed.netloc, path)
+            if data is not None:
+                http_events = await client.post(
+                    url,
+                    data=data.encode("utf8"),
+                    headers={"content-type": "application/x-www-form-urlencoded"},
+                )
+            else:
+                http_events = await client.get(url)
             elapsed = time.time() - start
 
             # print speed
@@ -262,6 +307,9 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
     parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
+    parser.add_argument(
+        "-d", "--data", type=str, help="send the specified data in a POST request"
+    )
     parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
     parser.add_argument(
         "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
@@ -309,7 +357,9 @@ if __name__ == "__main__":
         uvloop.install()
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(configuration=configuration, url=args.url))
+        loop.run_until_complete(
+            run(configuration=configuration, url=args.url, data=args.data)
+        )
     finally:
         if configuration.quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:

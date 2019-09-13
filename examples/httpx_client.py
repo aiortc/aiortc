@@ -6,7 +6,7 @@ import pickle
 import sys
 import time
 from collections import deque
-from typing import Deque, Dict
+from typing import Deque, Dict, cast
 from urllib.parse import urlparse
 
 from httpx import AsyncClient
@@ -116,7 +116,7 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(configuration: QuicConfiguration, url: str) -> None:
+async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme == "https", "Only https:// URLs are supported."
@@ -134,11 +134,19 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
         create_protocol=H3Dispatcher,
         session_ticket_handler=save_session_ticket,
     ) as dispatch:
-        client = AsyncClient(dispatch=dispatch)
+        client = AsyncClient(dispatch=cast(AsyncDispatcher, dispatch))
 
         # perform request
         start = time.time()
-        response = await client.get(url)
+        if data is not None:
+            response = await client.post(
+                url,
+                data=data.encode("utf8"),
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+        else:
+            response = await client.get(url)
+
         elapsed = time.time() - start
 
         # print speed
@@ -158,6 +166,9 @@ async def run(configuration: QuicConfiguration, url: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
     parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
+    parser.add_argument(
+        "-d", "--data", type=str, help="send the specified data in a POST request"
+    )
     parser.add_argument(
         "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
     )
@@ -199,7 +210,9 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run(configuration=configuration, url=args.url))
+        loop.run_until_complete(
+            run(configuration=configuration, url=args.url, data=args.data)
+        )
     finally:
         if configuration.quic_logger is not None:
             with open(args.quic_log, "w") as logger_fp:

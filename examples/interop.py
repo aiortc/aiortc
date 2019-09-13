@@ -156,7 +156,9 @@ async def test_http_0(server: Server, configuration: QuicConfiguration):
         protocol = cast(HttpClient, protocol)
 
         # perform HTTP request
-        events = await protocol.get(server.host, server.path)
+        events = await protocol.get(
+            "https://{}:{}{}".format(server.host, server.port, server.path)
+        )
         if events and isinstance(events[0], HeadersReceived):
             server.result |= Result.D
 
@@ -175,7 +177,9 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
         protocol = cast(HttpClient, protocol)
 
         # perform HTTP request
-        events = await protocol.get(server.host, server.path)
+        events = await protocol.get(
+            "https://{}:{}{}".format(server.host, server.port, server.path)
+        )
         if events and isinstance(events[0], HeadersReceived):
             server.result |= Result.D
             server.result |= Result.three
@@ -323,7 +327,9 @@ async def test_throughput(server: Server, configuration: QuicConfiguration):
         ) as protocol:
             protocol = cast(HttpClient, protocol)
 
-            http_events = await protocol.get(server.host, path)
+            http_events = await protocol.get(
+                "https://{}:{}{}".format(server.host, server.port, path)
+            )
             quic_elapsed = time.time() - start
             quic_octets = 0
             for http_event in http_events:
