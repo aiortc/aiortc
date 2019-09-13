@@ -181,9 +181,14 @@ class WebSocketHandler:
                 headers.append((b"sec-websocket-protocol", subprotocol.encode("utf8")))
             self.connection.send_headers(stream_id=self.stream_id, headers=headers)
         elif message["type"] == "websocket.close":
-            data = self.websocket.send(
-                wsproto.events.CloseConnection(code=message["code"])
-            )
+            if self.websocket is not None:
+                data = self.websocket.send(
+                    wsproto.events.CloseConnection(code=message["code"])
+                )
+            else:
+                self.connection.send_headers(
+                    stream_id=self.stream_id, headers=[(b":status", b"403")]
+                )
             end_stream = True
         elif message["type"] == "websocket.send":
             if message.get("text") is not None:
