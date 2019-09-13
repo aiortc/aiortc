@@ -5,8 +5,9 @@ import json
 import logging
 import os
 import time
+from collections import deque
 from email.utils import formatdate
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Deque, Dict, List, Optional, Union
 
 import wsproto
 import wsproto.events
@@ -131,6 +132,7 @@ class WebSocketHandler:
     ):
         self.closed = False
         self.connection = connection
+        self.http_event_queue: Deque[DataReceived] = deque()
         self.queue: asyncio.Queue[Dict] = asyncio.Queue()
         self.scope = scope
         self.stream_id = stream_id
@@ -138,11 +140,16 @@ class WebSocketHandler:
         self.websocket: Optional[wsproto.Connection] = None
 
     def http_event_received(self, event: H3Event) -> None:
-        if isinstance(event, DataReceived):
-            self.websocket.receive_data(event.data)
+        if isinstance(event, DataReceived) and not self.closed:
+            if self.websocket is not None:
+                self.websocket.receive_data(event.data)
 
-        for ws_event in self.websocket.events():
-            self.websocket_event_received(ws_event)
+                for ws_event in self.websocket.events():
+                    self.websocket_event_received(ws_event)
+            else:
+                # delay event processing until we get `websocket.accept`
+                # from the ASGI application
+                self.http_event_queue.append(event)
 
     def websocket_event_received(self, event: wsproto.events.Event) -> None:
         if isinstance(event, wsproto.events.TextMessage):
@@ -180,6 +187,11 @@ class WebSocketHandler:
             if subprotocol is not None:
                 headers.append((b"sec-websocket-protocol", subprotocol.encode("utf8")))
             self.connection.send_headers(stream_id=self.stream_id, headers=headers)
+
+            # consume backlog
+            while self.http_event_queue:
+                self.http_event_received(self.http_event_queue.popleft())
+
         elif message["type"] == "websocket.close":
             if self.websocket is not None:
                 data = self.websocket.send(
