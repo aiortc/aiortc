@@ -135,34 +135,11 @@ class HttpClient(QuicConnectionProtocol):
             HttpRequest(method="POST", url=URL(url), content=data, headers=headers)
         )
 
-    async def _request(self, request: HttpRequest):
-        stream_id = self._quic.get_next_available_stream_id()
-        self._http.send_headers(
-            stream_id=stream_id,
-            headers=[
-                (b":method", request.method.encode("utf8")),
-                (b":scheme", request.url.scheme.encode("utf8")),
-                (b":authority", str(request.url.authority).encode("utf8")),
-                (b":path", request.url.full_path.encode("utf8")),
-                (b"user-agent", b"aioquic"),
-            ]
-            + [
-                (k.encode("utf8"), v.encode("utf8"))
-                for (k, v) in request.headers.items()
-            ],
-        )
-        self._http.send_data(stream_id=stream_id, data=request.content, end_stream=True)
-
-        waiter = self._loop.create_future()
-        self._request_events[stream_id] = deque()
-        self._request_waiter[stream_id] = waiter
-        self.transmit()
-
-        return await asyncio.shield(waiter)
-
-    async def websocket(
-        self, authority: str, path: str, subprotocols: List[str] = []
-    ) -> WebSocket:
+    async def websocket(self, url: str, subprotocols: List[str] = []) -> WebSocket:
+        """
+        Open a WebSocket.
+        """
+        request = HttpRequest(method="CONNECT", url=URL(url))
         stream_id = self._quic.get_next_available_stream_id()
         websocket = WebSocket(
             http=self._http, stream_id=stream_id, transmit=self.transmit
@@ -173,9 +150,10 @@ class HttpClient(QuicConnectionProtocol):
         headers = [
             (b":method", b"CONNECT"),
             (b":scheme", b"https"),
-            (b":authority", authority.encode("utf8")),
-            (b":path", path.encode("utf8")),
+            (b":authority", request.url.authority.encode("utf8")),
+            (b":path", request.url.full_path.encode("utf8")),
             (b":protocol", b"websocket"),
+            (b"user-agent", b"aioquic"),
             (b"sec-websocket-version", b"13"),
         ]
         if subprotocols:
@@ -213,6 +191,31 @@ class HttpClient(QuicConnectionProtocol):
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)
 
+    async def _request(self, request: HttpRequest):
+        stream_id = self._quic.get_next_available_stream_id()
+        self._http.send_headers(
+            stream_id=stream_id,
+            headers=[
+                (b":method", request.method.encode("utf8")),
+                (b":scheme", request.url.scheme.encode("utf8")),
+                (b":authority", request.url.authority.encode("utf8")),
+                (b":path", request.url.full_path.encode("utf8")),
+                (b"user-agent", b"aioquic"),
+            ]
+            + [
+                (k.encode("utf8"), v.encode("utf8"))
+                for (k, v) in request.headers.items()
+            ],
+        )
+        self._http.send_data(stream_id=stream_id, data=request.content, end_stream=True)
+
+        waiter = self._loop.create_future()
+        self._request_events[stream_id] = deque()
+        self._request_waiter[stream_id] = waiter
+        self.transmit()
+
+        return await asyncio.shield(waiter)
+
 
 def save_session_ticket(ticket):
     """
@@ -239,10 +242,6 @@ async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
         host = parsed.netloc
         port = 443
 
-    path = parsed.path
-    if parsed.query:
-        path += "?" + parsed.query
-
     async with connect(
         host,
         port,
@@ -253,9 +252,7 @@ async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
         client = cast(HttpClient, client)
 
         if parsed.scheme == "wss":
-            ws = await client.websocket(
-                parsed.netloc, path, subprotocols=["chat", "superchat"]
-            )
+            ws = await client.websocket(url, subprotocols=["chat", "superchat"])
 
             # send some messages and receive reply
             for i in range(2):
