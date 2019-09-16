@@ -257,6 +257,10 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 path_bytes, query_string = raw_path, b""
             path = path_bytes.decode("utf8")
 
+            # FIXME: add a public API to retrieve peer address
+            client_addr = self._http._quic._network_paths[0].addr
+            client = (client_addr[0], client_addr[1])
+
             handler: Handler
             if method == "CONNECT" and protocol == "websocket":
                 subprotocols: List[str] = []
@@ -266,6 +270,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
                             x.strip() for x in value.decode("utf8").split(",")
                         ]
                 scope = {
+                    "client": client,
                     "headers": headers,
                     "http_version": http_version,
                     "method": method,
@@ -288,6 +293,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 if isinstance(self._http, H3Connection):
                     extensions["http.response.push"] = {}
                 scope = {
+                    "client": client,
                     "extensions": extensions,
                     "headers": headers,
                     "http_version": http_version,
