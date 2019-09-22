@@ -1417,6 +1417,9 @@ class Context:
         except InvalidSignature:
             raise AlertDecryptError
 
+        # check certificate
+        verify_certificate(self._peer_certificate, self.server_name)
+
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.CLIENT_EXPECT_FINISHED)
