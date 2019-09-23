@@ -11,9 +11,6 @@ from typing import Callable, Deque, Dict, List, Optional, Union
 
 import wsproto
 import wsproto.events
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
 
 from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h0.connection import H0Connection
@@ -449,24 +446,16 @@ if __name__ == "__main__":
     else:
         secrets_log_file = None
 
-    # load SSL certificate and key
-    with open(args.certificate, "rb") as fp:
-        certificate = x509.load_pem_x509_certificate(
-            fp.read(), backend=default_backend()
-        )
-    with open(args.private_key, "rb") as fp:
-        private_key = serialization.load_pem_private_key(
-            fp.read(), password=None, backend=default_backend()
-        )
-
     configuration = QuicConfiguration(
         alpn_protocols=["h3-23", "h3-22", "hq-23", "hq-22"],
-        certificate=certificate,
         is_client=False,
-        private_key=private_key,
         quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,
     )
+
+    # load SSL certificate and key
+    configuration.load_cert_chain(args.certificate, args.private_key)
+
     ticket_store = SessionTicketStore()
 
     if uvloop is not None:

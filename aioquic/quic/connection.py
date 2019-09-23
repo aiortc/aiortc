@@ -1036,6 +1036,7 @@ class QuicConnection:
         self.tls = tls.Context(is_client=self._is_client, logger=self._logger)
         self.tls.alpn_protocols = self._configuration.alpn_protocols
         self.tls.certificate = self._configuration.certificate
+        self.tls.certificate_chain = self._configuration.certificate_chain
         self.tls.certificate_private_key = self._configuration.private_key
         self.tls.handshake_extensions = [
             (

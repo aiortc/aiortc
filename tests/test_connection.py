@@ -27,7 +27,7 @@ from aioquic.quic.packet import (
 )
 from aioquic.quic.packet_builder import QuicDeliveryState, QuicPacketBuilder
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY
+from .utils import SERVER_CERTFILE, SERVER_KEYFILE
 
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
@@ -95,16 +95,12 @@ def client_and_server(
     client._ack_delay = 0
     client_patch(client)
 
-    server = QuicConnection(
-        configuration=QuicConfiguration(
-            is_client=False,
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-            quic_logger=QuicLogger(),
-            **server_options
-        ),
-        **server_kwargs
+    server_configuration = QuicConfiguration(
+        is_client=False, quic_logger=QuicLogger(), **server_options
     )
+    server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+
+    server = QuicConnection(configuration=server_configuration, **server_kwargs)
     server._ack_delay = 0
     server_patch(server)
 
@@ -278,13 +274,10 @@ class QuicConnectionTest(TestCase):
         client = QuicConnection(configuration=QuicConfiguration(is_client=True))
         client._ack_delay = 0
 
-        server = QuicConnection(
-            configuration=QuicConfiguration(
-                is_client=False,
-                certificate=SERVER_CERTIFICATE,
-                private_key=SERVER_PRIVATE_KEY,
-            )
-        )
+        server_configuration = QuicConfiguration(is_client=False)
+        server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+
+        server = QuicConnection(configuration=server_configuration)
         server._ack_delay = 0
 
         # client sends INITIAL
@@ -350,13 +343,10 @@ class QuicConnectionTest(TestCase):
         client = QuicConnection(configuration=QuicConfiguration(is_client=True))
         client._ack_delay = 0
 
-        server = QuicConnection(
-            configuration=QuicConfiguration(
-                is_client=False,
-                certificate=SERVER_CERTIFICATE,
-                private_key=SERVER_PRIVATE_KEY,
-            )
-        )
+        server_configuration = QuicConfiguration(is_client=False)
+        server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+
+        server = QuicConnection(configuration=server_configuration)
         server._ack_delay = 0
 
         # client sends INITIAL

@@ -23,7 +23,7 @@ from typing import (
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -162,6 +162,33 @@ def hkdf_extract(
     h = hmac.HMAC(salt, algorithm, backend=default_backend())
     h.update(key_material)
     return h.finalize()
+
+
+def load_pem_private_key(
+    data: bytes, password: Optional[str]
+) -> Union[dsa.DSAPrivateKey, ec.EllipticCurvePrivateKey, rsa.RSAPrivateKey]:
+    """
+    Load a PEM-encoded private key.
+    """
+    return serialization.load_pem_private_key(
+        data, password=password, backend=default_backend()
+    )
+
+
+def load_pem_x509_certificates(data: bytes) -> List[x509.Certificate]:
+    """
+    Load a chain of PEM-encoded X509 certificates.
+    """
+    boundary = b"-----END CERTIFICATE-----\n"
+    certificates = []
+    for chunk in data.split(boundary):
+        if chunk:
+            certificates.append(
+                x509.load_pem_x509_certificate(
+                    chunk + boundary, backend=default_backend()
+                )
+            )
+    return certificates
 
 
 def verify_certificate(
@@ -1064,6 +1091,7 @@ class Context:
         self.alpn_negotiated: Optional[str] = None
         self.alpn_protocols: Optional[List[str]] = None
         self.certificate: Optional[x509.Certificate] = None
+        self.certificate_chain: List[x509.Certificate] = []
         self.certificate_private_key: Optional[
             Union[dsa.DSAPublicKey, ec.EllipticCurvePublicKey, rsa.RSAPublicKey]
         ] = None
@@ -1650,7 +1678,8 @@ class Context:
                     Certificate(
                         request_context=b"",
                         certificates=[
-                            (self.certificate.public_bytes(Encoding.DER), b"")
+                            (x.public_bytes(Encoding.DER), b"")
+                            for x in [self.certificate] + self.certificate_chain
                         ],
                     ),
                 )

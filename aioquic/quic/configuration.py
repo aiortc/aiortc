@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
+from os import PathLike
 from typing import Any, List, Optional, TextIO
 
-from ..tls import SessionTicket
+from ..tls import SessionTicket, load_pem_private_key, load_pem_x509_certificates
 from .logger import QuicLogger
 from .packet import QuicProtocolVersion
 
@@ -15,15 +16,6 @@ class QuicConfiguration:
     alpn_protocols: Optional[List[str]] = None
     """
     A list of supported ALPN protocols.
-    """
-
-    certificate: Any = None
-    """
-    The server's TLS certificate.
-
-    See :func:`cryptography.x509.load_pem_x509_certificate`.
-
-    .. note:: This is only used by servers.
     """
 
     connection_id_length: int = 8
@@ -41,15 +33,6 @@ class QuicConfiguration:
     is_client: bool = True
     """
     Whether this is the client side of the QUIC connection.
-    """
-
-    private_key: Any = None
-    """
-    The server's TLS private key.
-
-    See :func:`cryptography.hazmat.primitives.serialization.load_pem_private_key`.
-
-    .. note:: This is only used by servers.
     """
 
     quic_logger: Optional[QuicLogger] = None
@@ -76,9 +59,30 @@ class QuicConfiguration:
     The TLS session ticket which should be used for session resumption.
     """
 
+    certificate: Any = None
+    certificate_chain: List[Any] = field(default_factory=list)
+    private_key: Any = None
     supported_versions: List[int] = field(
         default_factory=lambda: [
             QuicProtocolVersion.DRAFT_23,
             QuicProtocolVersion.DRAFT_22,
         ]
     )
+
+    def load_cert_chain(
+        self,
+        certfile: PathLike,
+        keyfile: Optional[PathLike] = None,
+        password: Optional[str] = None,
+    ):
+        """
+        Load a private key and the corresponding certificate.
+        """
+        with open(certfile, "rb") as fp:
+            certificates = load_pem_x509_certificates(fp.read())
+        self.certificate = certificates[0]
+        self.certificate_chain = certificates[1:]
+
+        if keyfile is not None:
+            with open(keyfile, "rb") as fp:
+                self.private_key = load_pem_private_key(fp.read(), password=password)

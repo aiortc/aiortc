@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from aioquic import tls
 from aioquic.buffer import Buffer, BufferReadError
+from aioquic.quic.configuration import QuicConfiguration
 from aioquic.tls import (
     Certificate,
     CertificateVerify,
@@ -36,7 +37,7 @@ from aioquic.tls import (
     verify_certificate,
 )
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, generate_ec_certificate, load
+from .utils import SERVER_CERTFILE, SERVER_KEYFILE, generate_ec_certificate, load
 
 CERTIFICATE_DATA = load("tls_certificate.bin")[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load("tls_certificate_verify.bin")[-384:]
@@ -103,9 +104,12 @@ class ContextTest(TestCase):
         return client
 
     def create_server(self):
+        configuration = QuicConfiguration(is_client=False)
+        configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+
         server = Context(is_client=False)
-        server.certificate = SERVER_CERTIFICATE
-        server.certificate_private_key = SERVER_PRIVATE_KEY
+        server.certificate = configuration.certificate
+        server.certificate_private_key = configuration.private_key
         server.handshake_extensions = [
             (
                 tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,

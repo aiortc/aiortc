@@ -12,7 +12,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
-from .utils import SERVER_CERTIFICATE, SERVER_PRIVATE_KEY, generate_ec_certificate, run
+from .utils import SERVER_CERTFILE, SERVER_KEYFILE, generate_ec_certificate, run
 
 real_sendto = socket.socket.sendto
 
@@ -59,11 +59,8 @@ def handle_stream(reader, writer):
 
 async def run_server(configuration=None, **kwargs):
     if configuration is None:
-        configuration = QuicConfiguration(
-            certificate=SERVER_CERTIFICATE,
-            private_key=SERVER_PRIVATE_KEY,
-            is_client=False,
-        )
+        configuration = QuicConfiguration(is_client=False)
+        configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
     return await serve(
         host="::",
         port="4433",
@@ -133,18 +130,15 @@ class HighLevelTest(TestCase):
         and received in the presence of packet loss (randomized 25% in each direction).
         """
         data = b"Z" * 65536
+
+        server_configuration = QuicConfiguration(
+            idle_timeout=300.0, is_client=False, quic_logger=QuicLogger()
+        )
+        server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+
         server, response = run(
             asyncio.gather(
-                run_server(
-                    configuration=QuicConfiguration(
-                        certificate=SERVER_CERTIFICATE,
-                        idle_timeout=300.0,
-                        is_client=False,
-                        private_key=SERVER_PRIVATE_KEY,
-                        quic_logger=QuicLogger(),
-                    ),
-                    stateless_retry=True,
-                ),
+                run_server(configuration=server_configuration, stateless_retry=True),
                 run_client(
                     "127.0.0.1",
                     configuration=QuicConfiguration(
