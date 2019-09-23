@@ -59,6 +59,9 @@ class QuicConfiguration:
     The TLS session ticket which should be used for session resumption.
     """
 
+    cadata: Optional[bytes] = None
+    cafile: Optional[str] = None
+    capath: Optional[str] = None
     certificate: Any = None
     certificate_chain: List[Any] = field(default_factory=list)
     private_key: Any = None
@@ -74,7 +77,7 @@ class QuicConfiguration:
         certfile: PathLike,
         keyfile: Optional[PathLike] = None,
         password: Optional[str] = None,
-    ):
+    ) -> None:
         """
         Load a private key and the corresponding certificate.
         """
@@ -86,3 +89,17 @@ class QuicConfiguration:
         if keyfile is not None:
             with open(keyfile, "rb") as fp:
                 self.private_key = load_pem_private_key(fp.read(), password=password)
+
+    def load_verify_locations(
+        self,
+        cafile: Optional[str] = None,
+        capath: Optional[str] = None,
+        cadata: Optional[bytes] = None,
+    ) -> None:
+        """
+        Load a set of "certification authority" (CA) certificates used to
+        validate other peers' certificates.
+        """
+        self.cafile = cafile
+        self.capath = capath
+        self.cadata = cadata

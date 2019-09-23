@@ -23,12 +23,18 @@ from typing import (
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.bindings.openssl.binding import Binding
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, padding, rsa, x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from .buffer import Buffer
+
+binding = Binding()
+binding.init_static_locks()
+ffi = binding.ffi
+lib = binding.lib
 
 TLS_VERSION_1_2 = 0x0303
 TLS_VERSION_1_3 = 0x0304
@@ -94,6 +100,10 @@ class AlertHandshakeFailure(Alert):
 
 class AlertIllegalParameter(Alert):
     description = AlertDescription.illegal_parameter
+
+
+class AlertInternalError(Alert):
+    description = AlertDescription.internal_error
 
 
 class AlertProtocolVersion(Alert):
@@ -191,8 +201,29 @@ def load_pem_x509_certificates(data: bytes) -> List[x509.Certificate]:
     return certificates
 
 
+def openssl_assert(ok: bool) -> None:
+    if not ok:
+        lib.ERR_clear_error()
+        raise AlertInternalError("OpenSSL call failed")
+
+
+def openssl_decode_string(charp) -> str:
+    return ffi.string(charp).decode("utf-8") if charp else ""
+
+
+def openssl_encode_path(s: Optional[str]) -> Any:
+    if s is not None:
+        return os.fsencode(s)
+    return ffi.NULL
+
+
 def verify_certificate(
-    certificate: x509.Certificate, server_name: Optional[str]
+    certificate: x509.Certificate,
+    chain: List[x509.Certificate] = [],
+    server_name: Optional[str] = None,
+    cadata: Optional[bytes] = None,
+    cafile: Optional[str] = None,
+    capath: Optional[str] = None,
 ) -> None:
     # verify dates
     now = utcnow()
@@ -221,6 +252,51 @@ def verify_certificate(
             )
         except ssl.CertificateError as exc:
             raise AlertBadCertificate("\n".join(exc.args)) from exc
+
+    # verify certificate chain
+    store = lib.X509_STORE_new()
+    openssl_assert(store != ffi.NULL)
+    store = ffi.gc(store, lib.X509_STORE_free)
+
+    # load default CAs
+    openssl_assert(lib.X509_STORE_set_default_paths(store))
+    paths = ssl.get_default_verify_paths()
+    openssl_assert(
+        lib.X509_STORE_load_locations(
+            store, openssl_encode_path(paths.cafile), openssl_encode_path(paths.capath)
+        )
+    )
+
+    # load extra CAs
+    if cadata is not None:
+        for cert in load_pem_x509_certificates(cadata):
+            openssl_assert(lib.X509_STORE_add_cert(store, cert._x509))
+
+    if cafile is not None or capath is not None:
+        openssl_assert(
+            lib.X509_STORE_load_locations(
+                store, openssl_encode_path(cafile), openssl_encode_path(capath)
+            )
+        )
+
+    chain_stack = lib.sk_X509_new_null()
+    openssl_assert(chain_stack != ffi.NULL)
+    chain_stack = ffi.gc(chain_stack, lib.sk_X509_free)
+    for cert in chain:
+        openssl_assert(lib.sk_X509_push(chain_stack, cert._x509))
+
+    store_ctx = lib.X509_STORE_CTX_new()
+    openssl_assert(store_ctx != ffi.NULL)
+    store_ctx = ffi.gc(store_ctx, lib.X509_STORE_CTX_free)
+    openssl_assert(
+        lib.X509_STORE_CTX_init(store_ctx, store, certificate._x509, chain_stack)
+    )
+
+    res = lib.X509_verify_cert(store_ctx)
+    if not res:
+        err = lib.X509_STORE_CTX_get_error(store_ctx)
+        err_str = openssl_decode_string(lib.X509_verify_cert_error_string(err))
+        raise AlertBadCertificate(err_str)
 
 
 class CipherSuite(IntEnum):
@@ -1090,6 +1166,9 @@ class Context:
     ):
         self.alpn_negotiated: Optional[str] = None
         self.alpn_protocols: Optional[List[str]] = None
+        self.cadata: Optional[bytes] = None
+        self.cafile: Optional[str] = None
+        self.capath: Optional[str] = None
         self.certificate: Optional[x509.Certificate] = None
         self.certificate_chain: List[x509.Certificate] = []
         self.certificate_private_key: Optional[
@@ -1132,6 +1211,7 @@ class Context:
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._new_session_ticket: Optional[NewSessionTicket] = None
         self._peer_certificate: Optional[x509.Certificate] = None
+        self._peer_certificate_chain: List[x509.Certificate] = []
         self._receive_buffer = b""
         self._session_resumed = False
         self._enc_key: Optional[bytes] = None
@@ -1424,6 +1504,13 @@ class Context:
         self._peer_certificate = x509.load_der_x509_certificate(
             certificate.certificates[0][0], backend=default_backend()
         )
+        self._peer_certificate_chain = [
+            x509.load_der_x509_certificate(
+                certificate.certificates[i][0], backend=default_backend()
+            )
+            for i in range(1, len(certificate.certificates))
+        ]
+
         self.key_schedule.update_hash(input_buf.data)
 
         self._set_state(State.CLIENT_EXPECT_CERTIFICATE_VERIFY)
@@ -1446,7 +1533,14 @@ class Context:
             raise AlertDecryptError
 
         # check certificate
-        verify_certificate(self._peer_certificate, self.server_name)
+        verify_certificate(
+            cadata=self.cadata,
+            cafile=self.cafile,
+            capath=self.capath,
+            certificate=self._peer_certificate,
+            chain=self._peer_certificate_chain,
+            server_name=self.server_name,
+        )
 
         self.key_schedule.update_hash(input_buf.data)
 

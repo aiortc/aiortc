@@ -46,7 +46,11 @@ def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
+SERVER_CACERTFILE = os.path.join(os.path.dirname(__file__), "pycacert.pem")
 SERVER_CERTFILE = os.path.join(os.path.dirname(__file__), "ssl_cert.pem")
+SERVER_CERTFILE_WITH_CHAIN = os.path.join(
+    os.path.dirname(__file__), "ssl_cert_with_chain.pem"
+)
 SERVER_KEYFILE = os.path.join(os.path.dirname(__file__), "ssl_key.pem")
 
 if os.environ.get("AIOQUIC_DEBUG"):

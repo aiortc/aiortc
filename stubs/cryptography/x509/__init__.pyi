@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 from cryptography.hazmat.backends.interfaces import X509Backend
 from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
@@ -21,6 +21,7 @@ class Certificate:
     not_valid_before: datetime.datetime
     serial_number: int
     subject: Dict
+    _x509: Any
     def fingerprint(self, algorithm: HashAlgorithm) -> bytes: ...
     def public_bytes(self, encoding: Encoding) -> bytes: ...
     def public_key(

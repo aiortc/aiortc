@@ -4,6 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from aioquic import tls
@@ -19,6 +20,7 @@ from aioquic.tls import (
     NewSessionTicket,
     ServerHello,
     State,
+    load_pem_x509_certificates,
     pull_block,
     pull_certificate,
     pull_certificate_verify,
@@ -37,7 +39,13 @@ from aioquic.tls import (
     verify_certificate,
 )
 
-from .utils import SERVER_CERTFILE, SERVER_KEYFILE, generate_ec_certificate, load
+from .utils import (
+    SERVER_CACERTFILE,
+    SERVER_CERTFILE,
+    SERVER_KEYFILE,
+    generate_ec_certificate,
+    load,
+)
 
 CERTIFICATE_DATA = load("tls_certificate.bin")[11:-2]
 CERTIFICATE_VERIFY_SIGNATURE = load("tls_certificate_verify.bin")[-384:]
@@ -92,8 +100,9 @@ def reset_buffers(buffers):
 
 
 class ContextTest(TestCase):
-    def create_client(self):
+    def create_client(self, cafile=SERVER_CACERTFILE):
         client = Context(is_client=True)
+        client.cafile = cafile
         client.handshake_extensions = [
             (
                 tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
@@ -347,11 +356,13 @@ class ContextTest(TestCase):
         self.assertEqual(server.alpn_negotiated, None)
 
     def test_handshake_ecdsa_secp256r1(self):
-        client = self.create_client()
         server = self.create_server()
         server.certificate, server.certificate_private_key = generate_ec_certificate(
             common_name="example.com", curve=ec.SECP256R1
         )
+
+        client = self.create_client(cafile=None)
+        client.cadata = server.certificate.public_bytes(serialization.Encoding.PEM)
 
         self._handshake(client, server)
 
@@ -1198,10 +1209,68 @@ class TlsTest(TestCase):
 
 
 class VerifyCertificateTest(TestCase):
+    def test_verify_certificate_chain(self):
+        with open(SERVER_CERTFILE, "rb") as fp:
+            certificate = load_pem_x509_certificates(fp.read())[0]
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_before
+
+            # fail
+            with self.assertRaises(tls.AlertBadCertificate) as cm:
+                verify_certificate(certificate=certificate, server_name="localhost")
+            self.assertEqual(
+                str(cm.exception), "unable to get local issuer certificate"
+            )
+
+            # ok
+            verify_certificate(
+                cafile=SERVER_CACERTFILE,
+                certificate=certificate,
+                server_name="localhost",
+            )
+
+    def test_verify_certificate_chain_self_signed(self):
+        certificate, _ = generate_ec_certificate(
+            common_name="localhost", curve=ec.SECP256R1
+        )
+
+        with patch("aioquic.tls.utcnow") as mock_utcnow:
+            mock_utcnow.return_value = certificate.not_valid_before
+
+            # fail
+            with self.assertRaises(tls.AlertBadCertificate) as cm:
+                verify_certificate(certificate=certificate, server_name="localhost")
+            self.assertEqual(str(cm.exception), "self signed certificate")
+
+            # ok
+            verify_certificate(
+                cadata=certificate.public_bytes(serialization.Encoding.PEM),
+                certificate=certificate,
+                server_name="localhost",
+            )
+
+    @patch("aioquic.tls.lib.X509_STORE_new")
+    def test_verify_certificate_chain_internal_error(self, mock_store_new):
+        mock_store_new.return_value = tls.ffi.NULL
+
+        certificate, _ = generate_ec_certificate(
+            common_name="localhost", curve=ec.SECP256R1
+        )
+
+        with self.assertRaises(tls.AlertInternalError) as cm:
+            verify_certificate(
+                cadata=certificate.public_bytes(serialization.Encoding.PEM),
+                certificate=certificate,
+                server_name="localhost",
+            )
+        self.assertEqual(str(cm.exception), "OpenSSL call failed")
+
     def test_verify_dates(self):
         certificate, _ = generate_ec_certificate(
             common_name="example.com", curve=ec.SECP256R1
         )
+        cadata = certificate.public_bytes(serialization.Encoding.PEM)
 
         #  too early
         with patch("aioquic.tls.utcnow") as mock_utcnow:
@@ -1209,17 +1278,23 @@ class VerifyCertificateTest(TestCase):
                 certificate.not_valid_before - datetime.timedelta(seconds=1)
             )
             with self.assertRaises(tls.AlertCertificateExpired) as cm:
-                verify_certificate(certificate, server_name="example.com")
+                verify_certificate(
+                    cadata=cadata, certificate=certificate, server_name="example.com"
+                )
             self.assertEqual(str(cm.exception), "Certificate is not valid yet")
 
         # valid
         with patch("aioquic.tls.utcnow") as mock_utcnow:
             mock_utcnow.return_value = certificate.not_valid_before
-            verify_certificate(certificate, server_name="example.com")
+            verify_certificate(
+                cadata=cadata, certificate=certificate, server_name="example.com"
+            )
 
         with patch("aioquic.tls.utcnow") as mock_utcnow:
             mock_utcnow.return_value = certificate.not_valid_after
-            verify_certificate(certificate, server_name="example.com")
+            verify_certificate(
+                cadata=cadata, certificate=certificate, server_name="example.com"
+            )
 
         # too late
         with patch("aioquic.tls.utcnow") as mock_utcnow:
@@ -1227,30 +1302,41 @@ class VerifyCertificateTest(TestCase):
                 seconds=1
             )
             with self.assertRaises(tls.AlertCertificateExpired) as cm:
-                verify_certificate(certificate, server_name="example.com")
+                verify_certificate(
+                    cadata=cadata, certificate=certificate, server_name="example.com"
+                )
             self.assertEqual(str(cm.exception), "Certificate is no longer valid")
 
     def test_verify_subject(self):
         certificate, _ = generate_ec_certificate(
             common_name="example.com", curve=ec.SECP256R1
         )
+        cadata = certificate.public_bytes(serialization.Encoding.PEM)
 
         with patch("aioquic.tls.utcnow") as mock_utcnow:
             mock_utcnow.return_value = certificate.not_valid_before
 
             # valid
-            verify_certificate(certificate, server_name="example.com")
+            verify_certificate(
+                cadata=cadata, certificate=certificate, server_name="example.com"
+            )
 
             # invalid
             with self.assertRaises(tls.AlertBadCertificate) as cm:
-                verify_certificate(certificate, server_name="test.example.com")
+                verify_certificate(
+                    cadata=cadata,
+                    certificate=certificate,
+                    server_name="test.example.com",
+                )
             self.assertEqual(
                 str(cm.exception),
                 "hostname 'test.example.com' doesn't match 'example.com'",
             )
 
             with self.assertRaises(tls.AlertBadCertificate) as cm:
-                verify_certificate(certificate, server_name="acme.com")
+                verify_certificate(
+                    cadata=cadata, certificate=certificate, server_name="acme.com"
+                )
             self.assertEqual(
                 str(cm.exception), "hostname 'acme.com' doesn't match 'example.com'"
             )
@@ -1261,17 +1347,24 @@ class VerifyCertificateTest(TestCase):
             common_name="example.com",
             curve=ec.SECP256R1,
         )
+        cadata = certificate.public_bytes(serialization.Encoding.PEM)
 
         with patch("aioquic.tls.utcnow") as mock_utcnow:
             mock_utcnow.return_value = certificate.not_valid_before
 
             # valid
-            verify_certificate(certificate, server_name="example.com")
-            verify_certificate(certificate, server_name="test.example.com")
+            verify_certificate(
+                cadata=cadata, certificate=certificate, server_name="example.com"
+            )
+            verify_certificate(
+                cadata=cadata, certificate=certificate, server_name="test.example.com"
+            )
 
             # invalid
             with self.assertRaises(tls.AlertBadCertificate) as cm:
-                verify_certificate(certificate, server_name="acme.com")
+                verify_certificate(
+                    cadata=cadata, certificate=certificate, server_name="acme.com"
+                )
             self.assertEqual(
                 str(cm.exception),
                 "hostname 'acme.com' doesn't match either of '*.example.com', 'example.com'",

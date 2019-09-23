@@ -5,6 +5,8 @@ import socket
 from unittest import TestCase
 from unittest.mock import patch
 
+from cryptography.hazmat.primitives import serialization
+
 from aioquic.asyncio.client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.asyncio.server import serve
@@ -12,7 +14,13 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicProtocolVersion
 
-from .utils import SERVER_CERTFILE, SERVER_KEYFILE, generate_ec_certificate, run
+from .utils import (
+    SERVER_CACERTFILE,
+    SERVER_CERTFILE,
+    SERVER_KEYFILE,
+    generate_ec_certificate,
+    run,
+)
 
 real_sendto = socket.socket.sendto
 
@@ -36,8 +44,19 @@ class SessionTicketStore:
         return self.tickets.pop(label, None)
 
 
-async def run_client(host, port=4433, request=b"ping", **kwargs):
-    async with connect(host, port, **kwargs) as client:
+async def run_client(
+    host,
+    port=4433,
+    cadata=None,
+    cafile=SERVER_CACERTFILE,
+    configuration=None,
+    request=b"ping",
+    **kwargs
+):
+    if configuration is None:
+        configuration = QuicConfiguration(is_client=True)
+    configuration.load_verify_locations(cadata=cadata, cafile=cafile)
+    async with connect(host, port, configuration=configuration, **kwargs) as client:
         reader, writer = await client.create_stream()
         assert writer.can_write_eof() is True
         assert writer.get_extra_info("stream_id") == 0
@@ -88,7 +107,11 @@ class HighLevelTest(TestCase):
                         is_client=False,
                     )
                 ),
-                run_client("127.0.0.1"),
+                run_client(
+                    "127.0.0.1",
+                    cadata=certificate.public_bytes(serialization.Encoding.PEM),
+                    cafile=None,
+                ),
             )
         )
 
@@ -106,9 +129,21 @@ class HighLevelTest(TestCase):
         self.assertEqual(response, data)
         server.close()
 
+    def test_connect_and_serve_without_client_configuration(self):
+        async def run_client_without_config(host, port=4433):
+            async with connect(host, port) as client:
+                await client.ping()
+
+        server = run(run_server())
+        with self.assertRaises(ConnectionError):
+            run(run_client_without_config("127.0.0.1"))
+        server.close()
+
     def test_connect_and_serve_writelines(self):
         async def run_client_writelines(host, port=4433):
-            async with connect(host, port) as client:
+            configuration = QuicConfiguration(is_client=True)
+            configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+            async with connect(host, port, configuration=configuration) as client:
                 reader, writer = await client.create_stream()
                 assert writer.can_write_eof() is True
 
@@ -257,7 +292,9 @@ class HighLevelTest(TestCase):
 
     def test_change_connection_id(self):
         async def run_client_key_update(host, port=4433):
-            async with connect(host, port) as client:
+            configuration = QuicConfiguration(is_client=True)
+            configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+            async with connect(host, port, configuration=configuration) as client:
                 await client.ping()
                 client.change_connection_id()
                 await client.ping()
@@ -271,7 +308,9 @@ class HighLevelTest(TestCase):
 
     def test_key_update(self):
         async def run_client_key_update(host, port=4433):
-            async with connect(host, port) as client:
+            configuration = QuicConfiguration(is_client=True)
+            configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+            async with connect(host, port, configuration=configuration) as client:
                 await client.ping()
                 client.request_key_update()
                 await client.ping()
@@ -285,7 +324,9 @@ class HighLevelTest(TestCase):
 
     def test_ping(self):
         async def run_client_ping(host, port=4433):
-            async with connect(host, port) as client:
+            configuration = QuicConfiguration(is_client=True)
+            configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+            async with connect(host, port, configuration=configuration) as client:
                 await client.ping()
                 await client.ping()
 

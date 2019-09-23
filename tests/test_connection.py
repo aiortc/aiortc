@@ -27,7 +27,12 @@ from aioquic.quic.packet import (
 )
 from aioquic.quic.packet_builder import QuicDeliveryState, QuicPacketBuilder
 
-from .utils import SERVER_CERTFILE, SERVER_KEYFILE
+from .utils import (
+    SERVER_CACERTFILE,
+    SERVER_CERTFILE,
+    SERVER_CERTFILE_WITH_CHAIN,
+    SERVER_KEYFILE,
+)
 
 CLIENT_ADDR = ("1.2.3.4", 1234)
 
@@ -82,23 +87,25 @@ def client_and_server(
     client_patch=lambda x: None,
     handshake=True,
     server_kwargs={},
+    server_certfile=SERVER_CERTFILE,
+    server_keyfile=SERVER_KEYFILE,
     server_options={},
     server_patch=lambda x: None,
     transport_options={},
 ):
-    client = QuicConnection(
-        configuration=QuicConfiguration(
-            is_client=True, quic_logger=QuicLogger(), **client_options
-        ),
-        **client_kwargs
+    client_configuration = QuicConfiguration(
+        is_client=True, quic_logger=QuicLogger(), **client_options
     )
+    client_configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+
+    client = QuicConnection(configuration=client_configuration, **client_kwargs)
     client._ack_delay = 0
     client_patch(client)
 
     server_configuration = QuicConfiguration(
         is_client=False, quic_logger=QuicLogger(), **server_options
     )
-    server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+    server_configuration.load_cert_chain(server_certfile, server_keyfile)
 
     server = QuicConnection(configuration=server_configuration, **server_kwargs)
     server._ack_delay = 0
@@ -263,6 +270,13 @@ class QuicConnectionTest(TestCase):
                 ],
             )
 
+    def test_connect_with_cert_chain(self):
+        with client_and_server(server_certfile=SERVER_CERTFILE_WITH_CHAIN) as (
+            client,
+            server,
+        ):
+            pass
+
     def test_connect_with_loss_1(self):
         """
         Check connection is established even in the client's INITIAL is lost.
@@ -271,7 +285,10 @@ class QuicConnectionTest(TestCase):
         def datagram_sizes(items):
             return [len(x[0]) for x in items]
 
-        client = QuicConnection(configuration=QuicConfiguration(is_client=True))
+        client_configuration = QuicConfiguration(is_client=True)
+        client_configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+
+        client = QuicConnection(configuration=client_configuration)
         client._ack_delay = 0
 
         server_configuration = QuicConfiguration(is_client=False)
@@ -340,7 +357,10 @@ class QuicConnectionTest(TestCase):
         def datagram_sizes(items):
             return [len(x[0]) for x in items]
 
-        client = QuicConnection(configuration=QuicConfiguration(is_client=True))
+        client_configuration = QuicConfiguration(is_client=True)
+        client_configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+
+        client = QuicConnection(configuration=client_configuration)
         client._ack_delay = 0
 
         server_configuration = QuicConfiguration(is_client=False)
