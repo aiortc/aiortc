@@ -1,15 +1,4 @@
-var pc = new RTCPeerConnection({
-    sdpSemantics: 'unified-plan'
-});
-
-// connect audio / video
-pc.addEventListener('track', function(evt) {
-    if (evt.track.kind == 'video') {
-        document.getElementById('video').srcObject = evt.streams[0];
-    } else {
-        document.getElementById('audio').srcObject = evt.streams[0];
-    }
-});
+var pc = null;
 
 function negotiate() {
     pc.addTransceiver('video', {direction: 'recvonly'});
@@ -53,6 +42,25 @@ function negotiate() {
 }
 
 function start() {
+    var config = {
+        sdpSemantics: 'unified-plan'
+    };
+
+    if (document.getElementById('use-stun').checked) {
+        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
+    }
+
+    pc = new RTCPeerConnection(config);
+
+    // connect audio / video
+    pc.addEventListener('track', function(evt) {
+        if (evt.track.kind == 'video') {
+            document.getElementById('video').srcObject = evt.streams[0];
+        } else {
+            document.getElementById('audio').srcObject = evt.streams[0];
+        }
+    });
+
     document.getElementById('start').style.display = 'none';
     negotiate();
     document.getElementById('stop').style.display = 'inline-block';

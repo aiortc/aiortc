@@ -12,6 +12,10 @@
         width: 100%;
     }
 
+    .option {
+        margin-bottom: 8px;
+    }
+
     #media {
         max-width: 1280px;
     }
@@ -19,6 +23,10 @@
 </head>
 <body>
 
+<div class="option">
+    <input id="use-stun" type="checkbox"/>
+    <label for="use-stun">Use STUN server</label>
+</div>
 <button id="start" onclick="start()">Start</button>
 <button id="stop" style="display: none" onclick="stop()">Stop</button>
 

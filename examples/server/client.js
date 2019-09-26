@@ -19,7 +19,7 @@ function createPeerConnection() {
         config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
     }
 
-    var pc = new RTCPeerConnection(config);
+    pc = new RTCPeerConnection(config);
 
     // register some listeners to help debugging
     pc.addEventListener('icegatheringstatechange', function() {
