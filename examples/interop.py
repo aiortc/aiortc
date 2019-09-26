@@ -71,7 +71,7 @@ class Server:
 
 
 SERVERS = [
-    Server("aioquic", "quic.aiortc.org"),
+    Server("aioquic", "quic.aiortc.org", port=443),
     Server("ats", "quic.ogre.com"),
     Server("f5", "f5quic.com", retry_port=4433),
     Server("gquic", "quic.rocks", retry_port=None),
