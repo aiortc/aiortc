@@ -305,6 +305,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HTTP/3 client")
     parser.add_argument("url", type=str, help="the URL to query (must be HTTPS)")
     parser.add_argument(
+        "--ca-certs", type=str, help="load CA certificates from the specified file"
+    )
+    parser.add_argument(
         "-d", "--data", type=str, help="send the specified data in a POST request"
     )
     parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
@@ -339,6 +342,8 @@ if __name__ == "__main__":
         is_client=True,
         alpn_protocols=["hq-23", "hq-22"] if args.legacy_http else ["h3-23", "h3-22"],
     )
+    if args.ca_certs:
+        configuration.load_verify_locations(args.ca_certs)
     if args.quic_log:
         configuration.quic_logger = QuicLogger()
     if args.secrets_log:

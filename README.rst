@@ -92,19 +92,19 @@ You can run the example client to perform an HTTP/3 request:
 
 .. code-block:: console
 
-  $ python examples/http3_client.py https://localhost:4433/
+  $ python examples/http3_client.py --ca-certs tests/pycacert.pem https://localhost:4433/
 
 Alternatively you can perform an HTTP/0.9 request:
 
 .. code-block:: console
 
-  $ python examples/http3_client.py --legacy-http https://localhost:4433/
+  $ python examples/http3_client.py --ca-certs tests/pycacert.pem --legacy-http https://localhost:4433/
 
 You can also open a WebSocket over HTTP/3:
 
 .. code-block:: console
 
-  $ python examples/http3_client.py wss://localhost:4433/ws
+  $ python examples/http3_client.py --ca-certs tests/pycacert.pem wss://localhost:4433/ws
 
 License
 -------
