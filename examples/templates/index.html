@@ -11,6 +11,11 @@
             This is a test page for <a href="https://github.com/aiortc/aioquic/">aioquic</a>,
             a QUIC and HTTP/3 implementation written in Python.
         </p>
+{% if request.scope["http_version"] == "3" %}
+        <p>
+            Congratulations, you loaded this page using HTTP/3!
+        </p>
+{% endif %}
         <h2>Available endpoints</h2>
         <ul>
             <li><strong>GET /</strong> returns the homepage</li>
