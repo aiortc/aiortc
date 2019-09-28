@@ -204,8 +204,8 @@ class H3Connection:
     """
 
     def __init__(self, quic: QuicConnection):
-        self._max_table_capacity = 0x100
-        self._blocked_streams = 0x10
+        self._max_table_capacity = 4096
+        self._blocked_streams = 16
 
         self._is_client = quic.configuration.is_client
         self._is_done = False
