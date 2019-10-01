@@ -11,11 +11,14 @@
         <tr>
             <th>name</th>
             <th>date (UTC)</th>
-            <th>size (bytes)</th>
+            <th>size</th>
         </tr>
 {% for log in logs %}
         <tr>
-            <td class="name"><a href="/logs/{{ log.name }}">{{ log.name }}</a></td>
+            <td class="name">
+                <a href="{{ log.file_url }}">{{ log.name }}</a>
+                <a href="{{ log.qvis_url }}">[qvis]</a>
+            </td>
             <td class="date">{{ log.date }}</td>
             <td class="size">{{ log.size }}</td>
         </tr>
