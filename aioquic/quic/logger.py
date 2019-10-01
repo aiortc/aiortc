@@ -12,6 +12,7 @@ from .packet import (
     PACKET_TYPE_ZERO_RTT,
     QuicNewConnectionIdFrame,
     QuicStreamFrame,
+    QuicTransportParameters,
 )
 from .rangeset import RangeSet
 
@@ -160,6 +161,19 @@ class QuicLoggerTrace:
 
     def encode_streams_blocked_frame(self, limit: int) -> Dict:
         return {"frame_type": "streams_blocked", "limit": str(limit)}
+
+    def encode_transport_parameters(
+        self, parameters: QuicTransportParameters
+    ) -> List[Dict]:
+        data = []
+        for param_name, param_value in parameters.__dict__.items():
+            if isinstance(param_value, bool):
+                data.append({"name": param_name, "value": param_value})
+            elif isinstance(param_value, bytes):
+                data.append({"name": param_name, "value": hexdump(param_value)})
+            elif isinstance(param_value, int):
+                data.append({"name": param_name, "value": str(param_value)})
+        return data
 
     def log_event(self, *, category: str, event: str, data: Dict) -> None:
         self._events.append((time.time(), category, event, data))

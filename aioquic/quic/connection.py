@@ -1766,6 +1766,19 @@ class QuicConnection:
     ) -> None:
         quic_transport_parameters = pull_quic_transport_parameters(Buffer(data=data))
 
+        # log event
+        if self._quic_logger is not None and not from_session_ticket:
+            self._quic_logger.log_event(
+                category="transport",
+                event="transport_parameters_update",
+                data={
+                    "owner": "remote",
+                    "parameters": self._quic_logger.encode_transport_parameters(
+                        quic_transport_parameters
+                    ),
+                },
+            )
+
         # validate remote parameters
         if (
             self._is_client
@@ -1820,6 +1833,19 @@ class QuicConnection:
         if not self._is_client:
             quic_transport_parameters.original_connection_id = (
                 self._original_connection_id
+            )
+
+        # log event
+        if self._quic_logger is not None:
+            self._quic_logger.log_event(
+                category="transport",
+                event="transport_parameters_update",
+                data={
+                    "owner": "local",
+                    "parameters": self._quic_logger.encode_transport_parameters(
+                        quic_transport_parameters
+                    ),
+                },
             )
 
         buf = Buffer(capacity=512)
