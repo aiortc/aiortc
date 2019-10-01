@@ -154,7 +154,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
     ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         adapter = QuicStreamAdapter(self, stream_id)
         reader = asyncio.StreamReader()
-        writer = asyncio.StreamWriter(adapter, None, reader, None)
+        writer = asyncio.StreamWriter(adapter, None, reader, self._loop)
         self._stream_readers[stream_id] = reader
         return reader, writer
 
