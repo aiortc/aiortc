@@ -13,8 +13,8 @@ import wsproto
 import wsproto.events
 
 from aioquic.asyncio import QuicConnectionProtocol, serve
-from aioquic.h0.connection import H0Connection
-from aioquic.h3.connection import H3Connection
+from aioquic.h0.connection import H0_ALPN, H0Connection
+from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import DataReceived, H3Event, HeadersReceived
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
@@ -447,7 +447,7 @@ if __name__ == "__main__":
         secrets_log_file = None
 
     configuration = QuicConfiguration(
-        alpn_protocols=["h3-23", "h3-22", "hq-23", "hq-22"],
+        alpn_protocols=H3_ALPN + H0_ALPN,
         is_client=False,
         quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,

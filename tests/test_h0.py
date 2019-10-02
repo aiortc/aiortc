@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aioquic.h0.connection import H0Connection
+from aioquic.h0.connection import H0_ALPN, H0Connection
 from aioquic.h3.events import DataReceived, HeadersReceived
 
 from .test_connection import client_and_server, transfer
@@ -22,8 +22,8 @@ def h0_transfer(quic_sender, h0_receiver):
 class H0ConnectionTest(TestCase):
     def test_connect(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["hq-23"]},
-            server_options={"alpn_protocols": ["hq-23"]},
+            client_options={"alpn_protocols": H0_ALPN},
+            server_options={"alpn_protocols": H0_ALPN},
         ) as (quic_client, quic_server):
             h0_client = H0Connection(quic_client)
             h0_server = H0Connection(quic_server)
@@ -87,8 +87,8 @@ class H0ConnectionTest(TestCase):
 
     def test_headers_only(self):
         with client_and_server(
-            client_options={"alpn_protocols": ["hq-23"]},
-            server_options={"alpn_protocols": ["hq-23"]},
+            client_options={"alpn_protocols": H0_ALPN},
+            server_options={"alpn_protocols": H0_ALPN},
         ) as (quic_client, quic_server):
             h0_client = H0Connection(quic_client)
             h0_server = H0Connection(quic_server)

@@ -18,6 +18,8 @@ import urllib3
 from http3_client import HttpClient
 
 from aioquic.asyncio import connect
+from aioquic.h0.connection import H0_ALPN
+from aioquic.h3.connection import H3_ALPN
 from aioquic.h3.events import DataReceived, HeadersReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
@@ -146,7 +148,7 @@ async def test_http_0(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    configuration.alpn_protocols = ["hq-23", "hq-22"]
+    configuration.alpn_protocols = H0_ALPN
     async with connect(
         server.host,
         server.port,
@@ -167,7 +169,7 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
     if server.path is None:
         return
 
-    configuration.alpn_protocols = ["h3-23", "h3-22"]
+    configuration.alpn_protocols = H3_ALPN
     async with connect(
         server.host,
         server.port,
@@ -315,9 +317,9 @@ async def test_throughput(server: Server, configuration: QuicConfiguration):
 
         # perform HTTP request over QUIC
         if server.http3:
-            configuration.alpn_protocols = ["h3-23", "h3-22"]
+            configuration.alpn_protocols = H3_ALPN
         else:
-            configuration.alpn_protocols = ["hq-23", "hq-22"]
+            configuration.alpn_protocols = H0_ALPN
         start = time.time()
         async with connect(
             server.host,
@@ -361,7 +363,7 @@ async def run(servers, tests, quic_log=False, secrets_log_file=None) -> None:
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
             configuration = QuicConfiguration(
-                alpn_protocols=["h3-23", "h3-22", "hq-23", "hq-22"],
+                alpn_protocols=H3_ALPN + H0_ALPN,
                 is_client=True,
                 quic_logger=QuicLogger(),
                 secrets_log_file=secrets_log_file,

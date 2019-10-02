@@ -19,6 +19,8 @@ from aioquic.quic.logger import QuicLoggerTrace
 
 logger = logging.getLogger("http3")
 
+H3_ALPN = ["h3-23", "h3-22"]
+
 
 class ErrorCode(IntEnum):
     HTTP_NO_ERROR = 0x100
