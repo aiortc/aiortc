@@ -216,7 +216,11 @@ class H3Connection:
         self._decoder = pylsqpack.Decoder(
             self._max_table_capacity, self._blocked_streams
         )
+        self._decoder_bytes_received = 0
+        self._decoder_bytes_sent = 0
         self._encoder = pylsqpack.Encoder()
+        self._encoder_bytes_received = 0
+        self._encoder_bytes_sent = 0
         self._stream: Dict[int, H3Stream] = {}
 
         self._max_push_id: Optional[int] = 8 if self._is_client else None
@@ -375,6 +379,7 @@ class H3Connection:
                 decoder, headers = self._decoder.resume_header(stream_id)
             else:
                 decoder, headers = self._decoder.feed_header(stream_id, frame_data)
+            self._decoder_bytes_sent += len(decoder)
             self._quic.send_stream_data(self._local_decoder_stream_id, decoder)
         except pylsqpack.DecompressionFailed as exc:
             raise QpackDecompressionFailed() from exc
@@ -386,6 +391,7 @@ class H3Connection:
         Encode a HEADERS block and send encoder updates on the encoder stream.
         """
         encoder, frame_data = self._encoder.encode(stream_id, 0, headers)
+        self._encoder_bytes_sent += len(encoder)
         self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
         return frame_data
 
@@ -727,6 +733,7 @@ class H3Connection:
                     self._encoder.feed_decoder(data)
                 except pylsqpack.DecoderStreamError as exc:
                     raise QpackDecoderStreamError() from exc
+                self._decoder_bytes_received += len(data)
             elif stream.stream_type == StreamType.QPACK_ENCODER:
                 # feed unframed data to encoder
                 data = buf.pull_bytes(buf.capacity - buf.tell())
@@ -735,6 +742,7 @@ class H3Connection:
                     unblocked_streams.update(self._decoder.feed_encoder(data))
                 except pylsqpack.EncoderStreamError as exc:
                     raise QpackEncoderStreamError() from exc
+                self._encoder_bytes_received += len(data)
             else:
                 # unknown stream type, discard data
                 buf.seek(buf.capacity)

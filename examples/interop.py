@@ -78,6 +78,7 @@ SERVERS = [
     Server("f5", "f5quic.com", retry_port=4433),
     Server("gquic", "quic.rocks", retry_port=None),
     Server("lsquic", "http3-test.litespeedtech.com"),
+    Server("msquic", "quic.westus.cloudapp.azure.com", port=443),
     Server("mvfst", "fb.mvfst.net"),
     Server("ngtcp2", "nghttp2.org"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
@@ -89,7 +90,6 @@ SERVERS = [
     Server("quicker", "quicker.edm.uhasselt.be", retry_port=None),
     Server("quicly", "kazuhooku.com"),
     Server("quinn", "ralith.com"),
-    Server("winquic", "quic.westus.cloudapp.azure.com"),
 ]
 
 
@@ -185,6 +185,29 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
         if events and isinstance(events[0], HeadersReceived):
             server.result |= Result.D
             server.result |= Result.three
+
+        # perform another HTTP request to use QPACK dynamic tables
+        events = await protocol.get(
+            "https://{}:{}{}".format(server.host, server.port, server.path)
+        )
+        if events and isinstance(events[0], HeadersReceived):
+            protocol._quic._logger.info(
+                "QPACK decoder bytes RX %d TX %d",
+                protocol._http._decoder_bytes_received,
+                protocol._http._decoder_bytes_sent,
+            )
+            protocol._quic._logger.info(
+                "QPACK encoder bytes RX %d TX %d",
+                protocol._http._encoder_bytes_received,
+                protocol._http._encoder_bytes_sent,
+            )
+            if (
+                protocol._http._decoder_bytes_received
+                and protocol._http._decoder_bytes_sent
+                and protocol._http._encoder_bytes_received
+                and protocol._http._encoder_bytes_sent
+            ):
+                server.result |= Result.d
 
 
 async def test_session_resumption(server: Server, configuration: QuicConfiguration):
