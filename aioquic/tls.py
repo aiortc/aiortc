@@ -1163,6 +1163,7 @@ class Context:
         self,
         is_client: bool,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
+        max_early_data: Optional[int] = None,
     ):
         self.alpn_negotiated: Optional[str] = None
         self.alpn_protocols: Optional[List[str]] = None
@@ -1177,6 +1178,7 @@ class Context:
         self.early_data_accepted = False
         self.handshake_extensions: List[Extension] = []
         self.key_schedule: Optional[KeySchedule] = None
+        self.max_early_data = max_early_data
         self.received_extensions: Optional[List[Extension]] = None
         self.session_ticket: Optional[SessionTicket] = None
         self.server_name: Optional[str] = None
@@ -1825,7 +1827,7 @@ class Context:
                 ticket_age_add=struct.unpack("I", os.urandom(4))[0],
                 ticket_nonce=b"",
                 ticket=os.urandom(64),
-                max_early_data_size=0xFFFFFFFF,
+                max_early_data_size=self.max_early_data,
             )
 
             # send messsage

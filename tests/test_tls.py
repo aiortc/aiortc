@@ -116,7 +116,7 @@ class ContextTest(TestCase):
         configuration = QuicConfiguration(is_client=False)
         configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
 
-        server = Context(is_client=False)
+        server = Context(is_client=False, max_early_data=0xFFFFFFFF)
         server.certificate = configuration.certificate
         server.certificate_private_key = configuration.private_key
         server.handshake_extensions = [
@@ -1037,7 +1037,7 @@ class TlsTest(TestCase):
                 ticket=binascii.unhexlify(
                     "dbe6f1a77a78c0426bfa607cd0d02b350247d90618704709596beda7e962cc81"
                 ),
-                max_early_data_size=4294967295,
+                max_early_data_size=0xFFFFFFFF,
             ),
         )
 
@@ -1061,7 +1061,7 @@ class TlsTest(TestCase):
                 ticket=binascii.unhexlify(
                     "dbe6f1a77a78c0426bfa607cd0d02b350247d90618704709596beda7e962cc81"
                 ),
-                max_early_data_size=4294967295,
+                max_early_data_size=0xFFFFFFFF,
                 other_extensions=[(12345, b"foo")],
             ),
         )

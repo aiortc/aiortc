@@ -473,6 +473,36 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(type(event), events.StreamDataReceived)
             self.assertEqual(event.data, b"hello")
 
+    def test_connect_with_0rtt_bad_max_early_data(self):
+        client_ticket = None
+        ticket_store = SessionTicketStore()
+
+        def patch(server):
+            """
+            Patch server's TLS initialization to set an invalid
+            max_early_data value.
+            """
+            real_initialize = server._initialize
+
+            def patched_initialize(peer_cid: bytes):
+                real_initialize(peer_cid)
+                server.tls.max_early_data = 12345
+
+            server._initialize = patched_initialize
+
+        def save_session_ticket(ticket):
+            nonlocal client_ticket
+            client_ticket = ticket
+
+        with client_and_server(
+            client_kwargs={"session_ticket_handler": save_session_ticket},
+            server_kwargs={"session_ticket_handler": ticket_store.add},
+            server_patch=patch,
+        ) as (client, server):
+            # check handshake failed
+            event = client.next_event()
+            self.assertIsNone(event)
+
     def test_change_connection_id(self):
         with client_and_server() as (client, server):
             self.assertEqual(

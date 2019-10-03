@@ -57,6 +57,7 @@ EPOCH_SHORTCUTS = {
     "O": tls.Epoch.ONE_RTT,
 }
 MAX_DATA_WINDOW = 1048576
+MAX_EARLY_DATA = 0xFFFFFFFF
 SECRETS_LABELS = [
     [
         None,
@@ -1031,9 +1032,26 @@ class QuicConnection:
             )
         return stream
 
+    def _handle_session_ticket(self, session_ticket: tls.SessionTicket) -> None:
+        if (
+            session_ticket.max_early_data_size is not None
+            and session_ticket.max_early_data_size != MAX_EARLY_DATA
+        ):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=QuicFrameType.CRYPTO,
+                reason_phrase="Invalid max_early_data value %s"
+                % session_ticket.max_early_data_size,
+            )
+        self._session_ticket_handler(session_ticket)
+
     def _initialize(self, peer_cid: bytes) -> None:
         # TLS
-        self.tls = tls.Context(is_client=self._is_client, logger=self._logger)
+        self.tls = tls.Context(
+            is_client=self._is_client,
+            logger=self._logger,
+            max_early_data=None if self._is_client else MAX_EARLY_DATA,
+        )
         self.tls.alpn_protocols = self._configuration.alpn_protocols
         self.tls.cadata = self._configuration.cadata
         self.tls.cafile = self._configuration.cafile
@@ -1060,7 +1078,7 @@ class QuicConnection:
             self.tls.session_ticket = self._configuration.session_ticket
 
             # parse saved QUIC transport parameters - for 0-RTT
-            if session_ticket.max_early_data_size == 0xFFFFFFFF:
+            if session_ticket.max_early_data_size == MAX_EARLY_DATA:
                 for ext_type, ext_data in session_ticket.other_extensions:
                     if ext_type == tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS:
                         self._parse_transport_parameters(
@@ -1073,7 +1091,7 @@ class QuicConnection:
         if self._session_ticket_fetcher is not None:
             self.tls.get_session_ticket_cb = self._session_ticket_fetcher
         if self._session_ticket_handler is not None:
-            self.tls.new_session_ticket_cb = self._session_ticket_handler
+            self.tls.new_session_ticket_cb = self._handle_session_ticket
         self.tls.update_traffic_key_cb = self._update_traffic_key
 
         # packet spaces
