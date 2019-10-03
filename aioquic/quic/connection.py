@@ -299,7 +299,7 @@ class QuicConnection:
         # frame handlers
         self.__frame_handlers = [
             (self._handle_padding_frame, EPOCHS("IZHO")),
-            (self._handle_ping_frame, EPOCHS("ZO")),
+            (self._handle_ping_frame, EPOCHS("IZHO")),
             (self._handle_ack_frame, EPOCHS("IHO")),
             (self._handle_ack_frame, EPOCHS("IHO")),
             (self._handle_reset_stream_frame, EPOCHS("ZO")),
