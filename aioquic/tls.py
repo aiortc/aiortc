@@ -376,25 +376,6 @@ class SignatureAlgorithm(IntEnum):
     ECDSA_SHA1 = 0x0203
 
 
-# INTEGERS
-
-
-def pull_compression_method(buf: Buffer) -> CompressionMethod:
-    return CompressionMethod(buf.pull_uint8())
-
-
-def pull_group(buf: Buffer) -> Group:
-    return Group(buf.pull_uint16())
-
-
-def pull_psk_key_exchange_mode(buf: Buffer) -> PskKeyExchangeMode:
-    return PskKeyExchangeMode(buf.pull_uint8())
-
-
-def pull_signature_algorithm(buf: Buffer) -> SignatureAlgorithm:
-    return SignatureAlgorithm(buf.pull_uint16())
-
-
 # BLOCKS
 
 
@@ -478,11 +459,11 @@ def push_extension(buf: Buffer, extension_type: int) -> Generator:
 # KeyShareEntry
 
 
-KeyShareEntry = Tuple[Group, bytes]
+KeyShareEntry = Tuple[int, bytes]
 
 
 def pull_key_share(buf: Buffer) -> KeyShareEntry:
-    group = pull_group(buf)
+    group = buf.pull_uint16()
     data = pull_opaque(buf, 2)
     return (group, data)
 
@@ -543,17 +524,17 @@ class ClientHello:
     random: bytes
     session_id: bytes
     cipher_suites: List[int]
-    compression_methods: List[CompressionMethod]
+    compression_methods: List[int]
 
     # extensions
     alpn_protocols: Optional[List[str]] = None
     early_data: bool = False
     key_share: Optional[List[KeyShareEntry]] = None
     pre_shared_key: Optional[OfferedPsks] = None
-    psk_key_exchange_modes: Optional[List[PskKeyExchangeMode]] = None
+    psk_key_exchange_modes: Optional[List[int]] = None
     server_name: Optional[str] = None
-    signature_algorithms: Optional[List[SignatureAlgorithm]] = None
-    supported_groups: Optional[List[Group]] = None
+    signature_algorithms: Optional[List[int]] = None
+    supported_groups: Optional[List[int]] = None
     supported_versions: Optional[List[int]] = None
 
     other_extensions: List[Extension] = field(default_factory=list)
@@ -569,9 +550,7 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
             random=client_random,
             session_id=pull_opaque(buf, 1),
             cipher_suites=pull_list(buf, 2, buf.pull_uint16),
-            compression_methods=pull_list(
-                buf, 1, partial(pull_compression_method, buf)
-            ),
+            compression_methods=pull_list(buf, 1, buf.pull_uint8),
         )
 
         # extensions
@@ -589,15 +568,11 @@ def pull_client_hello(buf: Buffer) -> ClientHello:
             elif extension_type == ExtensionType.SUPPORTED_VERSIONS:
                 hello.supported_versions = pull_list(buf, 1, buf.pull_uint16)
             elif extension_type == ExtensionType.SIGNATURE_ALGORITHMS:
-                hello.signature_algorithms = pull_list(
-                    buf, 2, partial(pull_signature_algorithm, buf)
-                )
+                hello.signature_algorithms = pull_list(buf, 2, buf.pull_uint16)
             elif extension_type == ExtensionType.SUPPORTED_GROUPS:
-                hello.supported_groups = pull_list(buf, 2, partial(pull_group, buf))
+                hello.supported_groups = pull_list(buf, 2, buf.pull_uint16)
             elif extension_type == ExtensionType.PSK_KEY_EXCHANGE_MODES:
-                hello.psk_key_exchange_modes = pull_list(
-                    buf, 1, partial(pull_psk_key_exchange_mode, buf)
-                )
+                hello.psk_key_exchange_modes = pull_list(buf, 1, buf.pull_uint8)
             elif extension_type == ExtensionType.SERVER_NAME:
                 with pull_block(buf, 2):
                     assert buf.pull_uint8() == 0
@@ -693,7 +668,7 @@ class ServerHello:
     random: bytes
     session_id: bytes
     cipher_suite: int
-    compression_method: CompressionMethod
+    compression_method: int
 
     # extensions
     key_share: Optional[KeyShareEntry] = None
@@ -712,7 +687,7 @@ def pull_server_hello(buf: Buffer) -> ServerHello:
             random=server_random,
             session_id=pull_opaque(buf, 1),
             cipher_suite=buf.pull_uint16(),
-            compression_method=pull_compression_method(buf),
+            compression_method=buf.pull_uint8(),
         )
 
         # extensions
@@ -918,14 +893,14 @@ def push_certificate(buf: Buffer, certificate: Certificate) -> None:
 
 @dataclass
 class CertificateVerify:
-    algorithm: SignatureAlgorithm
+    algorithm: int
     signature: bytes
 
 
 def pull_certificate_verify(buf: Buffer) -> CertificateVerify:
     assert buf.pull_uint8() == HandshakeType.CERTIFICATE_VERIFY
     with pull_block(buf, 3):
-        algorithm = pull_signature_algorithm(buf)
+        algorithm = buf.pull_uint16()
         signature = pull_opaque(buf, 2)
 
     return CertificateVerify(algorithm=algorithm, signature=signature)
@@ -1038,7 +1013,7 @@ CIPHER_SUITES = {
     CipherSuite.CHACHA20_POLY1305_SHA256: hashes.SHA256,
 }
 
-SIGNATURE_ALGORITHMS = {
+SIGNATURE_ALGORITHMS: Dict = {
     SignatureAlgorithm.ECDSA_SECP256R1_SHA256: (None, hashes.SHA256),
     SignatureAlgorithm.ECDSA_SECP384R1_SHA384: (None, hashes.SHA384),
     SignatureAlgorithm.ECDSA_SECP521R1_SHA512: (None, hashes.SHA512),
@@ -1051,7 +1026,7 @@ SIGNATURE_ALGORITHMS = {
     SignatureAlgorithm.RSA_PSS_RSAE_SHA512: (padding.PSS, hashes.SHA512),
 }
 
-GROUP_TO_CURVE = {
+GROUP_TO_CURVE: Dict = {
     Group.SECP256R1: ec.SECP256R1,
     Group.SECP384R1: ec.SECP384R1,
     Group.SECP521R1: ec.SECP521R1,
@@ -1098,7 +1073,7 @@ def negotiate(
 
 
 def signature_algorithm_params(
-    signature_algorithm: SignatureAlgorithm
+    signature_algorithm: int
 ) -> Union[Tuple[ec.ECDSA], Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]]:
     padding_cls, algorithm_cls = SIGNATURE_ALGORITHMS[signature_algorithm]
     algorithm = algorithm_cls()
@@ -1197,9 +1172,9 @@ class Context:
             CipherSuite.AES_128_GCM_SHA256,
             CipherSuite.CHACHA20_POLY1305_SHA256,
         ]
-        self._compression_methods = [CompressionMethod.NULL]
-        self._psk_key_exchange_modes = [PskKeyExchangeMode.PSK_DHE_KE]
-        self._signature_algorithms = [
+        self._compression_methods: List[int] = [CompressionMethod.NULL]
+        self._psk_key_exchange_modes: List[int] = [PskKeyExchangeMode.PSK_DHE_KE]
+        self._signature_algorithms: List[int] = [
             SignatureAlgorithm.RSA_PSS_RSAE_SHA256,
             SignatureAlgorithm.ECDSA_SECP256R1_SHA256,
             SignatureAlgorithm.RSA_PKCS1_SHA256,
@@ -1347,7 +1322,7 @@ class Context:
 
     def _client_send_hello(self, output_buf: Buffer) -> None:
         key_share: List[KeyShareEntry] = []
-        supported_groups: List[Group] = []
+        supported_groups: List[int] = []
 
         if Group.SECP256R1 in self._supported_groups:
             self._ec_private_key = ec.generate_private_key(
