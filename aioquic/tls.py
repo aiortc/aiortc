@@ -1181,6 +1181,8 @@ class Context:
             SignatureAlgorithm.RSA_PKCS1_SHA1,
         ]
         self._supported_groups = [Group.SECP256R1]
+        if default_backend().x25519_supported():
+            self._supported_groups.append(Group.X25519)
         self._supported_versions = [TLS_VERSION_1_3]
 
         # state
