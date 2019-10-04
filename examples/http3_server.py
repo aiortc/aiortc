@@ -7,7 +7,7 @@ import os
 import time
 from collections import deque
 from email.utils import formatdate
-from typing import Callable, Deque, Dict, List, Optional, Union
+from typing import Callable, Deque, Dict, List, Optional, Union, cast
 
 import wsproto
 import wsproto.events
@@ -110,7 +110,7 @@ class HttpRequestHandler:
                 return
 
             # fake request
-            self.protocol.http_event_received(
+            cast(HttpServerProtocol, self.protocol).http_event_received(
                 HeadersReceived(
                     headers=request_headers, stream_ended=True, stream_id=push_stream_id
                 )
