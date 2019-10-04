@@ -486,7 +486,7 @@ class QuicConnectionTest(TestCase):
 
             def patched_initialize(peer_cid: bytes):
                 real_initialize(peer_cid)
-                server.tls.max_early_data = 12345
+                server.tls._max_early_data = 12345
 
             server._initialize = patched_initialize
 

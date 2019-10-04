@@ -100,9 +100,10 @@ def reset_buffers(buffers):
 
 
 class ContextTest(TestCase):
-    def create_client(self, cafile=SERVER_CACERTFILE):
-        client = Context(is_client=True)
-        client.cafile = cafile
+    def create_client(self, alpn_protocols=None, cadata=None, cafile=SERVER_CACERTFILE):
+        client = Context(
+            alpn_protocols=alpn_protocols, cadata=cadata, cafile=cafile, is_client=True
+        )
         client.handshake_extensions = [
             (
                 tls.ExtensionType.QUIC_TRANSPORT_PARAMETERS,
@@ -112,11 +113,13 @@ class ContextTest(TestCase):
         self.assertEqual(client.state, State.CLIENT_HANDSHAKE_START)
         return client
 
-    def create_server(self):
+    def create_server(self, alpn_protocols=None):
         configuration = QuicConfiguration(is_client=False)
         configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
 
-        server = Context(is_client=False, max_early_data=0xFFFFFFFF)
+        server = Context(
+            alpn_protocols=alpn_protocols, is_client=False, max_early_data=0xFFFFFFFF
+        )
         server.certificate = configuration.certificate
         server.certificate_private_key = configuration.private_key
         server.handshake_extensions = [
@@ -361,8 +364,10 @@ class ContextTest(TestCase):
             common_name="example.com", curve=ec.SECP256R1
         )
 
-        client = self.create_client(cafile=None)
-        client.cadata = server.certificate.public_bytes(serialization.Encoding.PEM)
+        client = self.create_client(
+            cadata=server.certificate.public_bytes(serialization.Encoding.PEM),
+            cafile=None,
+        )
 
         self._handshake(client, server)
 
@@ -371,11 +376,9 @@ class ContextTest(TestCase):
         self.assertEqual(server.alpn_negotiated, None)
 
     def test_handshake_with_alpn(self):
-        client = self.create_client()
-        client.alpn_protocols = ["hq-20"]
+        client = self.create_client(alpn_protocols=["hq-20"])
 
-        server = self.create_server()
-        server.alpn_protocols = ["hq-20", "h3-20"]
+        server = self.create_server(alpn_protocols=["hq-20", "h3-20"])
 
         self._handshake(client, server)
 
@@ -384,11 +387,9 @@ class ContextTest(TestCase):
         self.assertEqual(server.alpn_negotiated, "hq-20")
 
     def test_handshake_with_alpn_fail(self):
-        client = self.create_client()
-        client.alpn_protocols = ["hq-20"]
+        client = self.create_client(alpn_protocols=["hq-20"])
 
-        server = self.create_server()
-        server.alpn_protocols = ["h3-20"]
+        server = self.create_server(alpn_protocols=["h3-20"])
 
         # send client hello
         client_buf = create_buffers()

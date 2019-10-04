@@ -1048,15 +1048,16 @@ class QuicConnection:
     def _initialize(self, peer_cid: bytes) -> None:
         # TLS
         self.tls = tls.Context(
+            alpn_protocols=self._configuration.alpn_protocols,
+            cadata=self._configuration.cadata,
+            cafile=self._configuration.cafile,
+            capath=self._configuration.capath,
             is_client=self._is_client,
             logger=self._logger,
             max_early_data=None if self._is_client else MAX_EARLY_DATA,
+            server_name=self._configuration.server_name,
             verify_mode=self._configuration.verify_mode,
         )
-        self.tls.alpn_protocols = self._configuration.alpn_protocols
-        self.tls.cadata = self._configuration.cadata
-        self.tls.cafile = self._configuration.cafile
-        self.tls.capath = self._configuration.capath
         self.tls.certificate = self._configuration.certificate
         self.tls.certificate_chain = self._configuration.certificate_chain
         self.tls.certificate_private_key = self._configuration.private_key
@@ -1066,7 +1067,6 @@ class QuicConnection:
                 self._serialize_transport_parameters(),
             )
         ]
-        self.tls.server_name = self._configuration.server_name
 
         # TLS session resumption
         session_ticket = self._configuration.session_ticket

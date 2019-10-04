@@ -1137,33 +1137,33 @@ class Context:
     def __init__(
         self,
         is_client: bool,
+        alpn_protocols: Optional[List[str]] = None,
+        cadata: Optional[bytes] = None,
+        cafile: Optional[str] = None,
+        capath: Optional[str] = None,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
         max_early_data: Optional[int] = None,
+        server_name: Optional[str] = None,
         verify_mode: Optional[int] = None,
     ):
-        self.alpn_negotiated: Optional[str] = None
-        self.alpn_protocols: Optional[List[str]] = None
-        self.cadata: Optional[bytes] = None
-        self.cafile: Optional[str] = None
-        self.capath: Optional[str] = None
+        # configuration
+        self._alpn_protocols = alpn_protocols
+        self._cadata = cadata
+        self._cafile = cafile
+        self._capath = capath
         self.certificate: Optional[x509.Certificate] = None
         self.certificate_chain: List[x509.Certificate] = []
         self.certificate_private_key: Optional[
             Union[dsa.DSAPublicKey, ec.EllipticCurvePublicKey, rsa.RSAPublicKey]
         ] = None
-        self.early_data_accepted = False
         self.handshake_extensions: List[Extension] = []
-        self.key_schedule: Optional[KeySchedule] = None
-        self.max_early_data = max_early_data
-        self.received_extensions: Optional[List[Extension]] = None
+        self._max_early_data = max_early_data
         self.session_ticket: Optional[SessionTicket] = None
-        self.server_name: Optional[str] = None
+        self._server_name = server_name
         if verify_mode is not None:
-            self.verify_mode = verify_mode
+            self._verify_mode = verify_mode
         else:
-            self.verify_mode = (
-                ssl.CERT_REQUIRED if is_client else ssl.CERT_NONE
-            )
+            self._verify_mode = ssl.CERT_REQUIRED if is_client else ssl.CERT_NONE
 
         # callbacks
         self.alpn_cb: Optional[AlpnHandler] = None
@@ -1193,6 +1193,10 @@ class Context:
         self._supported_versions = [TLS_VERSION_1_3]
 
         # state
+        self.alpn_negotiated: Optional[str] = None
+        self.early_data_accepted = False
+        self.key_schedule: Optional[KeySchedule] = None
+        self.received_extensions: Optional[List[Extension]] = None
         self._key_schedule_psk: Optional[KeySchedule] = None
         self._key_schedule_proxy: Optional[KeyScheduleProxy] = None
         self._new_session_ticket: Optional[NewSessionTicket] = None
@@ -1325,7 +1329,7 @@ class Context:
             not_valid_before=timestamp,
             other_extensions=self.handshake_extensions,
             resumption_secret=resumption_secret,
-            server_name=self.server_name,
+            server_name=self._server_name,
             ticket=new_session_ticket.ticket,
         )
 
@@ -1352,12 +1356,12 @@ class Context:
             session_id=self.session_id,
             cipher_suites=[int(x) for x in self._cipher_suites],
             compression_methods=self._compression_methods,
-            alpn_protocols=self.alpn_protocols,
+            alpn_protocols=self._alpn_protocols,
             key_share=key_share,
             psk_key_exchange_modes=self._psk_key_exchange_modes
             if (self.session_ticket or self.new_session_ticket_cb is not None)
             else None,
-            server_name=self.server_name,
+            server_name=self._server_name,
             signature_algorithms=self._signature_algorithms,
             supported_groups=supported_groups,
             supported_versions=self._supported_versions,
@@ -1519,14 +1523,14 @@ class Context:
             raise AlertDecryptError
 
         # check certificate
-        if self.verify_mode != ssl.CERT_NONE:
+        if self._verify_mode != ssl.CERT_NONE:
             verify_certificate(
-                cadata=self.cadata,
-                cafile=self.cafile,
-                capath=self.capath,
+                cadata=self._cadata,
+                cafile=self._cafile,
+                capath=self._capath,
                 certificate=self._peer_certificate,
                 chain=self._peer_certificate_chain,
-                server_name=self.server_name,
+                server_name=self._server_name,
             )
 
         self.key_schedule.update_hash(input_buf.data)
@@ -1626,9 +1630,9 @@ class Context:
         )
 
         # negotiate ALPN
-        if self.alpn_protocols is not None:
+        if self._alpn_protocols is not None:
             self.alpn_negotiated = negotiate(
-                self.alpn_protocols,
+                self._alpn_protocols,
                 peer_hello.alpn_protocols,
                 AlertHandshakeFailure("No common ALPN protocols"),
             )
@@ -1812,7 +1816,7 @@ class Context:
                 ticket_age_add=struct.unpack("I", os.urandom(4))[0],
                 ticket_nonce=b"",
                 ticket=os.urandom(64),
-                max_early_data_size=self.max_early_data,
+                max_early_data_size=self._max_early_data,
             )
 
             # send messsage
