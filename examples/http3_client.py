@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import pickle
+import ssl
 import sys
 import time
 from collections import deque
@@ -310,6 +311,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d", "--data", type=str, help="send the specified data in a POST request"
     )
+    parser.add_argument(
+        "-k",
+        "--insecure",
+        action="store_true",
+        help="do not validate server certificate",
+    ),
     parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
     parser.add_argument(
         "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
@@ -343,6 +350,8 @@ if __name__ == "__main__":
     )
     if args.ca_certs:
         configuration.load_verify_locations(args.ca_certs)
+    if args.insecure:
+        configuration.verify_mode = ssl.CERT_NONE
     if args.quic_log:
         configuration.quic_logger = QuicLogger()
     if args.secrets_log:
