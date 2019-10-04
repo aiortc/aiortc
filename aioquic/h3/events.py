@@ -64,8 +64,3 @@ class PushPromiseReceived(H3Event):
 
     stream_id: int
     "The Stream ID of the stream that the push is related to."
-
-
-# backwards compatibility
-
-RequestReceived = ResponseReceived = HeadersReceived
