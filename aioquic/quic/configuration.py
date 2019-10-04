@@ -71,6 +71,7 @@ class QuicConfiguration:
             QuicProtocolVersion.DRAFT_22,
         ]
     )
+    verify_mode: Optional[int] = None
 
     def load_cert_chain(
         self,

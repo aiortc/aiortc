@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import json
 import logging
+import ssl
 import time
 from dataclasses import dataclass, field
 from enum import Flag
@@ -70,6 +71,7 @@ class Server:
     retry_port: Optional[int] = 4434
     path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
+    verify_mode: Optional[int] = None
 
 
 SERVERS = [
@@ -78,7 +80,9 @@ SERVERS = [
     Server("f5", "f5quic.com", retry_port=4433),
     Server("gquic", "quic.rocks", retry_port=None),
     Server("lsquic", "http3-test.litespeedtech.com"),
-    Server("msquic", "quic.westus.cloudapp.azure.com", port=443),
+    Server(
+        "msquic", "quic.westus.cloudapp.azure.com", port=443, verify_mode=ssl.CERT_NONE
+    ),
     Server("mvfst", "fb.mvfst.net"),
     Server("ngtcp2", "nghttp2.org"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
@@ -390,6 +394,7 @@ async def run(servers, tests, quic_log=False, secrets_log_file=None) -> None:
                 is_client=True,
                 quic_logger=QuicLogger(),
                 secrets_log_file=secrets_log_file,
+                verify_mode=server.verify_mode,
             )
             if test_name == "test_throughput":
                 timeout = 60

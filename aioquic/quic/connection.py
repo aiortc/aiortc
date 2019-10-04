@@ -1051,6 +1051,7 @@ class QuicConnection:
             is_client=self._is_client,
             logger=self._logger,
             max_early_data=None if self._is_client else MAX_EARLY_DATA,
+            verify_mode=self._configuration.verify_mode,
         )
         self.tls.alpn_protocols = self._configuration.alpn_protocols
         self.tls.cadata = self._configuration.cadata

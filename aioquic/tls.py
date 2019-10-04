@@ -1139,6 +1139,7 @@ class Context:
         is_client: bool,
         logger: Optional[Union[logging.Logger, logging.LoggerAdapter]] = None,
         max_early_data: Optional[int] = None,
+        verify_mode: Optional[int] = None,
     ):
         self.alpn_negotiated: Optional[str] = None
         self.alpn_protocols: Optional[List[str]] = None
@@ -1157,6 +1158,12 @@ class Context:
         self.received_extensions: Optional[List[Extension]] = None
         self.session_ticket: Optional[SessionTicket] = None
         self.server_name: Optional[str] = None
+        if verify_mode is not None:
+            self.verify_mode = verify_mode
+        else:
+            self.verify_mode = (
+                ssl.CERT_REQUIRED if is_client else ssl.CERT_NONE
+            )
 
         # callbacks
         self.alpn_cb: Optional[AlpnHandler] = None
@@ -1512,14 +1519,15 @@ class Context:
             raise AlertDecryptError
 
         # check certificate
-        verify_certificate(
-            cadata=self.cadata,
-            cafile=self.cafile,
-            capath=self.capath,
-            certificate=self._peer_certificate,
-            chain=self._peer_certificate_chain,
-            server_name=self.server_name,
-        )
+        if self.verify_mode != ssl.CERT_NONE:
+            verify_certificate(
+                cadata=self.cadata,
+                cafile=self.cafile,
+                capath=self.capath,
+                certificate=self._peer_certificate,
+                chain=self._peer_certificate_chain,
+                server_name=self.server_name,
+            )
 
         self.key_schedule.update_hash(input_buf.data)
 
