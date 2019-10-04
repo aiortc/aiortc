@@ -16,7 +16,7 @@ from starlette.websockets import WebSocketDisconnect
 
 ROOT = os.path.dirname(__file__)
 LOGS_PATH = os.path.join(ROOT, "htdocs", "logs")
-QVIS_URL = "https://quicvis.edm.uhasselt.be/"
+QVIS_URL = "https://qvis.edm.uhasselt.be/"
 
 templates = Jinja2Templates(directory=os.path.join(ROOT, "templates"))
 app = Starlette()
