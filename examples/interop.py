@@ -93,7 +93,7 @@ SERVERS = [
     Server("mvfst", "fb.mvfst.net"),
     Server("ngtcp2", "nghttp2.org"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
-    Server("pandora", "pandora.cm.in.tum.de"),
+    Server("pandora", "pandora.cm.in.tum.de", verify_mode=ssl.CERT_NONE),
     Server("picoquic", "test.privateoctopus.com"),
     Server("quant", "quant.eggert.org", http3=False),
     Server("quic-go", "quic.seemann.io", port=443, retry_port=443),
