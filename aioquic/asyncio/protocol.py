@@ -15,7 +15,8 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         loop = asyncio.get_event_loop()
 
         self._closed = asyncio.Event()
-        self._connected_waiter = loop.create_future()
+        self._connected = False
+        self._connected_waiter: Optional[asyncio.Future[None]] = None
         self._loop = loop
         self._ping_waiter: Optional[asyncio.Future[None]] = None
         self._quic = quic
@@ -84,7 +85,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         Ping the peer and wait for the response.
         """
-        assert self._ping_waiter is None, "already await a ping"
+        assert self._ping_waiter is None, "already awaiting ping"
         self._ping_waiter = self._loop.create_future()
         self._quic.send_ping(id(self._ping_waiter))
         self.transmit()
@@ -119,7 +120,10 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         Wait for the TLS handshake to complete.
         """
-        await asyncio.shield(self._connected_waiter)
+        assert self._connected_waiter is None, "already awaiting connected"
+        if not self._connected:
+            self._connected_waiter = self._loop.create_future()
+            await asyncio.shield(self._connected_waiter)
 
     # asyncio.Transport
 
@@ -175,11 +179,17 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
                 self._connection_id_retired_handler(event.connection_id)
             elif isinstance(event, events.ConnectionTerminated):
                 self._connection_terminated_handler()
-                if not self._connected_waiter.done():
-                    self._connected_waiter.set_exception(ConnectionError)
+                if self._connected_waiter is not None:
+                    waiter = self._connected_waiter
+                    self._connected_waiter = None
+                    waiter.set_exception(ConnectionError)
                 self._closed.set()
             elif isinstance(event, events.HandshakeCompleted):
-                self._connected_waiter.set_result(None)
+                if self._connected_waiter is not None:
+                    waiter = self._connected_waiter
+                    self._connected = True
+                    self._connected_waiter = None
+                    waiter.set_result(None)
             elif isinstance(event, events.PingAcknowledged):
                 waiter = self._ping_waiter
                 self._ping_waiter = None

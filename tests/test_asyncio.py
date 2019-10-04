@@ -44,29 +44,6 @@ class SessionTicketStore:
         return self.tickets.pop(label, None)
 
 
-async def run_client(
-    host,
-    port=4433,
-    cadata=None,
-    cafile=SERVER_CACERTFILE,
-    configuration=None,
-    request=b"ping",
-    **kwargs
-):
-    if configuration is None:
-        configuration = QuicConfiguration(is_client=True)
-    configuration.load_verify_locations(cadata=cadata, cafile=cafile)
-    async with connect(host, port, configuration=configuration, **kwargs) as client:
-        reader, writer = await client.create_stream()
-        assert writer.can_write_eof() is True
-        assert writer.get_extra_info("stream_id") == 0
-
-        writer.write(request)
-        writer.write_eof()
-
-        return await reader.read()
-
-
 def handle_stream(reader, writer):
     async def serve():
         data = await reader.read()
@@ -76,22 +53,54 @@ def handle_stream(reader, writer):
     asyncio.ensure_future(serve())
 
 
-async def run_server(configuration=None, **kwargs):
-    if configuration is None:
-        configuration = QuicConfiguration(is_client=False)
-        configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
-    return await serve(
-        host="::",
-        port="4433",
-        configuration=configuration,
-        stream_handler=handle_stream,
-        **kwargs
-    )
-
-
 class HighLevelTest(TestCase):
+    async def run_client(
+        self,
+        host,
+        port=4433,
+        cadata=None,
+        cafile=SERVER_CACERTFILE,
+        configuration=None,
+        request=b"ping",
+        **kwargs
+    ):
+        if configuration is None:
+            configuration = QuicConfiguration(is_client=True)
+        configuration.load_verify_locations(cadata=cadata, cafile=cafile)
+        async with connect(host, port, configuration=configuration, **kwargs) as client:
+            # waiting for connected when connected returns immediately
+            await client.wait_connected()
+
+            reader, writer = await client.create_stream()
+            self.assertEqual(writer.can_write_eof(), True)
+            self.assertEqual(writer.get_extra_info("stream_id"), 0)
+
+            writer.write(request)
+            writer.write_eof()
+
+            response = await reader.read()
+
+        # waiting for closed when closed returns immediately
+        await client.wait_closed()
+
+        return response
+
+    async def run_server(self, configuration=None, **kwargs):
+        if configuration is None:
+            configuration = QuicConfiguration(is_client=False)
+            configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
+        return await serve(
+            host="::",
+            port="4433",
+            configuration=configuration,
+            stream_handler=handle_stream,
+            **kwargs
+        )
+
     def test_connect_and_serve(self):
-        server, response = run(asyncio.gather(run_server(), run_client("127.0.0.1")))
+        server, response = run(
+            asyncio.gather(self.run_server(), self.run_client("127.0.0.1"))
+        )
         self.assertEqual(response, b"gnip")
         server.close()
 
@@ -100,14 +109,14 @@ class HighLevelTest(TestCase):
 
         server, response = run(
             asyncio.gather(
-                run_server(
+                self.run_server(
                     configuration=QuicConfiguration(
                         certificate=certificate,
                         private_key=private_key,
                         is_client=False,
                     )
                 ),
-                run_client(
+                self.run_client(
                     "127.0.0.1",
                     cadata=certificate.public_bytes(serialization.Encoding.PEM),
                     cafile=None,
@@ -124,7 +133,9 @@ class HighLevelTest(TestCase):
         """
         data = b"Z" * 2097152
         server, response = run(
-            asyncio.gather(run_server(), run_client("127.0.0.1", request=data))
+            asyncio.gather(
+                self.run_server(), self.run_client("127.0.0.1", request=data)
+            )
         )
         self.assertEqual(response, data)
         server.close()
@@ -134,7 +145,7 @@ class HighLevelTest(TestCase):
             async with connect(host, port) as client:
                 await client.ping()
 
-        server = run(run_server())
+        server = run(self.run_server())
         with self.assertRaises(ConnectionError):
             run(run_client_without_config("127.0.0.1"))
         server.close()
@@ -153,7 +164,7 @@ class HighLevelTest(TestCase):
                 return await reader.read()
 
         server, response = run(
-            asyncio.gather(run_server(), run_client_writelines("127.0.0.1"))
+            asyncio.gather(self.run_server(), run_client_writelines("127.0.0.1"))
         )
         self.assertEqual(response, b"5432109876543210")
         server.close()
@@ -173,8 +184,10 @@ class HighLevelTest(TestCase):
 
         server, response = run(
             asyncio.gather(
-                run_server(configuration=server_configuration, stateless_retry=True),
-                run_client(
+                self.run_server(
+                    configuration=server_configuration, stateless_retry=True
+                ),
+                self.run_client(
                     "127.0.0.1",
                     configuration=QuicConfiguration(
                         is_client=True, idle_timeout=300.0, quic_logger=QuicLogger()
@@ -197,8 +210,8 @@ class HighLevelTest(TestCase):
         # first request
         server, response = run(
             asyncio.gather(
-                run_server(session_ticket_handler=store.add),
-                run_client("127.0.0.1", session_ticket_handler=save_ticket),
+                self.run_server(session_ticket_handler=store.add),
+                self.run_client("127.0.0.1", session_ticket_handler=save_ticket),
             )
         )
         self.assertEqual(response, b"gnip")
@@ -209,8 +222,8 @@ class HighLevelTest(TestCase):
         # second request
         server, response = run(
             asyncio.gather(
-                run_server(session_ticket_fetcher=store.pop),
-                run_client(
+                self.run_server(session_ticket_fetcher=store.pop),
+                self.run_client(
                     "127.0.0.1",
                     configuration=QuicConfiguration(
                         is_client=True, session_ticket=client_ticket
@@ -222,13 +235,17 @@ class HighLevelTest(TestCase):
         server.close()
 
     def test_connect_and_serve_with_sni(self):
-        server, response = run(asyncio.gather(run_server(), run_client("localhost")))
+        server, response = run(
+            asyncio.gather(self.run_server(), self.run_client("localhost"))
+        )
         self.assertEqual(response, b"gnip")
         server.close()
 
     def test_connect_and_serve_with_stateless_retry(self):
         server, response = run(
-            asyncio.gather(run_server(stateless_retry=True), run_client("127.0.0.1"))
+            asyncio.gather(
+                self.run_server(stateless_retry=True), self.run_client("127.0.0.1")
+            )
         )
         self.assertEqual(response, b"gnip")
         server.close()
@@ -244,19 +261,21 @@ class HighLevelTest(TestCase):
             protocol._quic._original_connection_id = None
             return protocol
 
-        server = run(run_server(create_protocol=create_protocol, stateless_retry=True))
+        server = run(
+            self.run_server(create_protocol=create_protocol, stateless_retry=True)
+        )
         with self.assertRaises(ConnectionError):
-            run(run_client("127.0.0.1"))
+            run(self.run_client("127.0.0.1"))
         server.close()
 
     @patch("aioquic.quic.retry.QuicRetryTokenHandler.validate_token")
     def test_connect_and_serve_with_stateless_retry_bad(self, mock_validate):
         mock_validate.side_effect = ValueError("Decryption failed.")
 
-        server = run(run_server(stateless_retry=True))
+        server = run(self.run_server(stateless_retry=True))
         with self.assertRaises(ConnectionError):
             run(
-                run_client(
+                self.run_client(
                     "127.0.0.1",
                     configuration=QuicConfiguration(is_client=True, idle_timeout=4.0),
                 )
@@ -266,8 +285,8 @@ class HighLevelTest(TestCase):
     def test_connect_and_serve_with_version_negotiation(self):
         server, response = run(
             asyncio.gather(
-                run_server(),
-                run_client(
+                self.run_server(),
+                self.run_client(
                     "127.0.0.1",
                     configuration=QuicConfiguration(
                         is_client=True,
@@ -283,7 +302,7 @@ class HighLevelTest(TestCase):
     def test_connect_timeout(self):
         with self.assertRaises(ConnectionError):
             run(
-                run_client(
+                self.run_client(
                     "127.0.0.1",
                     port=4400,
                     configuration=QuicConfiguration(is_client=True, idle_timeout=5),
@@ -301,7 +320,8 @@ class HighLevelTest(TestCase):
 
         server, _ = run(
             asyncio.gather(
-                run_server(stateless_retry=False), run_client_key_update("127.0.0.1")
+                self.run_server(stateless_retry=False),
+                run_client_key_update("127.0.0.1"),
             )
         )
         server.close()
@@ -317,7 +337,8 @@ class HighLevelTest(TestCase):
 
         server, _ = run(
             asyncio.gather(
-                run_server(stateless_retry=False), run_client_key_update("127.0.0.1")
+                self.run_server(stateless_retry=False),
+                run_client_key_update("127.0.0.1"),
             )
         )
         server.close()
@@ -332,12 +353,12 @@ class HighLevelTest(TestCase):
 
         server, _ = run(
             asyncio.gather(
-                run_server(stateless_retry=False), run_client_ping("127.0.0.1")
+                self.run_server(stateless_retry=False), run_client_ping("127.0.0.1")
             )
         )
         server.close()
 
     def test_server_receives_garbage(self):
-        server = run(run_server(stateless_retry=False))
+        server = run(self.run_server(stateless_retry=False))
         server.datagram_received(binascii.unhexlify("c00000000080"), ("1.2.3.4", 1234))
         server.close()
