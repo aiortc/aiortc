@@ -58,7 +58,10 @@ async def logs(request):
                     ),
                     "file_url": file_url,
                     "name": name[:-5],
-                    "qvis_url": QVIS_URL + "?" + urlencode({"file": file_url}),
+                    "qvis_url": QVIS_URL
+                    + "?"
+                    + urlencode({"file": file_url})
+                    + "#/sequence",
                     "size": s.st_size,
                 }
             )
