@@ -358,6 +358,21 @@ class HighLevelTest(TestCase):
         )
         server.close()
 
+    def test_ping_parallel(self):
+        async def run_client_ping(host, port=4433):
+            configuration = QuicConfiguration(is_client=True)
+            configuration.load_verify_locations(cafile=SERVER_CACERTFILE)
+            async with connect(host, port, configuration=configuration) as client:
+                coros = [client.ping() for x in range(16)]
+                await asyncio.gather(*coros)
+
+        server, _ = run(
+            asyncio.gather(
+                self.run_server(stateless_retry=False), run_client_ping("127.0.0.1")
+            )
+        )
+        server.close()
+
     def test_server_receives_garbage(self):
         server = run(self.run_server(stateless_retry=False))
         server.datagram_received(binascii.unhexlify("c00000000080"), ("1.2.3.4", 1234))

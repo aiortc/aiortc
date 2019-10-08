@@ -18,7 +18,7 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         self._connected = False
         self._connected_waiter: Optional[asyncio.Future[None]] = None
         self._loop = loop
-        self._ping_waiter: Optional[asyncio.Future[None]] = None
+        self._ping_waiters: Dict[int, asyncio.Future[None]] = {}
         self._quic = quic
         self._stream_readers: Dict[int, asyncio.StreamReader] = {}
         self._timer: Optional[asyncio.TimerHandle] = None
@@ -85,11 +85,12 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
         """
         Ping the peer and wait for the response.
         """
-        assert self._ping_waiter is None, "already awaiting ping"
-        self._ping_waiter = self._loop.create_future()
-        self._quic.send_ping(id(self._ping_waiter))
+        waiter = self._loop.create_future()
+        uid = id(waiter)
+        self._ping_waiters[uid] = waiter
+        self._quic.send_ping(uid)
         self.transmit()
-        await asyncio.shield(self._ping_waiter)
+        await asyncio.shield(waiter)
 
     def transmit(self) -> None:
         """
@@ -191,9 +192,9 @@ class QuicConnectionProtocol(asyncio.DatagramProtocol):
                     self._connected_waiter = None
                     waiter.set_result(None)
             elif isinstance(event, events.PingAcknowledged):
-                waiter = self._ping_waiter
-                self._ping_waiter = None
-                waiter.set_result(None)
+                waiter = self._ping_waiters.pop(event.uid, None)
+                if waiter is not None:
+                    waiter.set_result(None)
             self.quic_event_received(event)
             event = self._quic.next_event()
 
