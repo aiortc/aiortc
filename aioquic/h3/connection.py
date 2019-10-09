@@ -390,7 +390,7 @@ class H3Connection:
         """
         Encode a HEADERS block and send encoder updates on the encoder stream.
         """
-        encoder, frame_data = self._encoder.encode(stream_id, 0, headers)
+        encoder, frame_data = self._encoder.encode(stream_id, headers)
         self._encoder_bytes_sent += len(encoder)
         self._quic.send_stream_data(self._local_encoder_stream_id, encoder)
         return frame_data
