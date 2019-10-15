@@ -71,6 +71,7 @@ class Server:
     retry_port: Optional[int] = 4434
     path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
+    session_resumption_port: Optional[int] = None
     verify_mode: Optional[int] = None
 
 
@@ -81,7 +82,11 @@ SERVERS = [
     Server("gquic", "quic.rocks", retry_port=None),
     Server("lsquic", "http3-test.litespeedtech.com"),
     Server(
-        "msquic", "quic.westus.cloudapp.azure.com", port=443, verify_mode=ssl.CERT_NONE
+        "msquic",
+        "quic.westus.cloudapp.azure.com",
+        port=443,
+        session_resumption_port=4433,
+        verify_mode=ssl.CERT_NONE,
     ),
     Server("mvfst", "fb.mvfst.net"),
     Server("ngtcp2", "nghttp2.org"),
@@ -216,6 +221,7 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
 
 
 async def test_session_resumption(server: Server, configuration: QuicConfiguration):
+    port = server.session_resumption_port or server.port
     saved_ticket = None
 
     def session_ticket_handler(ticket):
@@ -225,7 +231,7 @@ async def test_session_resumption(server: Server, configuration: QuicConfigurati
     # connect a first time, receive a ticket
     async with connect(
         server.host,
-        server.port,
+        port,
         configuration=configuration,
         session_ticket_handler=session_ticket_handler,
     ) as protocol:
@@ -234,9 +240,7 @@ async def test_session_resumption(server: Server, configuration: QuicConfigurati
     # connect a second time, with the ticket
     if saved_ticket is not None:
         configuration.session_ticket = saved_ticket
-        async with connect(
-            server.host, server.port, configuration=configuration
-        ) as protocol:
+        async with connect(server.host, port, configuration=configuration) as protocol:
             await protocol.ping()
 
             # check session was resumed
