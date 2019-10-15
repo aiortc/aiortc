@@ -1,5 +1,6 @@
 import binascii
 import datetime
+import ssl
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -100,9 +101,15 @@ def reset_buffers(buffers):
 
 
 class ContextTest(TestCase):
-    def create_client(self, alpn_protocols=None, cadata=None, cafile=SERVER_CACERTFILE):
+    def create_client(
+        self, alpn_protocols=None, cadata=None, cafile=SERVER_CACERTFILE, **kwargs
+    ):
         client = Context(
-            alpn_protocols=alpn_protocols, cadata=cadata, cafile=cafile, is_client=True
+            alpn_protocols=alpn_protocols,
+            cadata=cadata,
+            cafile=cafile,
+            is_client=True,
+            **kwargs
         )
         client.handshake_extensions = [
             (
@@ -377,7 +384,6 @@ class ContextTest(TestCase):
 
     def test_handshake_with_alpn(self):
         client = self.create_client(alpn_protocols=["hq-20"])
-
         server = self.create_server(alpn_protocols=["hq-20", "h3-20"])
 
         self._handshake(client, server)
@@ -388,28 +394,29 @@ class ContextTest(TestCase):
 
     def test_handshake_with_alpn_fail(self):
         client = self.create_client(alpn_protocols=["hq-20"])
-
         server = self.create_server(alpn_protocols=["h3-20"])
 
-        # send client hello
-        client_buf = create_buffers()
-        client.handle_message(b"", client_buf)
-        self.assertEqual(client.state, State.CLIENT_EXPECT_SERVER_HELLO)
-        server_input = merge_buffers(client_buf)
-        self.assertGreaterEqual(len(server_input), 258)
-        self.assertLessEqual(len(server_input), 296)
-        reset_buffers(client_buf)
-
-        # handle client hello
-        # send server hello, encrypted extensions, certificate, certificate verify, finished
-        server_buf = create_buffers()
         with self.assertRaises(tls.AlertHandshakeFailure) as cm:
-            server.handle_message(server_input, server_buf)
+            self._handshake(client, server)
         self.assertEqual(str(cm.exception), "No common ALPN protocols")
 
     def test_handshake_with_rsa_pkcs1_sha256_signature(self):
         client = self.create_client()
         client._signature_algorithms = [tls.SignatureAlgorithm.RSA_PKCS1_SHA256]
+        server = self.create_server()
+
+        self._handshake(client, server)
+
+    def test_handshake_with_certificate_error(self):
+        client = self.create_client(cafile=None)
+        server = self.create_server()
+
+        with self.assertRaises(tls.AlertBadCertificate) as cm:
+            self._handshake(client, server)
+        self.assertEqual(str(cm.exception), "unable to get local issuer certificate")
+
+    def test_handshake_with_certificate_no_verify(self):
+        client = self.create_client(cafile=None, verify_mode=ssl.CERT_NONE)
         server = self.create_server()
 
         self._handshake(client, server)
