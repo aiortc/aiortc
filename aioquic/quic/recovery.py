@@ -220,7 +220,7 @@ class QuicPacketRecovery:
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
                     category="recovery",
-                    event="metric_update",
+                    event="metrics_updated",
                     data={
                         "latest_rtt": int(self._rtt_latest * 1000),
                         "min_rtt": int(self._rtt_min * 1000),
@@ -267,13 +267,13 @@ class QuicPacketRecovery:
             )
 
         if self._quic_logger is not None:
-            self._log_metric_update()
+            self._log_metrics_updated()
 
     def on_packet_expired(self, packet: QuicSentPacket) -> None:
         self.bytes_in_flight -= packet.sent_bytes
 
         if self._quic_logger is not None:
-            self._log_metric_update()
+            self._log_metrics_updated()
 
     def on_packet_lost(self, packet: QuicSentPacket, space: QuicPacketSpace) -> None:
         del space.sent_packets[packet.packet_number]
@@ -292,7 +292,7 @@ class QuicPacketRecovery:
                     "packet_number": str(packet.packet_number),
                 },
             )
-            self._log_metric_update()
+            self._log_metrics_updated()
 
         # trigger callbacks
         for handler, args in packet.delivery_handlers:
@@ -311,7 +311,7 @@ class QuicPacketRecovery:
             self.bytes_in_flight += packet.sent_bytes
 
             if self._quic_logger is not None:
-                self._log_metric_update()
+                self._log_metrics_updated()
 
     def on_packets_lost(self, lost_largest_time: float, now: float) -> None:
         # start a new congestion event if packet was sent after the
@@ -324,15 +324,15 @@ class QuicPacketRecovery:
             self._ssthresh = self.congestion_window
 
             if self._quic_logger is not None:
-                self._log_metric_update()
+                self._log_metrics_updated()
 
         # TODO : collapse congestion window if persistent congestion
 
-    def _log_metric_update(self) -> None:
+    def _log_metrics_updated(self) -> None:
         data = {"bytes_in_flight": self.bytes_in_flight, "cwnd": self.congestion_window}
         if self._ssthresh is not None:
             data["ssthresh"] = self._ssthresh
 
         self._quic_logger.log_event(
-            category="recovery", event="metric_update", data=data
+            category="recovery", event="metrics_updated", data=data
         )

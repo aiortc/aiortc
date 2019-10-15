@@ -85,8 +85,8 @@ class QuicLoggerTrace:
     def encode_max_stream_data_frame(self, maximum: int, stream_id: int) -> Dict:
         return {
             "frame_type": "max_stream_data",
-            "id": str(stream_id),
             "maximum": str(maximum),
+            "stream_id": str(stream_id),
         }
 
     def encode_max_streams_frame(self, maximum: int) -> Dict:
@@ -128,6 +128,7 @@ class QuicLoggerTrace:
             "error_code": error_code,
             "final_size": str(final_size),
             "frame_type": "reset_stream",
+            "stream_id": str(stream_id),
         }
 
     def encode_retire_connection_id_frame(self, sequence_number: int) -> Dict:
@@ -146,33 +147,33 @@ class QuicLoggerTrace:
     def encode_stop_sending_frame(self, error_code: int, stream_id: int) -> Dict:
         return {
             "frame_type": "stop_sending",
-            "id": str(stream_id),
             "error_code": error_code,
+            "stream_id": str(stream_id),
         }
 
     def encode_stream_frame(self, frame: QuicStreamFrame, stream_id: int) -> Dict:
         return {
             "fin": frame.fin,
             "frame_type": "stream",
-            "id": str(stream_id),
             "length": str(len(frame.data)),
             "offset": str(frame.offset),
+            "stream_id": str(stream_id),
         }
 
     def encode_streams_blocked_frame(self, limit: int) -> Dict:
         return {"frame_type": "streams_blocked", "limit": str(limit)}
 
     def encode_transport_parameters(
-        self, parameters: QuicTransportParameters
-    ) -> List[Dict]:
-        data = []
+        self, owner: str, parameters: QuicTransportParameters
+    ) -> Dict[str, Any]:
+        data: Dict[str, Any] = {"owner": owner}
         for param_name, param_value in parameters.__dict__.items():
             if isinstance(param_value, bool):
-                data.append({"name": param_name, "value": param_value})
+                data[param_name] = param_value
             elif isinstance(param_value, bytes):
-                data.append({"name": param_name, "value": hexdump(param_value)})
+                data[param_name] = param_value
             elif isinstance(param_value, int):
-                data.append({"name": param_name, "value": str(param_value)})
+                data[param_name] = param_value
         return data
 
     def log_event(self, *, category: str, event: str, data: Dict) -> None:

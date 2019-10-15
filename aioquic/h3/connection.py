@@ -164,7 +164,7 @@ def qlog_encode_headers_frame(
 ) -> Dict:
     return {
         "byte_length": str(byte_length),
-        "frame": {"frame_type": "headers", "fields": qlog_encode_headers(headers)},
+        "frame": {"frame_type": "headers", "headers": qlog_encode_headers(headers)},
         "stream_id": str(stream_id),
     }
 
@@ -176,8 +176,8 @@ def qlog_encode_push_promise_frame(
         "byte_length": str(byte_length),
         "frame": {
             "frame_type": "push_promise",
-            "field": qlog_encode_headers(headers),
-            "id": str(push_id),
+            "headers": qlog_encode_headers(headers),
+            "push_id": str(push_id),
         },
         "stream_id": str(stream_id),
     }
@@ -311,7 +311,7 @@ class H3Connection:
         # log frame
         if self._quic_logger is not None:
             self._quic_logger.log_event(
-                category="HTTP",
+                category="http",
                 event="frame_created",
                 data=qlog_encode_data_frame(byte_length=len(data), stream_id=stream_id),
             )
@@ -344,7 +344,7 @@ class H3Connection:
         # log frame
         if self._quic_logger is not None:
             self._quic_logger.log_event(
-                category="HTTP",
+                category="http",
                 event="frame_created",
                 data=qlog_encode_headers_frame(
                     byte_length=len(frame_data), headers=headers, stream_id=stream_id
@@ -460,7 +460,7 @@ class H3Connection:
             # log frame
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
-                    category="HTTP",
+                    category="http",
                     event="frame_parsed",
                     data=qlog_encode_headers_frame(
                         byte_length=stream.blocked_frame_size
@@ -496,7 +496,7 @@ class H3Connection:
             # log frame
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
-                    category="HTTP",
+                    category="http",
                     event="frame_parsed",
                     data=qlog_encode_push_promise_frame(
                         byte_length=len(frame_data),
@@ -621,7 +621,7 @@ class H3Connection:
                     and stream.frame_type == FrameType.DATA
                 ):
                     self._quic_logger.log_event(
-                        category="HTTP",
+                        category="http",
                         event="frame_parsed",
                         data=qlog_encode_data_frame(
                             byte_length=stream.frame_size, stream_id=stream.stream_id

@@ -516,7 +516,7 @@ class QuicConnection:
             if self._quic_logger is not None:
                 self._quic_logger.log_event(
                     category="transport",
-                    event="datagram_sent",
+                    event="datagrams_sent",
                     data={"byte_length": byte_length, "count": 1},
                 )
         return ret
@@ -599,7 +599,7 @@ class QuicConnection:
         if self._quic_logger is not None:
             self._quic_logger.log_event(
                 category="transport",
-                event="datagram_received",
+                event="datagrams_received",
                 data={"byte_length": len(data), "count": 1},
             )
 
@@ -772,7 +772,7 @@ class QuicConnection:
                 if self._quic_logger is not None:
                     self._quic_logger.log_event(
                         category="connectivity",
-                        event="spin_bit_update",
+                        event="spin_bit_updated",
                         data={"state": self._spin_bit},
                     )
 
@@ -1789,13 +1789,10 @@ class QuicConnection:
         if self._quic_logger is not None and not from_session_ticket:
             self._quic_logger.log_event(
                 category="transport",
-                event="transport_parameters_update",
-                data={
-                    "owner": "remote",
-                    "parameters": self._quic_logger.encode_transport_parameters(
-                        quic_transport_parameters
-                    ),
-                },
+                event="parameters_set",
+                data=self._quic_logger.encode_transport_parameters(
+                    owner="remote", parameters=quic_transport_parameters
+                ),
             )
 
         # validate remote parameters
@@ -1858,13 +1855,10 @@ class QuicConnection:
         if self._quic_logger is not None:
             self._quic_logger.log_event(
                 category="transport",
-                event="transport_parameters_update",
-                data={
-                    "owner": "local",
-                    "parameters": self._quic_logger.encode_transport_parameters(
-                        quic_transport_parameters
-                    ),
-                },
+                event="parameters_set",
+                data=self._quic_logger.encode_transport_parameters(
+                    owner="local", parameters=quic_transport_parameters
+                ),
             )
 
         buf = Buffer(capacity=512)
