@@ -323,7 +323,7 @@ async def test_spin_bit(server: Server, configuration: QuicConfiguration):
         for stamp, category, event, data in configuration.quic_logger.to_dict()[
             "traces"
         ][0]["events"]:
-            if category == "connectivity" and event == "spin_bit_update":
+            if category == "connectivity" and event == "spin_bit_updated":
                 spin_bits.add(data["state"])
         if len(spin_bits) == 2:
             server.result |= Result.P
