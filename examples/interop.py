@@ -72,6 +72,7 @@ class Server:
     path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
     session_resumption_port: Optional[int] = None
+    throughput_file_suffix: str = ""
     verify_mode: Optional[int] = None
 
 
@@ -86,6 +87,7 @@ SERVERS = [
         "quic.westus.cloudapp.azure.com",
         port=443,
         session_resumption_port=4433,
+        throughput_file_suffix=".txt",
         verify_mode=ssl.CERT_NONE,
     ),
     Server("mvfst", "fb.mvfst.net"),
@@ -338,7 +340,7 @@ async def test_throughput(server: Server, configuration: QuicConfiguration):
 
     for size in [5000000, 10000000]:
         print("Testing %d bytes download" % size)
-        path = "/%d" % size
+        path = "/%d%s" % (size, server.throughput_file_suffix)
 
         # perform HTTP request over TCP
         start = time.time()
