@@ -1,3 +1,6 @@
 from typing import Any
 
+class InvalidSignature(Exception): ...
+class InvalidTag(Exception): ...
+
 def __getattr__(name: str) -> Any: ...  # incomplete

@@ -175,7 +175,7 @@ def hkdf_extract(
 
 
 def load_pem_private_key(
-    data: bytes, password: Optional[str]
+    data: bytes, password: Optional[bytes]
 ) -> Union[dsa.DSAPrivateKey, ec.EllipticCurvePrivateKey, rsa.RSAPrivateKey]:
     """
     Load a PEM-encoded private key.
@@ -217,6 +217,13 @@ def openssl_encode_path(s: Optional[str]) -> Any:
     return ffi.NULL
 
 
+def cert_x509_ptr(certificate: x509.Certificate) -> Any:
+    """
+    Accessor for private attribute.
+    """
+    return getattr(certificate, "_x509")
+
+
 def verify_certificate(
     certificate: x509.Certificate,
     chain: List[x509.Certificate] = [],
@@ -240,7 +247,7 @@ def verify_certificate(
             if attr.oid == x509.NameOID.COMMON_NAME:
                 subject.append((("commonName", attr.value),))
         for ext in certificate.extensions:
-            if ext.oid == x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+            if isinstance(ext.value, x509.SubjectAlternativeName):
                 for name in ext.value:
                     if isinstance(name, x509.DNSName):
                         subjectAltName.append(("DNS", name.value))
@@ -270,7 +277,7 @@ def verify_certificate(
     # load extra CAs
     if cadata is not None:
         for cert in load_pem_x509_certificates(cadata):
-            openssl_assert(lib.X509_STORE_add_cert(store, cert._x509))
+            openssl_assert(lib.X509_STORE_add_cert(store, cert_x509_ptr(cert)))
 
     if cafile is not None or capath is not None:
         openssl_assert(
@@ -283,13 +290,15 @@ def verify_certificate(
     openssl_assert(chain_stack != ffi.NULL)
     chain_stack = ffi.gc(chain_stack, lib.sk_X509_free)
     for cert in chain:
-        openssl_assert(lib.sk_X509_push(chain_stack, cert._x509))
+        openssl_assert(lib.sk_X509_push(chain_stack, cert_x509_ptr(cert)))
 
     store_ctx = lib.X509_STORE_CTX_new()
     openssl_assert(store_ctx != ffi.NULL)
     store_ctx = ffi.gc(store_ctx, lib.X509_STORE_CTX_free)
     openssl_assert(
-        lib.X509_STORE_CTX_init(store_ctx, store, certificate._x509, chain_stack)
+        lib.X509_STORE_CTX_init(
+            store_ctx, store, cert_x509_ptr(certificate), chain_stack
+        )
     )
 
     res = lib.X509_verify_cert(store_ctx)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from os import PathLike
-from typing import Any, List, Optional, TextIO
+from typing import Any, List, Optional, TextIO, Union
 
 from ..tls import SessionTicket, load_pem_private_key, load_pem_x509_certificates
 from .logger import QuicLogger
@@ -77,7 +77,7 @@ class QuicConfiguration:
         self,
         certfile: PathLike,
         keyfile: Optional[PathLike] = None,
-        password: Optional[str] = None,
+        password: Optional[Union[bytes, str]] = None,
     ) -> None:
         """
         Load a private key and the corresponding certificate.
@@ -89,7 +89,12 @@ class QuicConfiguration:
 
         if keyfile is not None:
             with open(keyfile, "rb") as fp:
-                self.private_key = load_pem_private_key(fp.read(), password=password)
+                self.private_key = load_pem_private_key(
+                    fp.read(),
+                    password=password.encode("utf8")
+                    if isinstance(password, str)
+                    else password,
+                )
 
     def load_verify_locations(
         self,

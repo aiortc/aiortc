@@ -1,8 +1,19 @@
+from abc import ABCMeta, abstractmethod
+
 from cryptography.hazmat.backends.interfaces import HashBackend
 
-class HashAlgorithm:
+class HashAlgorithm(metaclass=ABCMeta):
     digest_size: int
     name: str
+
+class HashContext(metaclass=ABCMeta):
+    algorithm: HashAlgorithm
+    @abstractmethod
+    def copy(self) -> HashContext: ...
+    @abstractmethod
+    def finalize(self) -> bytes: ...
+    @abstractmethod
+    def update(self, data: bytes) -> None: ...
 
 class SHA1(HashAlgorithm): ...
 class SHA256(HashAlgorithm): ...
