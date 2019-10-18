@@ -75,46 +75,6 @@ LONG_CLIENT_ENCRYPTED_PACKET = binascii.unhexlify(
     "13c8b3d97b1a77b2ac3af745d61a34cc4709865bac824a94bb19058015e4e42d"
     "c9be6c7803567321829dd85853396269"
 )
-LONG_CLIENT_ENCRYPTED_PACKET_DRAFT_22 = binascii.unhexlify(
-    "c2ff000017088394c8f03e5157080000449e9bd343fd65f354ebb400418b614f"
-    "73765009c0162d594777f9e6ddeb32fba3865cffd7e26e3724d4997cdde8df34"
-    "f8868772fed2412d43046f44dc7c6adf5ee10da456d56c892c8f69594594e8dc"
-    "abedb10d591130ca464588f2834eab931b10feb963c1947a05f57062692c2422"
-    "48ad0133b31f6dcc585ba344ca5beb382fb619272e65dfccae59c08eb00b7d2a"
-    "5bbccd888582df1d1aee040aea76ab4dfdcae126791e71561b1f58312edb31c1"
-    "64ff1341fd2820e2399946bad901e425dae58a9859ef1825e7d757a6291d9ba6"
-    "ee1a8c836dc0027cd705bd2bc67f56bad0024efaa3819cbb5d46cefdb7e0df3a"
-    "d92b0689650e2b49ac29e6398bedc755541a3f3865bc4759bec74d721a28a045"
-    "2c1260189e8e92f844c91b27a00fc5ed6d14d8fceb5a848bea0a3208162c7a95"
-    "782fcf9a045b20b76710a2565372f2541181030e4350e199e62fa4e2e0bba19f"
-    "f66662ab8cc6815eeaa20b80d5f31c41e551f558d2c836a215ccff4e8afd2fec"
-    "4bfcb9ea9d051d12162f1b14842489b69d72a307d9144fced64fc4aa21ebd310"
-    "f897cf00062e90dad5dbf04186622e6c1296d388176585fdb395358ecfec4d95"
-    "db4429f4473a76210866fd180eaeb60da433500c74c00aef24d77eae81755faa"
-    "03e71a8879937b32d31be2ba51d41b5d7a1fbb4d952b10dd2d6ec171a3187cf3"
-    "f64d520afad796e4188bc32d153241c083f225b6e6b845ce9911bd3fe1eb4737"
-    "b71c8d55e3962871b73657b1e2cce368c7400658d47cfd9290ed16cdc2a6e3e7"
-    "dcea77fb5c6459303a32d58f62969d8f4670ce27f591c7a59cc3e7556eda4c58"
-    "a32e9f53fd7f9d60a9c05cd6238c71e3c82d2efabd3b5177670b8d595151d7eb"
-    "44aa401fe3b5b87bdb88dffb2bfb6d1d0d8868a41ba96265ca7a68d06fc0b74b"
-    "ccac55b038f8362b84d47f52744323d08b46bfec8c421f991e1394938a546a74"
-    "82a17c72be109ea4b0c71abc7d9c0ac0960327754e1043f18a32b9fb402fc33f"
-    "dcb6a0b4fdbbddbdf0d85779879e98ef211d104a5271f22823f16942cfa8ace6"
-    "8d0c9e5b52297da9702d8f1de24bcd06284ac8aa1068fa21a82abbca7e7454b8"
-    "48d7de8c3d43560541a362ff4f6be06c0115e3a733bff44417da11ae668857bb"
-    "a2c53ba17db8c100f1b5c7c9ea960d3f3d3b9e77c16c31a222b498a7384e286b"
-    "9b7c45167d5703de715f9b06708403562dcff77fdf2793f94e294888cebe8da4"
-    "ee88a53e38f2430addc161e8b2e2f2d40541d10cda9a7aa518ac14d0195d8c20"
-    "120b4f1d47d6d0909e69c4a0e641b83c1ad4fff85af4751035bc5698b6141ecc"
-    "3fbffcf2f55036880071ba1189274007967f64468172854d140d229320d689f5"
-    "7660f6c445e629d15ff2dcdff4b71a41ec0c24bd2fd8f5ad13b2c3688e0fdb8d"
-    "bcce42e6cf49cf60d022ccd5b19b4fd5d98dc10d9ce3a626851b1fdd23e1fa3a"
-    "961f9b0333ab8d632e48c944b82bdd9e800fa2b2b9e31e96aee54b40edaf6b79"
-    "ec211fdc95d95ef552aa532583d76a539e988e416a0a10df2550cdeacafc3d61"
-    "b0b0a79337960a0be8cf6169e4d55fa6e7a9c2e8efabab3da008f5bcc38c1bba"
-    "bdb6c10368723da0ae83c4b1819ff54946e7806458d80d7be2c867d46fe1f029"
-    "d9e8213693c88a498d54d924ebd38e0f"
-)
 
 LONG_SERVER_PACKET_NUMBER = 1
 LONG_SERVER_PLAIN_HEADER = binascii.unhexlify(
@@ -132,13 +92,6 @@ LONG_SERVER_ENCRYPTED_PACKET = binascii.unhexlify(
     "537426373b48d502214dd856d63b78cee37bc664b3fe86d487ac7a77c53038a3"
     "cd32f0b5004d9f5754c4f7f2d1f35cf3f7116351c92b9cf9bb6d091ddfc8b32d"
     "432348a2c413"
-)
-LONG_SERVER_ENCRYPTED_PACKET_DRAFT_22 = binascii.unhexlify(
-    "caff0000170008f067a5502a4262b5004074d74b7e486176fa3b713f272a9bf0"
-    "3ee28d3c8addb4e805b3a110b663122a75eee93c9177ac6b7a6b548e15a7b8f8"
-    "8465e9eab253a760779b2e6a2c574882b48d3a3eed696e50d04d5ec59af85261"
-    "e4cdbe264bd65f2b076760c69beef23aa714c9a174d6d4a8853548bf96b19c54"
-    "6fffe1ab616b"
 )
 
 SHORT_SERVER_PACKET_NUMBER = 3
@@ -216,31 +169,11 @@ class CryptoTest(TestCase):
         self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
         self.assertEqual(packet_number, LONG_CLIENT_PACKET_NUMBER)
 
-    def test_decrypt_long_client_draft_22(self):
-        pair = self.create_crypto(is_client=False, version=QuicProtocolVersion.DRAFT_22)
-
-        plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            LONG_CLIENT_ENCRYPTED_PACKET_DRAFT_22, 18, 0
-        )
-        self.assertEqual(plain_header, LONG_CLIENT_PLAIN_HEADER)
-        self.assertEqual(plain_payload, LONG_CLIENT_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, LONG_CLIENT_PACKET_NUMBER)
-
     def test_decrypt_long_server(self):
         pair = self.create_crypto(is_client=True)
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
             LONG_SERVER_ENCRYPTED_PACKET, 18, 0
-        )
-        self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
-        self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
-        self.assertEqual(packet_number, LONG_SERVER_PACKET_NUMBER)
-
-    def test_decrypt_long_server_draft_22(self):
-        pair = self.create_crypto(is_client=True, version=QuicProtocolVersion.DRAFT_22)
-
-        plain_header, plain_payload, packet_number = pair.decrypt_packet(
-            LONG_SERVER_ENCRYPTED_PACKET_DRAFT_22, 18, 0
         )
         self.assertEqual(plain_header, LONG_SERVER_PLAIN_HEADER)
         self.assertEqual(plain_payload, LONG_SERVER_PLAIN_PAYLOAD)
@@ -294,16 +227,6 @@ class CryptoTest(TestCase):
         )
         self.assertEqual(packet, LONG_CLIENT_ENCRYPTED_PACKET)
 
-    def test_encrypt_long_client_draft_22(self):
-        pair = self.create_crypto(is_client=True, version=QuicProtocolVersion.DRAFT_22)
-
-        packet = pair.encrypt_packet(
-            LONG_CLIENT_PLAIN_HEADER,
-            LONG_CLIENT_PLAIN_PAYLOAD,
-            LONG_CLIENT_PACKET_NUMBER,
-        )
-        self.assertEqual(packet, LONG_CLIENT_ENCRYPTED_PACKET_DRAFT_22)
-
     def test_encrypt_long_server(self):
         pair = self.create_crypto(is_client=False)
 
@@ -313,16 +236,6 @@ class CryptoTest(TestCase):
             LONG_SERVER_PACKET_NUMBER,
         )
         self.assertEqual(packet, LONG_SERVER_ENCRYPTED_PACKET)
-
-    def test_encrypt_long_server_draft_22(self):
-        pair = self.create_crypto(is_client=False, version=QuicProtocolVersion.DRAFT_22)
-
-        packet = pair.encrypt_packet(
-            LONG_SERVER_PLAIN_HEADER,
-            LONG_SERVER_PLAIN_PAYLOAD,
-            LONG_SERVER_PACKET_NUMBER,
-        )
-        self.assertEqual(packet, LONG_SERVER_ENCRYPTED_PACKET_DRAFT_22)
 
     def test_encrypt_short_server(self):
         pair = CryptoPair()

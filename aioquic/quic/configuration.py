@@ -66,10 +66,7 @@ class QuicConfiguration:
     certificate_chain: List[Any] = field(default_factory=list)
     private_key: Any = None
     supported_versions: List[int] = field(
-        default_factory=lambda: [
-            QuicProtocolVersion.DRAFT_23,
-            QuicProtocolVersion.DRAFT_22,
-        ]
+        default_factory=lambda: [QuicProtocolVersion.DRAFT_23]
     )
     verify_mode: Optional[int] = None
 

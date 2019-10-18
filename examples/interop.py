@@ -105,11 +105,7 @@ SERVERS = [
 
 
 async def test_version_negotiation(server: Server, configuration: QuicConfiguration):
-    configuration.supported_versions = [
-        0x1A2A3A4A,
-        QuicProtocolVersion.DRAFT_23,
-        QuicProtocolVersion.DRAFT_22,
-    ]
+    configuration.supported_versions = [0x1A2A3A4A, QuicProtocolVersion.DRAFT_23]
 
     async with connect(
         server.host, server.port, configuration=configuration

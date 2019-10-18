@@ -4,7 +4,7 @@ from aioquic.h3.events import DataReceived, H3Event, Headers, HeadersReceived
 from aioquic.quic.connection import QuicConnection
 from aioquic.quic.events import QuicEvent, StreamDataReceived
 
-H0_ALPN = ["hq-23", "hq-22"]
+H0_ALPN = ["hq-23"]
 
 
 class H0Connection:
