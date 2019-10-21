@@ -194,6 +194,7 @@ class QuicPacketRecovery:
 
         if largest_acked == largest_newly_acked and is_ack_eliciting:
             latest_rtt = now - largest_sent_time
+            log_rtt = True
 
             # limit ACK delay to max_ack_delay
             ack_delay = min(ack_delay, self.max_ack_delay)
@@ -216,20 +217,13 @@ class QuicPacketRecovery:
                 self._rtt_smoothed = (
                     7 / 8 * self._rtt_smoothed + 1 / 8 * self._rtt_latest
                 )
-
-            if self._quic_logger is not None:
-                self._quic_logger.log_event(
-                    category="recovery",
-                    event="metrics_updated",
-                    data={
-                        "latest_rtt": int(self._rtt_latest * 1000),
-                        "min_rtt": int(self._rtt_min * 1000),
-                        "smoothed_rtt": int(self._rtt_smoothed * 1000),
-                        "rtt_variance": int(self._rtt_variance * 1000),
-                    },
-                )
+        else:
+            log_rtt = False
 
         self.detect_loss(space, now=now)
+
+        if self._quic_logger is not None:
+            self._log_metrics_updated(log_rtt=log_rtt)
 
         self._pto_count = 0
 
@@ -265,9 +259,6 @@ class QuicPacketRecovery:
             self.congestion_window += (
                 K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self.congestion_window
             )
-
-        if self._quic_logger is not None:
-            self._log_metrics_updated()
 
     def on_packet_expired(self, packet: QuicSentPacket) -> None:
         self.bytes_in_flight -= packet.sent_bytes
@@ -328,10 +319,20 @@ class QuicPacketRecovery:
 
         # TODO : collapse congestion window if persistent congestion
 
-    def _log_metrics_updated(self) -> None:
+    def _log_metrics_updated(self, log_rtt=False) -> None:
         data = {"bytes_in_flight": self.bytes_in_flight, "cwnd": self.congestion_window}
         if self._ssthresh is not None:
             data["ssthresh"] = self._ssthresh
+
+        if log_rtt:
+            data.update(
+                {
+                    "latest_rtt": int(self._rtt_latest * 1000),
+                    "min_rtt": int(self._rtt_min * 1000),
+                    "smoothed_rtt": int(self._rtt_smoothed * 1000),
+                    "rtt_variance": int(self._rtt_variance * 1000),
+                }
+            )
 
         self._quic_logger.log_event(
             category="recovery", event="metrics_updated", data=data
