@@ -1192,7 +1192,7 @@ class QuicConnectionTest(TestCase):
             roundtrip(client, server)
 
             # server sends data, just before raising MAX_STREAM_DATA
-            server.send_stream_data(0, b"Z" * 786432)  # 0.75 * 1048576
+            server.send_stream_data(0, b"Z" * 524288)  # 1048576 // 2
             for i in range(10):
                 roundtrip(server, client)
             self.assertEqual(stream.max_stream_data_local, 1048576)

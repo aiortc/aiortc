@@ -2143,7 +2143,7 @@ class QuicConnection:
         self, builder: QuicPacketBuilder, space: QuicPacketSpace
     ) -> None:
         # raise MAX_DATA if needed
-        if self._local_max_data_used > self._local_max_data * 0.75:
+        if self._local_max_data_used * 2 > self._local_max_data:
             self._local_max_data *= 2
             self._logger.debug("Local max_data raised to %d", self._local_max_data)
         if self._local_max_data_sent != self._local_max_data:
@@ -2279,7 +2279,7 @@ class QuicConnection:
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
     ) -> None:
         # raise MAX_STREAM_DATA if needed
-        if stream._recv_highest > stream.max_stream_data_local * 0.75:
+        if stream._recv_highest * 2 > stream.max_stream_data_local:
             stream.max_stream_data_local *= 2
             self._logger.debug(
                 "Stream %d local max_stream_data raised to %d",
