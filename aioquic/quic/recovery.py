@@ -64,6 +64,7 @@ class QuicPacketRecovery:
         self.bytes_in_flight = 0
         self.congestion_window = K_INITIAL_WINDOW
         self._congestion_recovery_start_time = 0.0
+        self._congestion_stash = 0
         self._ssthresh: Optional[int] = None
 
     def detect_loss(self, space: QuicPacketSpace, now: float) -> None:
@@ -256,9 +257,11 @@ class QuicPacketRecovery:
             self.congestion_window += packet.sent_bytes
         else:
             # congestion avoidance
-            self.congestion_window += (
-                K_MAX_DATAGRAM_SIZE * packet.sent_bytes // self.congestion_window
-            )
+            self._congestion_stash += packet.sent_bytes
+            count = self._congestion_stash // self.congestion_window
+            if count:
+                self._congestion_stash -= count * self.congestion_window
+                self.congestion_window += count * K_MAX_DATAGRAM_SIZE
 
     def on_packet_expired(self, packet: QuicSentPacket) -> None:
         self.bytes_in_flight -= packet.sent_bytes
