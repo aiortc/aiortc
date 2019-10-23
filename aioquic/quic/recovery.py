@@ -65,6 +65,7 @@ class QuicPacketRecovery:
         self.congestion_window = K_INITIAL_WINDOW
         self._congestion_recovery_start_time = 0.0
         self._congestion_stash = 0
+        self._rtt_monitor = QuicRttMonitor()
         self._ssthresh: Optional[int] = None
 
     def detect_loss(self, space: QuicPacketSpace, now: float) -> None:
@@ -218,6 +219,13 @@ class QuicPacketRecovery:
                 self._rtt_smoothed = (
                     7 / 8 * self._rtt_smoothed + 1 / 8 * self._rtt_latest
                 )
+
+            # check whether we should exist slow start
+            if self._ssthresh is None and self._rtt_monitor.is_rtt_increasing(
+                latest_rtt, now
+            ):
+                self._ssthresh = self.congestion_window
+
         else:
             log_rtt = False
 
@@ -340,3 +348,58 @@ class QuicPacketRecovery:
         self._quic_logger.log_event(
             category="recovery", event="metrics_updated", data=data
         )
+
+
+class QuicRttMonitor:
+    """
+    Roundtrip time monitor for HyStart.
+    """
+
+    def __init__(self) -> None:
+        self._increases = 0
+        self._last_time = None
+        self._ready = False
+        self._size = 5
+
+        self._filtered_min: Optional[float] = None
+
+        self._sample_idx = 0
+        self._sample_max: Optional[float] = None
+        self._sample_min: Optional[float] = None
+        self._sample_time = 0.0
+        self._samples = [0.0 for i in range(self._size)]
+
+    def add_rtt(self, rtt: float) -> None:
+        self._samples[self._sample_idx] = rtt
+        self._sample_idx += 1
+
+        if self._sample_idx >= self._size:
+            self._sample_idx = 0
+            self._ready = True
+
+        if self._ready:
+            self._sample_max = self._samples[0]
+            self._sample_min = self._samples[0]
+            for sample in self._samples[1:]:
+                if sample < self._sample_min:
+                    self._sample_min = sample
+                elif sample > self._sample_max:
+                    self._sample_max = sample
+
+    def is_rtt_increasing(self, rtt: float, now: float) -> bool:
+        if now > self._sample_time + K_GRANULARITY:
+            self.add_rtt(rtt)
+            self._sample_time = now
+
+            if self._ready:
+                if self._filtered_min is None or self._filtered_min > self._sample_max:
+                    self._filtered_min = self._sample_max
+
+                delta = self._sample_min - self._filtered_min
+                if delta * 4 >= self._filtered_min:
+                    self._increases += 1
+                    if self._increases >= self._size:
+                        return True
+                elif delta > 0:
+                    self._increases = 0
+        return False
