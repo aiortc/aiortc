@@ -4,6 +4,7 @@ import random
 import time
 import uuid
 
+from aiortc.codecs.passthrough import PassThroughEncoder
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .exceptions import InvalidStateError
@@ -240,6 +241,19 @@ class RTCRtpSender:
                 pass
 
     async def _next_encoded_frame(self, codec):
+        if self.__track.should_by_pass_encoder:
+            await self._next_encoded_frame_without_encoder()
+        else:
+            await self._next_encoded_frame_with_encoder(codec)
+
+    async def _next_encoded_frame_without_encoder(self):
+        frame, ts = await self.__track.recv()
+        return await self.__loop.run_in_executor(
+            None, PassThroughEncoder.encode, frame, ts
+        )
+        return
+
+    async def _next_encoded_frame_with_encoder(self, codec):
         # get frame
         frame = await self.__track.recv()
 
