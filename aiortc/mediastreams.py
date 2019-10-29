@@ -139,28 +139,32 @@ class EncodedVideoStreamTrack(MediaStreamTrack):
 
     kind = "video"
 
-    def __init__(self, stream_reader):
+    def __init__(self, uds_address):
         """
         Add a :class:`StreamReader` to the set of encoded media tracks which
         will be transmitted to the remote peer.
         """
-        super(MediaStreamTrack, self).__init__()
+        super().__init__()
         self.should_by_pass_encoder = True
-        self.__stream_reader = stream_reader
+        self.__uds_address = uds_address
         self.__most_recent_frame = None
         self.__buffer = []
         self.__last_packet_ts = 0
         print("EncodedVideoStreamTrack Created")
-        self.__reading_task = asyncio.create_task(self._reading_and_parsing_frames())
+        self.__reading_task_running = False
+        self._timestamp = 0
 
     async def _reading_and_parsing_frames(self):
+        self.__stream_reader, self.__stream_writer = await asyncio.open_unix_connection(self.__uds_address)
+        self.__last_packet_ts = time.time()
         while True:
             data = await self.__stream_reader.read(102400)
             if len(data) > 0:
                 ts = time.time()
-                if ts - self.__last_packet_ts > FRAME_TS_THRESHOLD:  # check if this is next frame (interval larger than gap)
+                if ts - self.__last_packet_ts > FRAME_TS_THRESHOLD and len(self.__buffer) > 0:
+                    # check if this is next frame (interval larger than gap)
                     # if this is new frame, put all data in the buffer to the output queue
-                    self.__most_recent_frame # TBD
+                    self.__most_recent_frame = b"".join(p for p in self.__buffer)
 
                     # for debugging purpose
                     total_data_length = sum(map(lambda d: len(d), self.__buffer))
@@ -172,9 +176,9 @@ class EncodedVideoStreamTrack(MediaStreamTrack):
                 # append the data to the buffer
                 self.__buffer.append(data)
                 self.__last_packet_ts = ts
-            else:
-                # sleep to wait for data
-                await asyncio.sleep(SLEEP_THRESHOLD)
+
+            # sleep to wait for data
+            await asyncio.sleep(SLEEP_THRESHOLD)
 
     async def recv(self):
         """
@@ -183,11 +187,19 @@ class EncodedVideoStreamTrack(MediaStreamTrack):
         The base implementation just reads a 640x480 green frame at 30fps,
         subclass :class:`VideoStreamTrack` to provide a useful implementation.
         """
-        pts, time_base = await self.next_timestamp()
+        print("called")
+        if not self.__reading_task_running:
+            print("kicking off task")
+            asyncio.create_task(self._reading_and_parsing_frames())
+            print("start to read from uds")
+            self.__reading_task_running = True
+        while self.__most_recent_frame is None:
+            await asyncio.sleep(SLEEP_THRESHOLD)
+        frame = self.__most_recent_frame
+        self.__most_recent_frame = None
 
-        frame = VideoFrame(width=640, height=480)
-        for p in frame.planes:
-            p.update(bytes(p.buffer_size))
-        frame.pts = pts
-        frame.time_base = time_base
-        return frame
+        # calculate ts
+        self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
+
+        print("frame read")
+        return frame, self._timestamp

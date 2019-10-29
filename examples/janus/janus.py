@@ -9,6 +9,7 @@ import aiohttp
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import MediaPlayer
+from aiortc.mediastreams import EncodedVideoStreamTrack
 
 
 def transaction_id():
@@ -96,14 +97,17 @@ async def run(pc, player, room, session):
 
     # configure media
     media = {"audio": False, "video": True}
-    if player and player.audio:
-        pc.addTrack(player.audio)
-        media["audio"] = True
-
-    if player and player.video:
-        pc.addTrack(player.video)
+    if isinstance(player, EncodedVideoStreamTrack):
+        pc.addTrack(player)
     else:
-        pc.addTrack(VideoStreamTrack())
+        if player and player.audio:
+            pc.addTrack(player.audio)
+            media["audio"] = True
+
+        if player and player.video:
+            pc.addTrack(player.video)
+        else:
+            pc.addTrack(VideoStreamTrack())
 
     # join video room
     plugin = await session.attach("janus.plugin.videoroom")
@@ -154,6 +158,7 @@ if __name__ == "__main__":
         help="The video room ID to join (default: 1234).",
     ),
     parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--uds", help="Read encoded media from uds"),
     parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
@@ -167,6 +172,9 @@ if __name__ == "__main__":
     # create media source
     if args.play_from:
         player = MediaPlayer(args.play_from)
+    elif args.uds:
+        print("fetching raw video from: " + args.uds)
+        player = EncodedVideoStreamTrack(args.uds)
     else:
         player = None
 

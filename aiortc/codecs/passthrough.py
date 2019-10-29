@@ -12,9 +12,11 @@ It passes the input directly to the rtcrtpsender to avoid unnecessary encoding &
 
 class PassThroughEncoder:
 
-    def _encode_frame(self, packages):
-        yield from H264Encoder._sp_split_bitstream(b"".join(p.to_bytes() for p in packages))
+    # def _encode_frame(self, packages):
+    #     yield from H264Encoder._sp_split_bitstream(b"".join(p.to_bytes() for p in packages))
 
+    @staticmethod
     def encode(self, frame, timestamp):
-        packages = self._encode_frame(frame)
-        return H264Encoder._packetize(packages), timestamp
+        # packages = self._encode_frame(frame)
+        print("ps encode called")
+        return H264Encoder._packetize(frame), timestamp

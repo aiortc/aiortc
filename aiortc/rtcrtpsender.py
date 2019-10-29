@@ -242,16 +242,15 @@ class RTCRtpSender:
 
     async def _next_encoded_frame(self, codec):
         if self.__track.should_by_pass_encoder:
-            await self._next_encoded_frame_without_encoder()
+            return await self._next_encoded_frame_without_encoder()
         else:
-            await self._next_encoded_frame_with_encoder(codec)
+            return await self._next_encoded_frame_with_encoder(codec)
 
     async def _next_encoded_frame_without_encoder(self):
         frame, ts = await self.__track.recv()
         return await self.__loop.run_in_executor(
             None, PassThroughEncoder.encode, frame, ts
         )
-        return
 
     async def _next_encoded_frame_with_encoder(self, codec):
         # get frame
@@ -295,7 +294,7 @@ class RTCRtpSender:
         sequence_number = random16()
         timestamp_origin = random32()
         if self.__track.should_by_pass_encoder:
-            print("run rtp called for encoded video")
+            print("run rtp called for passthrough encdoer")
         else:
             print("run rtp called with default encoder")
         try:
