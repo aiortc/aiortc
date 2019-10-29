@@ -294,6 +294,10 @@ class RTCRtpSender:
 
         sequence_number = random16()
         timestamp_origin = random32()
+        if self.__track.should_by_pass_encoder:
+            print("run rtp called for encoded video")
+        else:
+            print("run rtp called with default encoder")
         try:
             while True:
                 if not self.__track:

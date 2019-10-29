@@ -150,6 +150,7 @@ class EncodedVideoStreamTrack(MediaStreamTrack):
         self.__most_recent_frame = None
         self.__buffer = []
         self.__last_packet_ts = 0
+        print("EncodedVideoStreamTrack Created")
         self.__reading_task = asyncio.create_task(self._reading_and_parsing_frames())
 
     async def _reading_and_parsing_frames(self):
