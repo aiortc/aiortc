@@ -242,8 +242,10 @@ class RTCRtpSender:
 
     async def _next_encoded_frame(self, codec):
         if self.__track.should_by_pass_encoder:
+            print("encode frame pass")
             return await self._next_encoded_frame_without_encoder()
         else:
+            print("encode frame encoder")
             return await self._next_encoded_frame_with_encoder(codec)
 
     async def _next_encoded_frame_without_encoder(self):
