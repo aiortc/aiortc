@@ -1048,7 +1048,7 @@ def cipher_suite_hash(cipher_suite: CipherSuite) -> hashes.HashAlgorithm:
 
 
 def decode_public_key(
-    key_share: KeyShareEntry
+    key_share: KeyShareEntry,
 ) -> Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]:
     if key_share[0] == Group.X25519:
         return x25519.X25519PublicKey.from_public_bytes(key_share[1])
@@ -1082,7 +1082,7 @@ def negotiate(
 
 
 def signature_algorithm_params(
-    signature_algorithm: int
+    signature_algorithm: int,
 ) -> Union[Tuple[ec.ECDSA], Tuple[padding.AsymmetricPadding, hashes.HashAlgorithm]]:
     padding_cls, algorithm_cls = SIGNATURE_ALGORITHMS[signature_algorithm]
     algorithm = algorithm_cls()
