@@ -2,6 +2,7 @@ import asyncio
 import copy
 import uuid
 from collections import OrderedDict
+from typing import Dict, List, Optional, Set
 
 from pyee import AsyncIOEventEmitter
 
@@ -14,6 +15,7 @@ from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from .rtcicetransport import RTCIceGatherer, RTCIceTransport
 from .rtcrtpparameters import (
+    RTCRtpCodecParameters,
     RTCRtpDecodingParameters,
     RTCRtpParameters,
     RTCRtpReceiveParameters,
@@ -31,7 +33,9 @@ DISCARD_PORT = 9
 MEDIA_KINDS = ["audio", "video"]
 
 
-def filter_preferred_codecs(codecs, preferred):
+def filter_preferred_codecs(
+    codecs: List[RTCRtpCodecParameters], preferred: List[RTCRtpCodecParameters]
+) -> List[RTCRtpCodecParameters]:
     if not preferred:
         return codecs
 
@@ -107,7 +111,9 @@ def find_common_header_extensions(local_extensions, remote_extensions):
     return common
 
 
-def add_transport_description(media, dtlsTransport):
+def add_transport_description(
+    media: sdp.MediaDescription, dtlsTransport: RTCDtlsTransport
+) -> None:
     # ice
     iceTransport = dtlsTransport.transport
     iceGatherer = iceTransport.iceGatherer
@@ -136,7 +142,7 @@ def add_remote_candidates(iceTransport, media):
         iceTransport.addRemoteCandidate(None)
 
 
-def allocate_mid(mids):
+def allocate_mid(mids: Set[str]) -> str:
     """
     Allocate a MID which has not been used yet.
     """
@@ -149,7 +155,9 @@ def allocate_mid(mids):
         i += 1
 
 
-def create_media_description_for_sctp(sctp, legacy, mid):
+def create_media_description_for_sctp(
+    sctp: RTCSctpTransport, legacy: bool, mid: str
+) -> sdp.MediaDescription:
     if legacy:
         media = sdp.MediaDescription(
             kind="application", port=DISCARD_PORT, profile="DTLS/SCTP", fmt=[sctp.port]
@@ -173,7 +181,9 @@ def create_media_description_for_sctp(sctp, legacy, mid):
     return media
 
 
-def create_media_description_for_transceiver(transceiver, cname, direction, mid):
+def create_media_description_for_transceiver(
+    transceiver: RTCRtpTransceiver, cname: str, direction: str, mid: str
+) -> sdp.MediaDescription:
     media = sdp.MediaDescription(
         kind=transceiver.kind,
         port=DISCARD_PORT,
@@ -210,15 +220,15 @@ def create_media_description_for_transceiver(transceiver, cname, direction, mid)
     return media
 
 
-def and_direction(a, b):
+def and_direction(a: str, b: str) -> str:
     return sdp.DIRECTIONS[sdp.DIRECTIONS.index(a) & sdp.DIRECTIONS.index(b)]
 
 
-def or_direction(a, b):
+def or_direction(a: str, b: str) -> str:
     return sdp.DIRECTIONS[sdp.DIRECTIONS.index(a) | sdp.DIRECTIONS.index(b)]
 
 
-def reverse_direction(direction):
+def reverse_direction(direction: str) -> str:
     if direction == "sendonly":
         return "recvonly"
     elif direction == "recvonly":
@@ -226,11 +236,14 @@ def reverse_direction(direction):
     return direction
 
 
-def wrap_session_description(session_description: sdp.SessionDescription):
+def wrap_session_description(
+    session_description: Optional[sdp.SessionDescription],
+) -> Optional[RTCSessionDescription]:
     if session_description is not None:
         return RTCSessionDescription(
             sdp=str(session_description), type=session_description.type
         )
+    return None
 
 
 class RTCPeerConnection(AsyncIOEventEmitter):
@@ -241,44 +254,44 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     :param: configuration: An optional :class:`RTCConfiguration`.
     """
 
-    def __init__(self, configuration=None):
+    def __init__(self, configuration: Optional[RTCConfiguration] = None) -> None:
         super().__init__()
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = "{%s}" % uuid.uuid4()
         self.__configuration = configuration or RTCConfiguration()
-        self.__iceTransports = set()
+        self.__iceTransports = set()  # type: Set[RTCIceTransport]
         self.__initialOfferer = None
-        self.__remoteDtls = {}
-        self.__remoteIce = {}
-        self.__seenMids = set()
+        self.__remoteDtls = {}  # type: Dict[RTCRtpTransceiver, RTCDtlsTransport]
+        self.__remoteIce = {}  # type: Dict[RTCRtpTransceiver, RTCIceTransport]
+        self.__seenMids = set()  # type: Set[str]
         self.__sctp = None
-        self.__sctp_mline_index = None
+        self.__sctp_mline_index = None  # type: Optional[int]
         self._sctpLegacySdp = True
         self.__sctpRemotePort = None
         self.__sctpRemoteCaps = None
         self.__stream_id = str(uuid.uuid4())
-        self.__transceivers = []
+        self.__transceivers = []  # type: List[RTCRtpTransceiver]
 
         self.__iceConnectionState = "new"
         self.__iceGatheringState = "new"
         self.__isClosed = False
         self.__signalingState = "stable"
 
-        self.__currentLocalDescription = None  # type: sdp.SessionDescription
-        self.__currentRemoteDescription = None  # type: sdp.SessionDescription
-        self.__pendingLocalDescription = None  # type: sdp.SessionDescription
-        self.__pendingRemoteDescription = None  # type: sdp.SessionDescription
+        self.__currentLocalDescription = None  # type: Optional[sdp.SessionDescription]
+        self.__currentRemoteDescription = None  # type: Optional[sdp.SessionDescription]
+        self.__pendingLocalDescription = None  # type: Optional[sdp.SessionDescription]
+        self.__pendingRemoteDescription = None  # type: Optional[sdp.SessionDescription]
 
     @property
-    def iceConnectionState(self):
+    def iceConnectionState(self) -> str:
         return self.__iceConnectionState
 
     @property
-    def iceGatheringState(self):
+    def iceGatheringState(self) -> str:
         return self.__iceGatheringState
 
     @property
-    def localDescription(self):
+    def localDescription(self) -> RTCSessionDescription:
         """
         An :class:`RTCSessionDescription` describing the session for
         the local end of the connection.
@@ -286,7 +299,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return wrap_session_description(self.__localDescription())
 
     @property
-    def remoteDescription(self):
+    def remoteDescription(self) -> RTCSessionDescription:
         """
         An :class:`RTCSessionDescription` describing the session for
         the remote end of the connection.
@@ -294,7 +307,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return wrap_session_description(self.__remoteDescription())
 
     @property
-    def sctp(self):
+    def sctp(self) -> Optional[RTCSctpTransport]:
         """
         An :class:`RTCSctpTransport` describing the SCTP transport being used
         for datachannels or `None`.
@@ -493,7 +506,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         )
         return RTCDataChannel(self.__sctp, parameters)
 
-    async def createOffer(self):
+    async def createOffer(self) -> RTCSessionDescription:
         """
         Create an SDP offer for the purpose of starting a new WebRTC
         connection to a remote peer.
@@ -526,10 +539,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         )
         description.type = "offer"
 
-        def get_media(description):
+        def get_media(
+            description: sdp.SessionDescription,
+        ) -> List[sdp.MediaDescription]:
             return description.media if description else []
 
-        def get_media_section(media, i):
+        def get_media_section(
+            media: List[sdp.MediaDescription], i: int
+        ) -> Optional[sdp.MediaDescription]:
             return media[i] if i < len(media) else None
 
         # handle existing transceivers / sctp
@@ -560,7 +577,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 )
 
         # handle new transceivers / sctp
-        def next_mline_index():
+        def next_mline_index() -> int:
             return len(description.media)
 
         for transceiver in filter(
@@ -864,7 +881,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         coros = map(lambda t: t.iceGatherer.gather(), self.__iceTransports)
         await asyncio.gather(*coros)
 
-    def __assertNotClosed(self):
+    def __assertNotClosed(self) -> None:
         if self.__isClosed:
             raise InvalidStateError("RTCPeerConnection is closed")
 
@@ -911,18 +928,18 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__transceivers.append(transceiver)
         return transceiver
 
-    def __getTransceiverByMid(self, mid):
+    def __getTransceiverByMid(self, mid: str) -> Optional[RTCRtpTransceiver]:
         return next(filter(lambda x: x.mid == mid, self.__transceivers), None)
 
-    def __getTransceiverByMLineIndex(self, index):
+    def __getTransceiverByMLineIndex(self, index: int) -> Optional[RTCRtpTransceiver]:
         return next(
             filter(lambda x: x._get_mline_index() == index, self.__transceivers), None
         )
 
-    def __localDescription(self):
+    def __localDescription(self) -> Optional[sdp.SessionDescription]:
         return self.__pendingLocalDescription or self.__currentLocalDescription
 
-    def __localRtp(self, transceiver):
+    def __localRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpParameters:
         rtp = RTCRtpParameters(
             codecs=transceiver._codecs,
             headerExtensions=transceiver._headerExtensions,
@@ -933,10 +950,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         rtp.rtcp.mux = True
         return rtp
 
-    def __remoteDescription(self):
+    def __remoteDescription(self) -> Optional[sdp.SessionDescription]:
         return self.__pendingRemoteDescription or self.__currentRemoteDescription
 
-    def __remoteRtp(self, transceiver):
+    def __remoteRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpReceiveParameters:
         media = self.__remoteDescription().media[transceiver._get_mline_index()]
 
         receiveParameters = RTCRtpReceiveParameters(
@@ -946,7 +963,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
-            encodings = OrderedDict()
+            encodings = (
+                OrderedDict()
+            )  # type: OrderedDict[int, RTCRtpDecodingParameters]
             for codec in transceiver._codecs:
                 if is_rtx(codec):
                     if codec.parameters["apt"] in encodings and len(media.ssrc) == 2:

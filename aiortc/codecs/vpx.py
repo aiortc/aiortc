@@ -1,9 +1,11 @@
 import multiprocessing
 import random
 from struct import pack, unpack_from
+from typing import List, Tuple, Type, TypeVar
 
 from av import VideoFrame
 
+from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
 from ._vpx import ffi, lib
 
@@ -14,8 +16,10 @@ MAX_BITRATE = 1500000  # 1.5 Mbps
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300 - 4
 
+DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
 
-def number_of_threads(pixels, cpus):
+
+def number_of_threads(pixels: int, cpus: int) -> int:
     if pixels >= 1920 * 1080 and cpus > 8:
         return 8
     elif pixels > 1280 * 960 and cpus >= 6:
@@ -35,7 +39,7 @@ class VpxPayloadDescriptor:
         tl0picidx=None,
         tid=None,
         keyidx=None,
-    ):
+    ) -> None:
         self.partition_start = partition_start
         self.partition_id = partition_id
         self.picture_id = picture_id
@@ -43,7 +47,7 @@ class VpxPayloadDescriptor:
         self.tid = tid
         self.keyidx = keyidx
 
-    def __bytes__(self):
+    def __bytes__(self) -> bytes:
         octet = (self.partition_start << 4) | self.partition_id
 
         ext_octet = 0
@@ -77,7 +81,7 @@ class VpxPayloadDescriptor:
 
         return data
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "VpxPayloadDescriptor(S=%d, PID=%d, pic_id=%s)" % (
             self.partition_start,
             self.partition_id,
@@ -85,7 +89,7 @@ class VpxPayloadDescriptor:
         )
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls: Type[DESCRIPTOR_T], data: bytes) -> Tuple[DESCRIPTOR_T, bytes]:
         if len(data) < 1:
             raise ValueError("VPX descriptor is too short")
 
@@ -156,14 +160,14 @@ class VpxPayloadDescriptor:
         return obj, data[pos:]
 
 
-def _vpx_assert(err):
+def _vpx_assert(err: int) -> None:
     if err != lib.VPX_CODEC_OK:
         reason = ffi.string(lib.vpx_codec_err_to_string(err))
         raise Exception("libvpx error: " + reason.decode("utf8"))
 
 
 class Vp8Decoder:
-    def __init__(self):
+    def __init__(self) -> None:
         self.codec = ffi.new("vpx_codec_ctx_t *")
         _vpx_assert(
             lib.vpx_codec_dec_init(self.codec, lib.vpx_codec_vp8_dx(), ffi.NULL, 0)
@@ -174,10 +178,10 @@ class Vp8Decoder:
         ppcfg.deblocking_level = 3
         lib.vpx_codec_control_(self.codec, lib.VP8_SET_POSTPROC, ppcfg)
 
-    def __del__(self):
+    def __del__(self) -> None:
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, encoded_frame):
+    def decode(self, encoded_frame: JitterFrame) -> List[VideoFrame]:
         frames = []
         result = lib.vpx_codec_decode(
             self.codec,
@@ -221,7 +225,7 @@ class Vp8Decoder:
 
 
 class Vp8Encoder:
-    def __init__(self):
+    def __init__(self) -> None:
         self.cx = lib.vpx_codec_vp8_cx()
 
         self.cfg = ffi.new("vpx_codec_enc_cfg_t *")
@@ -234,11 +238,13 @@ class Vp8Encoder:
         self.__target_bitrate = DEFAULT_BITRATE
         self.__update_config_needed = False
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self.codec:
             lib.vpx_codec_destroy(self.codec)
 
-    def encode(self, frame, force_keyframe=False):
+    def encode(
+        self, frame: VideoFrame, force_keyframe: bool = False
+    ) -> Tuple[List[bytes], int]:
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
 
@@ -354,24 +360,24 @@ class Vp8Encoder:
         return payloads, timestamp
 
     @property
-    def target_bitrate(self):
+    def target_bitrate(self) -> int:
         """
         Target bitrate in bits per second.
         """
         return self.__target_bitrate
 
     @target_bitrate.setter
-    def target_bitrate(self, bitrate):
+    def target_bitrate(self, bitrate: int) -> None:
         bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
         if bitrate != self.__target_bitrate:
             self.__target_bitrate = bitrate
             self.__update_config_needed = True
 
-    def __update_config(self):
+    def __update_config(self) -> None:
         self.cfg.rc_target_bitrate = self.__target_bitrate // 1000
         self.__update_config_needed = False
 
 
-def vp8_depayload(payload):
+def vp8_depayload(payload: bytes) -> bytes:
     descriptor, data = VpxPayloadDescriptor.parse(payload)
     return data

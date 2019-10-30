@@ -1,7 +1,7 @@
 import ipaddress
 import re
 from collections import OrderedDict
-from typing import List  # noqa
+from typing import Any, Dict, List, Optional, Tuple
 
 import attr
 
@@ -32,7 +32,7 @@ FMTP_INT_PARAMETERS = [
 ]
 
 
-def candidate_from_sdp(sdp):
+def candidate_from_sdp(sdp: str) -> RTCIceCandidate:
     bits = sdp.split()
     assert len(bits) >= 8
 
@@ -57,7 +57,7 @@ def candidate_from_sdp(sdp):
     return candidate
 
 
-def candidate_to_sdp(candidate):
+def candidate_to_sdp(candidate: RTCIceCandidate) -> str:
     sdp = "%s %d %s %d %s %d typ %s" % (
         candidate.foundation,
         candidate.component,
@@ -77,7 +77,7 @@ def candidate_to_sdp(candidate):
     return sdp
 
 
-def grouplines(sdp):
+def grouplines(sdp: str) -> Tuple[List[str], List[List[str]]]:
     session = []
     media = []
     for line in sdp.splitlines():
@@ -90,19 +90,19 @@ def grouplines(sdp):
     return session, media
 
 
-def ipaddress_from_sdp(sdp):
+def ipaddress_from_sdp(sdp: str) -> str:
     m = re.match("^IN (IP4|IP6) ([^ ]+)$", sdp)
     assert m
     return m.group(2)
 
 
-def ipaddress_to_sdp(addr):
+def ipaddress_to_sdp(addr: str) -> str:
     version = ipaddress.ip_address(addr).version
     return "IN IP%d %s" % (version, addr)
 
 
-def parameters_from_sdp(sdp):
-    parameters = OrderedDict()
+def parameters_from_sdp(sdp: str) -> OrderedDict:
+    parameters = OrderedDict()  # type: OrderedDict
     for param in sdp.split(";"):
         if "=" in param:
             k, v = param.split("=", 1)
@@ -115,7 +115,7 @@ def parameters_from_sdp(sdp):
     return parameters
 
 
-def parameters_to_sdp(parameters):
+def parameters_to_sdp(parameters: OrderedDict) -> str:
     params = []
     for param_k, param_v in parameters.items():
         if param_v is not None:
@@ -125,9 +125,10 @@ def parameters_to_sdp(parameters):
     return ";".join(params)
 
 
-def parse_attr(line):
+def parse_attr(line: str) -> Tuple[str, Optional[str]]:
     if ":" in line:
-        return line[2:].split(":", 1)
+        bits = line[2:].split(":", 1)
+        return bits[0], bits[1]
     else:
         return line[2:], None
 
@@ -143,7 +144,7 @@ class GroupDescription:
     semantic = attr.ib()
     items = attr.ib()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "%s %s" % (self.semantic, " ".join(map(str, self.items)))
 
 
@@ -160,43 +161,43 @@ SSRC_INFO_ATTRS = ["cname", "msid", "mslabel", "label"]
 
 
 class MediaDescription:
-    def __init__(self, kind, port, profile, fmt):
+    def __init__(self, kind: str, port: int, profile: str, fmt: List[Any]) -> None:
         # rtp
         self.kind = kind
         self.port = port
-        self.host = None
+        self.host = None  # type: Optional[str]
         self.profile = profile
-        self.direction = None
-        self.msid = None
+        self.direction = None  # type: Optional[str]
+        self.msid = None  # type: Optional[str]
 
         # rtcp
-        self.rtcp_port = None
-        self.rtcp_host = None
+        self.rtcp_port = None  # type: Optional[int]
+        self.rtcp_host = None  # type: Optional[str]
         self.rtcp_mux = False
 
         # ssrc
-        self.ssrc = []
-        self.ssrc_group = []
+        self.ssrc = []  # type: List[SsrcDescription]
+        self.ssrc_group = []  # type: List[GroupDescription]
 
         # formats
         self.fmt = fmt
         self.rtp = RTCRtpParameters()
 
         # SCTP
-        self.sctpCapabilities = None
-        self.sctpmap = {}
-        self.sctp_port = None
+        self.sctpCapabilities = None  # type: Optional[RTCSctpCapabilities]
+        self.sctpmap = {}  # type: Dict[int, str]
+        self.sctp_port = None  # type: Optional[int]
 
         # DTLS
-        self.dtls = None  # type: RTCDtlsParameters
+        self.dtls = None  # type: Optional[RTCDtlsParameters]
 
         # ICE
         self.ice = RTCIceParameters()
-        self.ice_candidates = []
+        self.ice_candidates = []  # type: List[RTCIceCandidate]
         self.ice_candidates_complete = False
         self.ice_options = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         lines = []
         lines.append(
             "m=%s %d %s %s"
@@ -279,9 +280,9 @@ class MediaDescription:
 
 
 class SessionDescription:
-    def __init__(self):
+    def __init__(self) -> None:
         self.version = 0
-        self.origin = None
+        self.origin = None  # type: Optional[str]
         self.name = "-"
         self.time = "0 0"
         self.host = None
@@ -462,7 +463,7 @@ class SessionDescription:
 
         return session
 
-    def __str__(self):
+    def __str__(self) -> str:
         lines = ["v=%d" % self.version, "o=%s" % self.origin, "s=%s" % self.name]
         if self.host is not None:
             lines += ["c=%s" % ipaddress_to_sdp(self.host)]

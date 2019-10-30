@@ -1,32 +1,38 @@
+from typing import List, Optional
+
+from .rtp import RtpPacket
+
 MAX_MISORDER = 100
 
 
 class JitterFrame:
-    def __init__(self, data, timestamp):
+    def __init__(self, data: bytes, timestamp: int) -> None:
         self.data = data
         self.timestamp = timestamp
 
 
 class JitterBuffer:
-    def __init__(self, capacity, prefetch=0):
+    def __init__(self, capacity: int, prefetch: int = 0) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
-        self._origin = None
-        self._packets = [None for i in range(capacity)]
+        self._origin = None  # type: Optional[int]
+        self._packets = [
+            None for i in range(capacity)
+        ]  # type: List[Optional[RtpPacket]]
         self._prefetch = prefetch
 
     @property
-    def capacity(self):
+    def capacity(self) -> int:
         return self._capacity
 
-    def add(self, packet):
+    def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
         if self._origin is None:
             self._origin = packet.sequence_number
         elif packet.sequence_number <= self._origin - MAX_MISORDER:
             self.remove(self.capacity)
             self._origin = packet.sequence_number
         elif packet.sequence_number < self._origin:
-            return
+            return None
 
         delta = packet.sequence_number - self._origin
         if delta >= 2 * self.capacity:
@@ -44,7 +50,7 @@ class JitterBuffer:
 
         return self._remove_frame(packet.sequence_number)
 
-    def _remove_frame(self, sequence_number):
+    def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
         frame = None
         frames = 0
         packets = []
@@ -78,7 +84,9 @@ class JitterBuffer:
 
             packets.append(packet)
 
-    def remove(self, count):
+        return None
+
+    def remove(self, count: int) -> None:
         assert count <= self._capacity
         for i in range(count):
             pos = self._origin % self._capacity

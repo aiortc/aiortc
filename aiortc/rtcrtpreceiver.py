@@ -5,6 +5,7 @@ import queue
 import random
 import threading
 import time
+from typing import Optional, Set
 
 import attr
 
@@ -65,11 +66,11 @@ def decoder_worker(loop, input_q, output_q):
 
 
 class NackGenerator:
-    def __init__(self):
-        self.max_seq = None
-        self.missing = set()
+    def __init__(self) -> None:
+        self.max_seq = None  # type: Optional[int]
+        self.missing = set()  # type: Set[int]
 
-    def add(self, packet):
+    def add(self, packet: RtpPacket) -> bool:
         missed = False
 
         if self.max_seq is None:
@@ -91,23 +92,23 @@ class NackGenerator:
 
 
 class StreamStatistics:
-    def __init__(self, clockrate):
-        self.base_seq = None
-        self.max_seq = None
+    def __init__(self, clockrate: int) -> None:
+        self.base_seq = None  # type: Optional[int]
+        self.max_seq = None  # type: Optional[int]
         self.cycles = 0
         self.packets_received = 0
 
         # jitter
         self._clockrate = clockrate
         self._jitter_q4 = 0
-        self._last_arrival = None
-        self._last_timestamp = None
+        self._last_arrival = None  # type: Optional[int]
+        self._last_timestamp = None  # type: Optional[int]
 
         # fraction lost
         self._expected_prior = 0
         self._received_prior = 0
 
-    def add(self, packet):
+    def add(self, packet: RtpPacket) -> None:
         in_order = self.max_seq is None or uint16_gt(
             packet.sequence_number, self.max_seq
         )
@@ -134,7 +135,7 @@ class StreamStatistics:
             self._last_timestamp = packet.timestamp
 
     @property
-    def fraction_lost(self):
+    def fraction_lost(self) -> int:
         expected_interval = self.packets_expected - self._expected_prior
         self._expected_prior = self.packets_expected
         received_interval = self.packets_received - self._received_prior
@@ -146,15 +147,15 @@ class StreamStatistics:
             return (lost_interval << 8) // expected_interval
 
     @property
-    def jitter(self):
+    def jitter(self) -> int:
         return self._jitter_q4 >> 4
 
     @property
-    def packets_expected(self):
+    def packets_expected(self) -> int:
         return self.cycles + self.max_seq - self.base_seq + 1
 
     @property
-    def packets_lost(self):
+    def packets_lost(self) -> int:
         return clamp_packets_lost(self.packets_expected - self.packets_received)
 
 
@@ -179,11 +180,11 @@ class RemoteStreamTrack(MediaStreamTrack):
 
 
 class TimestampMapper:
-    def __init__(self):
-        self._last = None
-        self._origin = None
+    def __init__(self) -> None:
+        self._last = None  # type: Optional[int]
+        self._origin = None  # type: Optional[int]
 
-    def map(self, timestamp):
+    def map(self, timestamp: int) -> int:
         if self._origin is None:
             # first timestamp
             self._origin = timestamp
@@ -479,7 +480,7 @@ class RTCRtpReceiver:
             )
             self.__decoder_queue.put((codec, encoded_frame))
 
-    async def _run_rtcp(self):
+    async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
 
         try:
@@ -521,14 +522,14 @@ class RTCRtpReceiver:
         self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
-    async def _send_rtcp(self, packet):
+    async def _send_rtcp(self, packet) -> None:
         self.__log_debug("> %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
             pass
 
-    async def _send_rtcp_nack(self, media_ssrc, lost):
+    async def _send_rtcp_nack(self, media_ssrc: int, lost) -> None:
         """
         Send an RTCP packet to report missing RTP packets.
         """
@@ -561,5 +562,5 @@ class RTCRtpReceiver:
             self.__decoder_thread.join()
             self.__decoder_thread = None
 
-    def __log_debug(self, msg, *args):
+    def __log_debug(self, msg: str, *args) -> None:
         logger.debug("receiver(%s) " + msg, self.__kind, *args)

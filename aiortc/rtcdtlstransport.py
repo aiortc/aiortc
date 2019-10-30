@@ -7,6 +7,7 @@ import logging
 import os
 import struct
 import traceback
+from typing import List, Type, TypeVar
 
 import attr
 import pylibsrtp
@@ -45,6 +46,8 @@ NID_X9_62_prime256v1 = 415
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
 
+CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
+
 logger = logging.getLogger("dtls")
 
 
@@ -52,12 +55,12 @@ class DtlsError(Exception):
     pass
 
 
-def _openssl_assert(ok):
+def _openssl_assert(ok: bool) -> None:
     if not ok:
         raise DtlsError("OpenSSL call failed")
 
 
-def certificate_digest(x509):
+def certificate_digest(x509) -> str:
     digest = lib.EVP_get_digestbyname(b"SHA256")
     _openssl_assert(digest != ffi.NULL)
 
@@ -179,6 +182,20 @@ class State(enum.Enum):
     FAILED = 4
 
 
+@attr.s
+class RTCDtlsFingerprint:
+    """
+    The :class:`RTCDtlsFingerprint` dictionary includes the hash function
+    algorithm and certificate fingerprint.
+    """
+
+    algorithm = attr.ib()  # type: str
+    "The hash function name, for instance `'sha-256'`."
+
+    value = attr.ib()  # type: str
+    "The fingerprint value."
+
+
 class RTCCertificate:
     """
     The :class:`RTCCertificate` interface enables the certificates used by an
@@ -187,12 +204,12 @@ class RTCCertificate:
     To generate a certificate and the corresponding private key use :func:`generateCertificate`.
     """
 
-    def __init__(self, key, cert):
+    def __init__(self, key, cert) -> None:
         self._key = key
         self._cert = cert
 
     @property
-    def expires(self):
+    def expires(self) -> datetime.datetime:
         """
         The date and time after which the certificate will be considered invalid.
         """
@@ -201,7 +218,7 @@ class RTCCertificate:
             tzinfo=datetime.timezone.utc
         )
 
-    def getFingerprints(self):
+    def getFingerprints(self) -> List[RTCDtlsFingerprint]:
         """
         Returns the list of certificate fingerprints, one of which is computed
         with the digest algorithm used in the certificate signature.
@@ -213,7 +230,7 @@ class RTCCertificate:
         ]
 
     @classmethod
-    def generateCertificate(cls):
+    def generateCertificate(cls: Type[CERTIFICATE_T]) -> CERTIFICATE_T:
         """
         Create and return an X.509 certificate and corresponding private key.
 
@@ -225,30 +242,16 @@ class RTCCertificate:
 
 
 @attr.s
-class RTCDtlsFingerprint:
-    """
-    The :class:`RTCDtlsFingerprint` dictionary includes the hash function
-    algorithm and certificate fingerprint.
-    """
-
-    algorithm = attr.ib()
-    "The hash function name, for instance `'sha-256'`."
-
-    value = attr.ib()
-    "The fingerprint value."
-
-
-@attr.s
 class RTCDtlsParameters:
     """
     The :class:`RTCDtlsParameters` dictionary includes information relating to
     DTLS configuration.
     """
 
-    fingerprints = attr.ib(default=attr.Factory(list))
+    fingerprints = attr.ib(default=attr.Factory(list))  # type: List[RTCDtlsFingerprint]
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
-    role = attr.ib(default="auto")
+    role = attr.ib(default="auto")  # type: str
     "The DTLS role, with a default of auto."
 
 

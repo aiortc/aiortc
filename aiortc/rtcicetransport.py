@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+from typing import List, Optional
 
 import attr
 from aioice import Candidate, Connection
@@ -36,7 +37,23 @@ class RTCIceCandidate:
     tcpType = attr.ib(default=None)
 
 
-def candidate_from_aioice(x):
+@attr.s
+class RTCIceParameters:
+    """
+    The :class:`RTCIceParameters` dictionary includes the ICE username
+    fragment and password and other ICE-related parameters.
+    """
+
+    usernameFragment = attr.ib(default=None)  # type: Optional[str]
+    "ICE username fragment."
+
+    password = attr.ib(default=None)  # type: Optional[str]
+    "ICE password."
+
+    iceLite = attr.ib(default=False)  # type: bool
+
+
+def candidate_from_aioice(x: Candidate) -> RTCIceCandidate:
     return RTCIceCandidate(
         component=x.component,
         foundation=x.foundation,
@@ -51,7 +68,7 @@ def candidate_from_aioice(x):
     )
 
 
-def candidate_to_aioice(x):
+def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
     return Candidate(
         component=x.component,
         foundation=x.foundation,
@@ -159,13 +176,13 @@ class RTCIceGatherer(AsyncIOEventEmitter):
         self.__state = "new"
 
     @property
-    def state(self):
+    def state(self) -> str:
         """
         The current state of the ICE gatherer.
         """
         return self.__state
 
-    async def gather(self):
+    async def gather(self) -> None:
         """
         Gather ICE candidates.
         """
@@ -175,20 +192,20 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             self.__setState("completed")
 
     @classmethod
-    def getDefaultIceServers(cls):
+    def getDefaultIceServers(cls) -> List[RTCIceServer]:
         """
         Return the list of default :class:`RTCIceServer`.
         """
         return [RTCIceServer("stun:stun.l.google.com:19302")]
 
-    def getLocalCandidates(self):
+    def getLocalCandidates(self) -> List[RTCIceCandidate]:
         """
         Retrieve the list of valid local candidates associated with the ICE
         gatherer.
         """
         return [candidate_from_aioice(x) for x in self._connection.local_candidates]
 
-    def getLocalParameters(self):
+    def getLocalParameters(self) -> RTCIceParameters:
         """
         Retrieve the ICE parameters of the ICE gatherer.
 
@@ -199,25 +216,9 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             password=self._connection.local_password,
         )
 
-    def __setState(self, state):
+    def __setState(self, state: str) -> None:
         self.__state = state
         self.emit("statechange")
-
-
-@attr.s
-class RTCIceParameters:
-    """
-    The :class:`RTCIceParameters` dictionary includes the ICE username
-    fragment and password and other ICE-related parameters.
-    """
-
-    usernameFragment = attr.ib(default=None)
-    "ICE username fragment."
-
-    password = attr.ib(default=None)
-    "ICE password."
-
-    iceLite = attr.ib(default=False)
 
 
 class RTCIceTransport(AsyncIOEventEmitter):

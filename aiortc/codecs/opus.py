@@ -1,8 +1,10 @@
 import audioop
 import fractions
+from typing import List, Optional, Tuple
 
 from av import AudioFrame
 
+from ..jitterbuffer import JitterFrame
 from ._opus import ffi, lib
 
 CHANNELS = 2
@@ -13,15 +15,15 @@ TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
 class OpusDecoder:
-    def __init__(self):
+    def __init__(self) -> None:
         error = ffi.new("int *")
         self.decoder = lib.opus_decoder_create(SAMPLE_RATE, CHANNELS, error)
         assert error[0] == lib.OPUS_OK
 
-    def __del__(self):
+    def __del__(self) -> None:
         lib.opus_decoder_destroy(self.decoder)
 
-    def decode(self, encoded_frame):
+    def decode(self, encoded_frame: JitterFrame) -> List[AudioFrame]:
         frame = AudioFrame(format="s16", layout="stereo", samples=SAMPLES_PER_FRAME)
         frame.pts = encoded_frame.timestamp
         frame.sample_rate = SAMPLE_RATE
@@ -40,7 +42,7 @@ class OpusDecoder:
 
 
 class OpusEncoder:
-    def __init__(self):
+    def __init__(self) -> None:
         error = ffi.new("int *")
         self.encoder = lib.opus_encoder_create(
             SAMPLE_RATE, CHANNELS, lib.OPUS_APPLICATION_VOIP, error
@@ -51,12 +53,14 @@ class OpusEncoder:
             "unsigned char []", SAMPLES_PER_FRAME * CHANNELS * SAMPLE_WIDTH
         )
         self.buffer = ffi.buffer(self.cdata)
-        self.rate_state = None
+        self.rate_state = None  # type: Optional[Tuple]
 
-    def __del__(self):
+    def __del__(self) -> None:
         lib.opus_encoder_destroy(self.encoder)
 
-    def encode(self, frame, force_keyframe=False):
+    def encode(
+        self, frame: AudioFrame, force_keyframe: bool = False
+    ) -> Tuple[List[bytes], int]:
         assert frame.format.name == "s16"
         assert frame.layout.name in ["mono", "stereo"]
 

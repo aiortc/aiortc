@@ -3,16 +3,18 @@ import logging
 import random
 import time
 import uuid
+from typing import List
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError
-from .rtcrtpparameters import RTCRtpSendParameters
+from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
 from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
     RtcpRrPacket,
@@ -155,11 +157,11 @@ class RTCRtpSender:
     def setTransport(self, transport):
         self.__transport = transport
 
-    async def send(self, parameters: RTCRtpSendParameters):
+    async def send(self, parameters: RTCRtpSendParameters) -> None:
         """
         Attempt to set the parameters controlling the sending of media.
 
-        :param: parameters: The :class:`RTCRtpParameters` for the sender.
+        :param: parameters: The :class:`RTCRtpSendParameters` for the sender.
         """
         if not self.__started:
             self.__cname = parameters.rtcp.cname
@@ -239,7 +241,7 @@ class RTCRtpSender:
             except ValueError:
                 pass
 
-    async def _next_encoded_frame(self, codec):
+    async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get frame
         frame = await self.__track.recv()
 
@@ -250,7 +252,7 @@ class RTCRtpSender:
             None, self.__encoder.encode, frame, self.__force_keyframe
         )
 
-    async def _retransmit(self, sequence_number):
+    async def _retransmit(self, sequence_number: int) -> None:
         """
         Retransmit an RTP packet which was reported as lost.
         """
@@ -275,7 +277,7 @@ class RTCRtpSender:
         """
         self.__force_keyframe = True
 
-    async def _run_rtp(self, codec):
+    async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
         self.__log_debug("- RTP started")
 
         sequence_number = random16()
@@ -329,7 +331,7 @@ class RTCRtpSender:
         self.__log_debug("- RTP finished")
         self.__rtp_exited.set()
 
-    async def _run_rtcp(self):
+    async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
 
         try:
@@ -349,7 +351,7 @@ class RTCRtpSender:
                             octet_count=self.__octet_count,
                         ),
                     )
-                ]
+                ]  # type: List[AnyRtcpPacket]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
 
@@ -377,7 +379,7 @@ class RTCRtpSender:
         self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
-    async def _send_rtcp(self, packets):
+    async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
             self.__log_debug("> %s", packet)
@@ -388,5 +390,5 @@ class RTCRtpSender:
         except ConnectionError:
             pass
 
-    def __log_debug(self, msg, *args):
+    def __log_debug(self, msg: str, *args) -> None:
         logger.debug("sender(%s) " + msg, self.__kind, *args)

@@ -1,6 +1,6 @@
 import os
 from struct import pack, unpack, unpack_from
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import attr
 
@@ -43,10 +43,10 @@ class HeaderExtensions:
 
 
 class HeaderExtensionsMap:
-    def __init__(self):
+    def __init__(self) -> None:
         self.__ids = HeaderExtensions()
 
-    def configure(self, parameters: RTCRtpParameters):
+    def configure(self, parameters: RTCRtpParameters) -> None:
         for ext in parameters.headerExtensions:
             if ext.uri == "urn:ietf:params:rtp-hdrext:sdes:mid":
                 self.__ids.mid = ext.id
@@ -143,15 +143,15 @@ class HeaderExtensionsMap:
         return pack_header_extensions(extensions)
 
 
-def clamp_packets_lost(count):
+def clamp_packets_lost(count: int) -> int:
     return max(PACKETS_LOST_MIN, min(count, PACKETS_LOST_MAX))
 
 
-def pack_packets_lost(count):
+def pack_packets_lost(count: int) -> bytes:
     return pack("!l", count)[1:]
 
 
-def unpack_packets_lost(d):
+def unpack_packets_lost(d: bytes) -> int:
     if d[0] & 0x80:
         d = b"\xff" + d
     else:
@@ -159,12 +159,12 @@ def unpack_packets_lost(d):
     return unpack("!l", d)[0]
 
 
-def pack_rtcp_packet(packet_type, count, payload):
+def pack_rtcp_packet(packet_type: int, count: int, payload: bytes) -> bytes:
     assert len(payload) % 4 == 0
     return pack("!BBH", (2 << 6) | count, packet_type, len(payload) // 4) + payload
 
 
-def pack_remb_fci(bitrate, ssrcs):
+def pack_remb_fci(bitrate: int, ssrcs: List[int]) -> bytes:
     """
     Pack the FCI for a Receiver Estimated Maximum Bitrate report.
 
@@ -302,40 +302,6 @@ def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, by
 
     extension_value += b"\x00" * padl(len(extension_value))
     return extension_profile, extension_value
-
-
-def unwrap_rtx(rtx, payload_type, ssrc):
-    """
-    Recover initial packet from a retransmission packet.
-    """
-    packet = RtpPacket(
-        payload_type=payload_type,
-        marker=rtx.marker,
-        sequence_number=unpack("!H", rtx.payload[0:2])[0],
-        timestamp=rtx.timestamp,
-        ssrc=ssrc,
-        payload=rtx.payload[2:],
-    )
-    packet.csrc = rtx.csrc
-    packet.extensions = rtx.extensions
-    return packet
-
-
-def wrap_rtx(packet, payload_type, sequence_number, ssrc):
-    """
-    Create a retransmission packet from a lost packet.
-    """
-    rtx = RtpPacket(
-        payload_type=payload_type,
-        marker=packet.marker,
-        sequence_number=sequence_number,
-        timestamp=packet.timestamp,
-        ssrc=ssrc,
-        payload=pack("!H", packet.sequence_number) + packet.payload,
-    )
-    rtx.csrc = packet.csrc
-    rtx.extensions = packet.extensions
-    return rtx
 
 
 @attr.s
@@ -637,25 +603,25 @@ class RtcpSrPacket:
 class RtpPacket:
     def __init__(
         self,
-        payload_type=0,
-        marker=0,
-        sequence_number=0,
-        timestamp=0,
-        ssrc=0,
-        payload=b"",
-    ):
+        payload_type: int = 0,
+        marker: int = 0,
+        sequence_number: int = 0,
+        timestamp: int = 0,
+        ssrc: int = 0,
+        payload: bytes = b"",
+    ) -> None:
         self.version = 2
         self.marker = marker
         self.payload_type = payload_type
         self.sequence_number = sequence_number
         self.timestamp = timestamp
         self.ssrc = ssrc
-        self.csrc = []
+        self.csrc = []  # type: List[int]
         self.extensions = HeaderExtensions()
         self.payload = payload
         self.padding_size = 0
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "RtpPacket(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)" % (
             self.sequence_number,
             self.timestamp,
@@ -665,7 +631,7 @@ class RtpPacket:
         )
 
     @classmethod
-    def parse(cls, data, extensions_map=HeaderExtensionsMap()):
+    def parse(cls, data: bytes, extensions_map=HeaderExtensionsMap()):
         if len(data) < RTP_HEADER_LENGTH:
             raise ValueError(
                 "RTP packet length is less than %d bytes" % RTP_HEADER_LENGTH
@@ -718,7 +684,7 @@ class RtpPacket:
 
         return packet
 
-    def serialize(self, extensions_map=HeaderExtensionsMap()):
+    def serialize(self, extensions_map=HeaderExtensionsMap()) -> bytes:
         extension_profile, extension_value = extensions_map.set(self.extensions)
         has_extension = bool(extension_value)
 
@@ -744,3 +710,42 @@ class RtpPacket:
             data += os.urandom(self.padding_size - 1)
             data += bytes([self.padding_size])
         return data
+
+
+def unwrap_rtx(rtx: RtpPacket, payload_type: int, ssrc: int) -> RtpPacket:
+    """
+    Recover initial packet from a retransmission packet.
+    """
+    packet = RtpPacket(
+        payload_type=payload_type,
+        marker=rtx.marker,
+        sequence_number=unpack("!H", rtx.payload[0:2])[0],
+        timestamp=rtx.timestamp,
+        ssrc=ssrc,
+        payload=rtx.payload[2:],
+    )
+    packet.csrc = rtx.csrc
+    packet.extensions = rtx.extensions
+    return packet
+
+
+def wrap_rtx(
+    packet: RtpPacket, payload_type: int, sequence_number: int, ssrc: int
+) -> RtpPacket:
+    """
+    Create a retransmission packet from a lost packet.
+    """
+    rtx = RtpPacket(
+        payload_type=payload_type,
+        marker=packet.marker,
+        sequence_number=sequence_number,
+        timestamp=packet.timestamp,
+        ssrc=ssrc,
+        payload=pack("!H", packet.sequence_number) + packet.payload,
+    )
+    rtx.csrc = packet.csrc
+    rtx.extensions = packet.extensions
+    return rtx
+
+
+AnyRtcpPacket = Union[RtcpByePacket, RtcpSdesPacket, RtcpSrPacket]

@@ -1,5 +1,6 @@
 import math
 from enum import Enum
+from typing import Optional
 
 from aiortc.utils import uint32_add, uint32_gt
 
@@ -44,10 +45,10 @@ class AimdRateControl:
         self.rtt = 200
         self.state = RateControlState.HOLD
 
-    def feedback_interval(self):
+    def feedback_interval(self) -> int:
         return 500
 
-    def set_estimate(self, bitrate: int, now_ms: int):
+    def set_estimate(self, bitrate: int, now_ms: int) -> None:
         """
         For testing purposes.
         """
@@ -57,7 +58,7 @@ class AimdRateControl:
 
     def update(
         self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int
-    ):
+    ) -> Optional[int]:
         if not self.current_bitrate_initialized:
             if self.first_estimated_throughput_time is None:
                 if estimated_throughput is not None:
@@ -71,7 +72,7 @@ class AimdRateControl:
             not self.current_bitrate_initialized
             and bandwidth_usage != BandwidthUsage.OVERUSING
         ):
-            return
+            return None
 
         # update state
         if (
@@ -139,21 +140,23 @@ class AimdRateControl:
         self.current_bitrate = self._clamp_bitrate(new_bitrate, estimated_throughput)
         return self.current_bitrate
 
-    def _additive_rate_increase(self, last_ms, now_ms):
+    def _additive_rate_increase(self, last_ms: int, now_ms: int) -> int:
         return int((now_ms - last_ms) * self._near_max_rate_increase() / 1000)
 
-    def _clamp_bitrate(self, new_bitrate, estimated_throughput):
+    def _clamp_bitrate(self, new_bitrate: int, estimated_throughput: int) -> int:
         max_bitrate = max(int(1.5 * estimated_throughput) + 10000, self.current_bitrate)
         return min(new_bitrate, max_bitrate)
 
-    def _multiplicative_rate_increase(self, new_bitrate, last_ms, now_ms):
+    def _multiplicative_rate_increase(
+        self, new_bitrate: int, last_ms: int, now_ms: int
+    ) -> int:
         alpha = 1.08
         if last_ms is not None:
             elapsed_ms = min(now_ms - last_ms, 1000)
             alpha = pow(alpha, elapsed_ms / 1000)
         return int(max((alpha - 1) * new_bitrate, 1000))
 
-    def _near_max_rate_increase(self):
+    def _near_max_rate_increase(self) -> int:
         bits_per_frame = self.current_bitrate / 30
         packets_per_frame = math.ceil(bits_per_frame / (8 * 1200))
         avg_packet_size_bits = bits_per_frame / packets_per_frame
@@ -161,7 +164,7 @@ class AimdRateControl:
         response_time = self.rtt + 100
         return max(4000, int((avg_packet_size_bits * 1000) / response_time))
 
-    def _update_max_throughput_estimate(self, estimated_throughput_kbps):
+    def _update_max_throughput_estimate(self, estimated_throughput_kbps) -> None:
         alpha = 0.05
         if self.avg_max_bitrate_kbps is None:
             self.avg_max_bitrate_kbps = estimated_throughput_kbps

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from aiortc.codecs import get_capabilities
 from aiortc.sdp import DIRECTIONS
@@ -16,8 +17,8 @@ class RTCRtpTransceiver:
     def __init__(self, kind, receiver, sender, direction="sendrecv"):
         self.__direction = direction
         self.__kind = kind
-        self.__mid = None
-        self.__mline_index = None
+        self.__mid = None  # type: Optional[str]
+        self.__mline_index = None  # type: Optional[int]
         self.__receiver = receiver
         self.__sender = sender
         self.__stopped = False
@@ -108,11 +109,11 @@ class RTCRtpTransceiver:
         await self.__sender.stop()
         self.__stopped = True
 
-    def _set_mid(self, mid):
+    def _set_mid(self, mid: str) -> None:
         self.__mid = mid
 
-    def _get_mline_index(self):
+    def _get_mline_index(self) -> Optional[int]:
         return self.__mline_index
 
-    def _set_mline_index(self, idx):
+    def _set_mline_index(self, idx: int) -> None:
         self.__mline_index = idx

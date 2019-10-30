@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Dict, List, Optional
 
 from ..rtcrtpparameters import (
     RTCRtcpFeedback,
@@ -29,7 +30,7 @@ CODECS = {
         PCMA_CODEC,
     ],
     "video": [],
-}
+}  # type: Dict[str, List[RTCRtpCodecParameters]]
 HEADER_EXTENSIONS = {
     "audio": [
         RTCRtpHeaderExtensionParameters(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid")
@@ -42,13 +43,15 @@ HEADER_EXTENSIONS = {
             id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
         ),
     ],
-}
+}  # type: Dict[str, List[RTCRtpHeaderExtensionParameters]]
 
 
-def init_codecs():
+def init_codecs() -> None:
     dynamic_pt = 97
 
-    def add_video_codec(mimeType, parameters=None):
+    def add_video_codec(
+        mimeType: str, parameters: Optional[OrderedDict] = None
+    ) -> None:
         nonlocal dynamic_pt
 
         clockRate = 90000
@@ -68,7 +71,7 @@ def init_codecs():
                 mimeType="video/rtx",
                 clockRate=clockRate,
                 payloadType=dynamic_pt + 1,
-                parameters={"apt": dynamic_pt},
+                parameters=OrderedDict([("apt", dynamic_pt)]),
             ),
         ]
         dynamic_pt += 2
@@ -96,7 +99,7 @@ def init_codecs():
     )
 
 
-def depayload(codec, payload):
+def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:
     if codec.name == "VP8":
         return vp8_depayload(payload)
     elif codec.name == "H264":
@@ -135,7 +138,7 @@ def get_capabilities(kind):
         return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 
-def get_decoder(codec):
+def get_decoder(codec: RTCRtpCodecParameters):
     mimeType = codec.mimeType.lower()
 
     if mimeType == "audio/opus":
@@ -150,7 +153,7 @@ def get_decoder(codec):
         return Vp8Decoder()
 
 
-def get_encoder(codec):
+def get_encoder(codec: RTCRtpCodecParameters):
     mimeType = codec.mimeType.lower()
 
     if mimeType == "audio/opus":
@@ -165,7 +168,7 @@ def get_encoder(codec):
         return Vp8Encoder()
 
 
-def is_rtx(codec):
+def is_rtx(codec: RTCRtpCodecParameters) -> bool:
     return codec.name.lower() == "rtx"
 
 

@@ -889,7 +889,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(
-        self
+        self,
     ):
         client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
@@ -943,7 +943,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(
-        self
+        self,
     ):
         client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
@@ -1139,7 +1139,7 @@ class RTCSctpTransportTest(TestCase):
         self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(
-        self
+        self,
     ):
         client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)

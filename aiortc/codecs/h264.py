@@ -3,9 +3,11 @@ import logging
 import math
 from itertools import tee
 from struct import pack, unpack_from
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar
 
 import av
 
+from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 
 logger = logging.getLogger("codec.h264")
@@ -21,8 +23,11 @@ FU_A_HEADER_SIZE = 2
 LENGTH_FIELD_SIZE = 2
 STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
 
+DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="H264PayloadDescriptor")
+T = TypeVar("T")
 
-def pairwise(iterable):
+
+def pairwise(iterable: Sequence[T]) -> Iterator[Tuple[T, T]]:
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
@@ -36,7 +41,7 @@ class H264PayloadDescriptor:
         return "H264PayloadDescriptor(FF={})".format(self.first_fragment)
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls: Type[DESCRIPTOR_T], data: bytes) -> Tuple[DESCRIPTOR_T, bytes]:
         output = bytes()
 
         # NAL unit header
@@ -91,10 +96,10 @@ class H264PayloadDescriptor:
 
 
 class H264Decoder:
-    def __init__(self):
+    def __init__(self) -> None:
         self.codec = av.CodecContext.create("h264", "r")
 
-    def decode(self, encoded_frame):
+    def decode(self, encoded_frame: JitterFrame) -> List[av.VideoFrame]:
         try:
             packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
@@ -108,11 +113,11 @@ class H264Decoder:
 
 
 class H264Encoder:
-    def __init__(self):
-        self.codec = None
+    def __init__(self) -> None:
+        self.codec = None  # type: Optional[av.CodecContext]
 
     @staticmethod
-    def _packetize_fu_a(data):
+    def _packetize_fu_a(data: bytes) -> List[bytes]:
         available_size = PACKET_MAX - FU_A_HEADER_SIZE
         payload_size = len(data) - NAL_HEADER_SIZE
         num_packets = math.ceil(payload_size / available_size)
@@ -151,7 +156,9 @@ class H264Encoder:
         return packages
 
     @staticmethod
-    def _packetize_stap_a(data, packages_iterator):
+    def _packetize_stap_a(
+        data: bytes, packages_iterator: Iterator[bytes]
+    ) -> Tuple[bytes, bytes]:
         counter = 0
         available_size = PACKET_MAX - STAP_A_HEADER_SIZE
 
@@ -183,7 +190,7 @@ class H264Encoder:
             return bytes([stap_header]) + payload, nalu
 
     @staticmethod
-    def _split_bitstream(buf):
+    def _split_bitstream(buf: bytes) -> Iterator[bytes]:
         # TODO: write in a more pytonic way,
         # translate from: https://github.com/aizvorski/h264bitstream/blob/master/h264_nal.c#L134
         i = 0
@@ -212,7 +219,7 @@ class H264Encoder:
             yield buf[nal_start:nal_end]
 
     @classmethod
-    def _packetize(cls, packages):
+    def _packetize(cls, packages: Iterator[bytes]) -> List[bytes]:
         packetized_packages = []
 
         packages_iterator = iter(packages)
@@ -227,7 +234,9 @@ class H264Encoder:
 
         return packetized_packages
 
-    def _encode_frame(self, frame, force_keyframe):
+    def _encode_frame(
+        self, frame: av.VideoFrame, force_keyframe: bool
+    ) -> Iterator[bytes]:
         if self.codec and (
             frame.width != self.codec.width or frame.height != self.codec.height
         ):
@@ -248,12 +257,14 @@ class H264Encoder:
         packages = self.codec.encode(frame)
         yield from self._split_bitstream(b"".join(p.to_bytes() for p in packages))
 
-    def encode(self, frame, force_keyframe=False):
+    def encode(
+        self, frame: av.VideoFrame, force_keyframe: bool = False
+    ) -> Tuple[List[bytes], int]:
         packages = self._encode_frame(frame, force_keyframe)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         return self._packetize(packages), timestamp
 
 
-def h264_depayload(payload):
+def h264_depayload(payload: bytes) -> bytes:
     descriptor, data = H264PayloadDescriptor.parse(payload)
     return data

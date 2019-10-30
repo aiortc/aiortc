@@ -7,6 +7,7 @@ import os
 import time
 from collections import deque
 from struct import pack, unpack_from
+from typing import Any, List, Optional, Tuple
 
 import attr
 from pyee import AsyncIOEventEmitter
@@ -80,7 +81,7 @@ def chunk_type(chunk):
     return chunk.__class__.__name__
 
 
-def decode_params(body):
+def decode_params(body: bytes) -> List[Tuple[int, bytes]]:
     params = []
     pos = 0
     while pos <= len(body) - 4:
@@ -101,7 +102,7 @@ def encode_params(params):
     return body
 
 
-def padl(l):
+def padl(l: int) -> int:
     m = l % 4
     return 4 - m if m else 0
 
@@ -130,7 +131,7 @@ class Chunk:
 
 
 class BaseParamsChunk(Chunk):
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
         if body:
             self.params = decode_params(body)
@@ -294,9 +295,12 @@ class SackChunk:
         self.gaps = []
         self.duplicates = []
         if body:
-            self.cumulative_tsn, self.advertised_rwnd, nb_gaps, nb_duplicates = unpack_from(
-                "!LLHH", body
-            )
+            (
+                self.cumulative_tsn,
+                self.advertised_rwnd,
+                nb_gaps,
+                nb_duplicates,
+            ) = unpack_from("!LLHH", body)
             pos = 12
             for i in range(nb_gaps):
                 self.gaps.append(unpack_from("!HH", body, pos))
@@ -384,7 +388,7 @@ CHUNK_CLASSES = [
 CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 
-def parse_packet(data):
+def parse_packet(data: bytes) -> Tuple[int, int, int, List[Any]]:
     length = len(data)
     if length < 12:
         raise ValueError("SCTP packet length is less than 12 bytes")
@@ -652,18 +656,18 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._data_channels = {}
 
     @property
-    def is_server(self):
+    def is_server(self) -> bool:
         return self.transport.transport.role != "controlling"
 
     @property
-    def port(self):
+    def port(self) -> int:
         """
         The local SCTP port number used for data channels.
         """
         return self._local_port
 
     @property
-    def state(self):
+    def state(self) -> str:
         """
         The current state of the SCTP transport.
         """
@@ -677,7 +681,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         return self.__transport
 
     @classmethod
-    def getCapabilities(cls):
+    def getCapabilities(cls) -> RTCSctpCapabilities:
         """
         Retrieve the capabilities of the transport.
 
