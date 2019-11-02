@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 
 #include <Python.h>
+#include <stdint.h>
 
 #define MODULE_NAME "aioquic._buffer"
 
