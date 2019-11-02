@@ -10,7 +10,7 @@ if [ "$BUILD" = "lint" ]; then
 elif [ "$BUILD" = "sdist" ]; then
     python3 setup.py sdist
     if [ -n "$TRAVIS_TAG" ]; then
-        python3 -m twine upload --skip-existing dist/*
+        twine upload --skip-existing dist/*
     fi
 else
     coverage run setup.py test

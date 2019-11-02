@@ -36,6 +36,7 @@ setuptools.setup(
             "aioquic._crypto", libraries=["crypto"], sources=["src/_crypto.c"]
         ),
     ],
+    package_data={"aioquic": ["py.typed"]},
     packages=["aioquic", "aioquic.asyncio", "aioquic.h0", "aioquic.h3", "aioquic.quic"],
     install_requires=[
         "cryptography >= 2.5",
