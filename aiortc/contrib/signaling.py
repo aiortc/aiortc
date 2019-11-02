@@ -90,7 +90,7 @@ class ApprtcSignaling:
     async def close(self):
         if self._websocket:
             await self.send(None)
-            self._websocket.close()
+            await self._websocket.close()
         if self._http:
             await self._http.close()
 
