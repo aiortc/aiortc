@@ -5,21 +5,16 @@ import datetime
 import enum
 import logging
 import os
-import struct
 import traceback
-from typing import List, Type, TypeVar
+from typing import List, Tuple, Type, TypeVar
 
 import attr
 import pylibsrtp
+from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.bindings.openssl.binding import Binding
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-)
-from OpenSSL import crypto
 from pyee import AsyncIOEventEmitter
 from pylibsrtp import Policy, Session
 
@@ -79,33 +74,31 @@ def certificate_digest(x509) -> str:
     ).decode("ascii")
 
 
-def generate_key():
-    key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    key_pem = key.private_bytes(
-        encoding=Encoding.PEM,
-        format=PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=NoEncryption(),
+def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
+    name = x509.Name(
+        [
+            x509.NameAttribute(
+                x509.NameOID.COMMON_NAME,
+                binascii.hexlify(os.urandom(16)).decode("ascii"),
+            )
+        ]
     )
-    return crypto.load_privatekey(crypto.FILETYPE_PEM, key_pem)
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow() - datetime.timedelta(days=1))
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=30))
+    )
+    return builder.sign(key, hashes.SHA256(), default_backend())
 
 
-def generate_certificate(key):
-    cert = crypto.X509()
-    cert.get_subject().CN = binascii.hexlify(os.urandom(16)).decode("ascii")
-    cert.gmtime_adj_notBefore(-86400)
-    cert.gmtime_adj_notAfter(30 * 86400)
-    cert.set_version(2)
-    cert.set_serial_number(struct.unpack("!L", os.urandom(4))[0])
-    cert.set_issuer(cert.get_subject())
-    cert.set_pubkey(key)
-    cert.sign(key, "sha256")
-    return cert
-
-
-def get_error_queue():
+def get_error_queue() -> List[Tuple[str, str, str]]:
     errors = []
 
-    def text(charp):
+    def text(charp) -> str:
         return ffi.string(charp).decode("utf-8") if charp else ""
 
     while True:
@@ -153,7 +146,7 @@ def create_ssl_context(certificate):
     )
 
     _openssl_assert(lib.SSL_CTX_use_certificate(ctx, certificate._cert._x509) == 1)
-    _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, certificate._key._pkey) == 1)
+    _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, certificate._key._evp_pkey) == 1)
     _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
     _openssl_assert(
         lib.SSL_CTX_set_tlsext_use_srtp(ctx, b"SRTP_AES128_CM_SHA1_80") == 0
@@ -204,7 +197,7 @@ class RTCCertificate:
     To generate a certificate and the corresponding private key use :func:`generateCertificate`.
     """
 
-    def __init__(self, key, cert) -> None:
+    def __init__(self, key: ec.EllipticCurvePrivateKey, cert: x509.Certificate) -> None:
         self._key = key
         self._cert = cert
 
@@ -213,10 +206,7 @@ class RTCCertificate:
         """
         The date and time after which the certificate will be considered invalid.
         """
-        not_after = self._cert.get_notAfter().decode("ascii")
-        return datetime.datetime.strptime(not_after, "%Y%m%d%H%M%SZ").replace(
-            tzinfo=datetime.timezone.utc
-        )
+        return self._cert.not_valid_after.replace(tzinfo=datetime.timezone.utc)
 
     def getFingerprints(self) -> List[RTCDtlsFingerprint]:
         """
@@ -236,7 +226,7 @@ class RTCCertificate:
 
         :rtype: RTCCertificate
         """
-        key = generate_key()
+        key = ec.generate_private_key(ec.SECP256R1(), default_backend())
         cert = generate_certificate(key)
         return cls(key=key, cert=cert)
 

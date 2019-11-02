@@ -20,7 +20,6 @@ install_requires = [
     'cryptography>=2.2',
     'pyee>=6.0.0',
     'pylibsrtp>=0.5.6',
-    'pyopenssl',
 ]
 
 if os.environ.get('READTHEDOCS') == 'True':
