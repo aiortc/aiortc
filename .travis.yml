@@ -6,13 +6,14 @@ matrix:
   - env: BUILD=lint
     install: pip install black flake8 isort mypy
   - env: BUILD=test
-  - env: BUILD=test
     language: generic
     os: osx
   - env: BUILD=test
-    python: "3.6"
+    python: "3.8"
   - env: BUILD=test
-    python: "3.8-dev"
+    python: "3.7"
+  - env: BUILD=test
+    python: "3.6"
   - env: BUILD=test
     python: "pypy3"
   - env: BUILD=sdist
