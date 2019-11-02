@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import attr
 from aioice import Candidate, Connection
@@ -83,8 +83,8 @@ def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
     )
 
 
-def connection_kwargs(servers):
-    kwargs = {}
+def connection_kwargs(servers: List[RTCIceServer]) -> Dict[str, Any]:
+    kwargs = {}  # type: Dict[str, Any]
 
     for server in servers:
         if isinstance(server.urls, list):
@@ -128,7 +128,7 @@ def connection_kwargs(servers):
     return kwargs
 
 
-def parse_stun_turn_uri(uri):
+def parse_stun_turn_uri(uri: str) -> Dict[str, Any]:
     if uri.startswith("stun"):
         match = STUN_REGEX.fullmatch(uri)
     elif uri.startswith("turn"):
@@ -140,21 +140,21 @@ def parse_stun_turn_uri(uri):
         raise ValueError("malformed uri")
 
     # set port
-    match = match.groupdict()
-    if match["port"]:
-        match["port"] = int(match["port"])
-    elif match["scheme"] in ["stuns", "turns"]:
-        match["port"] = 5349
+    parsed = match.groupdict()
+    if parsed["port"]:
+        parsed["port"] = int(parsed["port"])
+    elif parsed["scheme"] in ["stuns", "turns"]:
+        parsed["port"] = 5349
     else:
-        match["port"] = 3478
+        parsed["port"] = 3478
 
     # set transport
-    if match["scheme"] == "turn" and not match["transport"]:
-        match["transport"] = "udp"
-    elif match["scheme"] == "turns" and not match["transport"]:
-        match["transport"] = "tcp"
+    if parsed["scheme"] == "turn" and not parsed["transport"]:
+        parsed["transport"] = "udp"
+    elif parsed["scheme"] == "turns" and not parsed["transport"]:
+        parsed["transport"] = "tcp"
 
-    return match
+    return parsed
 
 
 class RTCIceGatherer(AsyncIOEventEmitter):
@@ -165,7 +165,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
     exchanged in signaling.
     """
 
-    def __init__(self, iceServers=None):
+    def __init__(self, iceServers: Optional[List[RTCIceServer]] = None) -> None:
         super().__init__()
 
         if iceServers is None:
@@ -230,22 +230,22 @@ class RTCIceTransport(AsyncIOEventEmitter):
     :param: gatherer: An :class:`RTCIceGatherer`.
     """
 
-    def __init__(self, gatherer):
+    def __init__(self, gatherer: RTCIceGatherer) -> None:
         super().__init__()
-        self.__start = None
+        self.__start = None  # type: Optional[asyncio.Event]
         self.__iceGatherer = gatherer
         self.__state = "new"
         self._connection = gatherer._connection
 
     @property
-    def iceGatherer(self):
+    def iceGatherer(self) -> RTCIceGatherer:
         """
         The ICE gatherer passed in the constructor.
         """
         return self.__iceGatherer
 
     @property
-    def role(self):
+    def role(self) -> str:
         """
         The current role of the ICE transport.
 
@@ -257,13 +257,13 @@ class RTCIceTransport(AsyncIOEventEmitter):
             return "controlled"
 
     @property
-    def state(self):
+    def state(self) -> str:
         """
         The current state of the ICE transport.
         """
         return self.__state
 
-    def addRemoteCandidate(self, candidate):
+    def addRemoteCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
         """
         Add a remote candidate.
         """
@@ -281,7 +281,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         """
         return [candidate_from_aioice(x) for x in self._connection.remote_candidates]
 
-    async def start(self, remoteParameters):
+    async def start(self, remoteParameters: RTCIceParameters) -> None:
         """
         Initiate connectivity checks.
 
@@ -293,7 +293,8 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
         # handle the case where start is already in progress
         if self.__start is not None:
-            return await self.__start.wait()
+            await self.__start.wait()
+            return
         self.__start = asyncio.Event()
 
         self.__setState("checking")
@@ -307,7 +308,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             self.__setState("completed")
         self.__start.set()
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Irreversibly stop the :class:`RTCIceTransport`.
         """
@@ -315,7 +316,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             self.__setState("closed")
             await self._connection.close()
 
-    async def _recv(self):
+    async def _recv(self) -> bytes:
         try:
             return await self._connection.recv()
         except ConnectionError:
@@ -323,7 +324,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
                 self.__setState("failed")
             raise
 
-    async def _send(self, data):
+    async def _send(self, data: bytes) -> None:
         try:
             await self._connection.send(data)
         except ConnectionError:
@@ -331,10 +332,10 @@ class RTCIceTransport(AsyncIOEventEmitter):
                 self.__setState("failed")
             raise
 
-    def __log_debug(self, msg, *args):
+    def __log_debug(self, msg: str, *args) -> None:
         logger.debug(self.role + " " + msg, *args)
 
-    def __setState(self, state):
+    def __setState(self, state: str) -> None:
         if state != self.__state:
             self.__log_debug("- %s -> %s", self.__state, state)
             self.__state = state

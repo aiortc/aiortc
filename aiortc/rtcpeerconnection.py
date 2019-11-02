@@ -2,7 +2,7 @@ import asyncio
 import copy
 import uuid
 from collections import OrderedDict
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 from pyee import AsyncIOEventEmitter
 
@@ -12,14 +12,17 @@ from .events import RTCTrackEvent
 from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from .rtcdtlstransport import RTCCertificate, RTCDtlsTransport
-from .rtcicetransport import RTCIceGatherer, RTCIceTransport
+from .rtcdtlstransport import RTCCertificate, RTCDtlsParameters, RTCDtlsTransport
+from .rtcicetransport import RTCIceGatherer, RTCIceParameters, RTCIceTransport
 from .rtcrtpparameters import (
+    RTCRtpCodecCapability,
     RTCRtpCodecParameters,
     RTCRtpDecodingParameters,
+    RTCRtpHeaderExtensionParameters,
     RTCRtpParameters,
     RTCRtpReceiveParameters,
     RTCRtpRtxParameters,
+    RTCRtpSendParameters,
 )
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
@@ -34,7 +37,7 @@ MEDIA_KINDS = ["audio", "video"]
 
 
 def filter_preferred_codecs(
-    codecs: List[RTCRtpCodecParameters], preferred: List[RTCRtpCodecParameters]
+    codecs: List[RTCRtpCodecParameters], preferred: List[RTCRtpCodecCapability]
 ) -> List[RTCRtpCodecParameters]:
     if not preferred:
         return codecs
@@ -63,9 +66,12 @@ def filter_preferred_codecs(
     return filtered
 
 
-def find_common_codecs(local_codecs, remote_codecs):
+def find_common_codecs(
+    local_codecs: List[RTCRtpCodecParameters],
+    remote_codecs: List[RTCRtpCodecParameters],
+) -> List[RTCRtpCodecParameters]:
     common = []
-    common_base = {}
+    common_base = {}  # type: Dict[int, RTCRtpCodecParameters]
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
         if is_rtx(c):
@@ -102,7 +108,10 @@ def find_common_codecs(local_codecs, remote_codecs):
     return common
 
 
-def find_common_header_extensions(local_extensions, remote_extensions):
+def find_common_header_extensions(
+    local_extensions: List[RTCRtpHeaderExtensionParameters],
+    remote_extensions: List[RTCRtpHeaderExtensionParameters],
+) -> List[RTCRtpHeaderExtensionParameters]:
     common = []
     for rx in remote_extensions:
         for lx in local_extensions:
@@ -135,7 +144,9 @@ def add_transport_description(
         media.dtls.role = "client"
 
 
-def add_remote_candidates(iceTransport, media):
+def add_remote_candidates(
+    iceTransport: RTCIceTransport, media: sdp.MediaDescription
+) -> None:
     for candidate in media.ice_candidates:
         iceTransport.addRemoteCandidate(candidate)
     if media.ice_candidates_complete:
@@ -261,13 +272,17 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports = set()  # type: Set[RTCIceTransport]
         self.__initialOfferer = None
-        self.__remoteDtls = {}  # type: Dict[RTCRtpTransceiver, RTCDtlsTransport]
-        self.__remoteIce = {}  # type: Dict[RTCRtpTransceiver, RTCIceTransport]
+        self.__remoteDtls = (
+            {}
+        )  # type: Dict[Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters]
+        self.__remoteIce = (
+            {}
+        )  # type: Dict[Union[RTCRtpTransceiver, RTCSctpTransport], RTCIceParameters]
         self.__seenMids = set()  # type: Set[str]
-        self.__sctp = None
+        self.__sctp = None  # type: Optional[RTCSctpTransport]
         self.__sctp_mline_index = None  # type: Optional[int]
         self._sctpLegacySdp = True
-        self.__sctpRemotePort = None
+        self.__sctpRemotePort = None  # type: Optional[int]
         self.__sctpRemoteCaps = None
         self.__stream_id = str(uuid.uuid4())
         self.__transceivers = []  # type: List[RTCRtpTransceiver]
@@ -698,7 +713,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         else:
             self.__pendingLocalDescription = description
 
-    async def setRemoteDescription(self, sessionDescription):
+    async def setRemoteDescription(
+        self, sessionDescription: RTCSessionDescription
+    ) -> None:
         """
         Changes the remote description associated with the connection.
 
@@ -844,7 +861,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         else:
             self.__pendingRemoteDescription = description
 
-    async def __connect(self):
+    async def __connect(self) -> None:
         for transceiver in self.__transceivers:
             dtlsTransport = transceiver._transport
             iceTransport = dtlsTransport.transport
@@ -890,7 +907,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if sender.track == track:
                 raise InvalidAccessError("Track already has a sender")
 
-    def __createDtlsTransport(self):
+    def __createDtlsTransport(self) -> RTCDtlsTransport:
         # create ICE transport
         iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
         iceGatherer.on("statechange", self.__updateIceGatheringState)
@@ -904,7 +921,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         return RTCDtlsTransport(iceTransport, self.__certificates)
 
-    def __createSctpTransport(self):
+    def __createSctpTransport(self) -> None:
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
         self.__sctp._bundled = False
         self.__sctp.mid = None
@@ -913,7 +930,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         def on_datachannel(channel):
             self.emit("datachannel", channel)
 
-    def __createTransceiver(self, direction, kind, sender_track=None):
+    def __createTransceiver(
+        self, direction: str, kind: str, sender_track=None
+    ) -> RTCRtpTransceiver:
         dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
             direction=direction,
@@ -939,8 +958,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     def __localDescription(self) -> Optional[sdp.SessionDescription]:
         return self.__pendingLocalDescription or self.__currentLocalDescription
 
-    def __localRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpParameters:
-        rtp = RTCRtpParameters(
+    def __localRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpSendParameters:
+        rtp = RTCRtpSendParameters(
             codecs=transceiver._codecs,
             headerExtensions=transceiver._headerExtensions,
             muxId=transceiver.mid,
@@ -980,11 +999,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             receiveParameters.encodings = list(encodings.values())
         return receiveParameters
 
-    def __setSignalingState(self, state):
+    def __setSignalingState(self, state: str) -> None:
         self.__signalingState = state
         self.emit("signalingstatechange")
 
-    def __updateIceConnectionState(self):
+    def __updateIceConnectionState(self) -> None:
         # compute new state
         states = set(map(lambda x: x.state, self.__iceTransports))
         if self.__isClosed:
@@ -1003,7 +1022,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.__iceConnectionState = state
             self.emit("iceconnectionstatechange")
 
-    def __updateIceGatheringState(self):
+    def __updateIceGatheringState(self) -> None:
         # compute new state
         states = set(map(lambda x: x.iceGatherer.state, self.__iceTransports))
         if states == set(["completed"]):
@@ -1018,7 +1037,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.__iceGatheringState = state
             self.emit("icegatheringstatechange")
 
-    def __validate_description(self, description, is_local):
+    def __validate_description(
+        self, description: sdp.SessionDescription, is_local: bool
+    ) -> None:
         # check description is compatible with signaling state
         if is_local:
             if description.type == "offer":

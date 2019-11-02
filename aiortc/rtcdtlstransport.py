@@ -117,7 +117,7 @@ def get_error_queue() -> List[Tuple[str, str, str]]:
     return errors
 
 
-def get_srtp_key_salt(src, idx):
+def get_srtp_key_salt(src, idx: int) -> bytes:
     key_start = idx * SRTP_KEY_LEN
     salt_start = 2 * SRTP_KEY_LEN + idx * SRTP_SALT_LEN
     return (
@@ -397,7 +397,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         """
         return self._transport
 
-    def getLocalParameters(self):
+    def getLocalParameters(self) -> RTCDtlsParameters:
         """
         Get the local parameters of the DTLS transport.
 
@@ -407,7 +407,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             fingerprints=self.__local_certificate.getFingerprints()
         )
 
-    async def start(self, remoteParameters):
+    async def start(self, remoteParameters: RTCDtlsParameters) -> None:
         """
         Start DTLS transport negotiation with the parameters of the remote
         DTLS transport.
@@ -497,7 +497,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._set_state(State.CONNECTED)
         self._task = asyncio.ensure_future(self.__run())
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Stop and close the DTLS transport.
         """
@@ -513,7 +513,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 pass
             self.__log_debug("- DTLS shutdown complete")
 
-    async def __run(self):
+    async def __run(self) -> None:
         try:
             while True:
                 await self._recv_next()
@@ -546,7 +546,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         )
         return report
 
-    async def _handle_rtcp_data(self, data):
+    async def _handle_rtcp_data(self, data: bytes) -> None:
         try:
             packets = RtcpPacket.parse(data)
         except ValueError as exc:
@@ -558,7 +558,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             for recipient in self._rtp_router.route_rtcp(packet):
                 await recipient._handle_rtcp_packet(packet)
 
-    async def _handle_rtp_data(self, data, arrival_time_ms):
+    async def _handle_rtp_data(self, data: bytes, arrival_time_ms: int) -> None:
         try:
             packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
         except ValueError as exc:
@@ -570,7 +570,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         if receiver is not None:
             await receiver._handle_rtp_packet(packet, arrival_time_ms=arrival_time_ms)
 
-    async def _recv_next(self):
+    async def _recv_next(self) -> None:
         # get timeout
         timeout = None
         if not self.encrypted:
@@ -659,7 +659,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__tx_bytes += len(data)
         self.__tx_packets += 1
 
-    def _set_state(self, state):
+    def _set_state(self, state: State) -> None:
         if state != self._state:
             self.__log_debug("- %s -> %s", self._state, state)
             self._state = state
@@ -675,7 +675,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
     def _unregister_rtp_sender(self, sender):
         self._rtp_router.unregister_sender(sender)
 
-    async def _write_ssl(self):
+    async def _write_ssl(self) -> None:
         """
         Flush outgoing data which OpenSSL put in our BIO to the transport.
         """
@@ -688,8 +688,8 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self.__tx_bytes += result
             self.__tx_packets += 1
 
-    def __log_debug(self, msg, *args):
+    def __log_debug(self, msg: str, *args) -> None:
         logger.debug(self._role + " " + msg, *args)
 
-    def __log_warning(self, msg, *args):
+    def __log_warning(self, msg: str, *args) -> None:
         logger.warning(self._role + " " + msg, *args)

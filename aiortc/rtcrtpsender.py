@@ -3,7 +3,7 @@ import logging
 import random
 import time
 import uuid
-from typing import List
+from typing import Dict, List, Optional
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
@@ -51,7 +51,7 @@ class RTCRtpSender:
     :param: transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, trackOrKind, transport):
+    def __init__(self, trackOrKind, transport) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
@@ -61,7 +61,7 @@ class RTCRtpSender:
         else:
             self.__kind = trackOrKind
             self.replaceTrack(None)
-        self.__cname = None
+        self.__cname = None  # type: Optional[str]
         self._ssrc = random32()
         self._rtx_ssrc = random32()
         # FIXME: how should this be initialised?
@@ -69,22 +69,22 @@ class RTCRtpSender:
         self.__encoder = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
-        self.__mid = None
+        self.__mid = None  # type: Optional[str]
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
-        self.__rtp_task = None
-        self.__rtp_history = {}
+        self.__rtp_task = None  # type: Optional[asyncio.Future[None]]
+        self.__rtp_history = {}  # type: Dict[int, RtpPacket]
         self.__rtcp_exited = asyncio.Event()
-        self.__rtcp_task = None
-        self.__rtx_payload_type = None
+        self.__rtcp_task = None  # type: Optional[asyncio.Future[None]]
+        self.__rtx_payload_type = None  # type: Optional[int]
         self.__rtx_sequence_number = random16()
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
 
         # stats
-        self.__lsr = None
-        self.__lsr_time = None
+        self.__lsr = None  # type: Optional[int]
+        self.__lsr_time = None  # type: Optional[float]
         self.__ntp_timestamp = 0
         self.__rtp_timestamp = 0
         self.__octet_count = 0
@@ -147,14 +147,14 @@ class RTCRtpSender:
 
         return self.__stats
 
-    def replaceTrack(self, track):
+    def replaceTrack(self, track) -> None:
         self.__track = track
         if track is not None:
             self._track_id = track.id
         else:
             self._track_id = str(uuid.uuid4())
 
-    def setTransport(self, transport):
+    def setTransport(self, transport) -> None:
         self.__transport = transport
 
     async def send(self, parameters: RTCRtpSendParameters) -> None:

@@ -1,11 +1,11 @@
 *.egg-info
 *.pyc
+*.so
 .coverage
 .eggs
 .idea
+.mypy_cache
 .vscode
-/aiortc/codecs/_opus.*
-/aiortc/codecs/_vpx.*
 /build
 /dist
 /docs/_build

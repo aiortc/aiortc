@@ -5,7 +5,7 @@ import queue
 import random
 import threading
 import time
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 
 import attr
 
@@ -15,7 +15,12 @@ from .exceptions import InvalidStateError
 from .jitterbuffer import JitterBuffer
 from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rate import RemoteBitrateEstimator
-from .rtcrtpparameters import RTCRtpReceiveParameters
+from .rtcdtlstransport import RTCDtlsTransport
+from .rtcrtpparameters import (
+    RTCRtpCapabilities,
+    RTCRtpCodecParameters,
+    RTCRtpReceiveParameters,
+)
 from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
@@ -231,14 +236,14 @@ class RTCRtpReceiver:
     :param: transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, kind, transport):
+    def __init__(self, kind: str, transport) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
-        self.__active_ssrc = {}
-        self.__codecs = {}
+        self.__active_ssrc = {}  # type: Dict[int, datetime.datetime]
+        self.__codecs = {}  # type: Dict[int, RTCRtpCodecParameters]
         self.__decoder_queue = queue.Queue()
-        self.__decoder_thread = None
+        self.__decoder_thread = None  # type: Optional[threading.Thread]
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
@@ -250,18 +255,18 @@ class RTCRtpReceiver:
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track = None
         self.__rtcp_exited = asyncio.Event()
-        self.__rtcp_task = None
-        self.__rtx_ssrc = {}
+        self.__rtcp_task = None  # type: Optional[asyncio.Future[None]]
+        self.__rtx_ssrc = {}  # type: Dict[int, int]
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
 
         # RTCP
-        self.__lsr = {}
-        self.__lsr_time = {}
-        self.__remote_streams = {}
-        self.__rtcp_ssrc = None
+        self.__lsr = {}  # type: Dict[int, int]
+        self.__lsr_time = {}  # type: Dict[int, float]
+        self.__remote_streams = {}  # type: Dict[int, StreamStatistics]
+        self.__rtcp_ssrc = None  # type: Optional[int]
 
     @property
     def transport(self):
@@ -272,7 +277,7 @@ class RTCRtpReceiver:
         return self.__transport
 
     @classmethod
-    def getCapabilities(self, kind):
+    def getCapabilities(self, kind) -> Optional[RTCRtpCapabilities]:
         """
         Returns the most optimistic view of the system's capabilities for
         receiving media of the given `kind`.
@@ -323,7 +328,7 @@ class RTCRtpReceiver:
                 )
         return sources
 
-    async def receive(self, parameters: RTCRtpReceiveParameters):
+    async def receive(self, parameters: RTCRtpReceiveParameters) -> None:
         """
         Attempt to set the parameters controlling the receiving of media.
 
@@ -352,7 +357,7 @@ class RTCRtpReceiver:
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
-    def setTransport(self, transport):
+    def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
     async def stop(self):
@@ -550,7 +555,7 @@ class RTCRtpReceiver:
             )
             await self._send_rtcp(packet)
 
-    def _set_rtcp_ssrc(self, ssrc):
+    def _set_rtcp_ssrc(self, ssrc: int) -> None:
         self.__rtcp_ssrc = ssrc
 
     def __stop_decoder(self):

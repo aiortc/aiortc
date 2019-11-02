@@ -133,19 +133,19 @@ def parse_attr(line: str) -> Tuple[str, Optional[str]]:
         return line[2:], None
 
 
-def parse_group(dest, value, type=str):
-    bits = value.split()
-    if bits:
-        dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
-
-
 @attr.s
 class GroupDescription:
-    semantic = attr.ib()
-    items = attr.ib()
+    semantic = attr.ib()  # type: str
+    items = attr.ib()  # List[Union[int, str]]
 
     def __str__(self) -> str:
         return "%s %s" % (self.semantic, " ".join(map(str, self.items)))
+
+
+def parse_group(dest: List[GroupDescription], value: str, type=str) -> None:
+    bits = value.split()
+    if bits:
+        dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
 
 
 @attr.s
@@ -195,7 +195,7 @@ class MediaDescription:
         self.ice = RTCIceParameters()
         self.ice_candidates = []  # type: List[RTCIceCandidate]
         self.ice_candidates_complete = False
-        self.ice_options = None
+        self.ice_options = None  # type: Optional[str]
 
     def __str__(self) -> str:
         lines = []
@@ -285,19 +285,19 @@ class SessionDescription:
         self.origin = None  # type: Optional[str]
         self.name = "-"
         self.time = "0 0"
-        self.host = None
+        self.host = None  # type: Optional[str]
         self.group = []  # type: List[GroupDescription]
         self.msid_semantic = []  # type: List[GroupDescription]
         self.media = []  # type: List[MediaDescription]
         self.type = None  # type: str
 
     @classmethod
-    def parse(cls, sdp):
-        current_media = None
+    def parse(cls, sdp: str):
+        current_media = None  # type: Optional[MediaDescription]
         dtls_fingerprints = []
         ice_options = None
 
-        def find_codec(pt):
+        def find_codec(pt: int) -> RTCRtpCodecParameters:
             for codec in current_media.rtp.codecs:
                 if codec.payloadType == pt:
                     return codec
@@ -339,14 +339,15 @@ class SessionDescription:
             # check payload types are valid
             kind = m.group(1)
             fmt = m.group(4).split()
+            fmt_int = None  # type: Optional[List[int]]
             if kind in ["audio", "video"]:
-                fmt = [int(x) for x in fmt]
-                for pt in fmt:
+                fmt_int = [int(x) for x in fmt]
+                for pt in fmt_int:
                     assert pt >= 0 and pt < 256
                     assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
 
             current_media = MediaDescription(
-                kind=kind, port=int(m.group(2)), profile=m.group(3), fmt=fmt
+                kind=kind, port=int(m.group(2)), profile=m.group(3), fmt=fmt_int or fmt
             )
             current_media.dtls = RTCDtlsParameters(
                 fingerprints=dtls_fingerprints[:], role=None
@@ -402,7 +403,6 @@ class SessionDescription:
                         current_media.direction = attr
                     elif attr == "rtpmap":
                         format_id, format_desc = value.split(" ", 1)
-                        format_id = int(format_id)
                         bits = format_desc.split("/")
                         if current_media.kind == "audio":
                             if len(bits) > 2:
@@ -426,8 +426,8 @@ class SessionDescription:
                     elif attr == "ssrc-group":
                         parse_group(current_media.ssrc_group, value, type=int)
                     elif attr == "ssrc":
-                        ssrc, ssrc_desc = value.split(" ", 1)
-                        ssrc = int(ssrc)
+                        ssrc_str, ssrc_desc = value.split(" ", 1)
+                        ssrc = int(ssrc_str)
                         ssrc_attr, ssrc_value = ssrc_desc.split(":")
 
                         try:

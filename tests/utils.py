@@ -92,7 +92,7 @@ def dummy_dtls_transport_pair():
     return (dtls_a, dtls_b)
 
 
-def load(name):
+def load(name: str) -> bytes:
     path = os.path.join(os.path.dirname(__file__), name)
     with open(path, "rb") as fp:
         return fp.read()

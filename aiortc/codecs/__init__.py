@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from ..rtcrtpparameters import (
     RTCRtcpFeedback,
@@ -108,34 +108,36 @@ def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:
         return payload
 
 
-def get_capabilities(kind):
-    if kind in CODECS:
-        codecs = []
-        rtx_added = False
-        for params in CODECS[kind]:
-            if not is_rtx(params):
-                codecs.append(
-                    RTCRtpCodecCapability(
-                        mimeType=params.mimeType,
-                        clockRate=params.clockRate,
-                        channels=params.channels,
-                        parameters=params.parameters,
-                    )
-                )
-            elif not rtx_added:
-                # There will only be a single entry in codecs[] for retransmission
-                # via RTX, with sdpFmtpLine not present.
-                codecs.append(
-                    RTCRtpCodecCapability(
-                        mimeType=params.mimeType, clockRate=params.clockRate
-                    )
-                )
-                rtx_added = True
+def get_capabilities(kind: str) -> RTCRtpCapabilities:
+    if kind not in CODECS:
+        raise ValueError("cannot get capabilities for unknown media %s" % kind)
 
-        headerExtensions = []
-        for params in HEADER_EXTENSIONS[kind]:
-            headerExtensions.append(RTCRtpHeaderExtensionCapability(uri=params.uri))
-        return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
+    codecs = []
+    rtx_added = False
+    for params in CODECS[kind]:
+        if not is_rtx(params):
+            codecs.append(
+                RTCRtpCodecCapability(
+                    mimeType=params.mimeType,
+                    clockRate=params.clockRate,
+                    channels=params.channels,
+                    parameters=params.parameters,
+                )
+            )
+        elif not rtx_added:
+            # There will only be a single entry in codecs[] for retransmission
+            # via RTX, with sdpFmtpLine not present.
+            codecs.append(
+                RTCRtpCodecCapability(
+                    mimeType=params.mimeType, clockRate=params.clockRate
+                )
+            )
+            rtx_added = True
+
+    headerExtensions = []
+    for extension in HEADER_EXTENSIONS[kind]:
+        headerExtensions.append(RTCRtpHeaderExtensionCapability(uri=extension.uri))
+    return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 
 def get_decoder(codec: RTCRtpCodecParameters):
@@ -168,7 +170,7 @@ def get_encoder(codec: RTCRtpCodecParameters):
         return Vp8Encoder()
 
 
-def is_rtx(codec: RTCRtpCodecParameters) -> bool:
+def is_rtx(codec: Union[RTCRtpCodecCapability, RTCRtpCodecParameters]) -> bool:
     return codec.name.lower() == "rtx"
 
 

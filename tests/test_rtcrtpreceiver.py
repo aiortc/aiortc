@@ -284,8 +284,8 @@ class RTCRtpReceiverTest(CodecTestCase):
         )
 
         # bogus
-        capabilities = RTCRtpReceiver.getCapabilities("bogus")
-        self.assertIsNone(capabilities)
+        with self.assertRaises(ValueError):
+            RTCRtpReceiver.getCapabilities("bogus")
 
     def test_connection_error(self):
         """

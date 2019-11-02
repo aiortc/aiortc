@@ -115,8 +115,8 @@ class RTCRtpSenderTest(TestCase):
         )
 
         # bogus
-        capabilities = RTCRtpSender.getCapabilities("bogus")
-        self.assertIsNone(capabilities)
+        with self.assertRaises(ValueError):
+            RTCRtpSender.getCapabilities("bogus")
 
     def test_construct(self):
         sender = RTCRtpSender("audio", self.local_transport)
