@@ -6,7 +6,7 @@ import aioice.stun
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.exceptions import InternalError, InvalidAccessError, InvalidStateError
-from aiortc.mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcpeerconnection import filter_preferred_codecs, find_common_codecs
 from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
@@ -23,7 +23,7 @@ LONG_DATA = b"\xff" * 2000
 STRIP_CANDIDATES_RE = re.compile("^a=(candidate:.*|end-of-candidates)\r\n", re.M)
 
 
-class BogusStreamTrack(MediaStreamTrack):
+class BogusStreamTrack(AudioStreamTrack):
     kind = "bogus"
 
 

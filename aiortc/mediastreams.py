@@ -2,6 +2,7 @@ import asyncio
 import fractions
 import time
 import uuid
+from abc import ABCMeta, abstractmethod
 from typing import Tuple
 
 from av import AudioFrame, VideoFrame
@@ -26,12 +27,14 @@ class MediaStreamError(Exception):
     pass
 
 
-class MediaStreamTrack(AsyncIOEventEmitter):
+class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
     """
     A single media track within a stream.
 
     See :class:`AudioStreamTrack` and :class:`VideoStreamTrack`.
     """
+
+    kind = "unknown"
 
     def __init__(self) -> None:
         super().__init__()
@@ -48,6 +51,10 @@ class MediaStreamTrack(AsyncIOEventEmitter):
     @property
     def readyState(self) -> str:
         return "ended" if self.__ended else "live"
+
+    @abstractmethod
+    async def recv(self) -> Frame:
+        pass
 
     def stop(self) -> None:
         if not self.__ended:

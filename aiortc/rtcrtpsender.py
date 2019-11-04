@@ -3,13 +3,13 @@ import logging
 import random
 import time
 import uuid
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
-from .mediastreams import MediaStreamError
+from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
 from .rtp import (
     RTCP_PSFB_APP,
@@ -52,11 +52,11 @@ class RTCRtpSender:
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, trackOrKind, transport) -> None:
+    def __init__(self, trackOrKind: Union[MediaStreamTrack, str], transport) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
-        if hasattr(trackOrKind, "kind"):
+        if isinstance(trackOrKind, MediaStreamTrack):
             self.__kind = trackOrKind.kind
             self.replaceTrack(trackOrKind)
         else:
@@ -97,7 +97,7 @@ class RTCRtpSender:
         return self.__kind
 
     @property
-    def track(self):
+    def track(self) -> MediaStreamTrack:
         """
         The :class:`MediaStreamTrack` which is being handled by the sender.
         """
@@ -121,7 +121,7 @@ class RTCRtpSender:
         """
         return get_capabilities(kind)
 
-    async def getStats(self):
+    async def getStats(self) -> RTCStatsReport:
         """
         Returns statistics about the RTP sender.
 
@@ -148,7 +148,7 @@ class RTCRtpSender:
 
         return self.__stats
 
-    def replaceTrack(self, track) -> None:
+    def replaceTrack(self, track: Optional[MediaStreamTrack]) -> None:
         self.__track = track
         if track is not None:
             self._track_id = track.id
