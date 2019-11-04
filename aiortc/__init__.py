@@ -1,7 +1,7 @@
 # flake8: noqa
 
 from .exceptions import InvalidAccessError, InvalidStateError
-from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
+from .mediastreams import MediaStreamTrack, VideoStreamTrack
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (

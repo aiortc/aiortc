@@ -6,9 +6,8 @@ from unittest import TestCase
 
 import av
 
-from aiortc import AudioStreamTrack, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.mediastreams import MediaStreamError
+from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
 
 from .codecs import CodecTestCase
 from .utils import run

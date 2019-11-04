@@ -10,7 +10,7 @@ import cv2
 from aiohttp import web
 from av import VideoFrame
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
 ROOT = os.path.dirname(__file__)
@@ -19,7 +19,13 @@ logger = logging.getLogger("pc")
 pcs = set()
 
 
-class VideoTransformTrack(VideoStreamTrack):
+class VideoTransformTrack(MediaStreamTrack):
+    """
+    A video stream track that transforms frames from an another track.
+    """
+
+    kind = "video"
+
     def __init__(self, track, transform):
         super().__init__()  # don't forget this!
         self.track = track

@@ -105,12 +105,6 @@ Media
    .. autoclass:: MediaStreamTrack
       :members:
 
-   .. autoclass:: AudioStreamTrack
-      :members:
-
-   .. autoclass:: VideoStreamTrack
-      :members:
-
 Statistics
 ----------
 

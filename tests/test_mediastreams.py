@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiortc import AudioStreamTrack, VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 
 
 class MediaStreamTrackTest(TestCase):

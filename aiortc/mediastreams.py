@@ -30,8 +30,6 @@ class MediaStreamError(Exception):
 class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
     """
     A single media track within a stream.
-
-    See :class:`AudioStreamTrack` and :class:`VideoStreamTrack`.
     """
 
     kind = "unknown"
@@ -54,7 +52,9 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
 
     @abstractmethod
     async def recv(self) -> Frame:
-        pass
+        """
+        Receive the next :class:`~av.audio.frame.AudioFrame` or :class:`~av.video.frame.VideoFrame`.
+        """
 
     def stop(self) -> None:
         if not self.__ended:
@@ -68,7 +68,7 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
 
 class AudioStreamTrack(MediaStreamTrack):
     """
-    An audio track.
+    A dummy audio track which reads silence.
     """
 
     kind = "audio"
@@ -105,7 +105,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
 class VideoStreamTrack(MediaStreamTrack):
     """
-    A video stream track.
+    A dummy video track which reads green frames.
     """
 
     kind = "video"
