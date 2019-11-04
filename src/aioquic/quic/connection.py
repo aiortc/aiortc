@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Deque, Dict, FrozenSet, List, Optional, Sequence, Tuple, cast
 
 from .. import tls
-from ..buffer import Buffer, BufferReadError, size_uint_var
+from ..buffer import UINT_VAR_MAX, Buffer, BufferReadError, size_uint_var
 from . import events
 from .configuration import QuicConfiguration
 from .crypto import CryptoError, CryptoPair
@@ -1198,6 +1198,12 @@ class QuicConnection:
         """
         offset = buf.pull_uint_var()
         length = buf.pull_uint_var()
+        if offset + length > UINT_VAR_MAX:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                frame_type=frame_type,
+                reason_phrase="offset + length cannot exceed 2^62 - 1",
+            )
         frame = QuicStreamFrame(offset=offset, data=buf.pull_bytes(length))
 
         # log frame
@@ -1216,7 +1222,7 @@ class QuicConnection:
             except tls.Alert as exc:
                 raise QuicConnectionError(
                     error_code=QuicErrorCode.CRYPTO_ERROR + int(exc.description),
-                    frame_type=QuicFrameType.CRYPTO,
+                    frame_type=frame_type,
                     reason_phrase=str(exc),
                 )
 
@@ -1580,6 +1586,12 @@ class QuicConnection:
             length = buf.pull_uint_var()
         else:
             length = buf.capacity - buf.tell()
+        if offset + length > UINT_VAR_MAX:
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.FRAME_ENCODING_ERROR,
+                frame_type=frame_type,
+                reason_phrase="offset + length cannot exceed 2^62 - 1",
+            )
         frame = QuicStreamFrame(
             offset=offset, data=buf.pull_bytes(length), fin=bool(frame_type & 1)
         )

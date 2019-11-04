@@ -1,5 +1,7 @@
 from ._buffer import Buffer, BufferReadError, BufferWriteError  # noqa
 
+UINT_VAR_MAX = 0x3FFFFFFFFFFFFFFF
+
 
 def encode_uint_var(value: int) -> bytes:
     """

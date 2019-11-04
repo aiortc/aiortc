@@ -6,7 +6,7 @@ import time
 from unittest import TestCase
 
 from aioquic import tls
-from aioquic.buffer import Buffer, encode_uint_var
+from aioquic.buffer import UINT_VAR_MAX, Buffer, encode_uint_var
 from aioquic.quic import events
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import (
@@ -719,6 +719,23 @@ class QuicConnectionTest(TestCase):
             server.close(error_code=QuicErrorCode.NO_ERROR)
             roundtrip(server, client)
 
+    def test_handle_crypto_frame_over_largest_offset(self):
+        with client_and_server() as (client, server):
+            # client receives offset + length > 2^62 - 1
+            with self.assertRaises(QuicConnectionError) as cm:
+                client._handle_crypto_frame(
+                    client_receive_context(client),
+                    QuicFrameType.CRYPTO,
+                    Buffer(data=encode_uint_var(UINT_VAR_MAX) + encode_uint_var(1)),
+                )
+            self.assertEqual(
+                cm.exception.error_code, QuicErrorCode.FRAME_ENCODING_ERROR
+            )
+            self.assertEqual(cm.exception.frame_type, QuicFrameType.CRYPTO)
+            self.assertEqual(
+                cm.exception.reason_phrase, "offset + length cannot exceed 2^62 - 1"
+            )
+
     def test_handle_data_blocked_frame(self):
         with client_and_server() as (client, server):
             # client receives DATA_BLOCKED: 12345
@@ -1005,6 +1022,29 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(cm.exception.error_code, QuicErrorCode.STREAM_STATE_ERROR)
             self.assertEqual(cm.exception.frame_type, QuicFrameType.STOP_SENDING)
             self.assertEqual(cm.exception.reason_phrase, "Stream is receive-only")
+
+    def test_handle_stream_frame_over_largest_offset(self):
+        with client_and_server() as (client, server):
+            # client receives offset + length > 2^62 - 1
+            frame_type = QuicFrameType.STREAM_BASE | 6
+            stream_id = 1
+            with self.assertRaises(QuicConnectionError) as cm:
+                client._handle_stream_frame(
+                    client_receive_context(client),
+                    frame_type,
+                    Buffer(
+                        data=encode_uint_var(stream_id)
+                        + encode_uint_var(UINT_VAR_MAX)
+                        + encode_uint_var(1)
+                    ),
+                )
+            self.assertEqual(
+                cm.exception.error_code, QuicErrorCode.FRAME_ENCODING_ERROR
+            )
+            self.assertEqual(cm.exception.frame_type, frame_type)
+            self.assertEqual(
+                cm.exception.reason_phrase, "offset + length cannot exceed 2^62 - 1"
+            )
 
     def test_handle_stream_frame_over_max_data(self):
         with client_and_server() as (client, server):
