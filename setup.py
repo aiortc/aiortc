@@ -8,8 +8,8 @@ with open(readme_file, encoding='utf-8') as f:
     long_description = f.read()
 
 cffi_modules = [
-    'src/build_opus.py:ffibuilder',
-    'src/build_vpx.py:ffibuilder',
+    'src/_cffi_src/build_opus.py:ffibuilder',
+    'src/_cffi_src/build_vpx.py:ffibuilder',
 ]
 install_requires = [
     'aioice>=0.6.15,<0.7.0',

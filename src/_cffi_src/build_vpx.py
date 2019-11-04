@@ -1,7 +1,10 @@
 from cffi import FFI
+
 ffibuilder = FFI()
 
-ffibuilder.set_source('aiortc.codecs._vpx', """
+ffibuilder.set_source(
+    "aiortc.codecs._vpx",
+    """
 #include <vpx/vpx_decoder.h>
 #include <vpx/vpx_encoder.h>
 #include <vpx/vp8cx.h>
@@ -26,9 +29,11 @@ vpx_codec_err_t vpx_codec_enc_init(vpx_codec_ctx_t *ctx,
     return vpx_codec_enc_init_ver(ctx, iface, cfg, flags, VPX_ENCODER_ABI_VERSION);
 }
     """,
-    libraries=['vpx'])
+    libraries=["vpx"],
+)
 
-ffibuilder.cdef("""
+ffibuilder.cdef(
+    """
 #define VPX_CODEC_USE_OUTPUT_PARTITION 0x20000
 #define VPX_DL_REALTIME 1
 #define VPX_EFLAG_FORCE_KF 1
@@ -244,7 +249,8 @@ void vpx_img_free(vpx_image_t *img);
 vpx_image_t *vpx_img_wrap(vpx_image_t *img, vpx_img_fmt_t fmt, unsigned int d_w,
                           unsigned int d_h, unsigned int align,
                           unsigned char *img_data);
-""")
+"""
+)
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)

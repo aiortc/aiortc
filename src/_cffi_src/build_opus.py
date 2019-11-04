@@ -1,12 +1,17 @@
 from cffi import FFI
+
 ffibuilder = FFI()
 
-ffibuilder.set_source('aiortc.codecs._opus', """
+ffibuilder.set_source(
+    "aiortc.codecs._opus",
+    """
 #include <opus/opus.h>
     """,
-    libraries=['opus'])
+    libraries=["opus"],
+)
 
-ffibuilder.cdef("""
+ffibuilder.cdef(
+    """
 #define OPUS_APPLICATION_VOIP 2048
 #define OPUS_OK 0
 
@@ -44,7 +49,8 @@ opus_int32 opus_encode(
     opus_int32 max_data_bytes
 );
 void opus_encoder_destroy(OpusEncoder *st);
-""")
+"""
+)
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)
