@@ -18,6 +18,9 @@ WebRTC
 Interactive Connectivity Establishment (ICE)
 --------------------------------------------
 
+   .. autoclass:: RTCIceCandidate
+      :members:
+
    .. autoclass:: RTCIceGatherer
       :members:
 

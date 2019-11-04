@@ -55,7 +55,7 @@ class MediaBlackhole:
         """
         Add a track whose media should be discarded.
 
-        :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
+        :param track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
         """
         if track not in self.__tracks:
             self.__tracks[track] = None
@@ -212,9 +212,9 @@ class MediaPlayer:
             'video_size': '640x480'
         })
 
-    :param: file: The path to a file, or a file-like object.
-    :param: format: The format to use, defaults to autodect.
-    :param: options: Additional options to pass to FFmpeg.
+    :param file: The path to a file, or a file-like object.
+    :param format: The format to use, defaults to autodect.
+    :param options: Additional options to pass to FFmpeg.
     """
 
     def __init__(self, file, format=None, options={}):
@@ -309,9 +309,9 @@ class MediaRecorder:
         # Write to a set of images.
         player = MediaRecorder('/path/to/file-%3d.png')
 
-    :param: file: The path to a file, or a file-like object.
-    :param: format: The format to use, defaults to autodect.
-    :param: options: Additional options to pass to FFmpeg.
+    :param file: The path to a file, or a file-like object.
+    :param format: The format to use, defaults to autodect.
+    :param options: Additional options to pass to FFmpeg.
     """
 
     def __init__(self, file, format=None, options={}):
@@ -322,7 +322,7 @@ class MediaRecorder:
         """
         Add a track to be recorded.
 
-        :param: track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
+        :param track: An :class:`aiortc.AudioStreamTrack` or :class:`aiortc.VideoStreamTrack`.
         """
         if track.kind == "audio":
             if self.__container.format.name == "wav":

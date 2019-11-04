@@ -47,9 +47,9 @@ class RTCRtpSender:
     obtain details about how a particular :class:`MediaStreamTrack` is encoded
     and sent to a remote peer.
 
-    :param: trackOrKind: Either a :class:`MediaStreamTrack` instance or a
+    :param trackOrKind: Either a :class:`MediaStreamTrack` instance or a
                          media kind (`'audio'` or `'video'`).
-    :param: transport: An :class:`RTCDtlsTransport`.
+    :param transport: An :class:`RTCDtlsTransport`.
     """
 
     def __init__(self, trackOrKind, transport) -> None:
@@ -162,7 +162,7 @@ class RTCRtpSender:
         """
         Attempt to set the parameters controlling the sending of media.
 
-        :param: parameters: The :class:`RTCRtpSendParameters` for the sender.
+        :param parameters: The :class:`RTCRtpSendParameters` for the sender.
         """
         if not self.__started:
             self.__cname = parameters.rtcp.cname

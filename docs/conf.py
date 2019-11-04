@@ -80,7 +80,13 @@ sys.modules.update({'aiortc.codecs.vpx': MockVpx()})
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinxcontrib.asyncio']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+    'sphinx_autodoc_typehints',
+    'sphinxcontrib.asyncio',
+]
+
 autodoc_member_order = 'bysource'
 intersphinx_mapping = {
     'av': ('http://docs.mikeboers.com/pyav/0.5.3', None)

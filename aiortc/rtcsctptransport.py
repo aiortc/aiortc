@@ -588,7 +588,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
     The :class:`RTCSctpTransport` interface includes information relating to
     Stream Control Transmission Protocol (SCTP) transport.
 
-    :param: transport: An :class:`RTCDtlsTransport`.
+    :param transport: An :class:`RTCDtlsTransport`.
     """
 
     def __init__(self, transport: RTCDtlsTransport, port: int = 5000) -> None:

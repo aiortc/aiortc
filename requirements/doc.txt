@@ -6,4 +6,5 @@ cryptography
 pyee
 pylibsrtp
 pyopenssl
+sphinx_autodoc_typehints
 sphinxcontrib-asyncio

@@ -347,8 +347,8 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
     The :class:`RTCDtlsTransport` object includes information relating to
     Datagram Transport Layer Security (DTLS) transport.
 
-    :param: transport: An :class:`RTCIceTransport`.
-    :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
+    :param transport: An :class:`RTCIceTransport`.
+    :param certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
     """
 
     def __init__(
@@ -393,7 +393,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__local_certificate = certificate
 
     @property
-    def state(self):
+    def state(self) -> str:
         """
         The current state of the DTLS transport.
 
@@ -423,7 +423,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         Start DTLS transport negotiation with the parameters of the remote
         DTLS transport.
 
-        :param: remoteParameters: An :class:`RTCDtlsParameters`.
+        :param remoteParameters: An :class:`RTCDtlsParameters`.
         """
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)

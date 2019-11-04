@@ -13,7 +13,12 @@ from .exceptions import InternalError, InvalidAccessError, InvalidStateError
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsParameters, RTCDtlsTransport
-from .rtcicetransport import RTCIceGatherer, RTCIceParameters, RTCIceTransport
+from .rtcicetransport import (
+    RTCIceCandidate,
+    RTCIceGatherer,
+    RTCIceParameters,
+    RTCIceTransport,
+)
 from .rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
@@ -262,7 +267,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     The :class:`RTCPeerConnection` interface represents a WebRTC connection
     between the local computer and a remote peer.
 
-    :param: configuration: An optional :class:`RTCConfiguration`.
+    :param configuration: An optional :class:`RTCConfiguration`.
     """
 
     def __init__(self, configuration: Optional[RTCConfiguration] = None) -> None:
@@ -333,11 +338,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     def signalingState(self):
         return self.__signalingState
 
-    def addIceCandidate(self, candidate):
+    def addIceCandidate(self, candidate: RTCIceCandidate) -> None:
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
 
         The specified candidate must have a value for either `sdpMid` or `sdpMLineIndex`.
+
+        :param candidate: The new remote candidate.
         """
         if candidate.sdpMid is None and candidate.sdpMLineIndex is None:
             raise ValueError("Candidate must have either sdpMid or sdpMLineIndex")
@@ -659,7 +666,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         Change the local description associated with the connection.
 
-        :param: sessionDescription: An :class:`RTCSessionDescription` generated
+        :param sessionDescription: An :class:`RTCSessionDescription` generated
                                     by :meth:`createOffer` or :meth:`createAnswer()`.
         """
         # parse and validate description
@@ -719,7 +726,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         Changes the remote description associated with the connection.
 
-        :param: sessionDescription: An :class:`RTCSessionDescription` created from
+        :param sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
         # parse and validate description

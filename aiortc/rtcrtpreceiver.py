@@ -234,8 +234,8 @@ class RTCRtpReceiver:
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
     of data for a :class:`MediaStreamTrack`.
 
-    :param: kind: The kind of media (`'audio'` or `'video'`).
-    :param: transport: An :class:`RTCDtlsTransport`.
+    :param kind: The kind of media (`'audio'` or `'video'`).
+    :param transport: An :class:`RTCDtlsTransport`.
     """
 
     def __init__(self, kind: str, transport: RTCDtlsTransport) -> None:
@@ -334,7 +334,7 @@ class RTCRtpReceiver:
         """
         Attempt to set the parameters controlling the receiving of media.
 
-        :param: parameters: The :class:`RTCRtpParameters` for the receiver.
+        :param parameters: The :class:`RTCRtpParameters` for the receiver.
         """
         if not self.__started:
             for codec in parameters.codecs:

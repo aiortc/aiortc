@@ -49,8 +49,8 @@ class RTCDataChannel(AsyncIOEventEmitter):
     The :class:`RTCDataChannel` interface represents a network channel which
     can be used for bidirectional peer-to-peer transfers of arbitrary data.
 
-    :param: transport: An :class:`RTCSctpTransport`.
-    :param: parameters: An :class:`RTCDataChannelParameters`.
+    :param transport: An :class:`RTCSctpTransport`.
+    :param parameters: An :class:`RTCDataChannelParameters`.
     """
 
     def __init__(

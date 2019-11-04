@@ -23,12 +23,18 @@ logger = logging.getLogger("ice")
 
 @attr.s
 class RTCIceCandidate:
-    component = attr.ib()
-    foundation = attr.ib()
-    ip = attr.ib()
-    port = attr.ib()
-    priority = attr.ib()
-    protocol = attr.ib()
+    """
+    The :class:`RTCIceCandidate` interface represents a candidate Interactive
+    Connectivity Establishment (ICE) configuration which may be used to
+    establish an RTCPeerConnection.
+    """
+
+    component = attr.ib()  # type: int
+    foundation = attr.ib()  # type: str
+    ip = attr.ib()  # type: str
+    port = attr.ib()  # type: int
+    priority = attr.ib()  # type: int
+    protocol = attr.ib()  # type: str
     type = attr.ib()
     relatedAddress = attr.ib(default=None)
     relatedPort = attr.ib(default=None)
@@ -227,7 +233,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
     information about the Interactive Connectivity Establishment (ICE)
     transport over which packets are sent and received.
 
-    :param: gatherer: An :class:`RTCIceGatherer`.
+    :param gatherer: An :class:`RTCIceGatherer`.
     """
 
     def __init__(self, gatherer: RTCIceGatherer) -> None:
@@ -266,6 +272,8 @@ class RTCIceTransport(AsyncIOEventEmitter):
     def addRemoteCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
         """
         Add a remote candidate.
+
+        :param candidate: The new candidate or `None` to signal end of candidates.
         """
         # FIXME: don't use private member!
         if not self._connection._remote_candidates_end:
@@ -285,7 +293,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         """
         Initiate connectivity checks.
 
-        :param: remoteParameters: The :class:`RTCIceParameters` associated with
+        :param remoteParameters: The :class:`RTCIceParameters` associated with
                                   the remote :class:`RTCIceTransport`.
         """
         if self.state == "closed":
