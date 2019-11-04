@@ -8,6 +8,7 @@ from .crypto import CryptoPair
 from .logger import QuicLoggerTrace
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
+    NON_IN_FLIGHT_FRAME_TYPES,
     PACKET_NUMBER_MAX_SIZE,
     PACKET_TYPE_HANDSHAKE,
     PACKET_TYPE_INITIAL,
@@ -141,10 +142,10 @@ class QuicPacketBuilder:
         """
         self.buffer.push_uint_var(frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
-            # FIXME: in_flight != is_ack_eliciting
-            self._packet.in_flight = True
             self._packet.is_ack_eliciting = True
             self._ack_eliciting = True
+        if frame_type not in NON_IN_FLIGHT_FRAME_TYPES:
+            self._packet.in_flight = True
         if frame_type == QuicFrameType.CRYPTO:
             self._packet.is_crypto_packet = True
         if handler is not None:

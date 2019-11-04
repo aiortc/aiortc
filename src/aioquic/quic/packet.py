@@ -373,8 +373,23 @@ class QuicFrameType(IntEnum):
 
 
 NON_ACK_ELICITING_FRAME_TYPES = frozenset(
-    [QuicFrameType.ACK, QuicFrameType.ACK_ECN, QuicFrameType.PADDING]
+    [
+        QuicFrameType.ACK,
+        QuicFrameType.ACK_ECN,
+        QuicFrameType.PADDING,
+        QuicFrameType.TRANSPORT_CLOSE,
+        QuicFrameType.APPLICATION_CLOSE,
+    ]
 )
+NON_IN_FLIGHT_FRAME_TYPES = frozenset(
+    [
+        QuicFrameType.ACK,
+        QuicFrameType.ACK_ECN,
+        QuicFrameType.TRANSPORT_CLOSE,
+        QuicFrameType.APPLICATION_CLOSE,
+    ]
+)
+
 PROBING_FRAME_TYPES = frozenset(
     [
         QuicFrameType.PATH_CHALLENGE,
