@@ -16,7 +16,7 @@ encoder_process = (
     ffmpeg
         .input('pipe:', format='rawvideo', pix_fmt='yuvj422p', s='1920x1080')  # pix_fmt='uyvy422'
         .output(named_pipe,
-                **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency", "pix_fmt": "yuv420p"})  # , "listen": "1"
+                **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency", "flush_packets":"1", "pix_fmt": "yuv420p"})  # , "listen": "1"
         .overwrite_output()
         .run_async(pipe_stdin=True)
 )
@@ -24,10 +24,10 @@ encoder_process = (
 # p = (
 #     ffmpeg
 #         .input('pipe:0', format='rawvideo', pix_fmt='uyvy422', s='{0}x{1}'.format(1280, 720))
-#         .output("/tmp/fifo",
+#         .output("pipe:1",
 #                 **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency"})
 #         .overwrite_output()
-#         .run_async(pipe_stdin=True)
+#         .run_async(pipe_stdin=True, pipe_stdout = True, pipe_stderr = True)
 # )
 
 
@@ -42,7 +42,7 @@ def read_from_pipe(pipe):
         return input
     except OSError as err:
         if err.errno == 11 or err.errno == 35:
-            return b""
+            return None
         else:
             raise err
 
@@ -57,17 +57,20 @@ async def read_and_write():
         # get next frame
         print("Getting frame", flush=True)
         frame = next(frame_generator)
-        print("Got frame with length".format(len(frame.planes[0].to_bytes())), flush=True)
 
         # encode
         # encoder_process.stdin.write(frame.planes[0].to_bytes())
+        data = bytes()
         for plane in frame.planes:
-            encoder_process.stdin.write(plane.to_bytes())
+            data += plane.to_bytes()
+        print("Writing frame plane with length {0}".format(len(data)), flush=True)
+        encoder_process.stdin.write(data)
+        encoder_process.stdin.flush()
+
+        print("Reading for frame", flush=True)
 
         # wait
         await asyncio.sleep(FRAME_TS_THRESHOLD)
-
-        print("Reading for frame", flush=True)
 
         # read until empty
         data = read_from_pipe(pipe)
@@ -77,7 +80,7 @@ async def read_and_write():
 
         print("waiting for next frame", flush=True)
         # wait
-        await asyncio.sleep(SLEEP_THRESHOLD)
+        # await asyncio.sleep(SLEEP_THRESHOLD)
 
 
 asyncio.run(read_and_write())
