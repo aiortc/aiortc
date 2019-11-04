@@ -298,9 +298,7 @@ class SessionDescription:
         ice_options = None
 
         def find_codec(pt: int) -> RTCRtpCodecParameters:
-            for codec in current_media.rtp.codecs:
-                if codec.payloadType == pt:
-                    return codec
+            return next(filter(lambda x: x.payloadType == pt, current_media.rtp.codecs))
 
         session_lines, media_groups = grouplines(sdp)
 

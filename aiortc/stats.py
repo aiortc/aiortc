@@ -108,5 +108,5 @@ class RTCStatsReport(dict):
     - :class:`RTCTransportStats`
     """
 
-    def add(self, stats):
+    def add(self, stats: RTCStats) -> None:
         self[stats.id] = stats

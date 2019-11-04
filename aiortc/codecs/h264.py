@@ -6,9 +6,11 @@ from struct import pack, unpack_from
 from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar
 
 import av
+from av.frame import Frame
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
+from .base import Decoder, Encoder
 
 logger = logging.getLogger("codec.h264")
 
@@ -95,11 +97,11 @@ class H264PayloadDescriptor:
         return obj, output
 
 
-class H264Decoder:
+class H264Decoder(Decoder):
     def __init__(self) -> None:
         self.codec = av.CodecContext.create("h264", "r")
 
-    def decode(self, encoded_frame: JitterFrame) -> List[av.VideoFrame]:
+    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         try:
             packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
@@ -112,7 +114,7 @@ class H264Decoder:
         return frames
 
 
-class H264Encoder:
+class H264Encoder(Encoder):
     def __init__(self) -> None:
         self.codec = None  # type: Optional[av.CodecContext]
 
@@ -258,8 +260,9 @@ class H264Encoder:
         yield from self._split_bitstream(b"".join(p.to_bytes() for p in packages))
 
     def encode(
-        self, frame: av.VideoFrame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
+        assert isinstance(frame, av.VideoFrame)
         packages = self._encode_frame(frame, force_keyframe)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         return self._packetize(packages), timestamp

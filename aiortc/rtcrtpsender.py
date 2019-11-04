@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
+from .codecs.base import Encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError
 from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
@@ -66,7 +67,7 @@ class RTCRtpSender:
         self._rtx_ssrc = random32()
         # FIXME: how should this be initialised?
         self._stream_id = str(uuid.uuid4())
-        self.__encoder = None
+        self.__encoder = None  # type: Optional[Encoder]
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
         self.__mid = None  # type: Optional[str]

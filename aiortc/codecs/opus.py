@@ -3,9 +3,11 @@ import fractions
 from typing import List, Optional, Tuple
 
 from av import AudioFrame
+from av.frame import Frame
 
 from ..jitterbuffer import JitterFrame
 from ._opus import ffi, lib
+from .base import Decoder, Encoder
 
 CHANNELS = 2
 SAMPLE_RATE = 48000
@@ -14,7 +16,7 @@ SAMPLES_PER_FRAME = 960
 TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
-class OpusDecoder:
+class OpusDecoder(Decoder):
     def __init__(self) -> None:
         error = ffi.new("int *")
         self.decoder = lib.opus_decoder_create(SAMPLE_RATE, CHANNELS, error)
@@ -23,7 +25,7 @@ class OpusDecoder:
     def __del__(self) -> None:
         lib.opus_decoder_destroy(self.decoder)
 
-    def decode(self, encoded_frame: JitterFrame) -> List[AudioFrame]:
+    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         frame = AudioFrame(format="s16", layout="stereo", samples=SAMPLES_PER_FRAME)
         frame.pts = encoded_frame.timestamp
         frame.sample_rate = SAMPLE_RATE
@@ -41,7 +43,7 @@ class OpusDecoder:
         return [frame]
 
 
-class OpusEncoder:
+class OpusEncoder(Encoder):
     def __init__(self) -> None:
         error = ffi.new("int *")
         self.encoder = lib.opus_encoder_create(
@@ -59,8 +61,9 @@ class OpusEncoder:
         lib.opus_encoder_destroy(self.encoder)
 
     def encode(
-        self, frame: AudioFrame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
+        assert isinstance(frame, AudioFrame)
         assert frame.format.name == "s16"
         assert frame.layout.name in ["mono", "stereo"]
 

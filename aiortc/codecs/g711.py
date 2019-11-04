@@ -3,8 +3,10 @@ import fractions
 from typing import List, Optional, Tuple
 
 from av import AudioFrame
+from av.frame import Frame
 
 from ..jitterbuffer import JitterFrame
+from .base import Decoder, Encoder
 
 SAMPLE_RATE = 8000
 SAMPLE_WIDTH = 2
@@ -12,8 +14,8 @@ SAMPLES_PER_FRAME = 160
 TIME_BASE = fractions.Fraction(1, 8000)
 
 
-class PcmDecoder:
-    def decode(self, encoded_frame: JitterFrame) -> List[AudioFrame]:
+class PcmDecoder(Decoder):
+    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
         frame.planes[0].update(self._convert(encoded_frame.data, SAMPLE_WIDTH))
         frame.pts = encoded_frame.timestamp
@@ -22,13 +24,14 @@ class PcmDecoder:
         return [frame]
 
 
-class PcmEncoder:
+class PcmEncoder(Encoder):
     def __init__(self) -> None:
         self.rate_state = None  # type: Optional[Tuple]
 
     def encode(
-        self, frame: AudioFrame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
+        assert isinstance(frame, AudioFrame)
         assert frame.format.name == "s16"
         assert frame.layout.name in ["mono", "stereo"]
 

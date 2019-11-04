@@ -4,10 +4,12 @@ from struct import pack, unpack_from
 from typing import List, Tuple, Type, TypeVar
 
 from av import VideoFrame
+from av.frame import Frame
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
 from ._vpx import ffi, lib
+from .base import Decoder, Encoder
 
 DEFAULT_BITRATE = 500000  # 500 kbps
 MIN_BITRATE = 250000  # 250 kbps
@@ -166,7 +168,7 @@ def _vpx_assert(err: int) -> None:
         raise Exception("libvpx error: " + reason.decode("utf8"))
 
 
-class Vp8Decoder:
+class Vp8Decoder(Decoder):
     def __init__(self) -> None:
         self.codec = ffi.new("vpx_codec_ctx_t *")
         _vpx_assert(
@@ -181,8 +183,8 @@ class Vp8Decoder:
     def __del__(self) -> None:
         lib.vpx_codec_destroy(self.codec)
 
-    def decode(self, encoded_frame: JitterFrame) -> List[VideoFrame]:
-        frames = []
+    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
+        frames = []  # type: List[Frame]
         result = lib.vpx_codec_decode(
             self.codec,
             encoded_frame.data,
@@ -224,7 +226,7 @@ class Vp8Decoder:
         return frames
 
 
-class Vp8Encoder:
+class Vp8Encoder(Encoder):
     def __init__(self) -> None:
         self.cx = lib.vpx_codec_vp8_cx()
 
@@ -243,8 +245,9 @@ class Vp8Encoder:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(
-        self, frame: VideoFrame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
+        assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
 

@@ -9,6 +9,7 @@ from ..rtcrtpparameters import (
     RTCRtpHeaderExtensionCapability,
     RTCRtpHeaderExtensionParameters,
 )
+from .base import Decoder, Encoder
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
@@ -140,7 +141,7 @@ def get_capabilities(kind: str) -> RTCRtpCapabilities:
     return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 
-def get_decoder(codec: RTCRtpCodecParameters):
+def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
     mimeType = codec.mimeType.lower()
 
     if mimeType == "audio/opus":
@@ -153,9 +154,11 @@ def get_decoder(codec: RTCRtpCodecParameters):
         return H264Decoder()
     elif mimeType == "video/vp8":
         return Vp8Decoder()
+    else:
+        raise ValueError("No decoder found for MIME type `%s`" % mimeType)
 
 
-def get_encoder(codec: RTCRtpCodecParameters):
+def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
     mimeType = codec.mimeType.lower()
 
     if mimeType == "audio/opus":
@@ -168,6 +171,8 @@ def get_encoder(codec: RTCRtpCodecParameters):
         return H264Encoder()
     elif mimeType == "video/vp8":
         return Vp8Encoder()
+    else:
+        raise ValueError("No encoder found for MIME type `%s`" % mimeType)
 
 
 def is_rtx(codec: Union[RTCRtpCodecCapability, RTCRtpCodecParameters]) -> bool:

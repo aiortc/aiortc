@@ -2,8 +2,10 @@ import asyncio
 import fractions
 import time
 import uuid
+from typing import Tuple
 
 from av import AudioFrame, VideoFrame
+from av.frame import Frame
 from pyee import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
@@ -31,23 +33,23 @@ class MediaStreamTrack(AsyncIOEventEmitter):
     See :class:`AudioStreamTrack` and :class:`VideoStreamTrack`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.__ended = False
         self.__id = str(uuid.uuid4())
 
     @property
-    def id(self):
+    def id(self) -> str:
         """
         An automatically generated globally unique ID.
         """
         return self.__id
 
     @property
-    def readyState(self):
+    def readyState(self) -> str:
         return "ended" if self.__ended else "live"
 
-    def stop(self):
+    def stop(self) -> None:
         if not self.__ended:
             self.__ended = True
             self.emit("ended")
@@ -64,7 +66,7 @@ class AudioStreamTrack(MediaStreamTrack):
 
     kind = "audio"
 
-    async def recv(self):
+    async def recv(self) -> Frame:
         """
         Receive the next :class:`~av.audio.frame.AudioFrame`.
 
@@ -101,7 +103,7 @@ class VideoStreamTrack(MediaStreamTrack):
 
     kind = "video"
 
-    async def next_timestamp(self):
+    async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
         if self.readyState != "live":
             raise MediaStreamError
 
@@ -114,7 +116,7 @@ class VideoStreamTrack(MediaStreamTrack):
             self._timestamp = 0
         return self._timestamp, VIDEO_TIME_BASE
 
-    async def recv(self):
+    async def recv(self) -> Frame:
         """
         Receive the next :class:`~av.video.frame.VideoFrame`.
 

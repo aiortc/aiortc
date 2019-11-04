@@ -6,7 +6,7 @@ import enum
 import logging
 import os
 import traceback
-from typing import List, Tuple, Type, TypeVar
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar
 
 import attr
 import pylibsrtp
@@ -19,8 +19,10 @@ from pyee import AsyncIOEventEmitter
 from pylibsrtp import Policy, Session
 
 from . import clock, rtp
+from .rtcicetransport import RTCIceTransport
 from .rtcrtpparameters import RTCRtpReceiveParameters, RTCRtpSendParameters
 from .rtp import (
+    AnyRtcpPacket,
     RtcpByePacket,
     RtcpPacket,
     RtcpPsfbPacket,
@@ -131,42 +133,6 @@ def verify_callback(x, y):
     return 1
 
 
-def create_ssl_context(certificate):
-    if hasattr(lib, "DTLS_method"):
-        # openssl >= 1.0.2
-        method = lib.DTLS_method
-    else:
-        # openssl < 1.0.2
-        method = lib.DTLSv1_method
-    ctx = lib.SSL_CTX_new(method())
-    ctx = ffi.gc(ctx, lib.SSL_CTX_free)
-
-    lib.SSL_CTX_set_verify(
-        ctx, lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT, verify_callback
-    )
-
-    _openssl_assert(lib.SSL_CTX_use_certificate(ctx, certificate._cert._x509) == 1)
-    _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, certificate._key._evp_pkey) == 1)
-    _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
-    _openssl_assert(
-        lib.SSL_CTX_set_tlsext_use_srtp(ctx, b"SRTP_AES128_CM_SHA1_80") == 0
-    )
-    _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
-
-    # Configure elliptic curve for ECDHE in server mode for older OpenSSL
-    if lib.OpenSSL_version_num() < 0x10002000:
-        # openssl < 1.0.2
-        ecdh = lib.EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)
-        lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
-        lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
-        lib.EC_KEY_free(ecdh)
-    elif lib.OpenSSL_version_num() < 0x10100000:
-        # openssl >= 1.0.2, < 1.1.0
-        lib.SSL_CTX_set_ecdh_auto(ctx, 1)
-
-    return ctx
-
-
 class State(enum.Enum):
     NEW = 0
     CONNECTING = 1
@@ -230,6 +196,43 @@ class RTCCertificate:
         cert = generate_certificate(key)
         return cls(key=key, cert=cert)
 
+    def _create_ssl_context(self) -> Any:
+        if hasattr(lib, "DTLS_method"):
+            # openssl >= 1.0.2
+            method = lib.DTLS_method
+        else:
+            # openssl < 1.0.2
+            method = lib.DTLSv1_method
+        ctx = lib.SSL_CTX_new(method())
+        ctx = ffi.gc(ctx, lib.SSL_CTX_free)
+
+        lib.SSL_CTX_set_verify(
+            ctx,
+            lib.SSL_VERIFY_PEER | lib.SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+            verify_callback,
+        )
+
+        _openssl_assert(lib.SSL_CTX_use_certificate(ctx, self._cert._x509) == 1)
+        _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, self._key._evp_pkey) == 1)
+        _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
+        _openssl_assert(
+            lib.SSL_CTX_set_tlsext_use_srtp(ctx, b"SRTP_AES128_CM_SHA1_80") == 0
+        )
+        _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
+
+        # Configure elliptic curve for ECDHE in server mode for older OpenSSL
+        if lib.OpenSSL_version_num() < 0x10002000:
+            # openssl < 1.0.2
+            ecdh = lib.EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)
+            lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
+            lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
+            lib.EC_KEY_free(ecdh)
+        elif lib.OpenSSL_version_num() < 0x10100000:
+            # openssl >= 1.0.2, < 1.1.0
+            lib.SSL_CTX_set_ecdh_auto(ctx, 1)
+
+        return ctx
+
 
 @attr.s
 class RTCDtlsParameters:
@@ -252,14 +255,20 @@ class RtpRouter:
     https://tools.ietf.org/html/draft-ietf-mmusic-sdp-bundle-negotiation-53
     """
 
-    def __init__(self):
-        self.receivers = set()
-        self.senders = {}
-        self.mid_table = {}
-        self.ssrc_table = {}
-        self.payload_type_table = {}
+    def __init__(self) -> None:
+        self.receivers = set()  # type: Set
+        self.senders = {}  # type: Dict[int, Any]
+        self.mid_table = {}  # type: Dict[str, Any]
+        self.ssrc_table = {}  # type: Dict[int, Any]
+        self.payload_type_table = {}  # type: Dict[int, Any]
 
-    def register_receiver(self, receiver, ssrcs, payload_types, mid=None):
+    def register_receiver(
+        self,
+        receiver,
+        ssrcs: List[int],
+        payload_types: List[int],
+        mid: Optional[str] = None,
+    ):
         self.receivers.add(receiver)
         if mid is not None:
             self.mid_table[mid] = receiver
@@ -268,13 +277,13 @@ class RtpRouter:
         for payload_type in payload_types:
             self.payload_type_table[payload_type] = receiver
 
-    def register_sender(self, sender, ssrc):
+    def register_sender(self, sender, ssrc: int) -> None:
         self.senders[ssrc] = sender
 
-    def route_rtcp(self, packet):
+    def route_rtcp(self, packet: AnyRtcpPacket) -> Set:
         recipients = set()
 
-        def add_recipient(recipient):
+        def add_recipient(recipient) -> None:
             if recipient is not None:
                 recipients.add(recipient)
 
@@ -302,7 +311,7 @@ class RtpRouter:
 
         return recipients
 
-    def route_rtp(self, packet):
+    def route_rtp(self, packet: RtpPacket) -> Optional[Any]:
         ssrc_receiver = self.ssrc_table.get(packet.ssrc)
         pt_receiver = self.payload_type_table.get(packet.payload_type)
 
@@ -318,16 +327,16 @@ class RtpRouter:
         # discard the packet
         return None
 
-    def unregister_receiver(self, receiver):
+    def unregister_receiver(self, receiver) -> None:
         self.receivers.discard(receiver)
         self.__discard(self.mid_table, receiver)
         self.__discard(self.ssrc_table, receiver)
         self.__discard(self.payload_type_table, receiver)
 
-    def unregister_sender(self, sender):
+    def unregister_sender(self, sender) -> None:
         self.__discard(self.senders, sender)
 
-    def __discard(self, d, value):
+    def __discard(self, d: Dict, value: Any) -> None:
         for k, v in list(d.items()):
             if v == value:
                 d.pop(k)
@@ -342,7 +351,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
     :param: certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
     """
 
-    def __init__(self, transport, certificates):
+    def __init__(
+        self, transport: RTCIceTransport, certificates: List[RTCCertificate]
+    ) -> None:
         assert len(certificates) == 1
         certificate = certificates[0]
 
@@ -354,7 +365,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._rtp_router = RtpRouter()
         self._state = State.NEW
         self._stats_id = "transport_" + str(id(self))
-        self._task = None
+        self._task = None  # type: Optional[asyncio.Future[None]]
         self._transport = transport
 
         # counters
@@ -364,11 +375,11 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__tx_packets = 0
 
         # SRTP
-        self._rx_srtp = None
-        self._tx_srtp = None
+        self._rx_srtp = None  # type: Session
+        self._tx_srtp = None  # type: Session
 
         # SSL init
-        self.__ctx = create_ssl_context(certificate)
+        self.__ctx = certificate._create_ssl_context()
 
         ssl = lib.SSL_new(self.__ctx)
         self.ssl = ffi.gc(ssl, lib.SSL_free)
@@ -527,7 +538,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         finally:
             self._set_state(State.CLOSED)
 
-    def _get_stats(self):
+    def _get_stats(self) -> RTCStatsReport:
         report = RTCStatsReport()
         report.add(
             RTCTransportStats(
@@ -619,11 +630,13 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             except pylibsrtp.Error as exc:
                 self.__log_debug("x SRTP unprotect failed: %s", exc)
 
-    def _register_data_receiver(self, receiver):
+    def _register_data_receiver(self, receiver) -> None:
         assert self._data_receiver is None
         self._data_receiver = receiver
 
-    def _register_rtp_receiver(self, receiver, parameters: RTCRtpReceiveParameters):
+    def _register_rtp_receiver(
+        self, receiver, parameters: RTCRtpReceiveParameters
+    ) -> None:
         ssrcs = set()
         for encoding in parameters.encodings:
             ssrcs.add(encoding.ssrc)
@@ -636,18 +649,18 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             mid=parameters.muxId,
         )
 
-    def _register_rtp_sender(self, sender, parameters: RTCRtpSendParameters):
+    def _register_rtp_sender(self, sender, parameters: RTCRtpSendParameters) -> None:
         self._rtp_header_extensions_map.configure(parameters)
         self._rtp_router.register_sender(sender, ssrc=sender._ssrc)
 
-    async def _send_data(self, data):
+    async def _send_data(self, data: bytes) -> None:
         if self._state != State.CONNECTED:
             raise ConnectionError("Cannot send encrypted data, not connected")
 
         lib.SSL_write(self.ssl, data, len(data))
         await self._write_ssl()
 
-    async def _send_rtp(self, data):
+    async def _send_rtp(self, data: bytes) -> None:
         if self._state != State.CONNECTED:
             raise ConnectionError("Cannot send encrypted RTP, not connected")
 
@@ -665,14 +678,14 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._state = state
             self.emit("statechange")
 
-    def _unregister_data_receiver(self, receiver):
+    def _unregister_data_receiver(self, receiver) -> None:
         if self._data_receiver == receiver:
             self._data_receiver = None
 
-    def _unregister_rtp_receiver(self, receiver):
+    def _unregister_rtp_receiver(self, receiver) -> None:
         self._rtp_router.unregister_receiver(receiver)
 
-    def _unregister_rtp_sender(self, sender):
+    def _unregister_rtp_sender(self, sender) -> None:
         self._rtp_router.unregister_sender(sender)
 
     async def _write_ssl(self) -> None:

@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from aiortc.utils import uint32_add, uint32_gt
 
@@ -33,13 +33,13 @@ class RateControlState(Enum):
 
 
 class AimdRateControl:
-    def __init__(self):
+    def __init__(self) -> None:
         self.avg_max_bitrate_kbps = None
         self.var_max_bitrate_kbps = 0.4
         self.current_bitrate = 30000000
         self.current_bitrate_initialized = False
-        self.first_estimated_throughput_time = None
-        self.last_change_ms = None
+        self.first_estimated_throughput_time = None  # type: Optional[int]
+        self.last_change_ms = None  # type: Optional[int]
         self.near_max = False
         self.latest_estimated_throughput = 30000000
         self.rtt = 200
@@ -181,15 +181,15 @@ class AimdRateControl:
 
 
 class TimestampGroup:
-    def __init__(self, timestamp=None):
-        self.arrival_time = None
+    def __init__(self, timestamp: Optional[int] = None) -> None:
+        self.arrival_time = None  # type: Optional[int]
         self.first_timestamp = timestamp
         self.last_timestamp = timestamp
         self.size = 0
 
 
 class InterArrivalDelta:
-    def __init__(self, timestamp, arrival_time, size):
+    def __init__(self, timestamp: int, arrival_time: int, size: int) -> None:
         self.timestamp = timestamp
         self.arrival_time = arrival_time
         self.size = size
@@ -202,13 +202,15 @@ class InterArrival:
     Adapted from the webrtc.org codebase.
     """
 
-    def __init__(self, group_length, timestamp_to_ms):
+    def __init__(self, group_length: int, timestamp_to_ms: float) -> None:
         self.group_length = group_length
         self.timestamp_to_ms = timestamp_to_ms
-        self.current_group = None
-        self.previous_group = None
+        self.current_group = None  # type: Optional[TimestampGroup]
+        self.previous_group = None  # type: Optional[TimestampGroup]
 
-    def compute_deltas(self, timestamp, arrival_time, packet_size):
+    def compute_deltas(
+        self, timestamp: int, arrival_time: int, packet_size: int
+    ) -> Optional[InterArrivalDelta]:
         deltas = None
         if self.current_group is None:
             self.current_group = TimestampGroup(timestamp)
@@ -239,7 +241,7 @@ class InterArrival:
 
         return deltas
 
-    def belongs_to_burst(self, timestamp, arrival_time):
+    def belongs_to_burst(self, timestamp: int, arrival_time: int) -> bool:
         timestamp_delta = uint32_add(timestamp, -self.current_group.last_timestamp)
         timestamp_delta_ms = round(self.timestamp_to_ms * timestamp_delta)
         arrival_time_delta = arrival_time - self.current_group.arrival_time
@@ -248,14 +250,14 @@ class InterArrival:
             and arrival_time_delta <= BURST_DELTA_THRESHOLD_MS
         )
 
-    def new_timestamp_group(self, timestamp, arrival_time):
+    def new_timestamp_group(self, timestamp: int, arrival_time: int) -> bool:
         if self.belongs_to_burst(timestamp, arrival_time):
             return False
         else:
             timestamp_delta = uint32_add(timestamp, -self.current_group.first_timestamp)
             return timestamp_delta > self.group_length
 
-    def packet_out_of_order(self, timestamp):
+    def packet_out_of_order(self, timestamp: int) -> bool:
         timestamp_delta = uint32_add(timestamp, -self.current_group.first_timestamp)
         return timestamp_delta >= 0x80000000
 
@@ -267,18 +269,20 @@ class OveruseDetector:
     Adapted from the webrtc.org codebase.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.hypothesis = BandwidthUsage.NORMAL
-        self.last_update_ms = None
+        self.last_update_ms = None  # type: Optional[int]
         self.k_up = 0.0087
         self.k_down = 0.039
         self.overuse_counter = 0
-        self.overuse_time = None
+        self.overuse_time = None  # type: Optional[float]
         self.overuse_time_threshold = 10
-        self.previous_offset = 0
+        self.previous_offset = 0.0
         self.threshold = 12.5
 
-    def detect(self, offset, timestamp_delta_ms, num_of_deltas, now_ms):
+    def detect(
+        self, offset: float, timestamp_delta_ms: float, num_of_deltas: int, now_ms: int
+    ) -> BandwidthUsage:
         if num_of_deltas < 2:
             return BandwidthUsage.NORMAL
 
@@ -311,10 +315,10 @@ class OveruseDetector:
         self.update_threshold(T, now_ms)
         return self.hypothesis
 
-    def state(self):
+    def state(self) -> BandwidthUsage:
         return self.hypothesis
 
-    def update_threshold(self, modified_offset, now_ms):
+    def update_threshold(self, modified_offset: float, now_ms: int) -> None:
         if self.last_update_ms is None:
             self.last_update_ms = now_ms
 
@@ -336,26 +340,31 @@ class OveruseEstimator:
     Adapted from the webrtc.org codebase.
     """
 
-    def __init__(self):
-        self.E = [[100, 0], [0, 0.1]]
+    def __init__(self) -> None:
+        self.E = [[100.0, 0.0], [0.0, 0.1]]
         self._num_of_deltas = 0
-        self._offset = 0
-        self.previous_offset = 0
+        self._offset = 0.0
+        self.previous_offset = 0.0
         self.slope = 1 / 64
-        self.ts_delta_hist = []
+        self.ts_delta_hist = []  # type: List[float]
 
-        self.avg_noise = 0
-        self.var_noise = 50
+        self.avg_noise = 0.0
+        self.var_noise = 50.0
         self.process_noise = [1e-13, 1e-3]
 
-    def num_of_deltas(self):
+    def num_of_deltas(self) -> int:
         return self._num_of_deltas
 
-    def offset(self):
+    def offset(self) -> float:
         return self._offset
 
     def update(
-        self, time_delta_ms, timestamp_delta_ms, size_delta, current_hypothesis, now_ms
+        self,
+        time_delta_ms: int,
+        timestamp_delta_ms: float,
+        size_delta: int,
+        current_hypothesis: BandwidthUsage,
+        now_ms: int,
     ):
         min_frame_period = self.update_min_frame_period(timestamp_delta_ms)
         t_ts_delta = time_delta_ms - timestamp_delta_ms
@@ -409,7 +418,7 @@ class OveruseEstimator:
         self.slope += K[0] * residual
         self._offset += K[1] * residual
 
-    def update_min_frame_period(self, ts_delta):
+    def update_min_frame_period(self, ts_delta: float) -> float:
         min_frame_period = ts_delta
         if len(self.ts_delta_hist) >= MIN_FRAME_PERIOD_HISTORY_LENGTH:
             self.ts_delta_hist.pop(0)
@@ -420,7 +429,7 @@ class OveruseEstimator:
         self.ts_delta_hist.append(ts_delta)
         return min_frame_period
 
-    def update_noise_estimate(self, residual, ts_delta):
+    def update_noise_estimate(self, residual: float, ts_delta: float) -> None:
         alpha = 0.01
         if self._num_of_deltas > 10 * 30:
             alpha = 0.002
@@ -436,11 +445,11 @@ class OveruseEstimator:
 
 
 class RateBucket:
-    def __init__(self, count=0, value=0):
+    def __init__(self, count: int = 0, value: int = 0) -> None:
         self.count = count
         self.value = value
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.count == other.count and self.value == other.value
 
 
@@ -449,12 +458,14 @@ class RateCounter:
     Rate counter, which stores the amount received in 1ms buckets.
     """
 
-    def __init__(self, window_size, scale=8000):
+    def __init__(self, window_size: int, scale: int = 8000) -> None:
+        self._origin_index = 0
+        self._origin_ms = None  # type: Optional[int]
         self._scale = scale
         self._window_size = window_size
         self.reset()
 
-    def add(self, value, now_ms):
+    def add(self, value: int, now_ms: int) -> None:
         if self._origin_ms is None:
             self._origin_ms = now_ms
         else:
@@ -466,20 +477,21 @@ class RateCounter:
         self._total.count += 1
         self._total.value += value
 
-    def rate(self, now_ms):
+    def rate(self, now_ms: int) -> Optional[int]:
         if self._origin_ms is not None:
             self._erase_old(now_ms)
             active_window_size = now_ms - self._origin_ms + 1
             if self._total.count > 0 and active_window_size > 1:
                 return round(self._scale * self._total.value / active_window_size)
+        return None
 
-    def reset(self):
+    def reset(self) -> None:
         self._buckets = [RateBucket() for i in range(self._window_size)]
         self._origin_index = 0
         self._origin_ms = None
         self._total = RateBucket()
 
-    def _erase_old(self, now_ms):
+    def _erase_old(self, now_ms: int) -> None:
         new_origin_ms = now_ms - self._window_size + 1
         while self._origin_ms < new_origin_ms:
             bucket = self._buckets[self._origin_index]
@@ -493,7 +505,7 @@ class RateCounter:
 
 
 class RemoteBitrateEstimator:
-    def __init__(self):
+    def __init__(self) -> None:
         self.incoming_bitrate = RateCounter(1000, 8000)
         self.incoming_bitrate_initialized = True
         self.inter_arrival = InterArrival(
@@ -502,10 +514,12 @@ class RemoteBitrateEstimator:
         self.estimator = OveruseEstimator()
         self.detector = OveruseDetector()
         self.rate_control = AimdRateControl()
-        self.last_update_ms = None
-        self.ssrcs = {}
+        self.last_update_ms = None  # type: Optional[int]
+        self.ssrcs = {}  # type: Dict[int, int]
 
-    def add(self, arrival_time_ms, abs_send_time, payload_size, ssrc):
+    def add(
+        self, arrival_time_ms: int, abs_send_time: int, payload_size: int, ssrc: int
+    ) -> Optional[Tuple[int, List[int]]]:
         timestamp = abs_send_time << 8
         update_estimate = False
 
@@ -558,4 +572,6 @@ class RemoteBitrateEstimator:
             )
             if target_bitrate is not None:
                 self.last_update_ms = arrival_time_ms
-                return target_bitrate, self.ssrcs.keys()
+                return target_bitrate, list(self.ssrcs.keys())
+
+        return None

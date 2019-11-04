@@ -184,7 +184,7 @@ def pack_remb_fci(bitrate: int, ssrcs: List[int]) -> bytes:
     return data
 
 
-def unpack_remb_fci(data):
+def unpack_remb_fci(data: bytes) -> Tuple[int, List[int]]:
     """
     Unpack the FCI for a Receiver Estimated Maximum Bitrate report.
 

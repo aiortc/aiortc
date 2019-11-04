@@ -5,9 +5,10 @@ import queue
 import random
 import threading
 import time
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import attr
+from av.frame import Frame
 
 from . import clock
 from .codecs import depayload, get_capabilities, get_decoder, is_rtx
@@ -25,6 +26,7 @@ from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
     RtcpReceiverInfo,
@@ -165,12 +167,12 @@ class StreamStatistics:
 
 
 class RemoteStreamTrack(MediaStreamTrack):
-    def __init__(self, kind):
+    def __init__(self, kind: str) -> None:
         super().__init__()
         self.kind = kind
-        self._queue = asyncio.Queue()
+        self._queue = asyncio.Queue()  # type: asyncio.Queue
 
-    async def recv(self):
+    async def recv(self) -> Frame:
         """
         Receive the next frame.
         """
@@ -236,13 +238,13 @@ class RTCRtpReceiver:
     :param: transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, kind: str, transport) -> None:
+    def __init__(self, kind: str, transport: RTCDtlsTransport) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
         self.__active_ssrc = {}  # type: Dict[int, datetime.datetime]
         self.__codecs = {}  # type: Dict[int, RTCRtpCodecParameters]
-        self.__decoder_queue = queue.Queue()
+        self.__decoder_queue = queue.Queue()  # type: queue.Queue
         self.__decoder_thread = None  # type: Optional[threading.Thread]
         self.__kind = kind
         if kind == "audio":
@@ -253,7 +255,7 @@ class RTCRtpReceiver:
             self.__jitter_buffer = JitterBuffer(capacity=128)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
-        self._track = None
+        self._track = None  # type: Optional[RemoteStreamTrack]
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_task = None  # type: Optional[asyncio.Future[None]]
         self.__rtx_ssrc = {}  # type: Dict[int, int]
@@ -269,7 +271,7 @@ class RTCRtpReceiver:
         self.__rtcp_ssrc = None  # type: Optional[int]
 
     @property
-    def transport(self):
+    def transport(self) -> RTCDtlsTransport:
         """
         The :class:`RTCDtlsTransport` over which the media for the receiver's
         track is received.
@@ -286,7 +288,7 @@ class RTCRtpReceiver:
         """
         return get_capabilities(kind)
 
-    async def getStats(self):
+    async def getStats(self) -> RTCStatsReport:
         """
         Returns statistics about the RTP receiver.
 
@@ -314,7 +316,7 @@ class RTCRtpReceiver:
 
         return self.__stats
 
-    def getSynchronizationSources(self):
+    def getSynchronizationSources(self) -> List[RTCRtpSynchronizationSource]:
         """
         Returns a :class:`RTCRtpSynchronizationSource` for each unique SSRC identifier
         received in the last 10 seconds.
@@ -360,7 +362,7 @@ class RTCRtpReceiver:
     def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Irreversibly stop the receiver.
         """
@@ -370,10 +372,10 @@ class RTCRtpReceiver:
             self.__rtcp_task.cancel()
             await self.__rtcp_exited.wait()
 
-    def _handle_disconnect(self):
+    def _handle_disconnect(self) -> None:
         self.__stop_decoder()
 
-    async def _handle_rtcp_packet(self, packet):
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
         self.__log_debug("< %s", packet)
 
         if isinstance(packet, RtcpSrPacket):
@@ -403,7 +405,7 @@ class RTCRtpReceiver:
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
 
-    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int):
+    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int) -> None:
         """
         Handle an incoming RTP packet.
         """
@@ -545,7 +547,7 @@ class RTCRtpReceiver:
             packet.lost = lost
             await self._send_rtcp(packet)
 
-    async def _send_rtcp_pli(self, media_ssrc):
+    async def _send_rtcp_pli(self, media_ssrc: int) -> None:
         """
         Send an RTCP packet to report picture loss.
         """
@@ -558,7 +560,7 @@ class RTCRtpReceiver:
     def _set_rtcp_ssrc(self, ssrc: int) -> None:
         self.__rtcp_ssrc = ssrc
 
-    def __stop_decoder(self):
+    def __stop_decoder(self) -> None:
         """
         Stop the decoder thread, which will in turn stop the track.
         """
