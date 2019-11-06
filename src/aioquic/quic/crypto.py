@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 from .._crypto import AEAD, CryptoError, HeaderProtection
 from ..tls import CipherSuite, cipher_suite_hash, hkdf_expand_label, hkdf_extract
-from .packet import decode_packet_number, is_long_header
+from .packet import QuicProtocolVersion, decode_packet_number, is_long_header
 
 CIPHER_SUITES = {
     CipherSuite.AES_128_GCM_SHA256: (b"aes-128-ecb", b"aes-128-gcm"),
@@ -40,6 +40,7 @@ class CryptoContext:
         self.hp: Optional[HeaderProtection] = None
         self.key_phase = key_phase
         self.secret: Optional[bytes] = None
+        self.version: Optional[int] = None
 
     def decrypt_packet(
         self, packet: bytes, encrypted_offset: int, expected_packet_number: int
@@ -87,7 +88,7 @@ class CryptoContext:
     def is_valid(self) -> bool:
         return self.aead is not None
 
-    def setup(self, cipher_suite: CipherSuite, secret: bytes) -> None:
+    def setup(self, cipher_suite: CipherSuite, secret: bytes, version: int) -> None:
         hp_cipher_name, aead_cipher_name = CIPHER_SUITES[cipher_suite]
 
         key, iv, hp = derive_key_iv_hp(cipher_suite, secret)
@@ -95,6 +96,7 @@ class CryptoContext:
         self.cipher_suite = cipher_suite
         self.hp = HeaderProtection(hp_cipher_name, hp)
         self.secret = secret
+        self.version = version
 
     def teardown(self) -> None:
         self.aead = None
@@ -112,12 +114,18 @@ def apply_key_phase(self: CryptoContext, crypto: CryptoContext) -> None:
 def next_key_phase(self: CryptoContext) -> CryptoContext:
     algorithm = cipher_suite_hash(self.cipher_suite)
 
+    if self.version < QuicProtocolVersion.DRAFT_24:
+        label = b"traffic upd"
+    else:
+        label = b"quic ku"
+
     crypto = CryptoContext(key_phase=int(not self.key_phase))
     crypto.setup(
-        self.cipher_suite,
-        hkdf_expand_label(
-            algorithm, self.secret, b"traffic upd", b"", algorithm.digest_size
+        cipher_suite=self.cipher_suite,
+        secret=hkdf_expand_label(
+            algorithm, self.secret, label, b"", algorithm.digest_size
         ),
+        version=self.version,
     )
     return crypto
 
@@ -155,16 +163,18 @@ class CryptoPair:
         algorithm = cipher_suite_hash(INITIAL_CIPHER_SUITE)
         initial_secret = hkdf_extract(algorithm, INITIAL_SALT_DRAFT_23, cid)
         self.recv.setup(
-            INITIAL_CIPHER_SUITE,
-            hkdf_expand_label(
+            cipher_suite=INITIAL_CIPHER_SUITE,
+            secret=hkdf_expand_label(
                 algorithm, initial_secret, recv_label, b"", algorithm.digest_size
             ),
+            version=version,
         )
         self.send.setup(
-            INITIAL_CIPHER_SUITE,
-            hkdf_expand_label(
+            cipher_suite=INITIAL_CIPHER_SUITE,
+            secret=hkdf_expand_label(
                 algorithm, initial_secret, send_label, b"", algorithm.digest_size
             ),
+            version=version,
         )
 
     def teardown(self) -> None:

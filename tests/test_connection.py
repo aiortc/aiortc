@@ -613,7 +613,9 @@ class QuicConnectionTest(TestCase):
         with client_and_server() as (client, server):
             # mess with encryption key
             server._cryptos[tls.Epoch.ONE_RTT].send.setup(
-                tls.CipherSuite.AES_128_GCM_SHA256, bytes(48)
+                cipher_suite=tls.CipherSuite.AES_128_GCM_SHA256,
+                secret=bytes(48),
+                version=QuicProtocolVersion.DRAFT_23,
             )
 
             # server sends close
