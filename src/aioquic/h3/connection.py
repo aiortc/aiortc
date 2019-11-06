@@ -19,7 +19,7 @@ from aioquic.quic.logger import QuicLoggerTrace
 
 logger = logging.getLogger("http3")
 
-H3_ALPN = ["h3-23"]
+H3_ALPN = ["h3-24", "h3-23"]
 
 
 class ErrorCode(IntEnum):
