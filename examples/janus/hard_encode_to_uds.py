@@ -1,29 +1,34 @@
 import av
 import ffmpeg
 import asyncio
+import os, errno, time
 
 # socket = "/tmp/ffmpeg4.socket"
 named_pipe = "/tmp/fifo"
 
-container = av.open(file="default:none", mode="r", format="avfoundation", options={"framerate": "30"})
+# container = av.open(file="default:none", mode="r", format="avfoundation", options={"framerate": "30"})  # Mac webcam
+container = av.open(file="/dev/video0", mode="r", format="v4l2",  # linux camera
+                    options={"framerate": "30", "input_format": "mjpeg", "video_size": "1920x1080"})
+
 frame_generator = container.decode(video=0)
 
 encoder_process = (
     ffmpeg
-        .input('pipe:', format='rawvideo', pix_fmt='uyvy422', s='{0}x{1}'.format(1280, 720))
+        .input('pipe:', format='rawvideo', pix_fmt='yuvj422p', s='1920x1080')  # pix_fmt='uyvy422'
         .output(named_pipe,
-                **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency", "pix_fmt": "yuv420p", "listen": "1"})
-        .run_async(pipe_stdin=True)
-)
-
-p = (
-    ffmpeg
-        .input('pipe:0', format='rawvideo', pix_fmt='uyvy422', s='{0}x{1}'.format(1280, 720))
-        .output("/tmp/fifo",
-                **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency"})
+                **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency", "flush_packets":"1", "pix_fmt": "yuv420p"})  # , "listen": "1"
         .overwrite_output()
         .run_async(pipe_stdin=True)
 )
+
+# p = (
+#     ffmpeg
+#         .input('pipe:0', format='rawvideo', pix_fmt='uyvy422', s='{0}x{1}'.format(1280, 720))
+#         .output("pipe:1",
+#                 **{"f": "h264", "c:v": "libx264", "preset": "ultrafast", "tune": "zerolatency"})
+#         .overwrite_output()
+#         .run_async(pipe_stdin=True, pipe_stdout = True, pipe_stderr = True)
+# )
 
 
 FPS = 30
@@ -31,51 +36,51 @@ SLEEP_THRESHOLD = float(1) / (10 * FPS)
 FRAME_TS_THRESHOLD = float(1) / (2 * FPS)
 
 
+def read_from_pipe(pipe):
+    try:
+        input = os.read(pipe, 102400)
+        return input
+    except OSError as err:
+        if err.errno == 11 or err.errno == 35:
+            return None
+        else:
+            raise err
+
+
 async def read_and_write():
-    reader, writer = None, None
-
-    async def read_loop(inner_reader):
-        # read until empty
-        while not inner_reader.at_eof():
-            data = await inner_reader.read(10240)
-            print("received: " + str(len(data)))
-
-        print("yo yo yo")
+    pipe = os.open(named_pipe, os.O_RDONLY | os.O_NONBLOCK)
 
 
     # for packet in container.demux((video_st,)):
     #     for frame in packet.decode():
     while True:
         # get next frame
-        print("Getting frame")
+        print("Getting frame", flush=True)
         frame = next(frame_generator)
-        len(frame.planes[0].to_bytes())
 
         # encode
-        encoder_process.stdin.write(frame.planes[0].to_bytes())
+        # encoder_process.stdin.write(frame.planes[0].to_bytes())
+        data = bytes()
+        for plane in frame.planes:
+            data += plane.to_bytes()
+        print("Writing frame plane with length {0}".format(len(data)), flush=True)
+        encoder_process.stdin.write(data)
+        encoder_process.stdin.flush()
+
+        print("Reading for frame", flush=True)
 
         # wait
         await asyncio.sleep(FRAME_TS_THRESHOLD)
 
-        if reader is None:
-            reader, writer = await asyncio.open_unix_connection(socket)
-            # reader.feed_eof()
-            # read_loop_task = asyncio.create_task(read_loop(reader))
-            # await read_loop_task
-
-        print("Reading for frame", flush=True)
-
         # read until empty
-        data = await reader.read(10240)  # this call blocks
-        while True:
+        data = read_from_pipe(pipe)
+        while data is not None and len(data) > 0:
             print("received: " + str(len(data)))
-            if len(data) < 8192:
-                break
-            data = await reader.read(10240)
+            data = read_from_pipe(pipe)
 
-        print("waiting for next frame")
+        print("waiting for next frame", flush=True)
         # wait
-        await asyncio.sleep(SLEEP_THRESHOLD)
+        # await asyncio.sleep(SLEEP_THRESHOLD)
 
 
 asyncio.run(read_and_write())
