@@ -7,17 +7,18 @@ from bitstring import BitStream
 
 buffer = BitStream()
 
+# cmd = ["/anaconda3/envs/py37/bin/python3",
+#        "/Users/shuyi.wang/Documents/others/aiortc/examples/tmp/stdout_same_line.py"]
+cmd = ["/home/sdjksdafji/anaconda3/envs/py37/bin/python3",
+       "/home/sdjksdafji/Documents/others/aiortc/examples/tmp/stdout_same_line.py"]
+proc = subprocess.Popen(
+    cmd,
+    stdout=subprocess.PIPE,
+    stdin=subprocess.PIPE)
+
 
 def buffered_read():
-    global buffer
-    # cmd = ["/anaconda3/envs/py37/bin/python3",
-    #        "/Users/shuyi.wang/Documents/others/aiortc/examples/tmp/stdout_same_line.py"]
-    cmd = ["/home/sdjksdafji/anaconda3/envs/py37/bin/python3",
-           "/home/sdjksdafji/Documents/others/aiortc/examples/tmp/stdout_same_line.py"]
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stdin=subprocess.PIPE)
+    global buffer, proc
 
     while True:
         data = proc.stdout.read(1)
@@ -25,10 +26,14 @@ def buffered_read():
 
 
 async def run():
-    global buffer
+    global buffer, proc
     buffered_read_thread = Thread(target=buffered_read)
     buffered_read_thread.start()
     while True:
+        print("Writing")
+        proc.stdin.write(b"testtest")
+        proc.stdin.flush()
+
         print("Reading")
         old_buffer = buffer
         buffer = BitStream()
