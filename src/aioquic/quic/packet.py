@@ -233,25 +233,27 @@ class QuicTransportParameters:
     disable_active_migration: Optional[bool] = False
     preferred_address: Optional[QuicPreferredAddress] = None
     active_connection_id_limit: Optional[int] = None
+    quantum_readiness: Optional[bytes] = None
 
 
-PARAMS = [
-    ("original_connection_id", bytes),
-    ("idle_timeout", int),
-    ("stateless_reset_token", bytes),
-    ("max_packet_size", int),
-    ("initial_max_data", int),
-    ("initial_max_stream_data_bidi_local", int),
-    ("initial_max_stream_data_bidi_remote", int),
-    ("initial_max_stream_data_uni", int),
-    ("initial_max_streams_bidi", int),
-    ("initial_max_streams_uni", int),
-    ("ack_delay_exponent", int),
-    ("max_ack_delay", int),
-    ("disable_active_migration", bool),
-    ("preferred_address", QuicPreferredAddress),
-    ("active_connection_id_limit", int),
-]
+PARAMS = {
+    0: ("original_connection_id", bytes),
+    1: ("idle_timeout", int),
+    2: ("stateless_reset_token", bytes),
+    3: ("max_packet_size", int),
+    4: ("initial_max_data", int),
+    5: ("initial_max_stream_data_bidi_local", int),
+    6: ("initial_max_stream_data_bidi_remote", int),
+    7: ("initial_max_stream_data_uni", int),
+    8: ("initial_max_streams_bidi", int),
+    9: ("initial_max_streams_uni", int),
+    10: ("ack_delay_exponent", int),
+    11: ("max_ack_delay", int),
+    12: ("disable_active_migration", bool),
+    13: ("preferred_address", QuicPreferredAddress),
+    14: ("active_connection_id_limit", int),
+    3127: ("quantum_readiness", bytes),
+}
 
 
 def pull_quic_preferred_address(buf: Buffer) -> QuicPreferredAddress:
@@ -308,7 +310,7 @@ def pull_quic_transport_parameters(buf: Buffer) -> QuicTransportParameters:
             param_id = buf.pull_uint16()
             param_len = buf.pull_uint16()
             param_start = buf.tell()
-            if param_id < len(PARAMS):
+            if param_id in PARAMS:
                 # parse known parameter
                 param_name, param_type = PARAMS[param_id]
                 if param_type == int:
@@ -331,7 +333,7 @@ def push_quic_transport_parameters(
     buf: Buffer, params: QuicTransportParameters
 ) -> None:
     with push_block(buf, 2):
-        for param_id, (param_name, param_type) in enumerate(PARAMS):
+        for param_id, (param_name, param_type) in PARAMS.items():
             param_value = getattr(params, param_name)
             if param_value is not None and param_value is not False:
                 buf.push_uint16(param_id)

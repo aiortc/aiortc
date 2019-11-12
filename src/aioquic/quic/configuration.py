@@ -65,6 +65,7 @@ class QuicConfiguration:
     certificate: Any = None
     certificate_chain: List[Any] = field(default_factory=list)
     private_key: Any = None
+    quantum_readiness_test: bool = False
     supported_versions: List[int] = field(
         default_factory=lambda: [
             QuicProtocolVersion.DRAFT_24,

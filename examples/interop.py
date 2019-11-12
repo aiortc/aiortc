@@ -27,22 +27,27 @@ from aioquic.quic.logger import QuicLogger
 
 
 class Result(Flag):
-    V = 0x0001
-    H = 0x0002
-    D = 0x0004
-    C = 0x0008
-    R = 0x0010
-    Z = 0x0020
-    S = 0x0040
-    M = 0x0080
-    B = 0x0100
-    U = 0x0200
-    P = 0x0400
-    E = 0x0800
-    T = 0x1000
-    three = 0x2000
-    d = 0x4000
-    p = 0x8000
+    V = 0x000001
+    H = 0x000002
+    D = 0x000004
+    C = 0x000008
+    R = 0x000010
+    Z = 0x000020
+    S = 0x000040
+    Q = 0x000080
+
+    M = 0x000100
+    B = 0x000200
+    A = 0x000400
+    U = 0x000800
+    P = 0x001000
+    E = 0x002000
+    L = 0x004000
+    T = 0x008000
+
+    three = 0x010000
+    d = 0x020000
+    p = 0x040000
 
     def __str__(self):
         flags = sorted(
@@ -149,6 +154,15 @@ async def test_stateless_retry(server: Server, configuration: QuicConfiguration)
                 and data["packet_type"] == "retry"
             ):
                 server.result |= Result.S
+
+
+async def test_quantum_readiness(server: Server, configuration: QuicConfiguration):
+    configuration.quantum_readiness_test = True
+    async with connect(
+        server.host, server.port, configuration=configuration
+    ) as protocol:
+        await protocol.ping()
+        server.result |= Result.Q
 
 
 async def test_http_0(server: Server, configuration: QuicConfiguration):
@@ -384,7 +398,7 @@ async def test_throughput(server: Server, configuration: QuicConfiguration):
 
 def print_result(server: Server) -> None:
     result = str(server.result).replace("three", "3")
-    result = result[0:7] + " " + result[7:13] + " " + result[13:]
+    result = result[0:8] + " " + result[8:16] + " " + result[16:]
     print("%s%s%s" % (server.name, " " * (20 - len(server.name)), result))
 
 

@@ -441,6 +441,26 @@ class QuicConnectionTest(TestCase):
         self.assertEqual(datagram_sizes(items), [32])
         self.assertAlmostEqual(client.get_timer(), 61.4)  # idle timeout
 
+    def test_connect_with_quantum_readiness(self):
+        with client_and_server(client_options={"quantum_readiness_test": True},) as (
+            client,
+            server,
+        ):
+            stream_id = client.get_next_available_stream_id()
+            client.send_stream_data(stream_id, b"hello")
+
+            roundtrip(client, server)
+
+            received = None
+            while True:
+                event = server.next_event()
+                if isinstance(event, events.StreamDataReceived):
+                    received = event.data
+                elif event is None:
+                    break
+
+            self.assertEqual(received, b"hello")
+
     def test_connect_with_0rtt(self):
         client_ticket = None
         ticket_store = SessionTicketStore()

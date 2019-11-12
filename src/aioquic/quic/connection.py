@@ -1857,6 +1857,9 @@ class QuicConnection:
             initial_max_streams_bidi=self._local_max_streams_bidi,
             initial_max_streams_uni=self._local_max_streams_uni,
             max_ack_delay=25,
+            quantum_readiness=b"Q" * 1200
+            if self._configuration.quantum_readiness_test
+            else None,
         )
         if not self._is_client:
             quic_transport_parameters.original_connection_id = (
@@ -1873,7 +1876,7 @@ class QuicConnection:
                 ),
             )
 
-        buf = Buffer(capacity=512)
+        buf = Buffer(capacity=3 * PACKET_MAX_SIZE)
         push_quic_transport_parameters(buf, quic_transport_parameters)
         return buf.data
 
