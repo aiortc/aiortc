@@ -110,6 +110,7 @@ class HttpClient(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.pushes: Dict[int, Deque[H3Event]] = {}
         self._http: Optional[HttpConnection] = None
         self._request_events: Dict[int, Deque[H3Event]] = {}
         self._request_waiter: Dict[int, asyncio.Future[Deque[H3Event]]] = {}
@@ -182,9 +183,11 @@ class HttpClient(QuicConnectionProtocol):
                 websocket = self._websockets[stream_id]
                 websocket.http_event_received(event)
 
-            else:
+            elif event.push_id is not None:
                 # push
-                print(event)
+                if event.push_id not in self.pushes:
+                    self.pushes[event.push_id] = deque()
+                self.pushes[event.push_id].append(event)
 
     def quic_event_received(self, event: QuicEvent):
         #  pass event to the HTTP layer

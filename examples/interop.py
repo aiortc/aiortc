@@ -97,7 +97,7 @@ SERVERS = [
         verify_mode=ssl.CERT_NONE,
     ),
     Server("mvfst", "fb.mvfst.net", structured_logging=True),
-    Server("ngtcp2", "nghttp2.org"),
+    Server("ngtcp2", "nghttp2.org", path="/?push=/100"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
     Server("pandora", "pandora.cm.in.tum.de", verify_mode=ssl.CERT_NONE),
     Server("picoquic", "test.privateoctopus.com", structured_logging=True),
@@ -233,6 +233,10 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
                 and http._encoder_bytes_sent
             ):
                 server.result |= Result.d
+
+            # check push support
+            if protocol.pushes:
+                server.result |= Result.p
 
 
 async def test_session_resumption(server: Server, configuration: QuicConfiguration):
