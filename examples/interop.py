@@ -207,10 +207,11 @@ async def test_http_3(server: Server, configuration: QuicConfiguration):
             server.result |= Result.D
             server.result |= Result.three
 
-        # perform another HTTP request to use QPACK dynamic tables
-        events = await protocol.get(
-            "https://{}:{}{}".format(server.host, server.port, server.path)
-        )
+        # perform more HTTP requests to use QPACK dynamic tables
+        for i in range(2):
+            events = await protocol.get(
+                "https://{}:{}{}".format(server.host, server.port, server.path)
+            )
         if events and isinstance(events[0], HeadersReceived):
             http = cast(H3Connection, protocol._http)
             protocol._quic._logger.info(
