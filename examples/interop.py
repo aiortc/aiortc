@@ -76,12 +76,13 @@ class Server:
     path: str = "/"
     result: Result = field(default_factory=lambda: Result(0))
     session_resumption_port: Optional[int] = None
+    structured_logging: bool = False
     throughput_file_suffix: str = ""
     verify_mode: Optional[int] = None
 
 
 SERVERS = [
-    Server("aioquic", "quic.aiortc.org", port=443),
+    Server("aioquic", "quic.aiortc.org", port=443, structured_logging=True),
     Server("ats", "quic.ogre.com"),
     Server("f5", "f5quic.com", retry_port=4433),
     Server("gquic", "quic.rocks", retry_port=None),
@@ -91,14 +92,15 @@ SERVERS = [
         "quic.westus.cloudapp.azure.com",
         port=443,
         session_resumption_port=4433,
+        structured_logging=True,
         throughput_file_suffix=".txt",
         verify_mode=ssl.CERT_NONE,
     ),
-    Server("mvfst", "fb.mvfst.net"),
+    Server("mvfst", "fb.mvfst.net", structured_logging=True),
     Server("ngtcp2", "nghttp2.org"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
     Server("pandora", "pandora.cm.in.tum.de", verify_mode=ssl.CERT_NONE),
-    Server("picoquic", "test.privateoctopus.com"),
+    Server("picoquic", "test.privateoctopus.com", structured_logging=True),
     Server("quant", "quant.eggert.org", http3=False),
     Server("quic-go", "quic.seemann.io", port=443, retry_port=443),
     Server("quiche", "quic.tech", port=8443, retry_port=4433),
@@ -405,6 +407,8 @@ def print_result(server: Server) -> None:
 
 async def run(servers, tests, quic_log=False, secrets_log_file=None) -> None:
     for server in servers:
+        if server.structured_logging:
+            server.result |= Result.L
         for test_name, test_func in tests:
             print("\n=== %s %s ===\n" % (server.name, test_name))
             configuration = QuicConfiguration(
