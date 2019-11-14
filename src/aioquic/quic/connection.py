@@ -2161,7 +2161,9 @@ class QuicConnection:
     def _write_connection_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace
     ) -> None:
-        # raise MAX_DATA if needed
+        """
+        Raise MAX_DATA if needed.
+        """
         if self._local_max_data_used * 2 > self._local_max_data:
             self._local_max_data *= 2
             self._logger.debug("Local max_data raised to %d", self._local_max_data)
@@ -2297,8 +2299,17 @@ class QuicConnection:
     def _write_stream_limits(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
     ) -> None:
-        # raise MAX_STREAM_DATA if needed
-        if stream._recv_highest * 2 > stream.max_stream_data_local:
+        """
+        Raise MAX_STREAM_DATA if needed.
+
+        The only case where `stream.max_stream_data_local` is zero is for
+        locally created unidirectional streams. We skip such streams to avoid
+        spurious logging.
+        """
+        if (
+            stream.max_stream_data_local
+            and stream._recv_highest * 2 > stream.max_stream_data_local
+        ):
             stream.max_stream_data_local *= 2
             self._logger.debug(
                 "Stream %d local max_stream_data raised to %d",
