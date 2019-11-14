@@ -96,7 +96,7 @@ SERVERS = [
         throughput_file_suffix=".txt",
         verify_mode=ssl.CERT_NONE,
     ),
-    Server("mvfst", "fb.mvfst.net", structured_logging=True),
+    Server("mvfst", "fb.mvfst.net", path="/push", structured_logging=True),
     Server("ngtcp2", "nghttp2.org", path="/?push=/100"),
     Server("ngx_quic", "cloudflare-quic.com", port=443, retry_port=443),
     Server("pandora", "pandora.cm.in.tum.de", verify_mode=ssl.CERT_NONE),
