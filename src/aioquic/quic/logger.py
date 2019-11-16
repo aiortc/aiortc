@@ -171,7 +171,7 @@ class QuicLoggerTrace:
             if isinstance(param_value, bool):
                 data[param_name] = param_value
             elif isinstance(param_value, bytes):
-                data[param_name] = param_value
+                data[param_name] = hexdump(param_value)
             elif isinstance(param_value, int):
                 data[param_name] = param_value
         return data
