@@ -228,6 +228,46 @@ class HttpClient(QuicConnectionProtocol):
         return await asyncio.shield(waiter)
 
 
+async def perform_http_request(
+    client: HttpClient, url: str, data: str, print_response: bool
+) -> None:
+    # perform request
+    start = time.time()
+    if data is not None:
+        http_events = await client.post(
+            url,
+            data=data.encode("utf8"),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+    else:
+        http_events = await client.get(url)
+    elapsed = time.time() - start
+
+    # print speed
+    octets = 0
+    for http_event in http_events:
+        if isinstance(http_event, DataReceived):
+            octets += len(http_event.data)
+    logger.info(
+        "Received %d bytes in %.1f s (%.3f Mbps)"
+        % (octets, elapsed, octets * 8 / elapsed / 1000000)
+    )
+
+    # print response
+    if print_response:
+        for http_event in http_events:
+            if isinstance(http_event, HeadersReceived):
+                headers = b""
+                for k, v in http_event.headers:
+                    headers += k + b": " + v + b"\r\n"
+                if headers:
+                    sys.stderr.buffer.write(headers + b"\r\n")
+                    sys.stderr.buffer.flush()
+            elif isinstance(http_event, DataReceived):
+                sys.stdout.buffer.write(http_event.data)
+                sys.stdout.buffer.flush()
+
+
 def save_session_ticket(ticket):
     """
     Callback which is invoked by the TLS engine when a new session ticket
@@ -239,7 +279,13 @@ def save_session_ticket(ticket):
             pickle.dump(ticket, fp)
 
 
-async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
+async def run(
+    configuration: QuicConfiguration,
+    url: str,
+    data: str,
+    parallel: int,
+    print_response: bool,
+) -> None:
     # parse URL
     parsed = urlparse(url)
     assert parsed.scheme in (
@@ -277,39 +323,13 @@ async def run(configuration: QuicConfiguration, url: str, data: str) -> None:
             await ws.close()
         else:
             # perform request
-            start = time.time()
-            if data is not None:
-                http_events = await client.post(
-                    url,
-                    data=data.encode("utf8"),
-                    headers={"content-type": "application/x-www-form-urlencoded"},
+            coros = [
+                perform_http_request(
+                    client=client, url=url, data=data, print_response=print_response
                 )
-            else:
-                http_events = await client.get(url)
-            elapsed = time.time() - start
-
-            # print speed
-            octets = 0
-            for http_event in http_events:
-                if isinstance(http_event, DataReceived):
-                    octets += len(http_event.data)
-            logger.info(
-                "Received %d bytes in %.1f s (%.3f Mbps)"
-                % (octets, elapsed, octets * 8 / elapsed / 1000000)
-            )
-
-            # print response
-            for http_event in http_events:
-                if isinstance(http_event, HeadersReceived):
-                    headers = b""
-                    for k, v in http_event.headers:
-                        headers += k + b": " + v + b"\r\n"
-                    if headers:
-                        sys.stderr.buffer.write(headers + b"\r\n")
-                        sys.stderr.buffer.flush()
-                elif isinstance(http_event, DataReceived):
-                    sys.stdout.buffer.write(http_event.data)
-                    sys.stdout.buffer.flush()
+                for i in range(parallel)
+            ]
+            await asyncio.gather(*coros)
 
 
 if __name__ == "__main__":
@@ -336,6 +356,12 @@ if __name__ == "__main__":
         "--secrets-log",
         type=str,
         help="log secrets to a file, for use with Wireshark",
+    )
+    parser.add_argument(
+        "--parallel", type=int, default=1, help="perform this many requests in parallel"
+    )
+    parser.add_argument(
+        "--print-response", action="store_true", help="print response headers and body"
     )
     parser.add_argument(
         "-s",
@@ -378,7 +404,13 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(
-            run(configuration=configuration, url=args.url, data=args.data)
+            run(
+                configuration=configuration,
+                url=args.url,
+                data=args.data,
+                parallel=args.parallel,
+                print_response=args.print_response,
+            )
         )
     finally:
         if configuration.quic_logger is not None:
