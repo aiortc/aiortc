@@ -682,7 +682,8 @@ class QuicConnectionTest(TestCase):
         crypto = CryptoPair()
         crypto.setup_initial(client.host_cid, is_client=False, version=client._version)
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
-        builder.buffer.push_bytes(bytes(1200))
+        buf = builder.start_frame(QuicFrameType.PADDING)
+        buf.push_bytes(bytes(builder.remaining_space))
 
         for datagram in builder.flush()[0]:
             client.receive_datagram(datagram, SERVER_ADDR, now=time.time())

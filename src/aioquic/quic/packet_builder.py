@@ -99,7 +99,7 @@ class QuicPacketBuilder:
         self._packet_start = 0
         self._packet_type = 0
 
-        self.buffer = Buffer(PACKET_MAX_SIZE)
+        self._buffer = Buffer(PACKET_MAX_SIZE)
         self._buffer_capacity = PACKET_MAX_SIZE
 
     @property
@@ -108,7 +108,7 @@ class QuicPacketBuilder:
         Returns `True` if the current packet is empty.
         """
         assert self._packet is not None
-        packet_size = self.buffer.tell() - self._packet_start
+        packet_size = self._buffer.tell() - self._packet_start
         return packet_size <= self._header_size
 
     @property
@@ -126,7 +126,7 @@ class QuicPacketBuilder:
         """
         return (
             self._buffer_capacity
-            - self.buffer.tell()
+            - self._buffer.tell()
             - self._packet_crypto.aead_tag_size
         )
 
@@ -149,11 +149,11 @@ class QuicPacketBuilder:
         frame_type: int,
         handler: Optional[QuicDeliveryHandler] = None,
         args: Sequence[Any] = [],
-    ) -> None:
+    ) -> Buffer:
         """
         Starts a new frame.
         """
-        self.buffer.push_uint_var(frame_type)
+        self._buffer.push_uint_var(frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
             self._packet.is_ack_eliciting = True
         if frame_type not in NON_IN_FLIGHT_FRAME_TYPES:
@@ -162,12 +162,13 @@ class QuicPacketBuilder:
             self._packet.is_crypto_packet = True
         if handler is not None:
             self._packet.delivery_handlers.append((handler, args))
+        return self._buffer
 
     def start_packet(self, packet_type: int, crypto: CryptoPair) -> None:
         """
         Starts a new packet.
         """
-        buf = self.buffer
+        buf = self._buffer
 
         # finish previous datagram
         if self._packet is not None:
@@ -237,7 +238,7 @@ class QuicPacketBuilder:
         """
         Ends the current packet.
         """
-        buf = self.buffer
+        buf = self._buffer
         packet_size = buf.tell() - self._packet_start
         if packet_size > self._header_size or (self._datagram_padding and final):
             if self._is_client and self._packet_type == PACKET_TYPE_INITIAL:
@@ -335,10 +336,10 @@ class QuicPacketBuilder:
         self.quic_logger_frames = None
 
     def _flush_current_datagram(self) -> None:
-        datagram_bytes = self.buffer.tell()
+        datagram_bytes = self._buffer.tell()
         if datagram_bytes:
-            self._datagrams.append(self.buffer.data)
+            self._datagrams.append(self._buffer.data)
             self._flight_bytes += self._datagram_flight_bytes
             self._total_bytes += datagram_bytes
             self._datagram_init = True
-            self.buffer.seek(0)
+            self._buffer.seek(0)
