@@ -63,6 +63,10 @@ class QuicPacketBuilderTest(TestCase):
         builder.buffer.push_bytes(bytes(100))
         self.assertFalse(builder.packet_is_empty)
 
+        # INITIAL, empty
+        builder.start_packet(PACKET_TYPE_INITIAL, crypto)
+        self.assertTrue(builder.packet_is_empty)
+
         # check datagrams
         datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
@@ -93,12 +97,20 @@ class QuicPacketBuilderTest(TestCase):
         builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertFalse(builder.packet_is_empty)
 
+        # INITIAL, empty
+        builder.start_packet(PACKET_TYPE_INITIAL, crypto)
+        self.assertTrue(builder.packet_is_empty)
+
         # ONE_RTT, fully padded
         builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
         self.assertEqual(builder.remaining_space, 1253)
         builder.start_frame(QuicFrameType.STREAM_BASE)
         builder.buffer.push_bytes(bytes(builder.remaining_space))
         self.assertFalse(builder.packet_is_empty)
+
+        # ONE_RTT, empty
+        builder.start_packet(PACKET_TYPE_ONE_RTT, crypto)
+        self.assertTrue(builder.packet_is_empty)
 
         # check datagrams
         datagrams, packets = builder.flush()
@@ -142,7 +154,6 @@ class QuicPacketBuilderTest(TestCase):
 
         # HANDSHAKE
         builder.start_packet(PACKET_TYPE_HANDSHAKE, crypto)
-        self.assertEqual(builder.buffer.tell(), 271)
         self.assertEqual(builder.remaining_space, 993)
         builder.start_frame(QuicFrameType.CRYPTO)
         builder.buffer.push_bytes(bytes(299))

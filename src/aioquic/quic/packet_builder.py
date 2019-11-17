@@ -248,6 +248,7 @@ class QuicPacketBuilder:
                 if self.remaining_space:
                     buf.push_bytes(bytes(self.remaining_space))
                     packet_size = buf.tell() - self._packet_start
+                    self._packet.in_flight = True
 
                     # log frame
                     if self._quic_logger is not None:
@@ -299,6 +300,13 @@ class QuicPacketBuilder:
                     buf.seek(self._packet_start + packet_size)
                     buf.push_bytes(bytes(padding_size))
                     packet_size += padding_size
+                    self._packet.in_flight = True
+
+                    # log frame
+                    if self._quic_logger is not None:
+                        self._packet.quic_logger_frames.append(
+                            self._quic_logger.encode_padding_frame()
+                        )
 
             # encrypt in place
             plain = buf.data_slice(self._packet_start, self._packet_start + packet_size)
