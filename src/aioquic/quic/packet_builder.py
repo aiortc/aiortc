@@ -82,8 +82,8 @@ class QuicPacketBuilder:
         self._version = version
 
         # assembled datagrams and packets
-        self._ack_eliciting = False
         self._datagrams: List[bytes] = []
+        self._datagram_flight_bytes = 0
         self._datagram_init = True
         self._packets: List[QuicSentPacket] = []
         self._flight_bytes = 0
@@ -143,7 +143,6 @@ class QuicPacketBuilder:
         self.buffer.push_uint_var(frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
             self._packet.is_ack_eliciting = True
-            self._ack_eliciting = True
         if frame_type not in NON_IN_FLIGHT_FRAME_TYPES:
             self._packet.in_flight = True
         if frame_type == QuicFrameType.CRYPTO:
@@ -156,7 +155,6 @@ class QuicPacketBuilder:
         Starts a new packet.
         """
         buf = self.buffer
-        self._ack_eliciting = False
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
@@ -175,6 +173,7 @@ class QuicPacketBuilder:
                 remaining_total_bytes = self.max_total_bytes - self._total_bytes
                 if remaining_total_bytes < self._buffer_capacity:
                     self._buffer_capacity = remaining_total_bytes
+            self._datagram_flight_bytes = 0
             self._datagram_init = False
 
         # calculate header size
@@ -297,6 +296,8 @@ class QuicPacketBuilder:
             )
             self._packet.sent_bytes = buf.tell() - self._packet_start
             self._packets.append(self._packet)
+            if self._packet.in_flight:
+                self._datagram_flight_bytes += self._packet.sent_bytes
 
             # short header packets cannot be coallesced, we need a new datagram
             if not self._packet_long_header:
@@ -316,8 +317,7 @@ class QuicPacketBuilder:
         datagram_bytes = self.buffer.tell()
         if datagram_bytes:
             self._datagrams.append(self.buffer.data)
-            self._datagram_init = True
-            if self._ack_eliciting:
-                self._flight_bytes += datagram_bytes
+            self._flight_bytes += self._datagram_flight_bytes
             self._total_bytes += datagram_bytes
+            self._datagram_init = True
             self.buffer.seek(0)
