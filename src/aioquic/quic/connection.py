@@ -440,7 +440,6 @@ class QuicConnection:
                         frame_type=self._close_event.frame_type,
                         reason_phrase=self._close_event.reason_phrase,
                     )
-                    builder.end_packet()
                     self._close_pending = False
                     break
             self._close_begin(is_initiator=True, now=now)
@@ -2073,7 +2072,7 @@ class QuicConnection:
                         ),
                     )
 
-            if not builder.end_packet():
+            if builder.packet_is_empty:
                 break
 
     def _write_handshake(self, builder: QuicPacketBuilder, epoch: tls.Epoch) -> None:
@@ -2107,7 +2106,7 @@ class QuicConnection:
                 buf.push_bytes(bytes(builder.remaining_space))
                 self._probe_pending = False
 
-            if not builder.end_packet():
+            if builder.packet_is_empty:
                 break
 
     def _write_ack_frame(self, builder: QuicPacketBuilder, space: QuicPacketSpace):

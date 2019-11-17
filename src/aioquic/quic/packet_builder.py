@@ -102,6 +102,15 @@ class QuicPacketBuilder:
         self._buffer_capacity = PACKET_MAX_SIZE
 
     @property
+    def packet_is_empty(self) -> bool:
+        """
+        Returns `True` if the current packet is empty.
+        """
+        assert self._packet is not None
+        packet_size = self.buffer.tell() - self._packet_start
+        return packet_size <= self._header_size
+
+    @property
     def packet_number(self) -> int:
         """
         Returns the packet number for the next packet.
@@ -124,7 +133,10 @@ class QuicPacketBuilder:
         """
         Returns the assembled datagrams.
         """
+        if self._packet is not None:
+            self._end_packet()
         self._flush_current_datagram()
+
         datagrams = self._datagrams
         packets = self._packets
         self._datagrams = []
@@ -155,6 +167,10 @@ class QuicPacketBuilder:
         Starts a new packet.
         """
         buf = self.buffer
+
+        # finish previous datagram
+        if self._packet is not None:
+            self._end_packet()
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
@@ -215,7 +231,7 @@ class QuicPacketBuilder:
 
         buf.seek(self._packet_start + self._header_size)
 
-    def end_packet(self) -> bool:
+    def _end_packet(self) -> bool:
         """
         Ends the current packet.
 
