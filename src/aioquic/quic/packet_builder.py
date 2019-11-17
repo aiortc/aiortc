@@ -63,7 +63,7 @@ class QuicPacketBuilder:
         host_cid: bytes,
         peer_cid: bytes,
         version: int,
-        pad_first_datagram: bool = False,
+        is_client: bool,
         packet_number: int = 0,
         peer_token: bytes = b"",
         quic_logger: Optional[QuicLoggerTrace] = None,
@@ -74,7 +74,7 @@ class QuicPacketBuilder:
         self.quic_logger_frames: Optional[List[Dict]] = None
 
         self._host_cid = host_cid
-        self._pad_first_datagram = pad_first_datagram
+        self._is_client = is_client
         self._peer_cid = peer_cid
         self._peer_token = peer_token
         self._quic_logger = quic_logger
@@ -85,6 +85,7 @@ class QuicPacketBuilder:
         self._datagrams: List[bytes] = []
         self._datagram_flight_bytes = 0
         self._datagram_init = True
+        self._datagram_padding = False
         self._packets: List[QuicSentPacket] = []
         self._flight_bytes = 0
         self._total_bytes = 0
@@ -134,7 +135,7 @@ class QuicPacketBuilder:
         Returns the assembled datagrams.
         """
         if self._packet is not None:
-            self._end_packet()
+            self._end_packet(final=True)
         self._flush_current_datagram()
 
         datagrams = self._datagrams
@@ -170,7 +171,7 @@ class QuicPacketBuilder:
 
         # finish previous datagram
         if self._packet is not None:
-            self._end_packet()
+            self._end_packet(final=False)
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
@@ -191,6 +192,7 @@ class QuicPacketBuilder:
                     self._buffer_capacity = remaining_total_bytes
             self._datagram_flight_bytes = 0
             self._datagram_init = False
+            self._datagram_padding = False
 
         # calculate header size
         packet_long_header = is_long_header(packet_type)
@@ -231,20 +233,18 @@ class QuicPacketBuilder:
 
         buf.seek(self._packet_start + self._header_size)
 
-    def _end_packet(self) -> bool:
+    def _end_packet(self, final: bool) -> None:
         """
         Ends the current packet.
-
-        Returns `True` if the packet contains data, `False` otherwise.
         """
         buf = self.buffer
-        empty = True
         packet_size = buf.tell() - self._packet_start
-        if packet_size > self._header_size:
-            empty = False
+        if packet_size > self._header_size or (self._datagram_padding and final):
+            if self._is_client and self._packet_type == PACKET_TYPE_INITIAL:
+                self._datagram_padding = True
 
             # pad initial datagram
-            if self._pad_first_datagram:
+            if self._datagram_padding and final:
                 if self.remaining_space:
                     buf.push_bytes(bytes(self.remaining_space))
                     packet_size = buf.tell() - self._packet_start
@@ -255,7 +255,6 @@ class QuicPacketBuilder:
                         self._packet.quic_logger_frames.append(
                             self._quic_logger.encode_padding_frame()
                         )
-                self._pad_first_datagram = False
 
             # write header
             if self._packet_long_header:
@@ -334,8 +333,6 @@ class QuicPacketBuilder:
 
         self._packet = None
         self.quic_logger_frames = None
-
-        return not empty
 
     def _flush_current_datagram(self) -> None:
         datagram_bytes = self.buffer.tell()

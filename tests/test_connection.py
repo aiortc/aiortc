@@ -389,7 +389,7 @@ class QuicConnectionTest(TestCase):
         now = 0.2
         client.receive_datagram(items[0][0], SERVER_ADDR, now=now)
         items = client.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [97])
+        self.assertEqual(datagram_sizes(items), [1280])
         self.assertAlmostEqual(client.get_timer(), 0.625)
 
         #  client PTO - padded HANDSHAKE
@@ -675,6 +675,7 @@ class QuicConnectionTest(TestCase):
 
         builder = QuicPacketBuilder(
             host_cid=client._peer_cid,
+            is_client=False,
             peer_cid=client.host_cid,
             version=0xFF000011,  # DRAFT_16
         )

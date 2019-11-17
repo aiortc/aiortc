@@ -415,10 +415,8 @@ class QuicConnection:
         # build datagrams
         builder = QuicPacketBuilder(
             host_cid=self.host_cid,
+            is_client=self._is_client,
             packet_number=self._packet_number,
-            pad_first_datagram=(
-                self._is_client and self._state == QuicConnectionState.FIRSTFLIGHT
-            ),
             peer_cid=self._peer_cid,
             peer_token=self._peer_token,
             quic_logger=self._quic_logger,
