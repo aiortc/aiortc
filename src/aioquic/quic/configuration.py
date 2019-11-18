@@ -64,6 +64,7 @@ class QuicConfiguration:
     capath: Optional[str] = None
     certificate: Any = None
     certificate_chain: List[Any] = field(default_factory=list)
+    max_datagram_frame_size: Optional[int] = None
     private_key: Any = None
     quantum_readiness_test: bool = False
     supported_versions: List[int] = field(

@@ -37,6 +37,16 @@ class ConnectionTerminated(QuicEvent):
 
 
 @dataclass
+class DatagramFrameReceived(QuicEvent):
+    """
+    The DatagramFrameReceived event is fired when a DATAGRAM frame is received.
+    """
+
+    data: bytes
+    "The data which was received."
+
+
+@dataclass
 class HandshakeCompleted(QuicEvent):
     """
     The HandshakeCompleted event is fired when the TLS handshake completes.

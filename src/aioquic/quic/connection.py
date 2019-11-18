@@ -252,6 +252,7 @@ class QuicConnection:
         self._remote_idle_timeout = 0.0  # seconds
         self._remote_max_data = 0
         self._remote_max_data_used = 0
+        self._remote_max_datagram_frame_size: Optional[int] = None
         self._remote_max_stream_data_bidi_local = 0
         self._remote_max_stream_data_bidi_remote = 0
         self._remote_max_stream_data_uni = 0
@@ -287,6 +288,7 @@ class QuicConnection:
 
         # things to send
         self._close_pending = False
+        self._datagrams_pending: Deque[bytes] = deque()
         self._ping_pending: List[int] = []
         self._probe_pending = False
         self._retire_connection_ids: List[int] = []
@@ -328,6 +330,8 @@ class QuicConnection:
             0x1B: (self._handle_path_response_frame, EPOCHS("O")),
             0x1C: (self._handle_connection_close_frame, EPOCHS("IZHO")),
             0x1D: (self._handle_connection_close_frame, EPOCHS("ZO")),
+            0x30: (self._handle_datagram_frame, EPOCHS("ZO")),
+            0x31: (self._handle_datagram_frame, EPOCHS("ZO")),
         }
 
     @property
@@ -849,6 +853,14 @@ class QuicConnection:
         """
         self._ping_pending.append(uid)
 
+    def send_datagram_frame(self, data: bytes) -> None:
+        """
+        Send a DATAGRAM frame.
+
+        :param data: The data to be sent.
+        """
+        self._datagrams_pending.append(data)
+
     def send_stream_data(
         self, stream_id: int, data: bytes, end_stream: bool = False
     ) -> None:
@@ -1270,6 +1282,38 @@ class QuicConnection:
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
                 self._quic_logger.encode_data_blocked_frame(limit=limit)
+            )
+
+    def _handle_datagram_frame(
+        self, context: QuicReceiveContext, frame_type: int, buf: Buffer
+    ) -> None:
+        """
+        Handle a DATAGRAM frame.
+        """
+        start = buf.tell()
+        if frame_type == QuicFrameType.DATAGRAM_WITH_LENGTH:
+            length = buf.pull_uint_var()
+        else:
+            length = buf.capacity - start
+        data = buf.pull_bytes(length)
+
+        # check frame is allowed
+        if (
+            self._configuration.max_datagram_frame_size is None
+            or buf.tell() - start >= self._configuration.max_datagram_frame_size
+        ):
+            raise QuicConnectionError(
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=frame_type,
+                reason_phrase="Unexpected DATAGRAM frame",
+            )
+
+        self._events.append(events.DatagramFrameReceived(data=data))
+
+        # log frame
+        if self._quic_logger is not None:
+            context.quic_logger_frames.append(
+                self._quic_logger.encode_datagram_frame(length=length)
             )
 
     def _handle_max_data_frame(
@@ -1830,6 +1874,9 @@ class QuicConnection:
             self._remote_idle_timeout = quic_transport_parameters.idle_timeout / 1000.0
         if quic_transport_parameters.max_ack_delay is not None:
             self._loss.max_ack_delay = quic_transport_parameters.max_ack_delay / 1000.0
+        self._remote_max_datagram_frame_size = (
+            quic_transport_parameters.max_datagram_frame_size
+        )
         for param in [
             "max_data",
             "max_stream_data_bidi_local",
@@ -1854,6 +1901,7 @@ class QuicConnection:
             initial_max_streams_bidi=self._local_max_streams_bidi,
             initial_max_streams_uni=self._local_max_streams_uni,
             max_ack_delay=25,
+            max_datagram_frame_size=self._configuration.max_datagram_frame_size,
             quantum_readiness=b"Q" * 1200
             if self._configuration.quantum_readiness_test
             else None,
@@ -2053,6 +2101,14 @@ class QuicConnection:
                     builder=builder, space=space, stream=crypto_stream
                 )
 
+            # DATAGRAM
+            while self._datagrams_pending:
+                self._write_datagram_frame(
+                    builder=builder,
+                    data=self._datagrams_pending.popleft(),
+                    frame_type=QuicFrameType.DATAGRAM_WITH_LENGTH,
+                )
+
             for stream in self._streams.values():
                 # STREAM
                 if not stream.is_blocked and not stream.send_buffer_is_empty:
@@ -2193,6 +2249,21 @@ class QuicConnection:
                 builder.quic_logger_frames.append(
                     self._quic_logger.encode_crypto_frame(frame)
                 )
+
+    def _write_datagram_frame(
+        self, builder: QuicPacketBuilder, data: bytes, frame_type: QuicFrameType
+    ) -> None:
+        assert frame_type == QuicFrameType.DATAGRAM_WITH_LENGTH
+        length = len(data)
+        buf = builder.start_frame(frame_type)
+        buf.push_uint_var(length)
+        buf.push_bytes(data)
+
+        # log frame
+        if self._quic_logger is not None:
+            builder.quic_logger_frames.append(
+                self._quic_logger.encode_datagram_frame(length=length)
+            )
 
     def _write_new_connection_id_frame(
         self, builder: QuicPacketBuilder, connection_id: QuicConnectionId

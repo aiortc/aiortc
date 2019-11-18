@@ -233,6 +233,7 @@ class QuicTransportParameters:
     disable_active_migration: Optional[bool] = False
     preferred_address: Optional[QuicPreferredAddress] = None
     active_connection_id_limit: Optional[int] = None
+    max_datagram_frame_size: Optional[int] = None
     quantum_readiness: Optional[bytes] = None
 
 
@@ -252,6 +253,7 @@ PARAMS = {
     12: ("disable_active_migration", bool),
     13: ("preferred_address", QuicPreferredAddress),
     14: ("active_connection_id_limit", int),
+    32: ("max_datagram_frame_size", int),
     3127: ("quantum_readiness", bytes),
 }
 
@@ -373,6 +375,8 @@ class QuicFrameType(IntEnum):
     PATH_RESPONSE = 0x1B
     TRANSPORT_CLOSE = 0x1C
     APPLICATION_CLOSE = 0x1D
+    DATAGRAM = 0x30
+    DATAGRAM_WITH_LENGTH = 0x31
 
 
 NON_ACK_ELICITING_FRAME_TYPES = frozenset(

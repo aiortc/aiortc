@@ -67,9 +67,11 @@ def consume_events(connection):
             break
 
 
-def create_standalone_client(self):
+def create_standalone_client(self, **client_options):
     client = QuicConnection(
-        configuration=QuicConfiguration(is_client=True, quic_logger=QuicLogger())
+        configuration=QuicConfiguration(
+            is_client=True, quic_logger=QuicLogger(), **client_options
+        )
     )
     client._ack_delay = 0
 
@@ -629,6 +631,42 @@ class QuicConnectionTest(TestCase):
             self.assertEqual(stream_id, 7)
             server.send_stream_data(stream_id, b"hello")
 
+    def test_datagram_frame(self):
+        with client_and_server(
+            client_options={"max_datagram_frame_size": 1200},
+            server_options={"max_datagram_frame_size": 1200},
+        ) as (client, server):
+            # check handshake completed
+            event = client.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, None)
+            event = client.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, None)
+            self.assertEqual(event.early_data_accepted, False)
+            self.assertEqual(event.session_resumed, False)
+            for i in range(7):
+                self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
+            self.assertIsNone(client.next_event())
+
+            event = server.next_event()
+            self.assertEqual(type(event), events.ProtocolNegotiated)
+            self.assertEqual(event.alpn_protocol, None)
+            event = server.next_event()
+            self.assertEqual(type(event), events.HandshakeCompleted)
+            self.assertEqual(event.alpn_protocol, None)
+            for i in range(7):
+                self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
+            self.assertIsNone(server.next_event())
+
+            # send datagram
+            client.send_datagram_frame(b"hello")
+            self.assertEqual(transfer(client, server), 1)
+
+            event = server.next_event()
+            self.assertEqual(type(event), events.DatagramFrameReceived)
+            self.assertEqual(event.data, b"hello")
+
     def test_decryption_error(self):
         with client_and_server() as (client, server):
             # mess with encryption key
@@ -767,6 +805,84 @@ class QuicConnectionTest(TestCase):
                 QuicFrameType.DATA_BLOCKED,
                 Buffer(data=encode_uint_var(12345)),
             )
+
+    def test_handle_datagram_frame(self):
+        client = create_standalone_client(self, max_datagram_frame_size=6)
+
+        client._handle_datagram_frame(
+            client_receive_context(client),
+            QuicFrameType.DATAGRAM,
+            Buffer(data=b"hello"),
+        )
+
+        self.assertEqual(
+            client.next_event(), events.DatagramFrameReceived(data=b"hello")
+        )
+
+    def test_handle_datagram_frame_not_allowed(self):
+        client = create_standalone_client(self, max_datagram_frame_size=None)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_datagram_frame(
+                client_receive_context(client),
+                QuicFrameType.DATAGRAM,
+                Buffer(data=b"hello"),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.DATAGRAM)
+        self.assertEqual(cm.exception.reason_phrase, "Unexpected DATAGRAM frame")
+
+    def test_handle_datagram_frame_too_large(self):
+        client = create_standalone_client(self, max_datagram_frame_size=5)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_datagram_frame(
+                client_receive_context(client),
+                QuicFrameType.DATAGRAM,
+                Buffer(data=b"hello"),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.DATAGRAM)
+        self.assertEqual(cm.exception.reason_phrase, "Unexpected DATAGRAM frame")
+
+    def test_handle_datagram_frame_with_length(self):
+        client = create_standalone_client(self, max_datagram_frame_size=7)
+
+        client._handle_datagram_frame(
+            client_receive_context(client),
+            QuicFrameType.DATAGRAM_WITH_LENGTH,
+            Buffer(data=b"\x05hellojunk"),
+        )
+
+        self.assertEqual(
+            client.next_event(), events.DatagramFrameReceived(data=b"hello")
+        )
+
+    def test_handle_datagram_frame_with_length_not_allowed(self):
+        client = create_standalone_client(self, max_datagram_frame_size=None)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_datagram_frame(
+                client_receive_context(client),
+                QuicFrameType.DATAGRAM_WITH_LENGTH,
+                Buffer(data=b"\x05hellojunk"),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.DATAGRAM_WITH_LENGTH)
+        self.assertEqual(cm.exception.reason_phrase, "Unexpected DATAGRAM frame")
+
+    def test_handle_datagram_frame_with_length_too_large(self):
+        client = create_standalone_client(self, max_datagram_frame_size=6)
+
+        with self.assertRaises(QuicConnectionError) as cm:
+            client._handle_datagram_frame(
+                client_receive_context(client),
+                QuicFrameType.DATAGRAM_WITH_LENGTH,
+                Buffer(data=b"\x05hellojunk"),
+            )
+        self.assertEqual(cm.exception.error_code, QuicErrorCode.PROTOCOL_VIOLATION)
+        self.assertEqual(cm.exception.frame_type, QuicFrameType.DATAGRAM_WITH_LENGTH)
+        self.assertEqual(cm.exception.reason_phrase, "Unexpected DATAGRAM frame")
 
     def test_handle_max_data_frame(self):
         with client_and_server() as (client, server):

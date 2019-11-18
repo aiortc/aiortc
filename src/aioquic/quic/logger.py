@@ -79,6 +79,12 @@ class QuicLoggerTrace:
     def encode_data_blocked_frame(self, limit: int) -> Dict:
         return {"frame_type": "data_blocked", "limit": str(limit)}
 
+    def encode_datagram_frame(self, length: int) -> Dict:
+        return {
+            "frame_type": "datagram",
+            "length": length,
+        }
+
     def encode_max_data_frame(self, maximum: int) -> Dict:
         return {"frame_type": "max_data", "maximum": str(maximum)}
 
