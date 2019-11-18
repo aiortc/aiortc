@@ -1,4 +1,5 @@
 import os.path
+import sys
 
 import setuptools
 
@@ -6,6 +7,10 @@ root_dir = os.path.abspath(os.path.dirname(__file__))
 readme_file = os.path.join(root_dir, "README.rst")
 with open(readme_file, encoding="utf-8") as f:
     long_description = f.read()
+
+extra_compile_args = []
+if sys.platform != "win32":
+    extra_compile_args = ["-std=c99"]
 
 setuptools.setup(
     name="aioquic",
@@ -31,9 +36,16 @@ setuptools.setup(
         "Topic :: Internet :: WWW/HTTP",
     ],
     ext_modules=[
-        setuptools.Extension("aioquic._buffer", sources=["src/aioquic/_buffer.c"]),
         setuptools.Extension(
-            "aioquic._crypto", libraries=["crypto"], sources=["src/aioquic/_crypto.c"]
+            "aioquic._buffer",
+            extra_compile_args=extra_compile_args,
+            sources=["src/aioquic/_buffer.c"],
+        ),
+        setuptools.Extension(
+            "aioquic._crypto",
+            extra_compile_args=extra_compile_args,
+            libraries=["crypto"],
+            sources=["src/aioquic/_crypto.c"],
         ),
     ],
     package_dir={"": "src"},
