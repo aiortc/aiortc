@@ -18,7 +18,7 @@ from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import DataReceived, H3Event, HeadersReceived
 from aioquic.h3.exceptions import NoAvailablePushIDError
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.events import ProtocolNegotiated, QuicEvent
+from aioquic.quic.events import DatagramFrameReceived, ProtocolNegotiated, QuicEvent
 from aioquic.quic.logger import QuicLogger, QuicLoggerTrace
 from aioquic.tls import SessionTicket
 
@@ -326,6 +326,9 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 self._http = H3Connection(self._quic)
             elif event.alpn_protocol.startswith("hq-"):
                 self._http = H0Connection(self._quic)
+        elif isinstance(event, DatagramFrameReceived):
+            if event.data == b"quack":
+                self._quic.send_datagram_frame(b"quack-ack")
 
         #  pass event to the HTTP layer
         if self._http is not None:
@@ -447,8 +450,9 @@ if __name__ == "__main__":
         secrets_log_file = None
 
     configuration = QuicConfiguration(
-        alpn_protocols=H3_ALPN + H0_ALPN,
+        alpn_protocols=H3_ALPN + H0_ALPN + ["siduck"],
         is_client=False,
+        max_datagram_frame_size=65536,
         quic_logger=quic_logger,
         secrets_log_file=secrets_log_file,
     )
