@@ -157,32 +157,36 @@ def transfer(sender, receiver):
 
 
 class QuicConnectionTest(TestCase):
+    def check_handshake(self, client, server, alpn_protocol=None):
+        """
+        Check handshake completed.
+        """
+        event = client.next_event()
+        self.assertEqual(type(event), events.ProtocolNegotiated)
+        self.assertEqual(event.alpn_protocol, alpn_protocol)
+        event = client.next_event()
+        self.assertEqual(type(event), events.HandshakeCompleted)
+        self.assertEqual(event.alpn_protocol, alpn_protocol)
+        self.assertEqual(event.early_data_accepted, False)
+        self.assertEqual(event.session_resumed, False)
+        for i in range(7):
+            self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
+        self.assertIsNone(client.next_event())
+
+        event = server.next_event()
+        self.assertEqual(type(event), events.ProtocolNegotiated)
+        self.assertEqual(event.alpn_protocol, alpn_protocol)
+        event = server.next_event()
+        self.assertEqual(type(event), events.HandshakeCompleted)
+        self.assertEqual(event.alpn_protocol, alpn_protocol)
+        for i in range(7):
+            self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
+        self.assertIsNone(server.next_event())
+
     def test_connect(self):
         with client_and_server() as (client, server):
             # check handshake completed
-            event = client.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, None)
-            event = client.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, None)
-            self.assertEqual(event.early_data_accepted, False)
-            self.assertEqual(event.session_resumed, False)
-            for i in range(7):
-                self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(client.next_event())
-
-            event = server.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, None)
-            event = server.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, None)
-            self.assertEqual(event.early_data_accepted, False)
-            self.assertEqual(event.session_resumed, False)
-            for i in range(7):
-                self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(server.next_event())
+            self.check_handshake(client=client, server=server)
 
             # check each endpoint has available connection IDs for the peer
             self.assertEqual(
@@ -228,25 +232,7 @@ class QuicConnectionTest(TestCase):
             server_options={"alpn_protocols": ["hq-23"]},
         ) as (client, server):
             # check handshake completed
-            event = client.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, "hq-23")
-            event = client.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, "hq-23")
-            for i in range(7):
-                self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(client.next_event())
-
-            event = server.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, "hq-23")
-            event = server.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, "hq-23")
-            for i in range(7):
-                self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(server.next_event())
+            self.check_handshake(client=client, server=server, alpn_protocol="hq-23")
 
     def test_connect_with_secrets_log(self):
         client_log_file = io.StringIO()
@@ -255,6 +241,9 @@ class QuicConnectionTest(TestCase):
             client_options={"secrets_log_file": client_log_file},
             server_options={"secrets_log_file": server_log_file},
         ) as (client, server):
+            # check handshake completed
+            self.check_handshake(client=client, server=server)
+
             # check secrets were logged
             client_log = client_log_file.getvalue()
             server_log = server_log_file.getvalue()
@@ -277,7 +266,8 @@ class QuicConnectionTest(TestCase):
             client,
             server,
         ):
-            pass
+            # check handshake completed
+            self.check_handshake(client=client, server=server)
 
     def test_connect_with_loss_1(self):
         """
@@ -633,31 +623,11 @@ class QuicConnectionTest(TestCase):
 
     def test_datagram_frame(self):
         with client_and_server(
-            client_options={"max_datagram_frame_size": 1200},
-            server_options={"max_datagram_frame_size": 1200},
+            client_options={"max_datagram_frame_size": 65536},
+            server_options={"max_datagram_frame_size": 65536},
         ) as (client, server):
             # check handshake completed
-            event = client.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, None)
-            event = client.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, None)
-            self.assertEqual(event.early_data_accepted, False)
-            self.assertEqual(event.session_resumed, False)
-            for i in range(7):
-                self.assertEqual(type(client.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(client.next_event())
-
-            event = server.next_event()
-            self.assertEqual(type(event), events.ProtocolNegotiated)
-            self.assertEqual(event.alpn_protocol, None)
-            event = server.next_event()
-            self.assertEqual(type(event), events.HandshakeCompleted)
-            self.assertEqual(event.alpn_protocol, None)
-            for i in range(7):
-                self.assertEqual(type(server.next_event()), events.ConnectionIdIssued)
-            self.assertIsNone(server.next_event())
+            self.check_handshake(client=client, server=server, alpn_protocol=None)
 
             # send datagram
             client.send_datagram_frame(b"hello")
@@ -666,6 +636,38 @@ class QuicConnectionTest(TestCase):
             event = server.next_event()
             self.assertEqual(type(event), events.DatagramFrameReceived)
             self.assertEqual(event.data, b"hello")
+
+    def test_datagram_frame_2(self):
+        # payload which exactly fills an entire packet
+        payload = b"Z" * 1250
+
+        with client_and_server(
+            client_options={"max_datagram_frame_size": 65536},
+            server_options={"max_datagram_frame_size": 65536},
+        ) as (client, server):
+            # check handshake completed
+            self.check_handshake(client=client, server=server, alpn_protocol=None)
+
+            # queue 20 datagrams
+            for i in range(20):
+                client.send_datagram_frame(payload)
+
+            # client can only 11 datagrams are sent due to congestion control
+            self.assertEqual(transfer(client, server), 11)
+            for i in range(11):
+                event = server.next_event()
+                self.assertEqual(type(event), events.DatagramFrameReceived)
+                self.assertEqual(event.data, payload)
+
+            # server sends ACK
+            self.assertEqual(transfer(server, client), 1)
+
+            # client sends remaining datagrams
+            self.assertEqual(transfer(client, server), 9)
+            for i in range(9):
+                event = server.next_event()
+                self.assertEqual(type(event), events.DatagramFrameReceived)
+                self.assertEqual(event.data, payload)
 
     def test_decryption_error(self):
         with client_and_server() as (client, server):

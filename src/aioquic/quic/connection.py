@@ -2103,11 +2103,14 @@ class QuicConnection:
 
             # DATAGRAM
             while self._datagrams_pending:
-                self._write_datagram_frame(
+                if self._write_datagram_frame(
                     builder=builder,
-                    data=self._datagrams_pending.popleft(),
+                    data=self._datagrams_pending[0],
                     frame_type=QuicFrameType.DATAGRAM_WITH_LENGTH,
-                )
+                ):
+                    self._datagrams_pending.popleft()
+                else:
+                    break
 
             for stream in self._streams.values():
                 # STREAM
@@ -2252,9 +2255,20 @@ class QuicConnection:
 
     def _write_datagram_frame(
         self, builder: QuicPacketBuilder, data: bytes, frame_type: QuicFrameType
-    ) -> None:
+    ) -> bool:
+        """
+        Write a DATAGRAM frame.
+
+        Returns True if the frame was processed, False otherwise.
+        """
         assert frame_type == QuicFrameType.DATAGRAM_WITH_LENGTH
         length = len(data)
+        frame_size = 1 + size_uint_var(length) + length
+
+        if frame_size > builder.remaining_space:
+            # not enough space left, retry later
+            return False
+
         buf = builder.start_frame(frame_type)
         buf.push_uint_var(length)
         buf.push_bytes(data)
@@ -2264,6 +2278,8 @@ class QuicConnection:
             builder.quic_logger_frames.append(
                 self._quic_logger.encode_datagram_frame(length=length)
             )
+
+        return True
 
     def _write_new_connection_id_frame(
         self, builder: QuicPacketBuilder, connection_id: QuicConnectionId
