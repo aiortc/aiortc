@@ -9,6 +9,8 @@ from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import DatagramFrameReceived, QuicEvent
 
+logger = logging.getLogger("client")
+
 
 class SiduckClient(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
@@ -38,7 +40,9 @@ async def run(configuration: QuicConfiguration, host: str, port: int) -> None:
         host, port, configuration=configuration, create_protocol=SiduckClient
     ) as client:
         client = cast(SiduckClient, client)
+        logger.info("sending quack")
         await client.quack()
+        logger.info("received quack-ack")
 
 
 if __name__ == "__main__":
