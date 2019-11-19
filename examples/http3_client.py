@@ -346,7 +346,7 @@ if __name__ == "__main__":
         "--insecure",
         action="store_true",
         help="do not validate server certificate",
-    ),
+    )
     parser.add_argument("--legacy-http", action="store_true", help="use HTTP/0.9")
     parser.add_argument(
         "-q", "--quic-log", type=str, help="log QUIC events to a file in QLOG format"
