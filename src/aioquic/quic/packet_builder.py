@@ -85,7 +85,6 @@ class QuicPacketBuilder:
         self._datagrams: List[bytes] = []
         self._datagram_flight_bytes = 0
         self._datagram_init = True
-        self._datagram_padding = False
         self._packets: List[QuicSentPacket] = []
         self._flight_bytes = 0
         self._total_bytes = 0
@@ -135,7 +134,7 @@ class QuicPacketBuilder:
         Returns the assembled datagrams.
         """
         if self._packet is not None:
-            self._end_packet(final=True)
+            self._end_packet()
         self._flush_current_datagram()
 
         datagrams = self._datagrams
@@ -172,7 +171,7 @@ class QuicPacketBuilder:
 
         # finish previous datagram
         if self._packet is not None:
-            self._end_packet(final=False)
+            self._end_packet()
 
         # if there is too little space remaining, start a new datagram
         # FIXME: the limit is arbitrary!
@@ -193,7 +192,6 @@ class QuicPacketBuilder:
                     self._buffer_capacity = remaining_total_bytes
             self._datagram_flight_bytes = 0
             self._datagram_init = False
-            self._datagram_padding = False
 
         # calculate header size
         packet_long_header = is_long_header(packet_type)
@@ -234,18 +232,15 @@ class QuicPacketBuilder:
 
         buf.seek(self._packet_start + self._header_size)
 
-    def _end_packet(self, final: bool) -> None:
+    def _end_packet(self) -> None:
         """
         Ends the current packet.
         """
         buf = self._buffer
         packet_size = buf.tell() - self._packet_start
-        if packet_size > self._header_size or (self._datagram_padding and final):
-            if self._is_client and self._packet_type == PACKET_TYPE_INITIAL:
-                self._datagram_padding = True
-
+        if packet_size > self._header_size:
             # pad initial datagram
-            if self._datagram_padding and final:
+            if self._is_client and self._packet_type == PACKET_TYPE_INITIAL:
                 if self.remaining_space:
                     buf.push_bytes(bytes(self.remaining_space))
                     packet_size = buf.tell() - self._packet_start

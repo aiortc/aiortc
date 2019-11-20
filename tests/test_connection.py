@@ -317,14 +317,14 @@ class QuicConnectionTest(TestCase):
         client.receive_datagram(items[0][0], SERVER_ADDR, now=now)
         client.receive_datagram(items[1][0], SERVER_ADDR, now=now)
         items = client.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [1280, 223])
+        self.assertEqual(datagram_sizes(items), [1280, 1280, 223])
         self.assertAlmostEqual(client.get_timer(), 1.825)
 
         now = 1.3
         server.receive_datagram(items[0][0], CLIENT_ADDR, now=now)
         server.receive_datagram(items[1][0], CLIENT_ADDR, now=now)
         items = server.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [276])
+        self.assertEqual(datagram_sizes(items), [271])
         self.assertAlmostEqual(server.get_timer(), 1.825)
         self.assertEqual(len(server._loss.spaces[0].sent_packets), 0)
         self.assertEqual(len(server._loss.spaces[1].sent_packets), 1)
@@ -333,7 +333,7 @@ class QuicConnectionTest(TestCase):
         client.receive_datagram(items[0][0], SERVER_ADDR, now=now)
         items = client.datagrams_to_send(now=now)
         self.assertEqual(datagram_sizes(items), [32])
-        self.assertAlmostEqual(client.get_timer(), 61.4)  # idle timeout
+        self.assertAlmostEqual(client.get_timer(), 1.725)
         self.assertEqual(type(client.next_event()), events.ProtocolNegotiated)
         self.assertEqual(type(client.next_event()), events.HandshakeCompleted)
 
@@ -381,7 +381,7 @@ class QuicConnectionTest(TestCase):
         now = 0.2
         client.receive_datagram(items[0][0], SERVER_ADDR, now=now)
         items = client.datagrams_to_send(now=now)
-        self.assertEqual(datagram_sizes(items), [1280])
+        self.assertEqual(datagram_sizes(items), [1280, 48])
         self.assertAlmostEqual(client.get_timer(), 0.625)
 
         #  client PTO - padded HANDSHAKE

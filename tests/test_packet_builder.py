@@ -16,7 +16,7 @@ from aioquic.quic.packet_builder import (
 from aioquic.tls import Epoch
 
 
-def create_builder(is_client=True):
+def create_builder(is_client=False):
     return QuicPacketBuilder(
         host_cid=bytes(8),
         is_client=is_client,
@@ -51,11 +51,11 @@ class QuicPacketBuilderTest(TestCase):
         # check builder
         self.assertEqual(builder.packet_number, 0)
 
-    def test_long_header_initial_client(self):
+    def test_long_header_padding(self):
         builder = create_builder(is_client=True)
         crypto = create_crypto()
 
-        # INITIAL
+        # INITIAL, fully padded
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         self.assertEqual(builder.remaining_space, 1236)
         buf = builder.start_frame(QuicFrameType.CRYPTO)
@@ -80,22 +80,13 @@ class QuicPacketBuilderTest(TestCase):
                     is_crypto_packet=True,
                     packet_number=0,
                     packet_type=PACKET_TYPE_INITIAL,
-                    sent_bytes=145,
-                ),
-                QuicSentPacket(
-                    epoch=Epoch.INITIAL,
-                    in_flight=True,
-                    is_ack_eliciting=False,
-                    is_crypto_packet=False,
-                    packet_number=1,
-                    packet_type=PACKET_TYPE_INITIAL,
-                    sent_bytes=1135,
-                ),
+                    sent_bytes=1280,
+                )
             ],
         )
 
         # check builder
-        self.assertEqual(builder.packet_number, 2)
+        self.assertEqual(builder.packet_number, 1)
 
     def test_long_header_initial_client_2(self):
         builder = create_builder(is_client=True)
@@ -143,25 +134,16 @@ class QuicPacketBuilderTest(TestCase):
                     is_crypto_packet=True,
                     packet_number=1,
                     packet_type=PACKET_TYPE_INITIAL,
-                    sent_bytes=145,
-                ),
-                QuicSentPacket(
-                    epoch=Epoch.INITIAL,
-                    in_flight=True,
-                    is_ack_eliciting=False,
-                    is_crypto_packet=False,
-                    packet_number=2,
-                    packet_type=PACKET_TYPE_INITIAL,
-                    sent_bytes=1135,
+                    sent_bytes=1280,
                 ),
             ],
         )
 
         # check builder
-        self.assertEqual(builder.packet_number, 3)
+        self.assertEqual(builder.packet_number, 2)
 
     def test_long_header_initial_server(self):
-        builder = create_builder(is_client=False)
+        builder = create_builder()
         crypto = create_crypto()
 
         # INITIAL
@@ -283,7 +265,7 @@ class QuicPacketBuilderTest(TestCase):
         # check datagrams
         datagrams, packets = builder.flush()
         self.assertEqual(len(datagrams), 1)
-        self.assertEqual(len(datagrams[0]), 1280)
+        self.assertEqual(len(datagrams[0]), 914)
         self.assertEqual(
             packets,
             [
@@ -312,7 +294,7 @@ class QuicPacketBuilderTest(TestCase):
                     is_crypto_packet=True,
                     packet_number=2,
                     packet_type=PACKET_TYPE_ONE_RTT,
-                    sent_bytes=693,
+                    sent_bytes=327,
                 ),
             ],
         )
