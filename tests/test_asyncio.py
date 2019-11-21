@@ -178,7 +178,7 @@ class HighLevelTest(TestCase):
             idle_timeout=300.0, is_client=False, quic_logger=QuicLogger()
         )
         server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
-        run(self.run_server(configuration=server_configuration, stateless_retry=True))
+        run(self.run_server(configuration=server_configuration))
 
         response = run(
             self.run_client(
