@@ -2151,14 +2151,17 @@ class QuicConnection:
 
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:
-                self._write_crypto_frame(
+                if self._write_crypto_frame(
                     builder=builder, space=space, stream=crypto_stream
-                )
+                ):
+                    self._probe_pending = False
 
-            # PADDING (anti-deadlock packet)
-            if self._probe_pending and self._is_client and epoch == tls.Epoch.HANDSHAKE:
-                buf = builder.start_frame(QuicFrameType.PADDING)
-                buf.push_bytes(bytes(builder.remaining_space))
+            # PING (probe)
+            if self._probe_pending and epoch == tls.Epoch.HANDSHAKE:
+                self._logger.info(
+                    "Sending PING (probe) in packet %d", builder.packet_number
+                )
+                self._write_ping_frame(builder)
                 self._probe_pending = False
 
             if builder.packet_is_empty:
@@ -2234,7 +2237,7 @@ class QuicConnection:
 
     def _write_crypto_frame(
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
-    ) -> None:
+    ) -> bool:
         frame_overhead = 3 + size_uint_var(stream.next_send_offset)
         frame = stream.get_frame(builder.remaining_space - frame_overhead)
         if frame is not None:
@@ -2252,6 +2255,9 @@ class QuicConnection:
                 builder.quic_logger_frames.append(
                     self._quic_logger.encode_crypto_frame(frame)
                 )
+            return True
+
+        return False
 
     def _write_datagram_frame(
         self, builder: QuicPacketBuilder, data: bytes, frame_type: QuicFrameType
