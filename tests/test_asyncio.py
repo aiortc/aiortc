@@ -175,7 +175,7 @@ class HighLevelTest(TestCase):
         data = b"Z" * 65536
 
         server_configuration = QuicConfiguration(
-            idle_timeout=300.0, is_client=False, quic_logger=QuicLogger()
+            is_client=False, quic_logger=QuicLogger()
         )
         server_configuration.load_cert_chain(SERVER_CERTFILE, SERVER_KEYFILE)
         run(self.run_server(configuration=server_configuration))
@@ -184,7 +184,7 @@ class HighLevelTest(TestCase):
             self.run_client(
                 "127.0.0.1",
                 configuration=QuicConfiguration(
-                    is_client=True, idle_timeout=300.0, quic_logger=QuicLogger()
+                    is_client=True, quic_logger=QuicLogger()
                 ),
                 request=data,
             )
