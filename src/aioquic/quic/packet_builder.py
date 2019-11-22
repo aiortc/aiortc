@@ -100,6 +100,7 @@ class QuicPacketBuilder:
 
         self._buffer = Buffer(PACKET_MAX_SIZE)
         self._buffer_capacity = PACKET_MAX_SIZE
+        self._flight_capacity = PACKET_MAX_SIZE
 
     @property
     def packet_is_empty(self) -> bool:
@@ -118,13 +119,25 @@ class QuicPacketBuilder:
         return self._packet_number
 
     @property
-    def remaining_space(self) -> int:
+    def remaining_buffer_space(self) -> int:
         """
         Returns the remaining number of bytes which can be used in
         the current packet.
         """
         return (
             self._buffer_capacity
+            - self._buffer.tell()
+            - self._packet_crypto.aead_tag_size
+        )
+
+    @property
+    def remaining_flight_space(self) -> int:
+        """
+        Returns the remaining number of bytes which can be used in
+        the current packet.
+        """
+        return (
+            self._flight_capacity
             - self._buffer.tell()
             - self._packet_crypto.aead_tag_size
         )
@@ -148,10 +161,17 @@ class QuicPacketBuilder:
         frame_type: int,
         handler: Optional[QuicDeliveryHandler] = None,
         args: Sequence[Any] = [],
+        required_bytes: int = 64,
     ) -> Buffer:
         """
         Starts a new frame.
         """
+        if self.remaining_buffer_space < required_bytes or (
+            frame_type not in NON_IN_FLIGHT_FRAME_TYPES
+            and self.remaining_flight_space < required_bytes
+        ):
+            raise QuicPacketBuilderStop
+
         self._buffer.push_uint_var(frame_type)
         if frame_type not in NON_ACK_ELICITING_FRAME_TYPES:
             self._packet.is_ack_eliciting = True
@@ -182,14 +202,16 @@ class QuicPacketBuilder:
 
         # initialize datagram if needed
         if self._datagram_init:
-            if self.max_flight_bytes is not None:
-                remaining_flight_bytes = self.max_flight_bytes - self._flight_bytes
-                if remaining_flight_bytes < self._buffer_capacity:
-                    self._buffer_capacity = remaining_flight_bytes
             if self.max_total_bytes is not None:
                 remaining_total_bytes = self.max_total_bytes - self._total_bytes
                 if remaining_total_bytes < self._buffer_capacity:
                     self._buffer_capacity = remaining_total_bytes
+
+            self._flight_capacity = self._buffer_capacity
+            if self.max_flight_bytes is not None:
+                remaining_flight_bytes = self.max_flight_bytes - self._flight_bytes
+                if remaining_flight_bytes < self._flight_capacity:
+                    self._flight_capacity = remaining_flight_bytes
             self._datagram_flight_bytes = 0
             self._datagram_init = False
 
@@ -241,8 +263,8 @@ class QuicPacketBuilder:
         if packet_size > self._header_size:
             # pad initial datagram
             if self._is_client and self._packet_type == PACKET_TYPE_INITIAL:
-                if self.remaining_space:
-                    buf.push_bytes(bytes(self.remaining_space))
+                if self.remaining_flight_space:
+                    buf.push_bytes(bytes(self.remaining_flight_space))
                     packet_size = buf.tell() - self._packet_start
                     self._packet.in_flight = True
 

@@ -723,7 +723,7 @@ class QuicConnectionTest(TestCase):
         crypto.setup_initial(client.host_cid, is_client=False, version=client._version)
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         buf = builder.start_frame(QuicFrameType.PADDING)
-        buf.push_bytes(bytes(builder.remaining_space))
+        buf.push_bytes(bytes(builder.remaining_flight_space))
 
         for datagram in builder.flush()[0]:
             client.receive_datagram(datagram, SERVER_ADDR, now=time.time())
@@ -1381,6 +1381,22 @@ class QuicConnectionTest(TestCase):
             )
             self.assertEqual(cm.exception.frame_type, 0x1C)
             self.assertEqual(cm.exception.reason_phrase, "Failed to parse frame")
+
+    def test_send_max_data_blocked_by_cc(self):
+        with client_and_server() as (client, server):
+            # check congestion control
+            self.assertEqual(client._loss.bytes_in_flight, 0)
+            self.assertEqual(client._loss.congestion_window, 14408)
+
+            # artificially raise received data counter
+            client._local_max_data_used = client._local_max_data
+            self.assertEqual(server._remote_max_data, 1048576)
+
+            # artificially raise bytes in flight
+            client._loss.bytes_in_flight = 14408
+
+            # MAX_DATA is not sent due to congestion control
+            self.assertEqual(drop(client), 0)
 
     def test_send_max_data_retransmit(self):
         with client_and_server() as (client, server):

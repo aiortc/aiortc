@@ -2243,12 +2243,13 @@ class QuicConnection:
         self, builder: QuicPacketBuilder, space: QuicPacketSpace, stream: QuicStream
     ) -> bool:
         frame_overhead = 3 + size_uint_var(stream.next_send_offset)
-        frame = stream.get_frame(builder.remaining_space - frame_overhead)
+        frame = stream.get_frame(builder.remaining_flight_space - frame_overhead)
         if frame is not None:
             buf = builder.start_frame(
                 QuicFrameType.CRYPTO,
                 stream.on_data_delivery,
                 (frame.offset, frame.offset + len(frame.data)),
+                required_bytes=frame_overhead,
             )
             buf.push_uint_var(frame.offset)
             buf.push_uint16(len(frame.data) | 0x4000)
@@ -2275,11 +2276,11 @@ class QuicConnection:
         length = len(data)
         frame_size = 1 + size_uint_var(length) + length
 
-        if frame_size > builder.remaining_space:
+        if frame_size > builder.remaining_flight_space:
             # not enough space left, retry later
             return False
 
-        buf = builder.start_frame(frame_type)
+        buf = builder.start_frame(frame_type, required_bytes=frame_size)
         buf.push_uint_var(length)
         buf.push_bytes(data)
 
@@ -2388,7 +2389,9 @@ class QuicConnection:
             + (size_uint_var(stream.next_send_offset) if stream.next_send_offset else 0)
         )
         previous_send_highest = stream._send_highest
-        frame = stream.get_frame(builder.remaining_space - frame_overhead, max_offset)
+        frame = stream.get_frame(
+            builder.remaining_flight_space - frame_overhead, max_offset
+        )
 
         if frame is not None:
             frame_type = QuicFrameType.STREAM_BASE | 2  # length
@@ -2400,6 +2403,7 @@ class QuicConnection:
                 frame_type,
                 stream.on_data_delivery,
                 (frame.offset, frame.offset + len(frame.data)),
+                required_bytes=frame_overhead,
             )
             buf.push_uint_var(stream.stream_id)
             if frame.offset:
