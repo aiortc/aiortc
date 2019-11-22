@@ -773,14 +773,50 @@ class QuicConnectionTest(TestCase):
     def test_handle_connection_close_frame(self):
         with client_and_server() as (client, server):
             server.close(
-                error_code=QuicErrorCode.NO_ERROR, frame_type=QuicFrameType.PADDING
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=QuicFrameType.ACK,
+                reason_phrase="illegal ACK frame",
             )
             roundtrip(server, client)
 
+            self.assertEqual(
+                client._close_event,
+                events.ConnectionTerminated(
+                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                    frame_type=QuicFrameType.ACK,
+                    reason_phrase="illegal ACK frame",
+                ),
+            )
+
     def test_handle_connection_close_frame_app(self):
         with client_and_server() as (client, server):
-            server.close(error_code=QuicErrorCode.NO_ERROR)
+            server.close(error_code=QuicErrorCode.NO_ERROR, reason_phrase="goodbye")
             roundtrip(server, client)
+
+            self.assertEqual(
+                client._close_event,
+                events.ConnectionTerminated(
+                    error_code=QuicErrorCode.NO_ERROR,
+                    frame_type=None,
+                    reason_phrase="goodbye",
+                ),
+            )
+
+    def test_handle_connection_close_frame_app_not_utf8(self):
+        client = create_standalone_client(self)
+
+        client._handle_connection_close_frame(
+            client_receive_context(client),
+            QuicFrameType.APPLICATION_CLOSE,
+            Buffer(data=binascii.unhexlify("0008676f6f6462798200")),
+        )
+
+        self.assertEqual(
+            client._close_event,
+            events.ConnectionTerminated(
+                error_code=QuicErrorCode.NO_ERROR, frame_type=None, reason_phrase="",
+            ),
+        )
 
     def test_handle_crypto_frame_over_largest_offset(self):
         with client_and_server() as (client, server):

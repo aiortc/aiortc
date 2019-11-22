@@ -29,11 +29,9 @@ from .packet import (
     get_spin_bit,
     is_long_header,
     pull_ack_frame,
-    pull_application_close_frame,
     pull_new_connection_id_frame,
     pull_quic_header,
     pull_quic_transport_parameters,
-    pull_transport_close_frame,
     push_ack_frame,
     push_new_connection_id_frame,
     push_quic_transport_parameters,
@@ -1174,11 +1172,16 @@ class QuicConnection:
         """
         Handle a CONNECTION_CLOSE frame.
         """
+        error_code = buf.pull_uint_var()
         if frame_type == QuicFrameType.TRANSPORT_CLOSE:
-            error_code, frame_type, reason_phrase = pull_transport_close_frame(buf)
+            frame_type = buf.pull_uint_var()
         else:
-            error_code, reason_phrase = pull_application_close_frame(buf)
             frame_type = None
+        reason_length = buf.pull_uint_var()
+        try:
+            reason_phrase = buf.pull_bytes(reason_length).decode("utf8")
+        except UnicodeDecodeError:
+            reason_phrase = ""
 
         # log frame
         if self._quic_logger is not None:

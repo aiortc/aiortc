@@ -475,25 +475,3 @@ def push_new_connection_id_frame(buf: Buffer, frame: QuicNewConnectionIdFrame) -
     buf.push_uint8(len(frame.connection_id))
     buf.push_bytes(frame.connection_id)
     buf.push_bytes(frame.stateless_reset_token)
-
-
-def decode_reason_phrase(reason_bytes: bytes) -> str:
-    try:
-        return reason_bytes.decode("utf8")
-    except UnicodeDecodeError:
-        return ""
-
-
-def pull_transport_close_frame(buf: Buffer) -> Tuple[int, int, str]:
-    error_code = buf.pull_uint_var()
-    frame_type = buf.pull_uint_var()
-    reason_length = buf.pull_uint_var()
-    reason_phrase = decode_reason_phrase(buf.pull_bytes(reason_length))
-    return (error_code, frame_type, reason_phrase)
-
-
-def pull_application_close_frame(buf: Buffer) -> Tuple[int, str]:
-    error_code = buf.pull_uint_var()
-    reason_length = buf.pull_uint_var()
-    reason_phrase = decode_reason_phrase(buf.pull_bytes(reason_length))
-    return (error_code, reason_phrase)
