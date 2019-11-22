@@ -456,7 +456,7 @@ class QuicConnection:
             try:
                 if not self._handshake_confirmed:
                     for epoch in [tls.Epoch.INITIAL, tls.Epoch.HANDSHAKE]:
-                        self._write_handshake(builder, epoch)
+                        self._write_handshake(builder, epoch, now)
                 self._write_application(builder, network_path, now)
             except QuicPacketBuilderStop:
                 pass
@@ -828,6 +828,7 @@ class QuicConnection:
             # record packet as received
             if packet_number > space.largest_received_packet:
                 space.largest_received_packet = packet_number
+                space.largest_received_time = now
             space.ack_queue.add(packet_number)
             if is_ack_eliciting and space.ack_at is None:
                 space.ack_at = now + self._ack_delay
@@ -2017,7 +2018,7 @@ class QuicConnection:
             if self._handshake_complete:
                 # ACK
                 if space.ack_at is not None and space.ack_at <= now:
-                    self._write_ack_frame(builder=builder, space=space)
+                    self._write_ack_frame(builder=builder, space=space, now=now)
 
                 # PATH CHALLENGE
                 if (
@@ -2119,7 +2120,9 @@ class QuicConnection:
             if builder.packet_is_empty:
                 break
 
-    def _write_handshake(self, builder: QuicPacketBuilder, epoch: tls.Epoch) -> None:
+    def _write_handshake(
+        self, builder: QuicPacketBuilder, epoch: tls.Epoch, now: float
+    ) -> None:
         crypto = self._cryptos[epoch]
         if not crypto.send.is_valid():
             return
@@ -2136,7 +2139,7 @@ class QuicConnection:
 
             # ACK
             if space.ack_at is not None:
-                self._write_ack_frame(builder=builder, space=space)
+                self._write_ack_frame(builder=builder, space=space, now=now)
 
             # CRYPTO
             if not crypto_stream.send_buffer_is_empty:
@@ -2153,19 +2156,27 @@ class QuicConnection:
             if builder.packet_is_empty:
                 break
 
-    def _write_ack_frame(self, builder: QuicPacketBuilder, space: QuicPacketSpace):
+    def _write_ack_frame(
+        self, builder: QuicPacketBuilder, space: QuicPacketSpace, now: float
+    ) -> None:
+        # calculate ACK delay
+        ack_delay = now - space.largest_received_time
+        ack_delay_encoded = int(ack_delay * 1000000) >> self._local_ack_delay_exponent
+
         buf = builder.start_frame(
             QuicFrameType.ACK,
             self._on_ack_delivery,
             (space, space.largest_received_packet),
         )
-        push_ack_frame(buf, space.ack_queue, 0)
+        push_ack_frame(buf, space.ack_queue, ack_delay_encoded)
         space.ack_at = None
 
         # log frame
         if self._quic_logger is not None:
             builder.quic_logger_frames.append(
-                self._quic_logger.encode_ack_frame(ranges=space.ack_queue, delay=0.0)
+                self._quic_logger.encode_ack_frame(
+                    ranges=space.ack_queue, delay=ack_delay
+                )
             )
 
     def _write_connection_close_frame(
