@@ -69,7 +69,6 @@ class QuicLoggerTrace:
 
     def encode_crypto_frame(self, frame: QuicStreamFrame) -> Dict:
         return {
-            "fin": frame.fin,
             "frame_type": "crypto",
             "length": len(frame.data),
             "offset": str(frame.offset),
@@ -94,8 +93,12 @@ class QuicLoggerTrace:
             "stream_id": str(stream_id),
         }
 
-    def encode_max_streams_frame(self, maximum: int) -> Dict:
-        return {"frame_type": "max_streams", "maximum": str(maximum)}
+    def encode_max_streams_frame(self, is_unidirectional: bool, maximum: int) -> Dict:
+        return {
+            "frame_type": "max_streams",
+            "maximum": str(maximum),
+            "stream_type": "unidirectional" if is_unidirectional else "bidirectional",
+        }
 
     def encode_new_connection_id_frame(
         self,
@@ -171,8 +174,12 @@ class QuicLoggerTrace:
             "stream_id": str(stream_id),
         }
 
-    def encode_streams_blocked_frame(self, limit: int) -> Dict:
-        return {"frame_type": "streams_blocked", "limit": str(limit)}
+    def encode_streams_blocked_frame(self, is_unidirectional: bool, limit: int) -> Dict:
+        return {
+            "frame_type": "streams_blocked",
+            "limit": str(limit),
+            "stream_type": "unidirectional" if is_unidirectional else "bidirectional",
+        }
 
     def encode_transport_parameters(
         self, owner: str, parameters: QuicTransportParameters

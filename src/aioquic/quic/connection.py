@@ -1380,7 +1380,9 @@ class QuicConnection:
         # log frame
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
-                self._quic_logger.encode_max_streams_frame(maximum=max_streams)
+                self._quic_logger.encode_max_streams_frame(
+                    is_unidirectional=False, maximum=max_streams
+                )
             )
 
         if max_streams > self._remote_max_streams_bidi:
@@ -1401,7 +1403,9 @@ class QuicConnection:
         # log frame
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
-                self._quic_logger.encode_max_streams_frame(maximum=max_streams)
+                self._quic_logger.encode_max_streams_frame(
+                    is_unidirectional=True, maximum=max_streams
+                )
             )
 
         if max_streams > self._remote_max_streams_uni:
@@ -1710,7 +1714,10 @@ class QuicConnection:
         # log frame
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
-                self._quic_logger.encode_streams_blocked_frame(limit=limit)
+                self._quic_logger.encode_streams_blocked_frame(
+                    is_unidirectional=frame_type == QuicFrameType.STREAMS_BLOCKED_UNI,
+                    limit=limit,
+                )
             )
 
     def _on_ack_delivery(
@@ -2459,5 +2466,8 @@ class QuicConnection:
         # log frame
         if self._quic_logger is not None:
             builder.quic_logger_frames.append(
-                self._quic_logger.encode_streams_blocked_frame(limit=limit)
+                self._quic_logger.encode_streams_blocked_frame(
+                    is_unidirectional=frame_type == QuicFrameType.STREAMS_BLOCKED_UNI,
+                    limit=limit,
+                )
             )
