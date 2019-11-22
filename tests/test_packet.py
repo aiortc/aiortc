@@ -404,19 +404,6 @@ class FrameTest(TestCase):
         packet.push_ack_frame(buf, rangeset, delay)
         self.assertEqual(buf.data, data)
 
-    def test_new_token(self):
-        data = binascii.unhexlify("080102030405060708")
-
-        # parse
-        buf = Buffer(data=data)
-        token = packet.pull_new_token_frame(buf)
-        self.assertEqual(token, binascii.unhexlify("0102030405060708"))
-
-        # serialize
-        buf = Buffer(capacity=len(data))
-        packet.push_new_token_frame(buf, token)
-        self.assertEqual(buf.data, data)
-
     def test_new_connection_id(self):
         data = binascii.unhexlify(
             "0200117813f3d9e45e0cacbb491b4b66b039f20406f68fede38ec4c31aba8ab1245244e8"

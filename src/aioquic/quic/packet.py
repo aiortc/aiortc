@@ -454,16 +454,6 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
         start = r.start
 
 
-def pull_new_token_frame(buf: Buffer) -> bytes:
-    length = buf.pull_uint_var()
-    return buf.pull_bytes(length)
-
-
-def push_new_token_frame(buf: Buffer, token: bytes) -> None:
-    buf.push_uint_var(len(token))
-    buf.push_bytes(token)
-
-
 def pull_new_connection_id_frame(buf: Buffer) -> QuicNewConnectionIdFrame:
     sequence_number = buf.pull_uint_var()
     retire_prior_to = buf.pull_uint_var()

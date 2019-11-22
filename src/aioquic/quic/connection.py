@@ -31,7 +31,6 @@ from .packet import (
     pull_ack_frame,
     pull_application_close_frame,
     pull_new_connection_id_frame,
-    pull_new_token_frame,
     pull_quic_header,
     pull_quic_transport_parameters,
     pull_transport_close_frame,
@@ -1437,7 +1436,8 @@ class QuicConnection:
         """
         Handle a NEW_TOKEN frame.
         """
-        token = pull_new_token_frame(buf)
+        length = buf.pull_uint_var()
+        token = buf.pull_bytes(length)
 
         if not self._is_client:
             raise QuicConnectionError(
