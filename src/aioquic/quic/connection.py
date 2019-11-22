@@ -433,7 +433,7 @@ class QuicConnection:
                 crypto = self._cryptos[epoch]
                 if crypto.send.is_valid():
                     builder.start_packet(packet_type, crypto)
-                    self._write_close_frame(
+                    self._write_connection_close_frame(
                         builder=builder,
                         error_code=self._close_event.error_code,
                         frame_type=self._close_event.frame_type,
@@ -2006,7 +2006,6 @@ class QuicConnection:
         space = self._spaces[tls.Epoch.ONE_RTT]
 
         while True:
-            # write header
             builder.start_packet(packet_type, crypto)
 
             if self._handshake_complete:
@@ -2062,7 +2061,7 @@ class QuicConnection:
                         )
                     self._streams_blocked_pending = False
 
-                # connection-level limits
+                # MAX_DATA
                 self._write_connection_limits(builder=builder, space=space)
 
             # stream-level limits
@@ -2096,8 +2095,8 @@ class QuicConnection:
                 else:
                     break
 
+            # STREAM
             for stream in self._streams.values():
-                # STREAM
                 if not stream.is_blocked and not stream.send_buffer_is_empty:
                     self._remote_max_data_used += self._write_stream_frame(
                         builder=builder,
@@ -2163,7 +2162,7 @@ class QuicConnection:
                 self._quic_logger.encode_ack_frame(ranges=space.ack_queue, delay=0.0)
             )
 
-    def _write_close_frame(
+    def _write_connection_close_frame(
         self,
         builder: QuicPacketBuilder,
         error_code: int,
