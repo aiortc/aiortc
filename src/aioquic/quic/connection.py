@@ -2020,30 +2020,17 @@ class QuicConnection:
                     and network_path.local_challenge is None
                 ):
                     challenge = os.urandom(8)
-                    buf = builder.start_frame(QuicFrameType.PATH_CHALLENGE)
-                    buf.push_bytes(challenge)
+                    self._write_path_challenge_frame(
+                        builder=builder, challenge=challenge
+                    )
                     network_path.local_challenge = challenge
-
-                    # log frame
-                    if self._quic_logger is not None:
-                        builder.quic_logger_frames.append(
-                            self._quic_logger.encode_path_challenge_frame(
-                                data=challenge
-                            )
-                        )
 
                 # PATH RESPONSE
                 if network_path.remote_challenge is not None:
-                    challenge = network_path.remote_challenge
-                    buf = builder.start_frame(QuicFrameType.PATH_RESPONSE)
-                    buf.push_bytes(challenge)
+                    self._write_path_response_frame(
+                        builder=builder, challenge=network_path.remote_challenge
+                    )
                     network_path.remote_challenge = None
-
-                    # log frame
-                    if self._quic_logger is not None:
-                        builder.quic_logger_frames.append(
-                            self._quic_logger.encode_path_response_frame(data=challenge)
-                        )
 
                 # NEW_CONNECTION_ID
                 for connection_id in self._host_cids:
@@ -2303,6 +2290,30 @@ class QuicConnection:
         if self._quic_logger is not None:
             builder.quic_logger_frames.append(
                 self._quic_logger.encode_new_connection_id_frame(frame)
+            )
+
+    def _write_path_challenge_frame(
+        self, builder: QuicPacketBuilder, challenge: bytes
+    ) -> None:
+        buf = builder.start_frame(QuicFrameType.PATH_CHALLENGE)
+        buf.push_bytes(challenge)
+
+        # log frame
+        if self._quic_logger is not None:
+            builder.quic_logger_frames.append(
+                self._quic_logger.encode_path_challenge_frame(data=challenge)
+            )
+
+    def _write_path_response_frame(
+        self, builder: QuicPacketBuilder, challenge: bytes
+    ) -> None:
+        buf = builder.start_frame(QuicFrameType.PATH_RESPONSE)
+        buf.push_bytes(challenge)
+
+        # log frame
+        if self._quic_logger is not None:
+            builder.quic_logger_frames.append(
+                self._quic_logger.encode_path_response_frame(data=challenge)
             )
 
     def _write_ping_frame(self, builder: QuicPacketBuilder, uids: List[int] = []):
