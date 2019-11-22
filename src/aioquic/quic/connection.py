@@ -1033,7 +1033,7 @@ class QuicConnection:
                 )
 
             # create stream
-            self._logger.info("Stream %d created by peer" % stream_id)
+            self._logger.debug("Stream %d created by peer" % stream_id)
             stream = self._streams[stream_id] = QuicStream(
                 stream_id=stream_id,
                 max_stream_data_local=max_stream_data_local,
@@ -1744,7 +1744,7 @@ class QuicConnection:
         Callback when a PING frame is acknowledged or lost.
         """
         if delivery == QuicDeliveryState.ACKED:
-            self._logger.info("Received PING response")
+            self._logger.debug("Received PING%s response", "" if uids else " (probe)")
             for uid in uids:
                 self._events.append(events.PingAcknowledged(uid=uid))
         else:
@@ -2016,18 +2016,16 @@ class QuicConnection:
                     not network_path.is_validated
                     and network_path.local_challenge is None
                 ):
-                    self._logger.debug(
-                        "Network path %s sending challenge", network_path.addr
-                    )
-                    network_path.local_challenge = os.urandom(8)
+                    challenge = os.urandom(8)
                     buf = builder.start_frame(QuicFrameType.PATH_CHALLENGE)
-                    buf.push_bytes(network_path.local_challenge)
+                    buf.push_bytes(challenge)
+                    network_path.local_challenge = challenge
 
                     # log frame
                     if self._quic_logger is not None:
                         builder.quic_logger_frames.append(
                             self._quic_logger.encode_path_challenge_frame(
-                                data=network_path.local_challenge
+                                data=challenge
                             )
                         )
 
@@ -2083,15 +2081,11 @@ class QuicConnection:
 
             # PING (user-request)
             if self._ping_pending:
-                self._logger.info("Sending PING in packet %d", builder.packet_number)
                 self._write_ping_frame(builder, self._ping_pending)
                 self._ping_pending.clear()
 
             # PING (probe)
             if self._probe_pending:
-                self._logger.info(
-                    "Sending PING (probe) in packet %d", builder.packet_number
-                )
                 self._write_ping_frame(builder)
                 self._probe_pending = False
 
@@ -2158,9 +2152,6 @@ class QuicConnection:
 
             # PING (probe)
             if self._probe_pending and epoch == tls.Epoch.HANDSHAKE:
-                self._logger.info(
-                    "Sending PING (probe) in packet %d", builder.packet_number
-                )
                 self._write_ping_frame(builder)
                 self._probe_pending = False
 
@@ -2313,6 +2304,11 @@ class QuicConnection:
 
     def _write_ping_frame(self, builder: QuicPacketBuilder, uids: List[int] = []):
         builder.start_frame(QuicFrameType.PING, self._on_ping_delivery, (tuple(uids),))
+        self._logger.debug(
+            "Sending PING%s in packet %d",
+            "" if uids else " (probe)",
+            builder.packet_number,
+        )
 
         # log frame
         if self._quic_logger is not None:
