@@ -408,14 +408,6 @@ PROBING_FRAME_TYPES = frozenset(
 
 
 @dataclass
-class QuicNewConnectionIdFrame:
-    sequence_number: int
-    retire_prior_to: int
-    connection_id: bytes
-    stateless_reset_token: bytes
-
-
-@dataclass
 class QuicStreamFrame:
     data: bytes = b""
     fin: bool = False
@@ -452,26 +444,3 @@ def push_ack_frame(buf: Buffer, rangeset: RangeSet, delay: int) -> None:
         buf.push_uint_var(start - r.stop - 1)
         buf.push_uint_var(r.stop - r.start - 1)
         start = r.start
-
-
-def pull_new_connection_id_frame(buf: Buffer) -> QuicNewConnectionIdFrame:
-    sequence_number = buf.pull_uint_var()
-    retire_prior_to = buf.pull_uint_var()
-    length = buf.pull_uint8()
-    connection_id = buf.pull_bytes(length)
-    stateless_reset_token = buf.pull_bytes(16)
-    return QuicNewConnectionIdFrame(
-        sequence_number=sequence_number,
-        retire_prior_to=retire_prior_to,
-        connection_id=connection_id,
-        stateless_reset_token=stateless_reset_token,
-    )
-
-
-def push_new_connection_id_frame(buf: Buffer, frame: QuicNewConnectionIdFrame) -> None:
-    assert len(frame.stateless_reset_token) == 16
-    buf.push_uint_var(frame.sequence_number)
-    buf.push_uint_var(frame.retire_prior_to)
-    buf.push_uint8(len(frame.connection_id))
-    buf.push_bytes(frame.connection_id)
-    buf.push_bytes(frame.stateless_reset_token)

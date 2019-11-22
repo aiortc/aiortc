@@ -10,7 +10,6 @@ from .packet import (
     PACKET_TYPE_ONE_RTT,
     PACKET_TYPE_RETRY,
     PACKET_TYPE_ZERO_RTT,
-    QuicNewConnectionIdFrame,
     QuicStreamFrame,
     QuicTransportParameters,
 )
@@ -72,7 +71,7 @@ class QuicLoggerTrace:
         return {
             "fin": frame.fin,
             "frame_type": "crypto",
-            "length": str(len(frame.data)),
+            "length": len(frame.data),
             "offset": str(frame.offset),
         }
 
@@ -98,20 +97,26 @@ class QuicLoggerTrace:
     def encode_max_streams_frame(self, maximum: int) -> Dict:
         return {"frame_type": "max_streams", "maximum": str(maximum)}
 
-    def encode_new_connection_id_frame(self, frame: QuicNewConnectionIdFrame) -> Dict:
+    def encode_new_connection_id_frame(
+        self,
+        connection_id: bytes,
+        retire_prior_to: int,
+        sequence_number: int,
+        stateless_reset_token: bytes,
+    ) -> Dict:
         return {
-            "connection_id": hexdump(frame.connection_id),
+            "connection_id": hexdump(connection_id),
             "frame_type": "new_connection_id",
-            "length": len(str(frame.connection_id)),
-            "reset_token": hexdump(frame.stateless_reset_token),
-            "retire_prior_to": str(frame.retire_prior_to),
-            "sequence_number": str(frame.sequence_number),
+            "length": len(connection_id),
+            "reset_token": hexdump(stateless_reset_token),
+            "retire_prior_to": str(retire_prior_to),
+            "sequence_number": str(sequence_number),
         }
 
     def encode_new_token_frame(self, token: bytes) -> Dict:
         return {
             "frame_type": "new_token",
-            "length": str(len(token)),
+            "length": len(token),
             "token": hexdump(token),
         }
 
@@ -161,7 +166,7 @@ class QuicLoggerTrace:
         return {
             "fin": frame.fin,
             "frame_type": "stream",
-            "length": str(len(frame.data)),
+            "length": len(frame.data),
             "offset": str(frame.offset),
             "stream_id": str(stream_id),
         }

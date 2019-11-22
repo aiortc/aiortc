@@ -22,18 +22,15 @@ from .packet import (
     PROBING_FRAME_TYPES,
     QuicErrorCode,
     QuicFrameType,
-    QuicNewConnectionIdFrame,
     QuicProtocolVersion,
     QuicStreamFrame,
     QuicTransportParameters,
     get_spin_bit,
     is_long_header,
     pull_ack_frame,
-    pull_new_connection_id_frame,
     pull_quic_header,
     pull_quic_transport_parameters,
     push_ack_frame,
-    push_new_connection_id_frame,
     push_quic_transport_parameters,
 )
 from .packet_builder import (
@@ -1417,19 +1414,28 @@ class QuicConnection:
         """
         Handle a NEW_CONNECTION_ID frame.
         """
-        frame = pull_new_connection_id_frame(buf)
+        sequence_number = buf.pull_uint_var()
+        retire_prior_to = buf.pull_uint_var()
+        length = buf.pull_uint8()
+        connection_id = buf.pull_bytes(length)
+        stateless_reset_token = buf.pull_bytes(16)
 
         # log frame
         if self._quic_logger is not None:
             context.quic_logger_frames.append(
-                self._quic_logger.encode_new_connection_id_frame(frame)
+                self._quic_logger.encode_new_connection_id_frame(
+                    connection_id=connection_id,
+                    retire_prior_to=retire_prior_to,
+                    sequence_number=sequence_number,
+                    stateless_reset_token=stateless_reset_token,
+                )
             )
 
         self._peer_cid_available.append(
             QuicConnectionId(
-                cid=frame.connection_id,
-                sequence_number=frame.sequence_number,
-                stateless_reset_token=frame.stateless_reset_token,
+                cid=connection_id,
+                sequence_number=sequence_number,
+                stateless_reset_token=stateless_reset_token,
             )
         )
 
@@ -2270,25 +2276,31 @@ class QuicConnection:
     def _write_new_connection_id_frame(
         self, builder: QuicPacketBuilder, connection_id: QuicConnectionId
     ) -> None:
+        retire_prior_to = 0  # FIXME
+
         buf = builder.start_frame(
             QuicFrameType.NEW_CONNECTION_ID,
             self._on_new_connection_id_delivery,
             (connection_id,),
         )
-        frame = QuicNewConnectionIdFrame(
-            sequence_number=connection_id.sequence_number,
-            retire_prior_to=0,  # FIXME
-            connection_id=connection_id.cid,
-            stateless_reset_token=connection_id.stateless_reset_token,
-        )
-        push_new_connection_id_frame(buf, frame)
+        buf.push_uint_var(connection_id.sequence_number)
+        buf.push_uint_var(retire_prior_to)
+        buf.push_uint8(len(connection_id.cid))
+        buf.push_bytes(connection_id.cid)
+        buf.push_bytes(connection_id.stateless_reset_token)
+
         connection_id.was_sent = True
         self._events.append(events.ConnectionIdIssued(connection_id=connection_id.cid))
 
         # log frame
         if self._quic_logger is not None:
             builder.quic_logger_frames.append(
-                self._quic_logger.encode_new_connection_id_frame(frame)
+                self._quic_logger.encode_new_connection_id_frame(
+                    connection_id=connection_id.cid,
+                    retire_prior_to=retire_prior_to,
+                    sequence_number=connection_id.sequence_number,
+                    stateless_reset_token=connection_id.stateless_reset_token,
+                )
             )
 
     def _write_path_challenge_frame(
