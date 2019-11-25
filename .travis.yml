@@ -23,19 +23,27 @@ matrix:
   - env: BUILD=lint
     install: pip install black flake8 isort
     python: "3.6"
-  - language: generic
+  - env: BUILD=test
+    language: generic
     os: osx
-  - python: "3.5"
+  - env: BUILD=test
+    python: "3.8"
+  - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
+    python: "3.8"
+  - env: BUILD=test
+    python: "3.7"
+  - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
+    python: "3.7"
+  - env: BUILD=test
+    python: "3.6"
+  - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
+    python: "3.6"
+  - env: BUILD=test
+    python: "3.5"
     dist: trusty
-  - env: CRYPTOGRAPHY_NO_BINARY=1
+  - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
     dist: trusty
     python: "3.5"
-  - python: "3.6"
-  - env: CRYPTOGRAPHY_NO_BINARY=1
-    python: "3.6"
-  - python: "3.7"
-  - env: CRYPTOGRAPHY_NO_BINARY=1
-    python: "3.7"
   - env: BUILD=sdist
     install: pip install twine
     python: "3.6"
