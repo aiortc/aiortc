@@ -3,52 +3,53 @@ import os.path
 import setuptools
 
 root_dir = os.path.abspath(os.path.dirname(__file__))
-readme_file = os.path.join(root_dir, 'README.rst')
-with open(readme_file, encoding='utf-8') as f:
+readme_file = os.path.join(root_dir, "README.rst")
+with open(readme_file, encoding="utf-8") as f:
     long_description = f.read()
 
 cffi_modules = [
-    'src/_cffi_src/build_opus.py:ffibuilder',
-    'src/_cffi_src/build_vpx.py:ffibuilder',
+    "src/_cffi_src/build_opus.py:ffibuilder",
+    "src/_cffi_src/build_vpx.py:ffibuilder",
 ]
 install_requires = [
-    'aioice>=0.6.15,<0.7.0',
-    'attrs',
-    'av>=6.2.0,<7.0.0',
-    'cffi>=1.0.0',
-    'crc32c',
-    'cryptography>=2.2',
-    'pyee>=6.0.0',
-    'pylibsrtp>=0.5.6',
+    "aioice>=0.6.15,<0.7.0",
+    "attrs",
+    "av>=6.2.0,<7.0.0",
+    "cffi>=1.0.0",
+    "crc32c",
+    "cryptography>=2.2",
+    "pyee>=6.0.0",
+    "pylibsrtp>=0.5.6",
 ]
 
-if os.environ.get('READTHEDOCS') == 'True':
+if os.environ.get("READTHEDOCS") == "True":
     cffi_modules = []
-    install_requires = list(filter(lambda x: not x.startswith('av'), install_requires))
+    install_requires = list(filter(lambda x: not x.startswith("av"), install_requires))
 
 setuptools.setup(
-    name='aiortc',
-    version='0.9.22',
-    description='An implementation of WebRTC and ORTC',
+    name="aiortc",
+    version="0.9.22",
+    description="An implementation of WebRTC and ORTC",
     long_description=long_description,
-    url='https://github.com/aiortc/aiortc',
-    author='Jeremy Lainé',
-    author_email='jeremy.laine@m4x.org',
-    license='BSD',
+    url="https://github.com/aiortc/aiortc",
+    author="Jeremy Lainé",
+    author_email="jeremy.laine@m4x.org",
+    license="BSD",
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Environment :: Web Environment',
-        'Intended Audience :: Developers',
-        'License :: OSI Approved :: BSD License',
-        'Operating System :: OS Independent',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
+        "Development Status :: 5 - Production/Stable",
+        "Environment :: Web Environment",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
     ],
     cffi_modules=cffi_modules,
-    packages=['aiortc', 'aiortc.codecs', 'aiortc.contrib'],
-    setup_requires=['cffi>=1.0.0'],
+    package_dir={"": "src"},
+    packages=["aiortc", "aiortc.codecs", "aiortc.contrib"],
+    setup_requires=["cffi>=1.0.0"],
     install_requires=install_requires,
 )
