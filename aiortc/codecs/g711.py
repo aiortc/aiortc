@@ -26,7 +26,9 @@ class PcmDecoder(Decoder):
 
 class PcmEncoder(Encoder):
     def __init__(self) -> None:
-        self.rate_state = None  # type: Optional[Tuple]
+        self.rate_state = (
+            None
+        )  # type: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]]
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
