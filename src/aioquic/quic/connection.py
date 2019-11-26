@@ -2100,13 +2100,14 @@ class QuicConnection:
 
             # DATAGRAM
             while self._datagrams_pending:
-                if self._write_datagram_frame(
-                    builder=builder,
-                    data=self._datagrams_pending[0],
-                    frame_type=QuicFrameType.DATAGRAM_WITH_LENGTH,
-                ):
+                try:
+                    self._write_datagram_frame(
+                        builder=builder,
+                        data=self._datagrams_pending[0],
+                        frame_type=QuicFrameType.DATAGRAM_WITH_LENGTH,
+                    )
                     self._datagrams_pending.popleft()
-                else:
+                except QuicPacketBuilderStop:
                     break
 
             # STREAM
@@ -2280,10 +2281,6 @@ class QuicConnection:
         length = len(data)
         frame_size = 1 + size_uint_var(length) + length
 
-        if frame_size > builder.remaining_flight_space:
-            # not enough space left, retry later
-            return False
-
         buf = builder.start_frame(frame_type, required_bytes=frame_size)
         buf.push_uint_var(length)
         buf.push_bytes(data)
@@ -2351,7 +2348,9 @@ class QuicConnection:
             )
 
     def _write_ping_frame(self, builder: QuicPacketBuilder, uids: List[int] = []):
-        builder.start_frame(QuicFrameType.PING, self._on_ping_delivery, (tuple(uids),))
+        builder.start_frame(
+            QuicFrameType.PING, self._on_ping_delivery, (tuple(uids),), required_bytes=1
+        )
         self._logger.debug(
             "Sending PING%s in packet %d",
             "" if uids else " (probe)",
