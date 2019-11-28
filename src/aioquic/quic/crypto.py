@@ -15,6 +15,10 @@ INITIAL_SALT_DRAFT_23 = binascii.unhexlify("c3eef712c72ebb5a11a7d2432bb46365bef9
 SAMPLE_SIZE = 16
 
 
+class KeyUnavailableError(CryptoError):
+    pass
+
+
 def derive_key_iv_hp(
     cipher_suite: CipherSuite, secret: bytes
 ) -> Tuple[bytes, bytes, bytes]:
@@ -46,7 +50,7 @@ class CryptoContext:
         self, packet: bytes, encrypted_offset: int, expected_packet_number: int
     ) -> Tuple[bytes, bytes, int, bool]:
         if self.aead is None:
-            raise CryptoError("Decryption key is not available")
+            raise KeyUnavailableError("Decryption key is not available")
 
         # header protection
         plain_header, packet_number = self.hp.remove(packet, encrypted_offset)

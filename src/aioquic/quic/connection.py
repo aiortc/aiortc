@@ -10,7 +10,7 @@ from .. import tls
 from ..buffer import UINT_VAR_MAX, Buffer, BufferReadError, size_uint_var
 from . import events
 from .configuration import QuicConfiguration
-from .crypto import CryptoError, CryptoPair
+from .crypto import CryptoError, CryptoPair, KeyUnavailableError
 from .logger import QuicLoggerTrace
 from .packet import (
     NON_ACK_ELICITING_FRAME_TYPES,
@@ -657,6 +657,12 @@ class QuicConnection:
                 and header.version not in self._configuration.supported_versions
             ):
                 # unsupported version
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="transport",
+                        event="packet_dropped",
+                        data={"trigger": "unsupported_version"},
+                    )
                 return
 
             if self._is_client and header.packet_type == PACKET_TYPE_RETRY:
@@ -716,8 +722,23 @@ class QuicConnection:
                 plain_header, plain_payload, packet_number = crypto.decrypt_packet(
                     data[start_off:end_off], encrypted_off, space.expected_packet_number
                 )
+            except KeyUnavailableError as exc:
+                self._logger.debug(exc)
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="transport",
+                        event="packet_dropped",
+                        data={"trigger": "key_unavailable"},
+                    )
+                continue
             except CryptoError as exc:
                 self._logger.debug(exc)
+                if self._quic_logger is not None:
+                    self._quic_logger.log_event(
+                        category="transport",
+                        event="packet_dropped",
+                        data={"trigger": "payload_decrypt_error"},
+                    )
                 continue
             if packet_number > space.expected_packet_number:
                 space.expected_packet_number = packet_number + 1
