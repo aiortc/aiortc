@@ -3,6 +3,12 @@ import os.path
 import setuptools
 
 root_dir = os.path.abspath(os.path.dirname(__file__))
+
+about = {}
+about_file = os.path.join(root_dir, "src", "aiortc", "about.py")
+with open(about_file, encoding="utf-8") as fp:
+    exec(fp.read(), about)
+
 readme_file = os.path.join(root_dir, "README.rst")
 with open(readme_file, encoding="utf-8") as f:
     long_description = f.read()
@@ -27,14 +33,14 @@ if os.environ.get("READTHEDOCS") == "True":
     install_requires = list(filter(lambda x: not x.startswith("av"), install_requires))
 
 setuptools.setup(
-    name="aiortc",
-    version="0.9.22",
-    description="An implementation of WebRTC and ORTC",
+    name=about["__title__"],
+    version=about["__version__"],
+    description=about["__summary__"],
     long_description=long_description,
-    url="https://github.com/aiortc/aiortc",
-    author="Jeremy Lainé",
-    author_email="jeremy.laine@m4x.org",
-    license="BSD",
+    url=about["__uri__"],
+    author=about["__author__"],
+    author_email=about["__email__"],
+    license=about["__license__"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Web Environment",

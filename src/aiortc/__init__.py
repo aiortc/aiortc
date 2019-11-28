@@ -1,5 +1,6 @@
 # flake8: noqa
 
+from .about import __version__
 from .exceptions import InvalidAccessError, InvalidStateError
 from .mediastreams import MediaStreamTrack, VideoStreamTrack
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
