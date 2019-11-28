@@ -740,6 +740,21 @@ class QuicConnection:
                         data={"trigger": "payload_decrypt_error"},
                     )
                 continue
+
+            # check reserved bits
+            if header.is_long_header:
+                reserved_mask = 0x0C
+            else:
+                reserved_mask = 0x18
+            if plain_header[0] & reserved_mask:
+                self.close(
+                    error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                    frame_type=None,
+                    reason_phrase="Reserved bits must be zero",
+                )
+                return
+
+            # raise expected packet number
             if packet_number > space.expected_packet_number:
                 space.expected_packet_number = packet_number + 1
 

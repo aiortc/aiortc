@@ -710,6 +710,44 @@ class QuicConnectionTest(TestCase):
         datagram = binascii.unhexlify("c00000000080")
         client.receive_datagram(datagram, SERVER_ADDR, now=time.time())
 
+    def test_receive_datagram_reserved_bits_non_zero(self):
+        client = create_standalone_client(self)
+
+        builder = QuicPacketBuilder(
+            host_cid=client._peer_cid,
+            is_client=False,
+            peer_cid=client.host_cid,
+            version=client._version,
+        )
+        crypto = CryptoPair()
+        crypto.setup_initial(client._peer_cid, is_client=False, version=client._version)
+        crypto.encrypt_packet_real = crypto.encrypt_packet
+
+        def encrypt_packet(plain_header, plain_payload, packet_number):
+            # mess with reserved bits
+            plain_header = bytes([plain_header[0] | 0x0C]) + plain_header[1:]
+            return crypto.encrypt_packet_real(
+                plain_header, plain_payload, packet_number
+            )
+
+        crypto.encrypt_packet = encrypt_packet
+
+        builder.start_packet(PACKET_TYPE_INITIAL, crypto)
+        buf = builder.start_frame(QuicFrameType.PADDING)
+        buf.push_bytes(bytes(builder.remaining_flight_space))
+
+        for datagram in builder.flush()[0]:
+            client.receive_datagram(datagram, SERVER_ADDR, now=time.time())
+        self.assertEqual(drop(client), 1)
+        self.assertEqual(
+            client._close_event,
+            events.ConnectionTerminated(
+                error_code=QuicErrorCode.PROTOCOL_VIOLATION,
+                frame_type=None,
+                reason_phrase="Reserved bits must be zero",
+            ),
+        )
+
     def test_receive_datagram_wrong_version(self):
         client = create_standalone_client(self)
 
@@ -720,7 +758,7 @@ class QuicConnectionTest(TestCase):
             version=0xFF000011,  # DRAFT_16
         )
         crypto = CryptoPair()
-        crypto.setup_initial(client.host_cid, is_client=False, version=client._version)
+        crypto.setup_initial(client._peer_cid, is_client=False, version=client._version)
         builder.start_packet(PACKET_TYPE_INITIAL, crypto)
         buf = builder.start_frame(QuicFrameType.PADDING)
         buf.push_bytes(bytes(builder.remaining_flight_space))
