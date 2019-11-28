@@ -12,15 +12,19 @@ extra_compile_args = []
 if sys.platform != "win32":
     extra_compile_args = ["-std=c99"]
 
+about = {}
+with open("src/aioquic/__init__.py") as fp:
+    exec(fp.read(), about)
+
 setuptools.setup(
-    name="aioquic",
-    version="0.8.3",
-    description="An implementation of QUIC and HTTP/3",
+    name=about["__title__"],
+    version=about["__version__"],
+    description=about["__summary__"],
     long_description=long_description,
-    url="https://github.com/aiortc/aioquic",
-    author="Jeremy Lainé",
-    author_email="jeremy.laine@m4x.org",
-    license="BSD",
+    url=about["__uri__"],
+    author=about["__author__"],
+    author_email=about["__email__"],
+    license=about["__license__"],
     include_package_data=True,
     classifiers=[
         "Development Status :: 4 - Beta",
