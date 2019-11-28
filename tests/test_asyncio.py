@@ -12,7 +12,6 @@ from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.asyncio.server import serve
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
-from aioquic.quic.packet import QuicProtocolVersion
 
 from .utils import (
     SERVER_CACERTFILE,
@@ -265,16 +264,12 @@ class HighLevelTest(TestCase):
 
     def test_connect_and_serve_with_version_negotiation(self):
         run(self.run_server())
-        response = run(
-            self.run_client(
-                "127.0.0.1",
-                configuration=QuicConfiguration(
-                    is_client=True,
-                    quic_logger=QuicLogger(),
-                    supported_versions=[0x1A2A3A4A, QuicProtocolVersion.DRAFT_23],
-                ),
-            ),
-        )
+
+        # force version negotiation
+        configuration = QuicConfiguration(is_client=True, quic_logger=QuicLogger())
+        configuration.supported_versions.insert(0, 0x1A2A3A4A)
+
+        response = run(self.run_client("127.0.0.1", configuration=configuration))
         self.assertEqual(response, b"gnip")
 
     def test_connect_timeout(self):

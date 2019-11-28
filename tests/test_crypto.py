@@ -114,7 +114,7 @@ class CryptoTest(TestCase):
     https://tools.ietf.org/html/draft-ietf-quic-tls-18#appendix-A
     """
 
-    def create_crypto(self, is_client, version=QuicProtocolVersion.DRAFT_23):
+    def create_crypto(self, is_client, version=QuicProtocolVersion.DRAFT_24):
         pair = CryptoPair()
         pair.setup_initial(
             cid=binascii.unhexlify("8394c8f03e515708"),
@@ -150,7 +150,7 @@ class CryptoTest(TestCase):
             secret=binascii.unhexlify(
                 "b42772df33c9719a32820d302aa664d080d7f5ea7a71a330f87864cb289ae8c0"
             ),
-            version=QuicProtocolVersion.DRAFT_23,
+            version=QuicProtocolVersion.DRAFT_24,
         )
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
@@ -192,7 +192,7 @@ class CryptoTest(TestCase):
             secret=binascii.unhexlify(
                 "310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100"
             ),
-            version=QuicProtocolVersion.DRAFT_23,
+            version=QuicProtocolVersion.DRAFT_24,
         )
 
         plain_header, plain_payload, packet_number = pair.decrypt_packet(
@@ -210,7 +210,7 @@ class CryptoTest(TestCase):
             secret=binascii.unhexlify(
                 "b42772df33c9719a32820d302aa664d080d7f5ea7a71a330f87864cb289ae8c0"
             ),
-            version=QuicProtocolVersion.DRAFT_23,
+            version=QuicProtocolVersion.DRAFT_24,
         )
 
         packet = pair.encrypt_packet(
@@ -247,7 +247,7 @@ class CryptoTest(TestCase):
             secret=binascii.unhexlify(
                 "310281977cb8c1c1c1212d784b2d29e5a6489e23de848d370a5a2f9537f3a100"
             ),
-            version=QuicProtocolVersion.DRAFT_23,
+            version=QuicProtocolVersion.DRAFT_24,
         )
 
         packet = pair.encrypt_packet(
