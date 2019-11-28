@@ -11,7 +11,7 @@ CIPHER_SUITES = {
     CipherSuite.CHACHA20_POLY1305_SHA256: (b"chacha20", b"chacha20-poly1305"),
 }
 INITIAL_CIPHER_SUITE = CipherSuite.AES_128_GCM_SHA256
-INITIAL_SALT_DRAFT_23 = binascii.unhexlify("c3eef712c72ebb5a11a7d2432bb46365bef9f502")
+INITIAL_SALT = binascii.unhexlify("c3eef712c72ebb5a11a7d2432bb46365bef9f502")
 SAMPLE_SIZE = 16
 
 
@@ -165,7 +165,7 @@ class CryptoPair:
             recv_label, send_label = b"client in", b"server in"
 
         algorithm = cipher_suite_hash(INITIAL_CIPHER_SUITE)
-        initial_secret = hkdf_extract(algorithm, INITIAL_SALT_DRAFT_23, cid)
+        initial_secret = hkdf_extract(algorithm, INITIAL_SALT, cid)
         self.recv.setup(
             cipher_suite=INITIAL_CIPHER_SUITE,
             secret=hkdf_expand_label(

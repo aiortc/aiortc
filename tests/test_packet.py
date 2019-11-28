@@ -53,7 +53,7 @@ class PacketTest(TestCase):
         buf = Buffer(data=load("initial_client.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_24)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, binascii.unhexlify("858b39368b8e3c6e"))
         self.assertEqual(header.source_cid, b"")
@@ -66,7 +66,7 @@ class PacketTest(TestCase):
         buf = Buffer(data=load("initial_server.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_24)
         self.assertEqual(header.packet_type, PACKET_TYPE_INITIAL)
         self.assertEqual(header.destination_cid, b"")
         self.assertEqual(header.source_cid, binascii.unhexlify("195c68344e28d479"))
@@ -79,7 +79,7 @@ class PacketTest(TestCase):
         buf = Buffer(data=load("retry.bin"))
         header = pull_quic_header(buf, host_cid_length=8)
         self.assertTrue(header.is_long_header)
-        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_22)
+        self.assertEqual(header.version, QuicProtocolVersion.DRAFT_24)
         self.assertEqual(header.packet_type, PACKET_TYPE_RETRY)
         self.assertEqual(header.destination_cid, binascii.unhexlify("fee746dfde699d61"))
         self.assertEqual(header.source_cid, binascii.unhexlify("59aa0942fd2f11e9"))
@@ -164,7 +164,7 @@ class PacketTest(TestCase):
         data = encode_quic_version_negotiation(
             destination_cid=binascii.unhexlify("9aac5a49ba87a849"),
             source_cid=binascii.unhexlify("f92f4336fa951ba1"),
-            supported_versions=[0x45474716, QuicProtocolVersion.DRAFT_22],
+            supported_versions=[0x45474716, QuicProtocolVersion.DRAFT_24],
         )
         self.assertEqual(data[1:], load("version_negotiation.bin")[1:])
 
