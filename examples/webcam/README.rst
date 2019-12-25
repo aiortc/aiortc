@@ -18,7 +18,7 @@ can connect to from your browser:
 
 .. code-block:: console
 
-    $ python server.py
+    $ python webcam.py
 
 You can then browse to the following page with your browser:
 
@@ -34,7 +34,7 @@ If you want to play a media file instead of using the webcam, run:
 
 .. code-block:: console
 
-   $ python server.py --play-from video.mp4
+   $ python webcam.py --play-from video.mp4
 
 Credits
 -------
