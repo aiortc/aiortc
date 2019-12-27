@@ -12,7 +12,8 @@ import attr
 try:
     from av.frame import Frame
 except ImportError:
-    class Frame: pass
+    class Frame:
+        pass
 
 from . import clock
 from .codecs import depayload, get_capabilities, get_decoder, is_rtx

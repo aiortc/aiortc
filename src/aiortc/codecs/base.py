@@ -4,7 +4,8 @@ from typing import List, Tuple
 try:
     from av.frame import Frame
 except ImportError:
-    class Frame: pass
+    class Frame:
+        pass
 
 from ..jitterbuffer import JitterFrame
 

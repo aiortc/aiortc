@@ -9,7 +9,8 @@ try:
     from av import AudioFrame, VideoFrame
     from av.frame import Frame
 except ImportError:
-    class Frame: pass
+    class Frame:
+        pass
 
 from pyee import AsyncIOEventEmitter
 

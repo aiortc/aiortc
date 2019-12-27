@@ -17,8 +17,10 @@ try:
     from .opus import OpusDecoder, OpusEncoder
     from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
 except ImportError:
-    class Decoder: pass
-    class Encoder: pass
+    class Decoder:
+        pass
+    class Encoder:
+        pass
     NO_CODECS = True
 else:
     NO_CODECS = False
