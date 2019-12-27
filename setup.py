@@ -1,4 +1,5 @@
 import os.path
+import sys
 
 import setuptools
 
@@ -28,9 +29,21 @@ install_requires = [
     "pylibsrtp>=0.5.6",
 ]
 
+datachannel_only = False
+
 if os.environ.get("READTHEDOCS") == "True":
+    readthedocs_build = True
+    datachannel_only = True
+else:
+    readthedocs_build = False
+
+if datachannel_only:
     cffi_modules = []
-    install_requires = list(filter(lambda x: not x.startswith("av"), install_requires))
+    install_requires = list(filter(lambda x: not x.startswith("av") and not x.startswith("cffi"), install_requires))
+
+if datachannel_only and not readthedocs_build:
+    about["__title__"] += "-datachannel"
+    about["__summary__"] += " (datachannel-only version)"
 
 setuptools.setup(
     name=about["__title__"],

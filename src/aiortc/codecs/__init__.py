@@ -9,11 +9,18 @@ from ..rtcrtpparameters import (
     RTCRtpHeaderExtensionCapability,
     RTCRtpHeaderExtensionParameters,
 )
-from .base import Decoder, Encoder
-from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
-from .h264 import H264Decoder, H264Encoder, h264_depayload
-from .opus import OpusDecoder, OpusEncoder
-from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
+
+try:
+    from .base import Decoder, Encoder
+    from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+    from .h264 import H264Decoder, H264Encoder, h264_depayload
+    from .opus import OpusDecoder, OpusEncoder
+    from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
+except ImportError:
+    class Decoder: pass
+    class Encoder: pass
+
+    NO_CODECS = True
 
 PCMU_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
@@ -179,4 +186,10 @@ def is_rtx(codec: Union[RTCRtpCodecCapability, RTCRtpCodecParameters]) -> bool:
     return codec.name.lower() == "rtx"
 
 
-init_codecs()
+if not NO_CODECS:
+    init_codecs()
+else:
+    CODECS = {
+        "audio": [],
+        "video": [],
+    }

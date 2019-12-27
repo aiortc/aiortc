@@ -1,7 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from typing import List, Tuple
 
-from av.frame import Frame
+try:
+    from av.frame import Frame
+except ImportError:
+    class Frame: pass
 
 from ..jitterbuffer import JitterFrame
 

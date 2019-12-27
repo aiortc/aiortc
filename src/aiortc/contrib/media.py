@@ -4,8 +4,11 @@ import logging
 import threading
 import time
 
-import av
-from av import AudioFrame, VideoFrame
+try:
+    import av
+    from av import AudioFrame, VideoFrame
+except ImportError:
+    pass
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 

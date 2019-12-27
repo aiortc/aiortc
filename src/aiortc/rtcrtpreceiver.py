@@ -8,7 +8,11 @@ import time
 from typing import Dict, List, Optional, Set
 
 import attr
-from av.frame import Frame
+
+try:
+    from av.frame import Frame
+except ImportError:
+    class Frame: pass
 
 from . import clock
 from .codecs import depayload, get_capabilities, get_decoder, is_rtx

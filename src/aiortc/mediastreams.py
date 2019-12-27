@@ -5,8 +5,12 @@ import uuid
 from abc import ABCMeta, abstractmethod
 from typing import Tuple
 
-from av import AudioFrame, VideoFrame
-from av.frame import Frame
+try:
+    from av import AudioFrame, VideoFrame
+    from av.frame import Frame
+except ImportError:
+    class Frame: pass
+
 from pyee import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
