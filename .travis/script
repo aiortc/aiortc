@@ -6,8 +6,14 @@ if [ "$BUILD" = "lint" ]; then
     flake8 examples src tests
     isort -c -df -rc examples src tests
     black --check --diff examples src tests
-elif [ "$BUILD" = "sdist" ]; then
+elif [ "$BUILD" = "dist full" ]; then
     python3 setup.py sdist
+    if [ -n "$TRAVIS_TAG" ]; then
+        python3 -m twine upload --skip-existing dist/*
+    fi
+elif [ "$BUILD" = "dist datachannel-only" ]; then
+    sed -i "s/datachannel_only = False/datachannel_only = True/g" setup.py
+    python3 setup.py sdist bdist_wheel
     if [ -n "$TRAVIS_TAG" ]; then
         python3 -m twine upload --skip-existing dist/*
     fi

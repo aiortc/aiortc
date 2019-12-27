@@ -44,8 +44,11 @@ matrix:
   - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
     dist: trusty
     python: "3.5"
-  - env: BUILD=sdist
+  - env: BUILD="dist full"
     install: pip install twine
+    python: "3.6"
+  - env: BUILD="dist datachannel-only"
+    install: pip install twine wheel
     python: "3.6"
 script: .travis/script
 sudo: true
