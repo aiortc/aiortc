@@ -19,8 +19,9 @@ try:
 except ImportError:
     class Decoder: pass
     class Encoder: pass
-
     NO_CODECS = True
+else:
+    NO_CODECS = False
 
 PCMU_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
