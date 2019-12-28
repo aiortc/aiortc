@@ -77,16 +77,15 @@ function negotiate() {
 
         // codec = document.getElementById('video-codec').value;
         codec = "H264/90000";
-        if (codec !== 'default') {
-            offer.sdp = sdpFilterCodec('video', codec, offer.sdp);
-        }
+        offer.sdp = sdpFilterCodec('video', codec, offer.sdp);
+        
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
         return fetch('/offer', {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,
-                video_transform: "cartoon" //document.getElementById('video-transform').value
+                video_transform: 'cartoon'
             }),
             headers: {
                 'Content-Type': 'application/json'
@@ -121,29 +120,29 @@ function start() {
 
     // if (document.getElementById('use-datachannel').checked) {
         // var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
-        var parameters = JSON.parse('{"ordered": true}');
+    var parameters = JSON.parse('{"ordered": true}');
 
-        dc = pc.createDataChannel('chat', parameters);
-        dc.onclose = function() {
-            clearInterval(dcInterval);
-            dataChannelLog.textContent += '- close\n';
-        };
-        dc.onopen = function() {
-            dataChannelLog.textContent += '- open\n';
-            dcInterval = setInterval(function() {
-                var message = 'ping ' + current_stamp();
-                dataChannelLog.textContent += '> ' + message + '\n';
-                dc.send(message);
-            }, 1000);
-        };
-        dc.onmessage = function(evt) {
-            dataChannelLog.textContent += '< ' + evt.data + '\n';
+    dc = pc.createDataChannel('chat', parameters);
+    dc.onclose = function() {
+        clearInterval(dcInterval);
+        dataChannelLog.textContent += '- close\n';
+    };
+    dc.onopen = function() {
+        dataChannelLog.textContent += '- open\n';
+        dcInterval = setInterval(function() {
+            var message = 'ping ' + current_stamp();
+            dataChannelLog.textContent += '> ' + message + '\n';
+            dc.send(message);
+        }, 1000);
+    };
+    dc.onmessage = function(evt) {
+        dataChannelLog.textContent += '< ' + evt.data + '\n';
 
-            if (evt.data.substring(0, 4) === 'pong') {
-                var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
-                dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
-            }
-        };
+        if (evt.data.substring(0, 4) === 'pong') {
+            var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
+            dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
+        }
+    };
     // }
 
     var constraints = {
