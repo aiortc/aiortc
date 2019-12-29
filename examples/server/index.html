@@ -24,16 +24,16 @@
 </head>
 <body>
 
-<div class="option" >
+<div class="option" style="display: none;">
     <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
     <select id="datachannel-parameters">
-        <option value='{"ordered": true}' selected>Ordered, reliable</option>
+        <option value='{"ordered": true}'>Ordered, reliable</option>
         <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
         <option value='{"ordered": false, "maxPacketLifetime": 500}'>Unordered, 500ms lifetime</option>
     </select>
 </div>
-<div class="option"  >
+<div class="option" style="display: none;">
     <input id="use-audio" type="checkbox"/>
     <label for="use-audio">Use audio</label>
     <select id="audio-codec">
@@ -43,7 +43,7 @@
         <option value="PCMA/8000">PCMA</option>
     </select>
 </div>
-<div class="option" >
+<div class="option" style="display: none;">
     <input id="use-video" checked="checked" type="checkbox"/>
     <label for="use-video">Use video</label>
     <select id="video-resolution">
@@ -63,10 +63,10 @@
     <select id="video-codec">
         <option value="default">Default codecs</option>
         <option value="VP8/90000">VP8</option>
-        <option value="H264/90000" selected>H264</option>
+        <option value="H264/90000">H264</option>
     </select>
 </div>
-<div class="option" >
+<div class="option" style="display:none ">
     <input id="use-stun" type="checkbox"/>
     <label for="use-stun">Use STUN server</label>
 </div>
@@ -74,26 +74,26 @@
 <button id="start" onclick="start()">Start</button>
 <button id="stop" style="display: none" onclick="stop()">Stop</button>
 
-<p  >
+<p style="display: none;">
     ICE gathering state: <span id="ice-gathering-state"></span>
 </p>
-<p  >
+<p style="display: none;">
     ICE connection state: <span id="ice-connection-state"></span>
 </p>
-<p  >
+<p style="display: none;">
     Signaling state: <span id="signaling-state"></span>
 </p>
 
 <div id="media" style="display: none">
-    <audio id="audio" autoplay="true"  ></audio>
+    <audio id="audio" autoplay="true" style="display: none;"></audio>
     <video id="video" autoplay="true" playsinline="true"></video>
 </div>
 
-<pre id="data-channel"  ></pre>
+<pre id="data-channel" style="display: none;"></pre>
 
-<pre id="offer-sdp"  ></pre>
+<pre id="offer-sdp" style="display: none;"></pre>
 
-<pre id="answer-sdp"  ></pre>
+<pre id="answer-sdp" style="display: none;"></pre>
 
 <script src="client.js"></script>
 </body>
