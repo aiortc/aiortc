@@ -34,6 +34,14 @@ to the browser, optionally applying a transform to it.
 In parallel to media streams, the browser sends a 'ping' message over the data
 channel, and the server replies with 'pong'.
 
+JSON EXAMPLE
+.. code-block:: console
+    $ {
+    $ "image" : "image encoded in base64",
+    $ "benchmark" : "float 0-1",
+    $ "color" : "boolean"
+    $ }
+
 Additional options
 ------------------
 

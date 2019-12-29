@@ -9,7 +9,7 @@ def result():
     benchmark = request.form['benchmark']
     color = request.form['color']
 
-    img_name = f"images/{ip.replace('.','-')}.jpg"
+    img_name = f"../images/{ip.replace('.','-')}.jpg"
 
     print(f"{img_name} - {benchmark} - {color}")
     
