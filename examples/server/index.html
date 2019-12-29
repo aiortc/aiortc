@@ -29,7 +29,7 @@
 <body>
 
 <!-- <h2>Options</h2> -->
-<!-- <div class="option" style="display: none;">
+<div class="option" style="display: none;">
     <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
     <select id="datachannel-parameters">
@@ -37,7 +37,7 @@
         <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
         <option value='{"ordered": false, "maxPacketLifetime": 500}'>Unordered, 500ms lifetime</option>
     </select>
-</div> -->
+</div>
 
 <div class="option" style="display: none;">
     <input id="use-audio" type="checkbox"/>
@@ -55,11 +55,12 @@
     <label for="use-video">Use video</label>
 
     <select id="video-resolution">
-        <option value="" selected>Default resolution</option>
-        <option value="320x240">320x240</option>
+        <option value="">Default resolution</option>
+        <option value="320x240" selected>320x240</option>
         <option value="640x480">640x480</option>
         <option value="960x540">960x540</option>
         <option value="1280x720">1280x720</option>
+        <option value="1024x576">1024x576</option>
     </select>
 
     <select id="video-transform">
@@ -76,10 +77,10 @@
     </select>
 </div>
 
-<!-- <div class="option">
+<div class="option" style="display: none;">
     <input id="use-stun" type="checkbox"/>
     <label for="use-stun">Use STUN server</label>
-</div> -->
+</div>
 
 <button id="start" onclick="start()">Start</button>
 <button id="stop" style="display: none" onclick="stop()">Stop</button>
@@ -96,9 +97,9 @@
 </p>
 
 <div id="media" style="display: none">
-    <!-- <h2>Media</h2>
+    <!-- <h2>Media</h2> -->
 
-    <audio id="audio" autoplay="true"></audio> -->
+    <audio id="audio" autoplay="false" style="display: none;"></audio>
     <video id="video" autoplay="true" playsinline="true"></video>
 </div>
 

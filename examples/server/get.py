@@ -6,10 +6,12 @@ app = Flask(__name__)
 def result():
     ip = request.environ['REMOTE_ADDR']
     img = request.form['image'].encode('utf-8')
-    benchmark = request.form['benchmark'].encode('utf-8')
-    color = request.form['color'].encode('utf-8')
-    
+    benchmark = request.form['benchmark']
+    color = request.form['color']
+
     img_name = f"images/{ip.replace('.','-')}.jpg"
+
+    print(f"{img_name} - {benchmark} - {color}")
     
     with open(img_name, "wb") as fh:
         fh.write(base64.decodestring(img))
