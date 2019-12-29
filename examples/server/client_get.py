@@ -1,9 +1,7 @@
 import requests
 import base64
-import socket    
 
-
-with open("img.jpg", "rb") as img_file:
+with open("images/img.jpg", "rb") as img_file:
     img_encoded = base64.b64encode(img_file.read())
 # print(my_string)
 

@@ -6,8 +6,8 @@ app = Flask(__name__)
 def result():
     ip = request.environ['REMOTE_ADDR']
     img = request.form['image'].encode('utf-8')
-    img_name = f"{ip.replace('.','-')}.jpg"
+    img_name = f"images/{ip.replace('.','-')}.jpg"
     
     with open(img_name, "wb") as fh:
         fh.write(base64.decodestring(img))
-    return f"received image {img_name}" # response to request
+    return f"received and stored {img_name}" # response to request

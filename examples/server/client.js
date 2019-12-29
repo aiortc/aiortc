@@ -45,6 +45,8 @@ function createPeerConnection() {
         //     document.getElementById('audio').srcObject = evt.streams[0];
     });
 
+    // document.getElementById('recv-img').src = "images/img.jpg";
+
     return pc;
 }
 
