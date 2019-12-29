@@ -15,9 +15,9 @@ function createPeerConnection() {
         sdpSemantics: 'unified-plan'
     };
 
-    // if (document.getElementById('use-stun').checked) {
-    //     config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
-    // }
+    if (document.getElementById('use-stun').checked) {
+        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
+    }
 
     pc = new RTCPeerConnection(config);
 
@@ -41,8 +41,8 @@ function createPeerConnection() {
     pc.addEventListener('track', function(evt) {
         if (evt.track.kind == 'video')
             document.getElementById('video').srcObject = evt.streams[0]; 
-        // else
-        //     document.getElementById('audio').srcObject = evt.streams[0];
+        else
+            document.getElementById('audio').srcObject = evt.streams[0];
     });
 
     return pc;
@@ -118,9 +118,9 @@ function start() {
         }
     }
 
-    // if (document.getElementById('use-datachannel').checked) {
-        // var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
-    var parameters = JSON.parse('{"ordered": true}');
+    if (document.getElementById('use-datachannel').checked) {
+        var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
+    // var parameters = JSON.parse('{"ordered": true}');
 
     dc = pc.createDataChannel('chat', parameters);
     dc.onclose = function() {
@@ -146,7 +146,7 @@ function start() {
     // }
 
     var constraints = {
-        // audio: document.getElementById('use-audio').checked,
+        audio: document.getElementById('use-audio').checked,
         video: true
     };
 
