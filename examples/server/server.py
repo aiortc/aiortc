@@ -18,7 +18,6 @@ ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
 
-
 class VideoTransformTrack(MediaStreamTrack):
     """
     A video stream track that transforms frames from an another track.
@@ -26,17 +25,23 @@ class VideoTransformTrack(MediaStreamTrack):
 
     kind = "video"
 
-    def __init__(self, track, transform):
+    def __init__(self, request, track, transform):
         super().__init__()  # don't forget this!
         self.track = track
         self.transform = transform
+        self.request = request
+
+        imgname = str(self.request.remote).replace('.','-')
+        filter_image = cv2.imread(f"images/{imgname}.jpg")
+        if not filter_image is None:
+            print(f"INFO.image: Filter Image: {imgname}.jpg with shape {filter_image.shape}")  
 
     async def recv(self):
         frame = await self.track.recv()
 
         if self.transform == "cartoon":
             img = frame.to_ndarray(format="bgr24")
-
+            
             # prepare color
             img_color = cv2.pyrDown(cv2.pyrDown(img))
             for _ in range(6):
@@ -121,7 +126,7 @@ async def offer(request):
             recorder.addTrack(track)
         elif track.kind == "video":
             local_video = VideoTransformTrack(
-                track, transform=params["video_transform"]
+                request, track, transform=params["video_transform"]
             )
             pc.addTrack(local_video)
 

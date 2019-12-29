@@ -28,29 +28,29 @@
 </head>
 <body>
 
-<!-- <h2>Options</h2>
-<div class="option">
+<!-- <h2>Options</h2> -->
+<!-- <div class="option" style="display: none;">
     <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
     <select id="datachannel-parameters">
-        <option value='{"ordered": true}'>Ordered, reliable</option>
+        <option value='{"ordered": true}' selected>Ordered, reliable</option>
         <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
         <option value='{"ordered": false, "maxPacketLifetime": 500}'>Unordered, 500ms lifetime</option>
     </select>
 </div> -->
 
-<!-- <div class="option">
-    <input id="use-audio" checked="checked" type="checkbox"/>
+<div class="option" style="display: none;">
+    <input id="use-audio" type="checkbox"/>
     <label for="use-audio">Use audio</label>
     <select id="audio-codec">
-        <option value="default" selected>Default codecs</option>
+        <option value="default">Default codecs</option>
         <option value="opus/48000/2">Opus</option>
-        <option value="PCMU/8000">PCMU</option>
+        <option value="PCMU/8000" selected>PCMU</option>
         <option value="PCMA/8000">PCMA</option>
     </select>
-</div> -->
+</div>
 
-<!-- <div class="option">
+<div class="option" style="display: none;">
     <input id="use-video" type="checkbox"/>
     <label for="use-video">Use video</label>
 
@@ -72,9 +72,9 @@
     <select id="video-codec">
         <option value="default" selected>Default codecs</option>
         <option value="VP8/90000">VP8</option>
-        <option value="H264/90000">H264</option>
+        <option value="H264/90000" selected>H264</option>
     </select>
-</div> -->
+</div>
 
 <!-- <div class="option">
     <input id="use-stun" type="checkbox"/>
@@ -101,8 +101,6 @@
     <audio id="audio" autoplay="true"></audio> -->
     <video id="video" autoplay="true" playsinline="true"></video>
 </div>
-
-<img id="recv-img" src="img.jpg" alt="filter-image" width="200" height="200"> 
 
 <!-- <h2>Data channel</h2> -->
 <pre id="data-channel" style="height: 200px; display: none;"></pre>
