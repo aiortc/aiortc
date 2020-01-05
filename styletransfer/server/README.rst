@@ -1,7 +1,6 @@
 Style transfer server
 ====================================
 
-
 Running
 -------
 
@@ -9,10 +8,10 @@ Make sure pip and opencv are installed. If not, isntall:
 
 .. code-block:: console
 
-    $ $ apt install python3-pip python3-opencv
+    $ apt install python3-pip python3-opencv
 
 
-Clone repo and install required packages
+clone repo and install required packages:
 
 .. code-block:: console
 
@@ -21,22 +20,21 @@ Clone repo and install required packages
     $ pip3 install flask aiohttp aiortc 
 
 
-Run aiortc server
+to run modified aiortc server:
 
 .. code-block:: console
 
-    $ cd styletransfer/server
     $ python3 server.py
     $ # or to run in the backgorund
     $ nohup python3 server.py &
 
 running on: http://your_ip:8080
 
-Run flask server
+to run flask server:
 
 .. code-block:: console
 
-    $ cd styletransfer/server/flask
+    $ cd flask
     $ export FLASK_APP=server-flask.py
     $ nohup python -m flask run --host=0.0.0.0 &
 
@@ -45,18 +43,9 @@ running on: http://your_ip:5000/filter
 To check if flask server works properly, use run flask/client-flask.py or send JSON: 
 
 .. code-block:: console
+
     $ {
     $ "image" : "image encoded in base64",
     $ "benchmark" : "float 0-1",
     $ "color" : "boolean"
     $ }
-
-
-
-Credits
--------
-
-The audio file "demo-instruct.wav" was borrowed from the Asterisk
-project. It is licensed as Creative Commons Attribution-Share Alike 3.0:
-
-https://wiki.asterisk.org/wiki/display/AST/Voice+Prompts+and+Music+on+Hold+License
