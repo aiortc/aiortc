@@ -1,40 +1,49 @@
-Audio, video and data channel server
+Style transfer server
 ====================================
 
-This example illustrates establishing audio, video and a data channel with a
-browser. It also performs some image processing on the video frames using
-OpenCV.
 
 Running
 -------
 
-First install the required packages:
+Make sure pip and opencv are installed. If not, isntall:
 
 .. code-block:: console
 
-    $ pip install aiohttp aiortc opencv-python
+    $ $ apt install python3-pip python3-opencv
 
-When you start the example, it will create an HTTP server which you
-can connect to from your browser:
+
+Clone repo and install required packages
 
 .. code-block:: console
 
-    $ python server.py
+    $ git clone https://github.com/bbbrtk/aiortc.git
+    $ apt install libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config libsrtp2-dev
+    $ pip3 install flask aiohttp aiortc 
 
-You can then browse to the following page with your browser:
 
-http://127.0.0.1:8080
+Run aiortc server
 
-Once you click `Start` the browser will send the audio and video from its
-webcam to the server.
+.. code-block:: console
 
-The server will play a pre-recorded audio clip and send the received video back
-to the browser, optionally applying a transform to it.
+    $ cd styletransfer/server
+    $ python3 server.py
+    $ # or to run in the backgorund
+    $ nohup python3 server.py &
 
-In parallel to media streams, the browser sends a 'ping' message over the data
-channel, and the server replies with 'pong'.
+running on: http://your_ip:8080
 
-JSON EXAMPLE
+Run flask server
+
+.. code-block:: console
+
+    $ cd styletransfer/server/flask
+    $ export FLASK_APP=server-flask.py
+    $ nohup python -m flask run --host=0.0.0.0 &
+
+running on: http://your_ip:5000/filter
+
+To check if flask server works properly, use run flask/client-flask.py or send JSON: 
+
 .. code-block:: console
     $ {
     $ "image" : "image encoded in base64",
@@ -42,14 +51,7 @@ JSON EXAMPLE
     $ "color" : "boolean"
     $ }
 
-Additional options
-------------------
 
-If you want to enable verbose logging, run:
-
-.. code-block:: console
-
-    $ python server.py -v
 
 Credits
 -------
