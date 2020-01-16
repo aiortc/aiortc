@@ -41,6 +41,7 @@ class VideoTransformTrack(MediaStreamTrack):
 
         if self.transform == "cartoon":
             img = frame.to_ndarray(format="bgr24")
+            print(type(img))
             
             # prepare color
             img_color = cv2.pyrDown(cv2.pyrDown(img))
