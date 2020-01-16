@@ -13,6 +13,11 @@ from av import VideoFrame
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
+import sys
+sys.path.append("../../../LinearStyleTransfer_nongit")
+from StyleTransfer import StyleTransfer
+
+
 ROOT = os.path.dirname(__file__)
 
 logger = logging.getLogger("pc")
@@ -35,6 +40,15 @@ class VideoTransformTrack(MediaStreamTrack):
         filter_image = cv2.imread(f"images/{imgname}.jpg")
         if not filter_image is None:
             print(f"INFO.image: Filter Image: {imgname}.jpg with shape {filter_image.shape}")  
+
+
+        style = Image.open("images/{imgname}.jpg")
+        style = np.asarray(style.resize((576, 1024))).transpose(2,0,1)
+        s = StyleTransfer()
+        print("--------- STYLE ----------")
+        print(im.shape, style.shape)
+        s.set_style(style, 1.0)
+        print("--------- STYLE SET ----------")
 
     async def recv(self):
         frame = await self.track.recv()
@@ -66,6 +80,16 @@ class VideoTransformTrack(MediaStreamTrack):
 
             # rebuild a VideoFrame, preserving timing information
             new_frame = VideoFrame.from_ndarray(img, format="bgr24")
+            new_frame.pts = frame.pts
+            new_frame.time_base = frame.time_base
+            return new_frame
+
+        if self.transform == "style":
+            im = frame.to_ndarray(format="bgr24")
+            im = np.asarray(im.resize((576, 1024))).transpose(2,0,1)
+            t = s.stylize_frame(im).transpose(1,2,0)
+            print(t.shape)
+            new_frame = VideoFrame.from_ndarray(t, format="bgr24")
             new_frame.pts = frame.pts
             new_frame.time_base = frame.time_base
             return new_frame
