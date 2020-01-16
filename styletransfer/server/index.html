@@ -25,7 +25,7 @@
 <body>
 
 <div class="option" style="display: none;">
-    <input id="use-datachannel" checked="checked" type="checkbox"/>
+    <input id="use-datachannel" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
     <select id="datachannel-parameters">
         <option value='{"ordered": true}'>Ordered, reliable</option>
@@ -55,9 +55,9 @@
         <option value="1024x576" selected>1024x576</option>
     </select>
     <select id="video-transform">
-        <option value="none" >No transform</option>
+        <option value="none" selected >No transform</option>
         <option value="edges">Edge detection</option>
-        <option value="cartoon" selected>Cartoon effect</option>
+        <option value="cartoon">Cartoon effect</option>
         <option value="rotate">Rotate</option>
     </select>
     <select id="video-codec">
