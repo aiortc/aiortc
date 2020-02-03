@@ -38,12 +38,6 @@ matrix:
     python: "3.6"
   - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
     python: "3.6"
-  - env: BUILD=test
-    python: "3.5"
-    dist: trusty
-  - env: BUILD=test CRYPTOGRAPHY_NO_BINARY=1
-    dist: trusty
-    python: "3.5"
   - env: BUILD=sdist
     install: pip install twine
     python: "3.6"
