@@ -330,12 +330,14 @@ class RTCPeerConnectionTest(TestCase):
             self.assertEqual(pc.sctp.transport, transport)
 
     def assertDataChannelOpen(self, dc):
-        if dc.readyState == "connecting":
-            run(asyncio.sleep(0.1))
+        self.sleepWhile(lambda: dc.readyState == "connecting")
         self.assertEqual(dc.readyState, "open")
 
     def assertIceCompleted(self, pc1, pc2):
-        run(asyncio.sleep(0.1))
+        self.sleepWhile(
+            lambda: pc1.iceConnectionState == "checking"
+            or pc2.iceConnectionState == "checking"
+        )
         self.assertEqual(pc1.iceConnectionState, "completed")
         self.assertEqual(pc2.iceConnectionState, "completed")
 
@@ -349,9 +351,15 @@ class RTCPeerConnectionTest(TestCase):
 
     def closeDataChannel(self, dc):
         dc.close()
-        self.assertEqual(dc.readyState, "closing")
-        run(asyncio.sleep(0.1))
+        self.sleepWhile(lambda: dc.readyState == "closing")
         self.assertEqual(dc.readyState, "closed")
+
+    def sleepWhile(self, f, max_sleep=1.0):
+        sleep = 0.1
+        total = 0.0
+        while f() and total < max_sleep:
+            run(asyncio.sleep(sleep))
+            total += sleep
 
     def setUp(self):
         # shorten retransmissions to run tests faster
@@ -3026,8 +3034,8 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc1.readyState, "open")
-        self.assertEqual(dc2.readyState, "open")
+        self.assertDataChannelOpen(dc1)
+        self.assertDataChannelOpen(dc2)
 
         # send message
         dc1.send("hello")
@@ -3456,7 +3464,6 @@ a=fmtp:98 apt=97
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
             candidate.sdpMid = pc1.sctp.mid
             pc2.addIceCandidate(candidate)
-        run(asyncio.sleep(0.1))
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
