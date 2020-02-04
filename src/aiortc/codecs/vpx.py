@@ -16,7 +16,7 @@ MIN_BITRATE = 250000  # 250 kbps
 MAX_BITRATE = 1500000  # 1.5 Mbps
 
 MAX_FRAME_RATE = 30
-PACKET_MAX = 1300 - 4
+PACKET_MAX = 1300
 
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
 
@@ -353,10 +353,13 @@ class Vp8Encoder(Encoder):
         descr = VpxPayloadDescriptor(
             partition_start=1, partition_id=0, picture_id=self.picture_id
         )
-        for pos in range(0, length, PACKET_MAX):
-            data = self.buffer[pos : min(length, pos + PACKET_MAX)]
-            payloads.append(bytes(descr) + data)
+        pos = 0
+        while pos < length:
+            descr_bytes = bytes(descr)
+            size = min(length - pos, PACKET_MAX - len(descr_bytes))
+            payloads.append(descr_bytes + self.buffer[pos : pos + size])
             descr.partition_start = 0
+            pos += size
         self.picture_id = (self.picture_id + 1) % (1 << 15)
 
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
