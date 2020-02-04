@@ -329,6 +329,11 @@ class RTCPeerConnectionTest(TestCase):
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
 
+    def assertDataChannelOpen(self, dc):
+        if dc.readyState == "connecting":
+            run(asyncio.sleep(0.1))
+        self.assertEqual(dc.readyState, "open")
+
     def assertIceCompleted(self, pc1, pc2):
         run(asyncio.sleep(0.1))
         self.assertEqual(pc1.iceConnectionState, "completed")
@@ -2716,7 +2721,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
         self.assertEqual(dc.bufferedAmount, 0)
 
         # check pc2 got a datachannel
@@ -2874,7 +2879,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -3219,7 +3224,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -3455,7 +3460,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -3565,7 +3570,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -3664,7 +3669,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
@@ -3795,7 +3800,7 @@ a=fmtp:98 apt=97
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
-        self.assertEqual(dc.readyState, "open")
+        self.assertDataChannelOpen(dc)
 
         # check pc2 got a datachannel
         self.assertEqual(len(pc2_data_channels), 1)
