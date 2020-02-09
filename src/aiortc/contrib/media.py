@@ -325,7 +325,7 @@ class MediaRecorder:
         :param track: A :class:`aiortc.MediaStreamTrack`.
         """
         if track.kind == "audio":
-            if self.__container.format.name == "wav":
+            if self.__container.format.name in ("wav", "alsa"):
                 codec_name = "pcm_s16le"
             elif self.__container.format.name == "mp3":
                 codec_name = "mp3"
