@@ -91,7 +91,7 @@ On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libavdevice-dev libavfilter-dev libopus-dev libvpx-dev libsrtp2-dev pkg-config
+    apt install libavdevice-dev libavfilter-dev libopus-dev libsrtp2-dev libvpx-dev pkg-config
 
 On OS X run:
 
