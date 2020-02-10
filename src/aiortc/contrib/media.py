@@ -286,7 +286,7 @@ class MediaPlayer:
             self.__container = None
 
     def __log_debug(self, msg, *args):
-        logger.debug("player(%s) " + msg, self.__container.name, *args)
+        logger.debug(f"player(%s) {msg}", self.__container.name, *args)
 
 
 class MediaRecorderContext:

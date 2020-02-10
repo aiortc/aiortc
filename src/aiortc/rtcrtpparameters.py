@@ -50,7 +50,7 @@ class RTCRtpCodecParameters:
         return self.mimeType.split("/")[1]
 
     def __str__(self):
-        s = "%s/%d" % (self.name, self.clockRate)
+        s = f"{self.name}/{self.clockRate}"
         if self.channels == 2:
             s += "/2"
         return s

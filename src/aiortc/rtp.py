@@ -572,7 +572,7 @@ class RtcpPacket:
         while pos < len(data):
             if len(data) < pos + RTCP_HEADER_LENGTH:
                 raise ValueError(
-                    "RTCP packet length is less than %d bytes" % RTCP_HEADER_LENGTH
+                    f"RTCP packet length is less than {RTCP_HEADER_LENGTH} bytes"
                 )
 
             v_p_count, packet_type, length = unpack("!BBH", data[pos : pos + 4])
@@ -632,19 +632,16 @@ class RtpPacket:
         self.padding_size = 0
 
     def __repr__(self) -> str:
-        return "RtpPacket(seq=%d, ts=%s, marker=%d, payload=%d, %d bytes)" % (
-            self.sequence_number,
-            self.timestamp,
-            self.marker,
-            self.payload_type,
-            len(self.payload),
+        return (
+            f"RtpPacket(seq={self.sequence_number}, ts={self.timestamp}, "
+            f"marker={self.marker}, payload={self.payload_type}, {len(self.payload)} bytes)"
         )
 
     @classmethod
     def parse(cls, data: bytes, extensions_map=HeaderExtensionsMap()):
         if len(data) < RTP_HEADER_LENGTH:
             raise ValueError(
-                "RTP packet length is less than %d bytes" % RTP_HEADER_LENGTH
+                f"RTP packet length is less than {RTP_HEADER_LENGTH} bytes"
             )
 
         v_p_x_cc, m_pt, sequence_number, timestamp, ssrc = unpack("!BBHLL", data[0:12])

@@ -40,7 +40,7 @@ class H264PayloadDescriptor:
         self.first_fragment = first_fragment
 
     def __repr__(self):
-        return "H264PayloadDescriptor(FF={})".format(self.first_fragment)
+        return f"H264PayloadDescriptor(FF={self.first_fragment})"
 
     @classmethod
     def parse(cls: Type[DESCRIPTOR_T], data: bytes) -> Tuple[DESCRIPTOR_T, bytes]:
@@ -92,7 +92,7 @@ class H264PayloadDescriptor:
 
             obj = cls(first_fragment=True)
         else:
-            raise ValueError("NAL unit type %d is not supported" % nal_type)
+            raise ValueError(f"NAL unit type {nal_type} is not supported")
 
         return obj, output
 

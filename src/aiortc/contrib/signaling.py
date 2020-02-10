@@ -83,7 +83,7 @@ class ApprtcSignaling:
             )
         )
 
-        print("AppRTC room is %(room_id)s %(room_link)s" % params)
+        print(f"AppRTC room is {params['room_id']} {params['room_link']}")
 
         return params
 

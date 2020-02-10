@@ -84,10 +84,9 @@ class VpxPayloadDescriptor:
         return data
 
     def __repr__(self) -> str:
-        return "VpxPayloadDescriptor(S=%d, PID=%d, pic_id=%s)" % (
-            self.partition_start,
-            self.partition_id,
-            self.picture_id,
+        return (
+            f"VpxPayloadDescriptor(S={self.partition_start}, "
+            f"PID={self.partition_id}, pic_id={self.picture_id})"
         )
 
     @classmethod
