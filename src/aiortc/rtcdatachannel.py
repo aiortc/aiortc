@@ -181,7 +181,7 @@ class RTCDataChannel(AsyncIOEventEmitter):
             raise InvalidStateError
 
         if not isinstance(data, (str, bytes)):
-            raise ValueError("Cannot send unsupported data type: %s" % type(data))
+            raise ValueError(f"Cannot send unsupported data type: {type(data)}")
 
         self.transport._data_channel_send(self, data)
 
@@ -199,7 +199,7 @@ class RTCDataChannel(AsyncIOEventEmitter):
 
     def _setReadyState(self, state: str) -> None:
         if state != self.__readyState:
-            self.__log_debug("- %s -> %s", self.__readyState, state)
+            self.__log_debug(f"- {self.__readyState} -> {state}")
             self.__readyState = state
 
             if state == "open":

@@ -376,7 +376,7 @@ class RTCRtpReceiver:
         self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
-        self.__log_debug("< %s", packet)
+        self.__log_debug(f"< {packet}")
 
         if isinstance(packet, RtcpSrPacket):
             self.__stats.add(
@@ -384,7 +384,7 @@ class RTCRtpReceiver:
                     # RTCStats
                     timestamp=clock.current_datetime(),
                     type="remote-outbound-rtp",
-                    id="remote-outbound-rtp_" + str(id(self)),
+                    id=f"remote-outbound-rtp_{id(self)}",
                     # RTCStreamStats
                     ssrc=packet.ssrc,
                     kind=self.__kind,
@@ -409,7 +409,7 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
-        self.__log_debug("< %s", packet)
+        self.__log_debug(f"< {packet}")
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
@@ -437,7 +437,7 @@ class RTCRtpReceiver:
         codec = self.__codecs.get(packet.payload_type)
         if codec is None:
             self.__log_debug(
-                "x RTP packet with unknown payload type %d", packet.payload_type
+                f"x RTP packet with unknown payload type {packet.payload_type}"
             )
             return
 
@@ -450,7 +450,7 @@ class RTCRtpReceiver:
         if is_rtx(codec):
             original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
             if original_ssrc is None:
-                self.__log_debug("x RTX packet from unknown SSRC %d", packet.ssrc)
+                self.__log_debug(f"x RTX packet from unknown SSRC {packet.ssrc}")
                 return
 
             if len(packet.payload) < 2:
@@ -474,7 +474,7 @@ class RTCRtpReceiver:
             else:
                 packet._data = b""
         except ValueError as exc:
-            self.__log_debug("x RTP payload parsing failed: %s", exc)
+            self.__log_debug(f"x RTP payload parsing failed: {exc}")
             return
 
         # try to re-assemble encoded frame
@@ -530,7 +530,7 @@ class RTCRtpReceiver:
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packet) -> None:
-        self.__log_debug("> %s", packet)
+        self.__log_debug(f"> {packet}")
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
@@ -570,4 +570,4 @@ class RTCRtpReceiver:
             self.__decoder_thread = None
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug("receiver(%s) " + msg, self.__kind, *args)
+        logger.debug(f"receiver(%s) {msg}", self.__kind, *args)

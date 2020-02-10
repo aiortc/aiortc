@@ -179,9 +179,7 @@ def create_media_description_for_sctp(
         media = sdp.MediaDescription(
             kind="application", port=DISCARD_PORT, profile="DTLS/SCTP", fmt=[sctp.port]
         )
-        media.sctpmap[sctp.port] = (
-            "webrtc-datachannel %d" % sctp._outbound_streams_count
-        )
+        media.sctpmap[sctp.port] = f"webrtc-datachannel {sctp._outbound_streams_count}"
     else:
         media = sdp.MediaDescription(
             kind="application",
@@ -208,7 +206,7 @@ def create_media_description_for_transceiver(
         fmt=[c.payloadType for c in transceiver._codecs],
     )
     media.direction = direction
-    media.msid = "%s %s" % (transceiver.sender._stream_id, transceiver.sender._track_id)
+    media.msid = f"{transceiver.sender._stream_id} {transceiver.sender._track_id}"
 
     media.rtp = RTCRtpParameters(
         codecs=transceiver._codecs,
@@ -274,7 +272,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     def __init__(self, configuration: Optional[RTCConfiguration] = None) -> None:
         super().__init__()
         self.__certificates = [RTCCertificate.generateCertificate()]
-        self.__cname = "{%s}" % uuid.uuid4()
+        self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports = set()  # type: Set[RTCIceTransport]
         self.__initialOfferer = None  # type: Optional[bool]
@@ -372,7 +370,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # check state is valid
         self.__assertNotClosed()
         if track.kind not in ["audio", "video"]:
-            raise InternalError('Invalid track kind "%s"' % track.kind)
+            raise InternalError(f'Invalid track kind "{track.kind}"')
 
         # don't add track twice
         self.__assertTrackHasNoSender(track)
@@ -407,11 +405,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             kind = trackOrKind
             track = None
         if kind not in ["audio", "video"]:
-            raise InternalError('Invalid track kind "%s"' % kind)
+            raise InternalError(f'Invalid track kind "{kind}"')
 
         # check direction
         if direction not in sdp.DIRECTIONS:
-            raise InternalError('Invalid direction "%s"' % direction)
+            raise InternalError(f'Invalid direction "{direction}"')
 
         # don't add track twice
         if track:
@@ -460,13 +458,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__assertNotClosed()
         if self.signalingState not in ["have-remote-offer", "have-local-pranswer"]:
             raise InvalidStateError(
-                'Cannot create answer in signaling state "%s"' % self.signalingState
+                f'Cannot create answer in signaling state "{self.signalingState}"'
             )
 
         # create description
         ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
-        description.origin = "- %d %d IN IP4 0.0.0.0" % (ntp_seconds, ntp_seconds)
+        description.origin = f"- {ntp_seconds} {ntp_seconds} IN IP4 0.0.0.0"
         description.msid_semantic.append(
             sdp.GroupDescription(semantic="WMS", items=["*"])
         )
@@ -558,7 +556,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # create description
         ntp_seconds = clock.current_ntp_time() >> 32
         description = sdp.SessionDescription()
-        description.origin = "- %d %d IN IP4 0.0.0.0" % (ntp_seconds, ntp_seconds)
+        description.origin = f"- {ntp_seconds} {ntp_seconds} IN IP4 0.0.0.0"
         description.msid_semantic.append(
             sdp.GroupDescription(semantic="WMS", items=["*"])
         )
@@ -1059,8 +1057,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if description.type == "offer":
                 if self.signalingState not in ["stable", "have-local-offer"]:
                     raise InvalidStateError(
-                        'Cannot handle offer in signaling state "%s"'
-                        % self.signalingState
+                        f'Cannot handle offer in signaling state "{self.signalingState}"'
                     )
             elif description.type == "answer":
                 if self.signalingState not in [
@@ -1068,15 +1065,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     "have-local-pranswer",
                 ]:
                     raise InvalidStateError(
-                        'Cannot handle answer in signaling state "%s"'
-                        % self.signalingState
+                        f'Cannot handle answer in signaling state "{self.signalingState}"'
                     )
         else:
             if description.type == "offer":
                 if self.signalingState not in ["stable", "have-remote-offer"]:
                     raise InvalidStateError(
-                        'Cannot handle offer in signaling state "%s"'
-                        % self.signalingState
+                        f'Cannot handle offer in signaling state "{self.signalingState}"'
                     )
             elif description.type == "answer":
                 if self.signalingState not in [
@@ -1084,8 +1079,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     "have-remote-pranswer",
                 ]:
                     raise InvalidStateError(
-                        'Cannot handle answer in signaling state "%s"'
-                        % self.signalingState
+                        f'Cannot handle answer in signaling state "{self.signalingState}"'
                     )
 
         for media in description.media:

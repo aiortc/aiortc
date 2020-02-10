@@ -111,7 +111,7 @@ def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:
 
 def get_capabilities(kind: str) -> RTCRtpCapabilities:
     if kind not in CODECS:
-        raise ValueError("cannot get capabilities for unknown media %s" % kind)
+        raise ValueError(f"cannot get capabilities for unknown media {kind}")
 
     codecs = []
     rtx_added = False
@@ -155,7 +155,7 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
     elif mimeType == "video/vp8":
         return Vp8Decoder()
     else:
-        raise ValueError("No decoder found for MIME type `%s`" % mimeType)
+        raise ValueError(f"No decoder found for MIME type `{mimeType}`")
 
 
 def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
@@ -172,7 +172,7 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
     elif mimeType == "video/vp8":
         return Vp8Encoder()
     else:
-        raise ValueError("No encoder found for MIME type `%s`" % mimeType)
+        raise ValueError(f"No encoder found for MIME type `{mimeType}`")
 
 
 def is_rtx(codec: Union[RTCRtpCodecCapability, RTCRtpCodecParameters]) -> bool:
