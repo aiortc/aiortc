@@ -3,6 +3,14 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.23
+------
+
+  * Drop support for Python 3.5.
+  * Drop dependency on PyOpenSSL.
+  * Use PyAV >= 7.0.0.
+  * Add partial type hints.
+
 0.9.22
 ------
 

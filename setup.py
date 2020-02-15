@@ -21,7 +21,7 @@ cffi_modules = [
 install_requires = [
     "aioice>=0.6.15,<0.7.0",
     "attrs",
-    "av>=6.2.0,<7.0.0",
+    "av>=7.0.0,<8.0.0",
     "cffi>=1.0.0",
     "crc32c",
     "cryptography>=2.2",
@@ -62,7 +62,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",

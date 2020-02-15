@@ -24,7 +24,7 @@ answer = RTCSessionDescription(sdp="some-answer", type="answer")
 
 class SignalingTest(TestCase):
     def setUp(self):
-        def mock_print(v=""):
+        def mock_print(*args, **kwargs):
             pass
 
         # hijack print()
