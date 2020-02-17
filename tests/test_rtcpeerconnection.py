@@ -5,8 +5,8 @@ from unittest import TestCase
 import aioice.stun
 
 from aiortc import (
-    RTCIceCandidate,
     RTCConfiguration,
+    RTCIceCandidate,
     RTCPeerConnection,
     RTCSessionDescription,
 )
