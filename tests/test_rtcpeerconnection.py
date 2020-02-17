@@ -4,7 +4,12 @@ from unittest import TestCase
 
 import aioice.stun
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
+from aiortc import (
+    RTCIceCandidate,
+    RTCConfiguration,
+    RTCPeerConnection,
+    RTCSessionDescription,
+)
 from aiortc.exceptions import InternalError, InvalidAccessError, InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcpeerconnection import filter_preferred_codecs, find_common_codecs
@@ -578,11 +583,8 @@ class RTCPeerConnectionTest(TestCase):
 
         self.assertEqual(pc_states["signalingState"], ["stable", "closed"])
 
-    def test_connect_audio_bidirectional(self):
-        pc1 = RTCPeerConnection()
+    def _test_connect_audio_bidirectional(self, pc1, pc2):
         pc1_states = track_states(pc1)
-
-        pc2 = RTCPeerConnection()
         pc2_states = track_states(pc2)
 
         self.assertEqual(pc1.iceConnectionState, "new")
@@ -713,7 +715,17 @@ a=rtpmap:8 PCMA/8000
             ["stable", "have-remote-offer", "stable", "closed"],
         )
 
-    def test_connect_audio_bidirectional_trickle(self):
+    def test_connect_audio_bidirectional(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        self._test_connect_audio_bidirectional(pc1, pc2)
+
+    def test_connect_audio_bidirectional_with_empty_iceservers(self):
+        pc1 = RTCPeerConnection(RTCConfiguration(iceServers=[]))
+        pc2 = RTCPeerConnection()
+        self._test_connect_audio_bidirectional(pc1, pc2)
+
+    def test_connect_audio_bidirectional_with_trickle(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
