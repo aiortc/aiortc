@@ -87,11 +87,24 @@ Requirements
 In addition to aiortc's Python dependencies you need a couple of libraries
 installed on your system for media codecs. FFmpeg 3.2 or greater is required.
 
+Linux
+.....
+
 On Debian/Ubuntu run:
 
 .. code:: bash
 
     apt install libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config
+
+`pylibsrtp` comes with binary wheels for most platforms, but if it needs to be
+built from you will also need to run:
+
+.. code:: bash
+
+    apt install libsrtp2-dev
+
+OS X
+....
 
 On OS X run:
 
