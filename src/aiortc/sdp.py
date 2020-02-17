@@ -285,6 +285,7 @@ class SessionDescription:
     def parse(cls, sdp: str):
         current_media = None  # type: Optional[MediaDescription]
         dtls_fingerprints = []
+        ice_lite = False
         ice_options = None
 
         def find_codec(pt: int) -> RTCRtpCodecParameters:
@@ -312,6 +313,8 @@ class SessionDescription:
                     dtls_fingerprints.append(
                         RTCDtlsFingerprint(algorithm=algorithm, value=fingerprint)
                     )
+                elif attr == "ice-lite":
+                    ice_lite = True
                 elif attr == "ice-options":
                     ice_options = value
                 elif attr == "group":
@@ -340,6 +343,7 @@ class SessionDescription:
             current_media.dtls = RTCDtlsParameters(
                 fingerprints=dtls_fingerprints[:], role=None
             )
+            current_media.ice.iceLite = ice_lite
             current_media.ice_options = ice_options
             session.media.append(current_media)
 
@@ -456,6 +460,8 @@ class SessionDescription:
         if self.host is not None:
             lines += [f"c={ipaddress_to_sdp(self.host)}"]
         lines += [f"t={self.time}"]
+        if any(m.ice.iceLite for m in self.media):
+            lines += ["a=ice-lite"]
         for group in self.group:
             lines += [f"a=group:{group}"]
         for group in self.msid_semantic:

@@ -184,6 +184,7 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "5+Ix")
         self.assertEqual(d.media[0].ice.password, "uK8IlylxzDMUhrkVzdmj0M+v")
 
@@ -385,6 +386,7 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(len(d.media[0].ice_candidates), 10)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "403a81e1")
         self.assertEqual(d.media[0].ice.password, "f9b83487285016f7492197a5790ceee5")
 
@@ -536,6 +538,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, None)
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "75EDuLTEOkEUd3cu")
         self.assertEqual(d.media[0].ice.password, "5dvb9SbfooWc49814CupdeTS")
 
@@ -667,6 +670,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
         self.assertEqual(len(d.media[0].ice_candidates), 1)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, None)
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "75EDuLTEOkEUd3cu")
         self.assertEqual(d.media[0].ice.password, "5dvb9SbfooWc49814CupdeTS")
 
@@ -695,6 +699,119 @@ a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host
 a=end-of-candidates
 a=ice-ufrag:75EDuLTEOkEUd3cu
 a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+"""
+            ),
+        )
+
+    def test_audio_icelite(self):
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=ice-lite
+m=audio 45076 UDP/TLS/RTP/SAVPF 0 8
+c=IN IP4 192.168.99.58
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host generation 0 network-id 2 network-cost 10
+a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host generation 0 network-id 1 network-cost 10
+a=ice-ufrag:5+Ix
+a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
+a=setup:actpass
+a=mid:audio
+a=sendrecv
+a=rtcp-mux
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000"""
+            )
+        )
+
+        self.assertEqual(d.group, [])
+        self.assertEqual(d.msid_semantic, [])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, "-")
+        self.assertEqual(d.origin, "- 863426017819471768 2 IN IP4 127.0.0.1")
+        self.assertEqual(d.time, "0 0")
+        self.assertEqual(d.version, 0)
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, "audio")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
+        self.assertEqual(d.media[0].port, 45076)
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
+        self.assertEqual(d.media[0].msid, None)
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+                ),
+            ],
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions, [],
+        )
+        self.assertEqual(d.media[0].rtp.muxId, "audio")
+        self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
+        self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].rtcp_mux, True)
+
+        # ssrc
+        self.assertEqual(
+            d.media[0].ssrc, [],
+        )
+        self.assertEqual(d.media[0].ssrc_group, [])
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [0, 8])
+        self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 2)
+        self.assertEqual(d.media[0].ice_candidates_complete, False)
+        self.assertEqual(d.media[0].ice_options, None)
+        self.assertEqual(d.media[0].ice.iceLite, True)
+        self.assertEqual(d.media[0].ice.usernameFragment, "5+Ix")
+        self.assertEqual(d.media[0].ice.password, "uK8IlylxzDMUhrkVzdmj0M+v")
+
+        # dtls
+        self.assertEqual(len(d.media[0].dtls.fingerprints), 1)
+        self.assertEqual(d.media[0].dtls.fingerprints[0].algorithm, "sha-256")
+        self.assertEqual(
+            d.media[0].dtls.fingerprints[0].value,
+            "6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC",
+        )
+        self.assertEqual(d.media[0].dtls.role, "auto")
+
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=ice-lite
+m=audio 45076 UDP/TLS/RTP/SAVPF 0 8
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=mid:audio
+a=rtcp:9 IN IP4 0.0.0.0
+a=rtcp-mux
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host
+a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host
+a=ice-ufrag:5+Ix
+a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
+a=setup:actpass
 """
             ),
         )
@@ -761,6 +878,7 @@ a=max-message-size:1073741823
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "9889e0c4")
         self.assertEqual(d.media[0].ice.password, "d30a5aec4dd81f07d4ff3344209400ab")
 
@@ -864,6 +982,7 @@ a=max-message-size:1073741823
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "9889e0c4")
         self.assertEqual(d.media[0].ice.password, "d30a5aec4dd81f07d4ff3344209400ab")
 
@@ -1113,6 +1232,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(len(d.media[0].ice_candidates), 2)
         self.assertEqual(d.media[0].ice_candidates_complete, False)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "9KhP")
         self.assertEqual(d.media[0].ice.password, "mlPea2xBCmFmNLfmy/jlqw1D")
 
@@ -1318,6 +1438,7 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         self.assertEqual(len(d.media[0].ice_candidates), 4)
         self.assertEqual(d.media[0].ice_candidates_complete, True)
         self.assertEqual(d.media[0].ice_options, "trickle")
+        self.assertEqual(d.media[0].ice.iceLite, False)
         self.assertEqual(d.media[0].ice.usernameFragment, "1a0e6b24")
         self.assertEqual(d.media[0].ice.password, "c43b0306087bb4de15f70e4405c4dafe")
 
