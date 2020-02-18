@@ -73,6 +73,9 @@ class AudioStreamTrack(MediaStreamTrack):
 
     kind = "audio"
 
+    _start: float
+    _timestamp: int
+
     async def recv(self) -> Frame:
         """
         Receive the next :class:`~av.audio.frame.AudioFrame`.
@@ -109,6 +112,9 @@ class VideoStreamTrack(MediaStreamTrack):
     """
 
     kind = "video"
+
+    _start: float
+    _timestamp: int
 
     async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
         if self.readyState != "live":

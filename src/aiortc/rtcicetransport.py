@@ -29,12 +29,12 @@ class RTCIceCandidate:
     establish an RTCPeerConnection.
     """
 
-    component = attr.ib()  # type: int
-    foundation = attr.ib()  # type: str
-    ip = attr.ib()  # type: str
-    port = attr.ib()  # type: int
-    priority = attr.ib()  # type: int
-    protocol = attr.ib()  # type: str
+    component: int = attr.ib()
+    foundation: str = attr.ib()
+    ip: str = attr.ib()
+    port: int = attr.ib()
+    priority: int = attr.ib()
+    protocol: str = attr.ib()
     type = attr.ib()
     relatedAddress = attr.ib(default=None)
     relatedPort = attr.ib(default=None)
@@ -50,13 +50,13 @@ class RTCIceParameters:
     fragment and password and other ICE-related parameters.
     """
 
-    usernameFragment = attr.ib(default=None)  # type: Optional[str]
+    usernameFragment: Optional[str] = attr.ib(default=None)
     "ICE username fragment."
 
-    password = attr.ib(default=None)  # type: Optional[str]
+    password: Optional[str] = attr.ib(default=None)
     "ICE password."
 
-    iceLite = attr.ib(default=False)  # type: bool
+    iceLite: bool = attr.ib(default=False)
 
 
 def candidate_from_aioice(x: Candidate) -> RTCIceCandidate:
@@ -90,7 +90,7 @@ def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
 
 
 def connection_kwargs(servers: List[RTCIceServer]) -> Dict[str, Any]:
-    kwargs = {}  # type: Dict[str, Any]
+    kwargs: Dict[str, Any] = {}
 
     for server in servers:
         if isinstance(server.urls, list):
@@ -146,7 +146,7 @@ def parse_stun_turn_uri(uri: str) -> Dict[str, Any]:
         raise ValueError("malformed uri")
 
     # set port
-    parsed = match.groupdict()
+    parsed: Dict[str, Any] = match.groupdict()
     if parsed["port"]:
         parsed["port"] = int(parsed["port"])
     elif parsed["scheme"] in ["stuns", "turns"]:
@@ -238,7 +238,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
     def __init__(self, gatherer: RTCIceGatherer) -> None:
         super().__init__()
-        self.__start = None  # type: Optional[asyncio.Event]
+        self.__start: Optional[asyncio.Event] = None
         self.__iceGatherer = gatherer
         self.__state = "new"
         self._connection = gatherer._connection

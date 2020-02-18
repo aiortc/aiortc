@@ -1,7 +1,7 @@
 import multiprocessing
 import random
 from struct import pack, unpack_from
-from typing import List, Tuple, Type, TypeVar
+from typing import List, Tuple, Type, TypeVar, cast
 
 from av import VideoFrame
 from av.frame import Frame
@@ -183,7 +183,7 @@ class Vp8Decoder(Decoder):
         lib.vpx_codec_destroy(self.codec)
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        frames = []  # type: List[Frame]
+        frames: List[Frame] = []
         result = lib.vpx_codec_decode(
             self.codec,
             encoded_frame.data,
@@ -209,7 +209,7 @@ class Vp8Decoder(Decoder):
                     i_pos = 0
 
                     o_stride = frame.planes[p].line_size
-                    o_buf = memoryview(frame.planes[p])
+                    o_buf = memoryview(cast(bytes, frame.planes[p]))
                     o_pos = 0
 
                     div = p and 2 or 1

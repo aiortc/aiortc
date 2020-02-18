@@ -22,7 +22,7 @@ PCMA_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
 )
 
-CODECS = {
+CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
     "audio": [
         RTCRtpCodecParameters(
             mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -31,8 +31,8 @@ CODECS = {
         PCMA_CODEC,
     ],
     "video": [],
-}  # type: Dict[str, List[RTCRtpCodecParameters]]
-HEADER_EXTENSIONS = {
+}
+HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
         RTCRtpHeaderExtensionParameters(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid")
     ],
@@ -44,7 +44,7 @@ HEADER_EXTENSIONS = {
             id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
         ),
     ],
-}  # type: Dict[str, List[RTCRtpHeaderExtensionParameters]]
+}
 
 
 def init_codecs() -> None:

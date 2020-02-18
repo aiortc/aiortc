@@ -97,7 +97,7 @@ def ipaddress_to_sdp(addr: str) -> str:
 
 
 def parameters_from_sdp(sdp: str) -> OrderedDict:
-    parameters = OrderedDict()  # type: OrderedDict
+    parameters: OrderedDict = OrderedDict()
     for param in sdp.split(";"):
         if "=" in param:
             k, v = param.split("=", 1)
@@ -130,7 +130,7 @@ def parse_attr(line: str) -> Tuple[str, Optional[str]]:
 
 @attr.s
 class GroupDescription:
-    semantic = attr.ib()  # type: str
+    semantic: str = attr.ib()
     items = attr.ib()  # List[Union[int, str]]
 
     def __str__(self) -> str:
@@ -160,37 +160,37 @@ class MediaDescription:
         # rtp
         self.kind = kind
         self.port = port
-        self.host = None  # type: Optional[str]
+        self.host: Optional[str] = None
         self.profile = profile
-        self.direction = None  # type: Optional[str]
-        self.msid = None  # type: Optional[str]
+        self.direction: Optional[str] = None
+        self.msid: Optional[str] = None
 
         # rtcp
-        self.rtcp_port = None  # type: Optional[int]
-        self.rtcp_host = None  # type: Optional[str]
+        self.rtcp_port: Optional[int] = None
+        self.rtcp_host: Optional[str] = None
         self.rtcp_mux = False
 
         # ssrc
-        self.ssrc = []  # type: List[SsrcDescription]
-        self.ssrc_group = []  # type: List[GroupDescription]
+        self.ssrc: List[SsrcDescription] = []
+        self.ssrc_group: List[GroupDescription] = []
 
         # formats
         self.fmt = fmt
         self.rtp = RTCRtpParameters()
 
         # SCTP
-        self.sctpCapabilities = None  # type: Optional[RTCSctpCapabilities]
-        self.sctpmap = {}  # type: Dict[int, str]
-        self.sctp_port = None  # type: Optional[int]
+        self.sctpCapabilities: Optional[RTCSctpCapabilities] = None
+        self.sctpmap: Dict[int, str] = {}
+        self.sctp_port: Optional[int] = None
 
         # DTLS
-        self.dtls = None  # type: Optional[RTCDtlsParameters]
+        self.dtls: Optional[RTCDtlsParameters] = None
 
         # ICE
         self.ice = RTCIceParameters()
-        self.ice_candidates = []  # type: List[RTCIceCandidate]
+        self.ice_candidates: List[RTCIceCandidate] = []
         self.ice_candidates_complete = False
-        self.ice_options = None  # type: Optional[str]
+        self.ice_options: Optional[str] = None
 
     def __str__(self) -> str:
         lines = []
@@ -272,18 +272,18 @@ class MediaDescription:
 class SessionDescription:
     def __init__(self) -> None:
         self.version = 0
-        self.origin = None  # type: Optional[str]
+        self.origin: Optional[str] = None
         self.name = "-"
         self.time = "0 0"
-        self.host = None  # type: Optional[str]
-        self.group = []  # type: List[GroupDescription]
-        self.msid_semantic = []  # type: List[GroupDescription]
-        self.media = []  # type: List[MediaDescription]
-        self.type = None  # type: str
+        self.host: Optional[str] = None
+        self.group: List[GroupDescription] = []
+        self.msid_semantic: List[GroupDescription] = []
+        self.media: List[MediaDescription] = []
+        self.type: Optional[str] = None
 
     @classmethod
     def parse(cls, sdp: str):
-        current_media = None  # type: Optional[MediaDescription]
+        current_media: Optional[MediaDescription] = None
         dtls_fingerprints = []
         ice_lite = False
         ice_options = None
@@ -330,7 +330,7 @@ class SessionDescription:
             # check payload types are valid
             kind = m.group(1)
             fmt = m.group(4).split()
-            fmt_int = None  # type: Optional[List[int]]
+            fmt_int: Optional[List[int]] = None
             if kind in ["audio", "video"]:
                 fmt_int = [int(x) for x in fmt]
                 for pt in fmt_int:

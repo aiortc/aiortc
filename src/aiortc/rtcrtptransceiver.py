@@ -31,21 +31,21 @@ class RTCRtpTransceiver:
     ):
         self.__direction = direction
         self.__kind = kind
-        self.__mid = None  # type: Optional[str]
-        self.__mline_index = None  # type: Optional[int]
+        self.__mid: Optional[str] = None
+        self.__mline_index: Optional[int] = None
         self.__receiver = receiver
         self.__sender = sender
         self.__stopped = False
 
-        self._currentDirection = None  # type: Optional[str]
-        self._offerDirection = None  # type: Optional[str]
-        self._preferred_codecs = []  # type: List[RTCRtpCodecCapability]
-        self._transport = None  # type: RTCDtlsTransport
+        self._currentDirection: Optional[str] = None
+        self._offerDirection: Optional[str] = None
+        self._preferred_codecs: List[RTCRtpCodecCapability] = []
+        self._transport: RTCDtlsTransport = None
 
         # FIXME: this is only used by RTCPeerConnection
         self._bundled = False
-        self._codecs = []  # type: List[RTCRtpCodecParameters]
-        self._headerExtensions = []  # type: List[RTCRtpHeaderExtensionParameters]
+        self._codecs: List[RTCRtpCodecParameters] = []
+        self._headerExtensions: List[RTCRtpHeaderExtensionParameters] = []
 
     @property
     def currentDirection(self) -> Optional[str]:
@@ -113,7 +113,7 @@ class RTCRtpTransceiver:
             self._preferred_codecs = []
 
         capabilities = get_capabilities(self.kind).codecs
-        unique = []  # type: List[RTCRtpCodecCapability]
+        unique: List[RTCRtpCodecCapability] = []
         for codec in reversed(codecs):
             if codec not in capabilities:
                 raise ValueError("Codec is not in capabilities")

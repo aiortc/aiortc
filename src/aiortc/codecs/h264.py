@@ -116,7 +116,7 @@ class H264Decoder(Decoder):
 
 class H264Encoder(Encoder):
     def __init__(self) -> None:
-        self.codec = None  # type: Optional[av.CodecContext]
+        self.codec: Optional[av.CodecContext] = None
 
     @staticmethod
     def _packetize_fu_a(data: bytes) -> List[bytes]:

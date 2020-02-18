@@ -1,5 +1,6 @@
 import audioop
 import fractions
+from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
 from av import AudioFrame
@@ -14,7 +15,12 @@ SAMPLES_PER_FRAME = 160
 TIME_BASE = fractions.Fraction(1, 8000)
 
 
-class PcmDecoder(Decoder):
+class PcmDecoder(ABC, Decoder):
+    @staticmethod
+    @abstractmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        ...
+
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
         frame.planes[0].update(self._convert(encoded_frame.data, SAMPLE_WIDTH))
@@ -24,11 +30,14 @@ class PcmDecoder(Decoder):
         return [frame]
 
 
-class PcmEncoder(Encoder):
+class PcmEncoder(ABC, Encoder):
+    @staticmethod
+    @abstractmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        ...
+
     def __init__(self) -> None:
-        self.rate_state = (
-            None
-        )  # type: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]]
+        self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -62,16 +71,24 @@ class PcmEncoder(Encoder):
 
 
 class PcmaDecoder(PcmDecoder):
-    _convert = staticmethod(audioop.alaw2lin)
+    @staticmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        return audioop.alaw2lin(data, width)
 
 
 class PcmaEncoder(PcmEncoder):
-    _convert = staticmethod(audioop.lin2alaw)
+    @staticmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        return audioop.lin2alaw(data, width)
 
 
 class PcmuDecoder(PcmDecoder):
-    _convert = staticmethod(audioop.ulaw2lin)
+    @staticmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        return audioop.ulaw2lin(data, width)
 
 
 class PcmuEncoder(PcmEncoder):
-    _convert = staticmethod(audioop.lin2ulaw)
+    @staticmethod
+    def _convert(data: bytes, width: int) -> bytes:
+        return audioop.lin2ulaw(data, width)

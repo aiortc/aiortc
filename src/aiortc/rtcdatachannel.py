@@ -16,27 +16,27 @@ class RTCDataChannelParameters:
     configuration of an :class:`RTCDataChannel`.
     """
 
-    label = attr.ib(default="")  # type: str
+    label: str = attr.ib(default="")
     "A name describing the data channel."
 
-    maxPacketLifeTime = attr.ib(default=None)  # type: Optional[int]
+    maxPacketLifeTime: Optional[int] = attr.ib(default=None)
     "The maximum time in milliseconds during which transmissions are attempted."
 
-    maxRetransmits = attr.ib(default=None)  # type: Optional[int]
+    maxRetransmits: Optional[int] = attr.ib(default=None)
     "The maximum number of retransmissions that are attempted."
 
-    ordered = attr.ib(default=True)  # type: bool
+    ordered: bool = attr.ib(default=True)
     "Whether the data channel guarantees in-order delivery of messages."
 
-    protocol = attr.ib(default="")  # type: str
+    protocol: str = attr.ib(default="")
     "The name of the subprotocol in use."
 
-    negotiated = attr.ib(default=False)  # type: bool
+    negotiated: bool = attr.ib(default=False)
     """
     Whether data channel will be negotiated out of-band, where both sides
     create data channel with an agreed-upon ID."""
 
-    id = attr.ib(default=None)  # type: Optional[int]
+    id: Optional[int] = attr.ib(default=None)
     """
     An numeric ID for the channel; permitted values are 0-65534.
     If you don't include this option, the user agent will select an ID for you.

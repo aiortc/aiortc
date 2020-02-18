@@ -11,13 +11,13 @@ class RTCRtpCodecCapability:
     codec capabilities.
     """
 
-    mimeType = attr.ib(type=str)  # type: str
+    mimeType: str = attr.ib()
     "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
-    clockRate = attr.ib(type=int)  # type: int
+    clockRate: int = attr.ib()
     "The codec clock rate expressed in Hertz."
-    channels = attr.ib(default=None)  # type: int
+    channels: int = attr.ib(default=None)
     "The number of channels supported (e.g. two for stereo)."
-    parameters = attr.ib(default=attr.Factory(OrderedDict))  # type: OrderedDict
+    parameters: OrderedDict = attr.ib(default=attr.Factory(OrderedDict))
     "Codec-specific parameters available for signaling."
 
     @property
@@ -32,17 +32,17 @@ class RTCRtpCodecParameters:
     codec settings.
     """
 
-    mimeType = attr.ib(type=str)  # type: str
+    mimeType: str = attr.ib()
     "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
-    clockRate = attr.ib(type=int)  # type: int
+    clockRate: int = attr.ib()
     "The codec clock rate expressed in Hertz."
-    channels = attr.ib(default=None)  # type: int
+    channels: int = attr.ib(default=None)
     "The number of channels supported (e.g. two for stereo)."
-    payloadType = attr.ib(default=None)  # type: int
+    payloadType: int = attr.ib(default=None)
     "The value that goes in the RTP Payload Type Field."
-    rtcpFeedback = attr.ib(default=attr.Factory(list))  # type: List[RTCRtcpFeedback]
+    rtcpFeedback: List["RTCRtcpFeedback"] = attr.ib(default=attr.Factory(list))
     "Transport layer and codec-specific feedback messages for this codec."
-    parameters = attr.ib(default=attr.Factory(OrderedDict))  # type: OrderedDict
+    parameters: OrderedDict = attr.ib(default=attr.Factory(OrderedDict))
     "Codec-specific parameters available for signaling."
 
     @property
@@ -58,14 +58,14 @@ class RTCRtpCodecParameters:
 
 @attr.s
 class RTCRtpRtxParameters:
-    ssrc = attr.ib(type=int)  # type: int
+    ssrc: int = attr.ib()
 
 
 @attr.s
 class RTCRtpCodingParameters:
-    ssrc = attr.ib(type=int)  # type: int
-    payloadType = attr.ib(type=int)  # type: int
-    rtx = attr.ib(default=None)  # type: RTCRtpRtxParameters
+    ssrc: int = attr.ib()
+    payloadType: int = attr.ib()
+    rtx: RTCRtpRtxParameters = attr.ib(default=None)
 
 
 @attr.s
@@ -85,7 +85,7 @@ class RTCRtpHeaderExtensionCapability:
     on a supported header extension.
     """
 
-    uri = attr.ib(type=str)  # type: str
+    uri: str = attr.ib()
     "The URI of the RTP header extension."
 
 
@@ -97,9 +97,9 @@ class RTCRtpHeaderExtensionParameters:
     :class:`RTCRtpReceiver`.
     """
 
-    id = attr.ib(type=int)  # type: int
+    id: int = attr.ib()
     "The value that goes in the packet."
-    uri = attr.ib(type=str)  # type: str
+    uri: str = attr.ib()
     "The URI of the RTP header extension."
 
 
@@ -110,11 +110,11 @@ class RTCRtpCapabilities:
     support codecs and header extensions.
     """
 
-    codecs = attr.ib(default=attr.Factory(list))  # type: List[RTCRtpCodecCapability]
+    codecs: List[RTCRtpCodecCapability] = attr.ib(default=attr.Factory(list))
     "A list of :class:`RTCRtpCodecCapability`."
-    headerExtensions = attr.ib(
+    headerExtensions: List[RTCRtpHeaderExtensionCapability] = attr.ib(
         default=attr.Factory(list)
-    )  # type: List[RTCRtpHeaderExtensionCapability]
+    )
     "A list of :class:`RTCRtpHeaderExtensionCapability`."
 
 
@@ -124,8 +124,8 @@ class RTCRtcpFeedback:
     The :class:`RTCRtcpFeedback` dictionary provides information on RTCP feedback messages.
     """
 
-    type = attr.ib()  # type: str
-    parameter = attr.ib(default=None)  # type: str
+    type: str = attr.ib()
+    parameter: str = attr.ib(default=None)
 
 
 @attr.s
@@ -134,11 +134,11 @@ class RTCRtcpParameters:
     The :class:`RTCRtcpParameters` dictionary provides information on RTCP settings.
     """
 
-    cname = attr.ib(default=None)  # type: str
+    cname: str = attr.ib(default=None)
     "The Canonical Name (CNAME) used by RTCP."
-    mux = attr.ib(default=False)  # type: bool
+    mux: bool = attr.ib(default=False)
     "Whether RTP and RTCP are multiplexed."
-    ssrc = attr.ib(default=None)  # type: int
+    ssrc: int = attr.ib(default=None)
     "The Synchronization Source identifier."
 
 
@@ -149,27 +149,23 @@ class RTCRtpParameters:
     an :class:`RTCRtpReceiver` or an :class:`RTCRtpSender`.
     """
 
-    codecs = attr.ib(default=attr.Factory(list))  # type: List[RTCRtpCodecParameters]
+    codecs: List[RTCRtpCodecParameters] = attr.ib(default=attr.Factory(list))
     "A list of :class:`RTCRtpCodecParameters` to send or receive."
-    headerExtensions = attr.ib(
+    headerExtensions: List[RTCRtpHeaderExtensionParameters] = attr.ib(
         default=attr.Factory(list)
-    )  # type: List[RTCRtpHeaderExtensionParameters]
+    )
     "A list of :class:`RTCRtpHeaderExtensionParameters`."
-    muxId = attr.ib(default="")  # type: str
+    muxId: str = attr.ib(default="")
     "The muxId assigned to the RTP stream, if any, empty string if unset."
-    rtcp = attr.ib(default=attr.Factory(RTCRtcpParameters))  # type: RTCRtcpParameters
+    rtcp: RTCRtcpParameters = attr.ib(default=attr.Factory(RTCRtcpParameters))
     "Parameters to configure RTCP."
 
 
 @attr.s
 class RTCRtpReceiveParameters(RTCRtpParameters):
-    encodings = attr.ib(
-        default=attr.Factory(list)
-    )  # type: List[RTCRtpDecodingParameters]
+    encodings: List[RTCRtpDecodingParameters] = attr.ib(default=attr.Factory(list))
 
 
 @attr.s
 class RTCRtpSendParameters(RTCRtpParameters):
-    encodings = attr.ib(
-        default=attr.Factory(list)
-    )  # type: List[RTCRtpEncodingParameters]
+    encodings: List[RTCRtpEncodingParameters] = attr.ib(default=attr.Factory(list))
