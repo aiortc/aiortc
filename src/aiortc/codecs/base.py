@@ -9,7 +9,7 @@ from ..jitterbuffer import JitterFrame
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        pass
+        pass  # pragma: no cover
 
 
 class Encoder(metaclass=ABCMeta):
@@ -17,4 +17,4 @@ class Encoder(metaclass=ABCMeta):
     def encode(
         self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
-        pass
+        pass  # pragma: no cover
