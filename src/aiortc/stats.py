@@ -1,3 +1,5 @@
+import datetime
+
 import attr
 
 
@@ -7,31 +9,31 @@ class RTCStats:
     Base class for statistics.
     """
 
-    timestamp = attr.ib()
+    timestamp: datetime.datetime = attr.ib()
     "The timestamp associated with this object."
-    type = attr.ib()
-    id = attr.ib()
+    type: str = attr.ib()
+    id: str = attr.ib()
 
 
 @attr.s
 class RTCRtpStreamStats(RTCStats):
-    ssrc = attr.ib()
-    kind = attr.ib()
-    transportId = attr.ib()
+    ssrc: int = attr.ib()
+    kind: str = attr.ib()
+    transportId: str = attr.ib()
 
 
 @attr.s
 class RTCReceivedRtpStreamStats(RTCRtpStreamStats):
-    packetsReceived = attr.ib()
-    packetsLost = attr.ib()
-    jitter = attr.ib()
+    packetsReceived: int = attr.ib()
+    packetsLost: int = attr.ib()
+    jitter: int = attr.ib()
 
 
 @attr.s
 class RTCSentRtpStreamStats(RTCRtpStreamStats):
-    packetsSent = attr.ib()
+    packetsSent: int = attr.ib()
     "Total number of RTP packets sent for this SSRC."
-    bytesSent = attr.ib()
+    bytesSent: int = attr.ib()
     "Total number of bytes sent for this SSRC."
 
 
@@ -52,8 +54,8 @@ class RTCRemoteInboundRtpStreamStats(RTCReceivedRtpStreamStats):
     endpoint's measurement metrics for a particular incoming RTP stream.
     """
 
-    roundTripTime = attr.ib()
-    fractionLost = attr.ib()
+    roundTripTime: float = attr.ib()
+    fractionLost: float = attr.ib()
 
 
 @attr.s
@@ -63,7 +65,7 @@ class RTCOutboundRtpStreamStats(RTCSentRtpStreamStats):
     metrics for the outgoing RTP stream.
     """
 
-    trackId = attr.ib(type=str)
+    trackId: str = attr.ib()
 
 
 @attr.s
@@ -73,22 +75,22 @@ class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
     endpoint's measurement metrics for its outgoing RTP stream.
     """
 
-    remoteTimestamp = attr.ib(default=None)
+    remoteTimestamp: datetime.datetime = attr.ib(default=None)
 
 
 @attr.s
 class RTCTransportStats(RTCStats):
-    packetsSent = attr.ib()  # type: int
+    packetsSent: int = attr.ib()
     "Total number of packets sent over this transport."
-    packetsReceived = attr.ib()  # type: int
+    packetsReceived: int = attr.ib()
     "Total number of packets received over this transport."
-    bytesSent = attr.ib()  # type: int
+    bytesSent: int = attr.ib()
     "Total number of bytes sent over this transport."
-    bytesReceived = attr.ib()  # type: int
+    bytesReceived: int = attr.ib()
     "Total number of bytes received over this transport."
-    iceRole = attr.ib()  # type: str
+    iceRole: str = attr.ib()
     "The current value of :attr:`RTCIceTransport.role`."
-    dtlsState = attr.ib()  # type: str
+    dtlsState: str = attr.ib()
     "The current value of :attr:`RTCDtlsTransport.state`."
 
 

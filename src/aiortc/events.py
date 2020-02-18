@@ -12,9 +12,9 @@ class RTCTrackEvent:
     :class:`MediaStreamTrack` is added by the remote party.
     """
 
-    receiver = attr.ib()  # type: RTCRtpReceiver
+    receiver: RTCRtpReceiver = attr.ib()
     "The :class:`RTCRtpReceiver` associated with the event."
-    track = attr.ib()  # type: MediaStreamTrack
+    track: MediaStreamTrack = attr.ib()
     "The :class:`MediaStreamTrack` associated with the event."
-    transceiver = attr.ib()  # type: RTCRtpTransceiver
+    transceiver: RTCRtpTransceiver = attr.ib()
     "The :class:`RTCRtpTransceiver` associated with the event."

@@ -338,10 +338,10 @@ class RtcpReceiverInfo:
 
 @attr.s
 class RtcpSenderInfo:
-    ntp_timestamp = attr.ib()  # type: int
-    rtp_timestamp = attr.ib()  # type: int
-    packet_count = attr.ib()  # type: int
-    octet_count = attr.ib()  # type: int
+    ntp_timestamp: int = attr.ib()
+    rtp_timestamp: int = attr.ib()
+    packet_count: int = attr.ib()
+    octet_count: int = attr.ib()
 
     def __bytes__(self) -> bytes:
         return pack(
@@ -415,8 +415,8 @@ class RtcpPsfbPacket:
 
 @attr.s
 class RtcpRrPacket:
-    ssrc = attr.ib()  # type: int
-    reports = attr.ib(default=attr.Factory(list))  # type: List[RtcpReceiverInfo]
+    ssrc: int = attr.ib()
+    reports: List[RtcpReceiverInfo] = attr.ib(default=attr.Factory(list))
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)
@@ -449,7 +449,7 @@ class RtcpRtpfbPacket:
     media_ssrc = attr.ib()
 
     # generick NACK
-    lost = attr.ib(default=attr.Factory(list))  # type: List[int]
+    lost: List[int] = attr.ib(default=attr.Factory(list))
 
     def __bytes__(self) -> bytes:
         payload = pack("!LL", self.ssrc, self.media_ssrc)
@@ -485,7 +485,7 @@ class RtcpRtpfbPacket:
 
 @attr.s
 class RtcpSdesPacket:
-    chunks = attr.ib(default=attr.Factory(list))  # type: List[RtcpSourceInfo]
+    chunks: List[RtcpSourceInfo] = attr.ib(default=attr.Factory(list))
 
     def __bytes__(self) -> bytes:
         payload = b""
@@ -527,9 +527,9 @@ class RtcpSdesPacket:
 
 @attr.s
 class RtcpSrPacket:
-    ssrc = attr.ib()  # type: int
-    sender_info = attr.ib()  # type: RtcpSenderInfo
-    reports = attr.ib(default=attr.Factory(list))  # type: List[RtcpReceiverInfo]
+    ssrc: int = attr.ib()
+    sender_info: RtcpSenderInfo = attr.ib()
+    reports: List[RtcpReceiverInfo] = attr.ib(default=attr.Factory(list))
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)
@@ -626,7 +626,7 @@ class RtpPacket:
         self.sequence_number = sequence_number
         self.timestamp = timestamp
         self.ssrc = ssrc
-        self.csrc = []  # type: List[int]
+        self.csrc: List[int] = []
         self.extensions = HeaderExtensions()
         self.payload = payload
         self.padding_size = 0

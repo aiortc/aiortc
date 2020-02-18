@@ -77,7 +77,7 @@ def find_common_codecs(
     remote_codecs: List[RTCRtpCodecParameters],
 ) -> List[RTCRtpCodecParameters]:
     common = []
-    common_base = {}  # type: Dict[int, RTCRtpCodecParameters]
+    common_base: Dict[int, RTCRtpCodecParameters] = {}
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
         if is_rtx(c):
@@ -274,32 +274,32 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
-        self.__iceTransports = set()  # type: Set[RTCIceTransport]
-        self.__initialOfferer = None  # type: Optional[bool]
-        self.__remoteDtls = (
-            {}
-        )  # type: Dict[Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters]
-        self.__remoteIce = (
-            {}
-        )  # type: Dict[Union[RTCRtpTransceiver, RTCSctpTransport], RTCIceParameters]
-        self.__seenMids = set()  # type: Set[str]
-        self.__sctp = None  # type: Optional[RTCSctpTransport]
-        self.__sctp_mline_index = None  # type: Optional[int]
+        self.__iceTransports: Set[RTCIceTransport] = set()
+        self.__initialOfferer: Optional[bool] = None
+        self.__remoteDtls: Dict[
+            Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters
+        ] = ({})
+        self.__remoteIce: Dict[
+            Union[RTCRtpTransceiver, RTCSctpTransport], RTCIceParameters
+        ] = ({})
+        self.__seenMids: Set[str] = set()
+        self.__sctp: Optional[RTCSctpTransport] = None
+        self.__sctp_mline_index: Optional[int] = None
         self._sctpLegacySdp = True
-        self.__sctpRemotePort = None  # type: Optional[int]
+        self.__sctpRemotePort: Optional[int] = None
         self.__sctpRemoteCaps = None
         self.__stream_id = str(uuid.uuid4())
-        self.__transceivers = []  # type: List[RTCRtpTransceiver]
+        self.__transceivers: List[RTCRtpTransceiver] = []
 
         self.__iceConnectionState = "new"
         self.__iceGatheringState = "new"
         self.__isClosed = False
         self.__signalingState = "stable"
 
-        self.__currentLocalDescription = None  # type: Optional[sdp.SessionDescription]
-        self.__currentRemoteDescription = None  # type: Optional[sdp.SessionDescription]
-        self.__pendingLocalDescription = None  # type: Optional[sdp.SessionDescription]
-        self.__pendingRemoteDescription = None  # type: Optional[sdp.SessionDescription]
+        self.__currentLocalDescription: Optional[sdp.SessionDescription] = None
+        self.__currentRemoteDescription: Optional[sdp.SessionDescription] = None
+        self.__pendingLocalDescription: Optional[sdp.SessionDescription] = None
+        self.__pendingRemoteDescription: Optional[sdp.SessionDescription] = None
 
     @property
     def iceConnectionState(self) -> str:
@@ -994,9 +994,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
-            encodings = (
-                OrderedDict()
-            )  # type: OrderedDict[int, RTCRtpDecodingParameters]
+            encodings: OrderedDict[int, RTCRtpDecodingParameters] = (OrderedDict())
             for codec in transceiver._codecs:
                 if is_rtx(codec):
                     if codec.parameters["apt"] in encodings and len(media.ssrc) == 2:

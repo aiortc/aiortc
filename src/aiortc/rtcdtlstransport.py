@@ -148,10 +148,10 @@ class RTCDtlsFingerprint:
     algorithm and certificate fingerprint.
     """
 
-    algorithm = attr.ib()  # type: str
+    algorithm: str = attr.ib()
     "The hash function name, for instance `'sha-256'`."
 
-    value = attr.ib()  # type: str
+    value: str = attr.ib()
     "The fingerprint value."
 
 
@@ -181,7 +181,8 @@ class RTCCertificate:
         """
         return [
             RTCDtlsFingerprint(
-                algorithm="sha-256", value=certificate_digest(self._cert._x509)
+                algorithm="sha-256",
+                value=certificate_digest(self._cert._x509),  # type: ignore
             )
         ]
 
@@ -212,8 +213,8 @@ class RTCCertificate:
             verify_callback,
         )
 
-        _openssl_assert(lib.SSL_CTX_use_certificate(ctx, self._cert._x509) == 1)
-        _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, self._key._evp_pkey) == 1)
+        _openssl_assert(lib.SSL_CTX_use_certificate(ctx, self._cert._x509) == 1)  # type: ignore
+        _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, self._key._evp_pkey) == 1)  # type: ignore
         _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
         _openssl_assert(
             lib.SSL_CTX_set_tlsext_use_srtp(ctx, b"SRTP_AES128_CM_SHA1_80") == 0
@@ -241,10 +242,10 @@ class RTCDtlsParameters:
     DTLS configuration.
     """
 
-    fingerprints = attr.ib(default=attr.Factory(list))  # type: List[RTCDtlsFingerprint]
+    fingerprints: List[RTCDtlsFingerprint] = attr.ib(default=attr.Factory(list))
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
-    role = attr.ib(default="auto")  # type: str
+    role: str = attr.ib(default="auto")
     "The DTLS role, with a default of auto."
 
 
@@ -256,11 +257,11 @@ class RtpRouter:
     """
 
     def __init__(self) -> None:
-        self.receivers = set()  # type: Set
-        self.senders = {}  # type: Dict[int, Any]
-        self.mid_table = {}  # type: Dict[str, Any]
-        self.ssrc_table = {}  # type: Dict[int, Any]
-        self.payload_type_table = {}  # type: Dict[int, Any]
+        self.receivers: Set = set()
+        self.senders: Dict[int, Any] = {}
+        self.mid_table: Dict[str, Any] = {}
+        self.ssrc_table: Dict[int, Any] = {}
+        self.payload_type_table: Dict[int, Any] = {}
 
     def register_receiver(
         self,
@@ -365,7 +366,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._rtp_router = RtpRouter()
         self._state = State.NEW
         self._stats_id = "transport_" + str(id(self))
-        self._task = None  # type: Optional[asyncio.Future[None]]
+        self._task: Optional[asyncio.Future[None]] = None
         self._transport = transport
 
         # counters
@@ -375,8 +376,8 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__tx_packets = 0
 
         # SRTP
-        self._rx_srtp = None  # type: Session
-        self._tx_srtp = None  # type: Session
+        self._rx_srtp: Session = None
+        self._tx_srtp: Session = None
 
         # SSL init
         self.__ctx = certificate._create_ssl_context()

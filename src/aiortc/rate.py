@@ -38,8 +38,8 @@ class AimdRateControl:
         self.var_max_bitrate_kbps = 0.4
         self.current_bitrate = 30000000
         self.current_bitrate_initialized = False
-        self.first_estimated_throughput_time = None  # type: Optional[int]
-        self.last_change_ms = None  # type: Optional[int]
+        self.first_estimated_throughput_time: Optional[int] = None
+        self.last_change_ms: Optional[int] = None
         self.near_max = False
         self.latest_estimated_throughput = 30000000
         self.rtt = 200
@@ -182,7 +182,7 @@ class AimdRateControl:
 
 class TimestampGroup:
     def __init__(self, timestamp: Optional[int] = None) -> None:
-        self.arrival_time = None  # type: Optional[int]
+        self.arrival_time: Optional[int] = None
         self.first_timestamp = timestamp
         self.last_timestamp = timestamp
         self.size = 0
@@ -205,8 +205,8 @@ class InterArrival:
     def __init__(self, group_length: int, timestamp_to_ms: float) -> None:
         self.group_length = group_length
         self.timestamp_to_ms = timestamp_to_ms
-        self.current_group = None  # type: Optional[TimestampGroup]
-        self.previous_group = None  # type: Optional[TimestampGroup]
+        self.current_group: Optional[TimestampGroup] = None
+        self.previous_group: Optional[TimestampGroup] = None
 
     def compute_deltas(
         self, timestamp: int, arrival_time: int, packet_size: int
@@ -271,11 +271,11 @@ class OveruseDetector:
 
     def __init__(self) -> None:
         self.hypothesis = BandwidthUsage.NORMAL
-        self.last_update_ms = None  # type: Optional[int]
+        self.last_update_ms: Optional[int] = None
         self.k_up = 0.0087
         self.k_down = 0.039
         self.overuse_counter = 0
-        self.overuse_time = None  # type: Optional[float]
+        self.overuse_time: Optional[float] = None
         self.overuse_time_threshold = 10
         self.previous_offset = 0.0
         self.threshold = 12.5
@@ -346,7 +346,7 @@ class OveruseEstimator:
         self._offset = 0.0
         self.previous_offset = 0.0
         self.slope = 1 / 64
-        self.ts_delta_hist = []  # type: List[float]
+        self.ts_delta_hist: List[float] = []
 
         self.avg_noise = 0.0
         self.var_noise = 50.0
@@ -460,7 +460,7 @@ class RateCounter:
 
     def __init__(self, window_size: int, scale: int = 8000) -> None:
         self._origin_index = 0
-        self._origin_ms = None  # type: Optional[int]
+        self._origin_ms: Optional[int] = None
         self._scale = scale
         self._window_size = window_size
         self.reset()
@@ -514,8 +514,8 @@ class RemoteBitrateEstimator:
         self.estimator = OveruseEstimator()
         self.detector = OveruseDetector()
         self.rate_control = AimdRateControl()
-        self.last_update_ms = None  # type: Optional[int]
-        self.ssrcs = {}  # type: Dict[int, int]
+        self.last_update_ms: Optional[int] = None
+        self.ssrcs: Dict[int, int] = {}
 
     def add(
         self, arrival_time_ms: int, abs_send_time: int, payload_size: int, ssrc: int

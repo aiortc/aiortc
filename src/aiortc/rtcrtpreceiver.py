@@ -74,8 +74,8 @@ def decoder_worker(loop, input_q, output_q):
 
 class NackGenerator:
     def __init__(self) -> None:
-        self.max_seq = None  # type: Optional[int]
-        self.missing = set()  # type: Set[int]
+        self.max_seq: Optional[int] = None
+        self.missing: Set[int] = set()
 
     def add(self, packet: RtpPacket) -> bool:
         missed = False
@@ -100,16 +100,16 @@ class NackGenerator:
 
 class StreamStatistics:
     def __init__(self, clockrate: int) -> None:
-        self.base_seq = None  # type: Optional[int]
-        self.max_seq = None  # type: Optional[int]
+        self.base_seq: Optional[int] = None
+        self.max_seq: Optional[int] = None
         self.cycles = 0
         self.packets_received = 0
 
         # jitter
         self._clockrate = clockrate
         self._jitter_q4 = 0
-        self._last_arrival = None  # type: Optional[int]
-        self._last_timestamp = None  # type: Optional[int]
+        self._last_arrival: Optional[int] = None
+        self._last_timestamp: Optional[int] = None
 
         # fraction lost
         self._expected_prior = 0
@@ -170,7 +170,7 @@ class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind: str) -> None:
         super().__init__()
         self.kind = kind
-        self._queue = asyncio.Queue()  # type: asyncio.Queue
+        self._queue: asyncio.Queue = asyncio.Queue()
 
     async def recv(self) -> Frame:
         """
@@ -188,8 +188,8 @@ class RemoteStreamTrack(MediaStreamTrack):
 
 class TimestampMapper:
     def __init__(self) -> None:
-        self._last = None  # type: Optional[int]
-        self._origin = None  # type: Optional[int]
+        self._last: Optional[int] = None
+        self._origin: Optional[int] = None
 
     def map(self, timestamp: int) -> int:
         if self._origin is None:
@@ -210,9 +210,9 @@ class RTCRtpContributingSource:
     a contributing source (CSRC).
     """
 
-    timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
+    timestamp: datetime.datetime = attr.ib()
     "The timestamp associated with this source."
-    source = attr.ib(type=int)  # type: int
+    source: int = attr.ib()
     "The CSRC identifier associated with this source."
 
 
@@ -223,9 +223,9 @@ class RTCRtpSynchronizationSource:
     a synchronization source (SSRC).
     """
 
-    timestamp = attr.ib(type=datetime.datetime)  # type: datetime.datetime
+    timestamp: datetime.datetime = attr.ib()
     "The timestamp associated with this source."
-    source = attr.ib(type=int)  # type: int
+    source: int = attr.ib()
     "The SSRC identifier associated with this source."
 
 
@@ -242,10 +242,10 @@ class RTCRtpReceiver:
         if transport.state == "closed":
             raise InvalidStateError
 
-        self.__active_ssrc = {}  # type: Dict[int, datetime.datetime]
-        self.__codecs = {}  # type: Dict[int, RTCRtpCodecParameters]
-        self.__decoder_queue = queue.Queue()  # type: queue.Queue
-        self.__decoder_thread = None  # type: Optional[threading.Thread]
+        self.__active_ssrc: Dict[int, datetime.datetime] = {}
+        self.__codecs: Dict[int, RTCRtpCodecParameters] = {}
+        self.__decoder_queue: queue.Queue = queue.Queue()
+        self.__decoder_thread: Optional[threading.Thread] = None
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
@@ -255,20 +255,20 @@ class RTCRtpReceiver:
             self.__jitter_buffer = JitterBuffer(capacity=128)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
-        self._track = None  # type: Optional[RemoteStreamTrack]
+        self._track: Optional[RemoteStreamTrack] = None
         self.__rtcp_exited = asyncio.Event()
-        self.__rtcp_task = None  # type: Optional[asyncio.Future[None]]
-        self.__rtx_ssrc = {}  # type: Dict[int, int]
+        self.__rtcp_task: Optional[asyncio.Future[None]] = None
+        self.__rtx_ssrc: Dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
 
         # RTCP
-        self.__lsr = {}  # type: Dict[int, int]
-        self.__lsr_time = {}  # type: Dict[int, float]
-        self.__remote_streams = {}  # type: Dict[int, StreamStatistics]
-        self.__rtcp_ssrc = None  # type: Optional[int]
+        self.__lsr: Dict[int, int] = {}
+        self.__lsr_time: Dict[int, float] = {}
+        self.__remote_streams: Dict[int, StreamStatistics] = {}
+        self.__rtcp_ssrc: Optional[int] = None
 
     @property
     def transport(self) -> RTCDtlsTransport:
@@ -470,9 +470,9 @@ class RTCRtpReceiver:
         # parse codec-specific information
         try:
             if packet.payload:
-                packet._data = depayload(codec, packet.payload)
+                packet._data = depayload(codec, packet.payload)  # type: ignore
             else:
-                packet._data = b""
+                packet._data = b""  # type: ignore
         except ValueError as exc:
             self.__log_debug(f"x RTP payload parsing failed: {exc}")
             return

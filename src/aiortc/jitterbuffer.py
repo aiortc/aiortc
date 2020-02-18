@@ -15,10 +15,8 @@ class JitterBuffer:
     def __init__(self, capacity: int, prefetch: int = 0) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
-        self._origin = None  # type: Optional[int]
-        self._packets = [
-            None for i in range(capacity)
-        ]  # type: List[Optional[RtpPacket]]
+        self._origin: Optional[int] = None
+        self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
 
     @property

@@ -21,7 +21,7 @@ language: python
 matrix:
   include:
   - env: BUILD=lint
-    install: pip install black flake8 isort
+    install: pip install black flake8 isort mypy
     python: "3.6"
   - env: BUILD=test
     language: generic

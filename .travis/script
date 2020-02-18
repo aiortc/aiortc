@@ -6,6 +6,7 @@ if [ "$BUILD" = "lint" ]; then
     flake8 examples src tests
     isort -c -df -rc examples src tests
     black --check --diff examples src tests
+    mypy src
 elif [ "$BUILD" = "sdist" ]; then
     python3 setup.py sdist
     if [ -n "$TRAVIS_TAG" ]; then

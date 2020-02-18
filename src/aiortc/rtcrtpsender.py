@@ -62,30 +62,30 @@ class RTCRtpSender:
         else:
             self.__kind = trackOrKind
             self.replaceTrack(None)
-        self.__cname = None  # type: Optional[str]
+        self.__cname: Optional[str] = None
         self._ssrc = random32()
         self._rtx_ssrc = random32()
         # FIXME: how should this be initialised?
         self._stream_id = str(uuid.uuid4())
-        self.__encoder = None  # type: Optional[Encoder]
+        self.__encoder: Optional[Encoder] = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
-        self.__mid = None  # type: Optional[str]
+        self.__mid: Optional[str] = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
-        self.__rtp_task = None  # type: Optional[asyncio.Future[None]]
-        self.__rtp_history = {}  # type: Dict[int, RtpPacket]
+        self.__rtp_task: Optional[asyncio.Future[None]] = None
+        self.__rtp_history: Dict[int, RtpPacket] = {}
         self.__rtcp_exited = asyncio.Event()
-        self.__rtcp_task = None  # type: Optional[asyncio.Future[None]]
-        self.__rtx_payload_type = None  # type: Optional[int]
+        self.__rtcp_task: Optional[asyncio.Future[None]] = None
+        self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random16()
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
 
         # stats
-        self.__lsr = None  # type: Optional[int]
-        self.__lsr_time = None  # type: Optional[float]
+        self.__lsr: Optional[int] = None
+        self.__lsr_time: Optional[float] = None
         self.__ntp_timestamp = 0
         self.__rtp_timestamp = 0
         self.__octet_count = 0
@@ -342,7 +342,7 @@ class RTCRtpSender:
                 await asyncio.sleep(0.5 + random.random())
 
                 # RTCP SR
-                packets = [
+                packets: List[AnyRtcpPacket] = [
                     RtcpSrPacket(
                         ssrc=self._ssrc,
                         sender_info=RtcpSenderInfo(
@@ -352,7 +352,7 @@ class RTCRtpSender:
                             octet_count=self.__octet_count,
                         ),
                     )
-                ]  # type: List[AnyRtcpPacket]
+                ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
 

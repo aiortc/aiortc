@@ -7,7 +7,19 @@ import os
 import time
 from collections import deque
 from struct import pack, unpack_from
-from typing import Any, Callable, Deque, Dict, Iterator, List, Optional, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Deque,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+    no_type_check,
+)
 
 import attr
 from pyee import AsyncIOEventEmitter
@@ -142,7 +154,7 @@ class BaseParamsChunk(Chunk):
             self.params = []
 
     @property
-    def body(self) -> bytes:
+    def body(self) -> bytes:  # type: ignore
         return encode_params(self.params)
 
 
@@ -210,18 +222,20 @@ class ForwardTsnChunk(Chunk):
 
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
-        self.streams = []  # type: List[Tuple[int, int]]
+        self.streams: List[Tuple[int, int]] = []
         if body:
             self.cumulative_tsn = unpack_from("!L", body, 0)[0]
             pos = 4
             while pos < len(body):
-                self.streams.append(unpack_from("!HH", body, pos))
+                self.streams.append(
+                    cast(Tuple[int, int], unpack_from("!HH", body, pos))
+                )
                 pos += 4
         else:
             self.cumulative_tsn = 0
 
     @property
-    def body(self) -> bytes:
+    def body(self) -> bytes:  # type: ignore
         body = pack("!L", self.cumulative_tsn)
         for stream_id, stream_seq in self.streams:
             body += pack("!HH", stream_id, stream_seq)
@@ -260,7 +274,7 @@ class BaseInitChunk(Chunk):
             self.params = []
 
     @property
-    def body(self) -> bytes:
+    def body(self) -> bytes:  # type: ignore
         body = pack(
             "!LLHHL",
             self.initiate_tag,
@@ -346,7 +360,7 @@ class ShutdownChunk(Chunk):
             self.cumulative_tsn = 0
 
     @property
-    def body(self) -> bytes:
+    def body(self) -> bytes:  # type: ignore
         return pack("!L", self.cumulative_tsn)
 
     def __repr__(self) -> str:
@@ -486,7 +500,7 @@ RECONFIG_PARAM_TYPES = {
 
 class InboundStream:
     def __init__(self) -> None:
-        self.reassembly = []  # type: List[DataChunk]
+        self.reassembly: List[DataChunk] = []
         self.sequence_number = 0
 
     def add_chunk(self, chunk: DataChunk) -> None:
@@ -572,6 +586,7 @@ class RTCSctpCapabilities:
     """
     The maximum size of data that the implementation can send or
     0 if the implementation can handle messages of any size.
+
     """
 
 
@@ -589,7 +604,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         super().__init__()
         self._association_state = self.State.CLOSED
-        self.__log_debug = lambda *args: None  # type: Callable[..., None]
+        self.__log_debug: Callable[..., None] = lambda *args: None
         self.__started = False
         self.__state = "new"
         self.__transport = transport
@@ -601,66 +616,64 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._local_port = port
         self._local_verification_tag = random32()
 
-        self._remote_extensions = []  # type: List[int]
+        self._remote_extensions: List[int] = []
         self._remote_partial_reliability = False
-        self._remote_port = None  # type: Optional[int]
+        self._remote_port: Optional[int] = None
         self._remote_verification_tag = 0
 
         # inbound
         self._advertised_rwnd = 1024 * 1024
-        self._inbound_streams = {}  # type: Dict[int, InboundStream]
+        self._inbound_streams: Dict[int, InboundStream] = {}
         self._inbound_streams_count = 0
         self._inbound_streams_max = MAX_STREAMS
-        self._last_received_tsn = None  # type: Optional[int]
-        self._sack_duplicates = []  # type: List[int]
-        self._sack_misordered = set()  # type: Set[int]
+        self._last_received_tsn: Optional[int] = None
+        self._sack_duplicates: List[int] = []
+        self._sack_misordered: Set[int] = set()
         self._sack_needed = False
 
         # outbound
         self._cwnd = 3 * USERDATA_MAX_LENGTH
         self._fast_recovery_exit = None
         self._fast_recovery_transmit = False
-        self._forward_tsn_chunk = None  # type: Optional[ForwardTsnChunk]
+        self._forward_tsn_chunk: Optional[ForwardTsnChunk] = None
         self._flight_size = 0
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
         self._advanced_peer_ack_tsn = tsn_minus_one(self._local_tsn)
-        self._outbound_queue = deque()  # type: Deque[DataChunk]
-        self._outbound_stream_seq = {}  # type: Dict[int, int]
+        self._outbound_queue: Deque[DataChunk] = deque()
+        self._outbound_stream_seq: Dict[int, int] = {}
         self._outbound_streams_count = MAX_STREAMS
         self._partial_bytes_acked = 0
-        self._sent_queue = deque()  # type: Deque[DataChunk]
+        self._sent_queue: Deque[DataChunk] = deque()
 
         # reconfiguration
-        self._reconfig_queue = []  # type: List[int]
+        self._reconfig_queue: List[int] = []
         self._reconfig_request = None
         self._reconfig_request_seq = self._local_tsn
         self._reconfig_response_seq = 0
 
         # rtt calculation
-        self._srtt = None  # type: Optional[float]
-        self._rttvar = None  # type: Optional[float]
+        self._srtt: Optional[float] = None
+        self._rttvar: Optional[float] = None
 
         # timers
         self._rto = SCTP_RTO_INITIAL
-        self._t1_chunk = None  # type: Optional[Chunk]
+        self._t1_chunk: Optional[Chunk] = None
         self._t1_failures = 0
-        self._t1_handle = None  # type: Optional[asyncio.TimerHandle]
-        self._t2_chunk = None  # type: Optional[Chunk]
+        self._t1_handle: Optional[asyncio.TimerHandle] = None
+        self._t2_chunk: Optional[Chunk] = None
         self._t2_failures = 0
-        self._t2_handle = None  # type: Optional[asyncio.TimerHandle]
-        self._t3_handle = None  # type: Optional[asyncio.TimerHandle]
+        self._t2_handle: Optional[asyncio.TimerHandle] = None
+        self._t3_handle: Optional[asyncio.TimerHandle] = None
 
         # data channels
-        self._data_channel_id = None  # type: Optional[int]
-        self._data_channel_queue = (
-            deque()
-        )  # type: Deque[Tuple[RTCDataChannel, int, bytes]]
-        self._data_channels = {}  # type: Dict[int, RTCDataChannel]
+        self._data_channel_id: Optional[int] = None
+        self._data_channel_queue: Deque[Tuple[RTCDataChannel, int, bytes]] = (deque())
+        self._data_channels: Dict[int, RTCDataChannel] = {}
 
         # FIXME: this is only used by RTCPeerConnection
         self._bundled = False
-        self.mid = None  # type: Optional[str]
+        self.mid: Optional[str] = None
 
     @property
     def is_server(self) -> bool:
@@ -761,10 +774,10 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._set_state(self.State.COOKIE_WAIT)
 
     def _flight_size_decrease(self, chunk: DataChunk) -> None:
-        self._flight_size = max(0, self._flight_size - chunk._book_size)
+        self._flight_size = max(0, self._flight_size - chunk._book_size)  # type: ignore
 
     def _flight_size_increase(self, chunk: DataChunk) -> None:
-        self._flight_size += chunk._book_size
+        self._flight_size += chunk._book_size  # type: ignore
 
     def _get_extensions(self, params: List[Tuple[int, bytes]]) -> None:
         """
@@ -831,6 +844,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if self._sack_needed:
             await self._send_sack()
 
+    @no_type_check
     def _maybe_abandon(self, chunk: DataChunk) -> bool:
         """
         Determine if a chunk needs to be marked as abandoned.
@@ -1105,6 +1119,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._last_received_tsn
             )
 
+    @no_type_check
     async def _receive_sack_chunk(self, chunk: SackChunk) -> None:
         """
         Handle a SACK chunk.
@@ -1247,6 +1262,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
+    @no_type_check
     async def _send(
         self,
         stream_id: int,
@@ -1281,6 +1297,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             chunk.protocol = pp_id
             chunk.user_data = user_data[pos : pos + USERDATA_MAX_LENGTH]
 
+            # FIXME: dynamically added attributes, mypy can't handle them
             # initialize counters
             chunk._abandoned = False
             chunk._acked = False
@@ -1435,6 +1452,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self.__log_debug(f"- T2({chunk_type(self._t2_chunk)}) start")
         self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
+    @no_type_check
     def _t3_expired(self) -> None:
         self._t3_handle = None
         self.__log_debug("x T3 expired")
@@ -1473,6 +1491,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._t3_handle.cancel()
             self._t3_handle = None
 
+    @no_type_check
     async def _transmit(self) -> None:
         """
         Transmit outbound data.
@@ -1541,6 +1560,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             await self._send_reconfig_param(param)
 
+    @no_type_check
     def _update_advanced_peer_ack_point(self) -> None:
         """
         Try to advance "Advanced.Peer.Ack.Point" according to RFC 3758.
