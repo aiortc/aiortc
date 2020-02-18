@@ -19,7 +19,7 @@ class PcmDecoder(ABC, Decoder):
     @staticmethod
     @abstractmethod
     def _convert(data: bytes, width: int) -> bytes:
-        ...
+        pass  # pragma: no cover
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
@@ -34,7 +34,7 @@ class PcmEncoder(ABC, Encoder):
     @staticmethod
     @abstractmethod
     def _convert(data: bytes, width: int) -> bytes:
-        ...
+        pass  # pragma: no cover
 
     def __init__(self) -> None:
         self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
