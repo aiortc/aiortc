@@ -37,14 +37,14 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
     def __init__(self) -> None:
         super().__init__()
         self.__ended = False
-        self.__id = str(uuid.uuid4())
+        self._id = str(uuid.uuid4())
 
     @property
     def id(self) -> str:
         """
         An automatically generated globally unique ID.
         """
-        return self.__id
+        return self._id
 
     @property
     def readyState(self) -> str:

@@ -67,6 +67,16 @@ def track_states(pc):
     return states
 
 
+def track_remote_tracks(pc):
+    tracks = []
+
+    @pc.on("track")
+    def track(track):
+        tracks.append(track)
+
+    return tracks
+
+
 class RTCRtpCodecParametersTest(TestCase):
     def test_common_static(self):
         local_codecs = [
@@ -585,7 +595,9 @@ class RTCPeerConnectionTest(TestCase):
 
     def _test_connect_audio_bidirectional(self, pc1, pc2):
         pc1_states = track_states(pc1)
+        pc1_tracks = track_remote_tracks(pc1)
         pc2_states = track_states(pc2)
+        pc2_tracks = track_remote_tracks(pc2)
 
         self.assertEqual(pc1.iceConnectionState, "new")
         self.assertEqual(pc1.iceGatheringState, "new")
@@ -598,7 +610,8 @@ class RTCPeerConnectionTest(TestCase):
         self.assertIsNone(pc2.remoteDescription)
 
         # create offer
-        pc1.addTrack(AudioStreamTrack())
+        track1 = AudioStreamTrack()
+        pc1.addTrack(track1)
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, "offer")
         self.assertTrue("m=audio " in offer.sdp)
@@ -631,8 +644,13 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(len(pc2.getTransceivers()), 1)
         self.assertEqual(mids(pc2), ["0"])
 
+        # the RemoteStreamTrack should have the same ID as the source track
+        self.assertEqual(len(pc2_tracks), 1)
+        self.assertEqual(pc2_tracks[0].id, track1.id)
+
         # create answer
-        pc2.addTrack(AudioStreamTrack())
+        track2 = AudioStreamTrack()
+        pc2.addTrack(track2)
         answer = run(pc2.createAnswer())
         self.assertEqual(answer.type, "answer")
         self.assertTrue("m=audio " in answer.sdp)
@@ -665,6 +683,10 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceConnectionState, "checking")
         self.assertEqual(pc1.getTransceivers()[0].currentDirection, "sendrecv")
         self.assertEqual(pc1.getTransceivers()[0].direction, "sendrecv")
+
+        # the RemoteStreamTrack should have the same ID as the source track
+        self.assertEqual(len(pc1_tracks), 1)
+        self.assertEqual(pc1_tracks[0].id, track2.id)
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
