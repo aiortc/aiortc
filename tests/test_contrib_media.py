@@ -232,19 +232,6 @@ class MediaRecorderTest(MediaTestCase):
 
         run(recorder.stop())
 
-    def test_audio_alsa(self):
-        """Test if MediaRecorder passes proper codec when using alsa output."""
-        recorder = MediaRecorder("null", format="alsa")
-        recorder.addTrack(AudioStreamTrack())
-        run(recorder.start())
-        try:
-            run(recorder.stop())
-        except NotImplementedError as e:
-            if "sample format 0x15002 is not supported" in str(e):
-                self.fail("Invalid codec to alsa format")
-            else:
-                raise e
-
     def test_audio_and_video(self):
         path = self.temporary_path("test.mp4")
         recorder = MediaRecorder(path)
