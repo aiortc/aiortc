@@ -847,7 +847,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     transceiver.sender.setTransport(masterTransport)
                     transceiver._bundled = True
                     transceiver._transport = masterTransport
-            if self.__sctp and self.__sctp.mid in slaveMids:
+            if (
+                self.__sctp
+                and self.__sctp.mid in slaveMids
+                and not self.__sctp._bundled
+            ):
                 oldTransports.add(self.__sctp.transport)
                 self.__sctp.setTransport(masterTransport)
                 self.__sctp._bundled = True
