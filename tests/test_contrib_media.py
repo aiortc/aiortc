@@ -234,7 +234,7 @@ class MediaRecorderTest(MediaTestCase):
 
     def test_audio_alsa(self):
         """Test if MediaRecorder passes proper codec when using alsa output."""
-        recorder = MediaRecorder("default", format="alsa")
+        recorder = MediaRecorder("null", format="alsa")
         recorder.addTrack(AudioStreamTrack())
         run(recorder.start())
         try:
