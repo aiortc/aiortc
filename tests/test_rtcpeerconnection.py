@@ -4032,3 +4032,159 @@ a=fmtp:98 apt=97
             str(cm.exception),
             'Cannot handle offer in signaling state "have-local-offer"',
         )
+
+    def test_setRemoteDescription_media_datachannel_bundled(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1_states = track_states(pc1)
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        """
+        initial negotiation
+        """
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        pc1.createDataChannel("chat", protocol="")
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, "offer")
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0", "1"])
+        self.assertTrue("a=group:BUNDLE 0 1" in pc1.localDescription.sdp)
+        self.assertTrue("m=audio " in pc1.localDescription.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0", "1"])
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("a=group:BUNDLE 0 1" in answer.sdp)
+        self.assertTrue("m=audio " in answer.sdp)
+        self.assertTrue("m=application " in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, "checking")
+        self.assertEqual(pc2.iceGatheringState, "complete")
+        self.assertEqual(mids(pc2), ["0", "1"])
+        self.assertTrue("a=group:BUNDLE 0 1" in pc2.localDescription.sdp)
+        self.assertTrue("m=audio " in pc2.localDescription.sdp)
+        self.assertTrue("m=application " in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, "checking")
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        """
+        renegotiation
+        """
+
+        # create offer
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, "offer")
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, "completed")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0", "1"])
+        self.assertTrue("a=group:BUNDLE 0 1" in pc1.localDescription.sdp)
+        self.assertTrue("m=audio " in pc1.localDescription.sdp)
+        self.assertTrue("m=application " in pc1.localDescription.sdp)
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0", "1"])
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("a=group:BUNDLE 0 1" in answer.sdp)
+        self.assertTrue("m=audio " in answer.sdp)
+        self.assertTrue("m=application " in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, "completed")
+        self.assertEqual(pc2.iceGatheringState, "complete")
+        self.assertEqual(mids(pc2), ["0", "1"])
+        self.assertTrue("a=group:BUNDLE 0 1" in pc2.localDescription.sdp)
+        self.assertTrue("m=audio " in pc2.localDescription.sdp)
+        self.assertTrue("m=application " in pc2.localDescription.sdp)
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, "completed")
+
+        # allow media to flow long enough to collect stats
+        run(asyncio.sleep(2))
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            [
+                "stable",
+                "have-local-offer",
+                "stable",
+                "have-local-offer",
+                "stable",
+                "closed",
+            ],
+        )
+
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            [
+                "stable",
+                "have-remote-offer",
+                "stable",
+                "have-remote-offer",
+                "stable",
+                "closed",
+            ],
+        )
