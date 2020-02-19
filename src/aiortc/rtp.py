@@ -1,8 +1,7 @@
 import os
+from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
-from typing import List, Tuple, Union
-
-import attr
+from typing import Any, List, Optional, Tuple, Union
 
 from .rtcrtpparameters import RTCRtpParameters
 
@@ -31,15 +30,15 @@ RTCP_PSFB_RPSI = 3
 RTCP_PSFB_APP = 15
 
 
-@attr.s
+@dataclass
 class HeaderExtensions:
-    abs_send_time = attr.ib(default=None)
-    audio_level = attr.ib(default=None)
-    mid = attr.ib(default=None)
-    repaired_rtp_stream_id = attr.ib(default=None)
-    rtp_stream_id = attr.ib(default=None)
-    transmission_offset = attr.ib(default=None)
-    transport_sequence_number = attr.ib(default=None)
+    abs_send_time: Optional[int] = None
+    audio_level: Any = None
+    mid: Any = None
+    repaired_rtp_stream_id: Any = None
+    rtp_stream_id: Any = None
+    transmission_offset: Optional[int] = None
+    transport_sequence_number: Optional[int] = None
 
 
 class HeaderExtensionsMap:
@@ -304,15 +303,15 @@ def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, by
     return extension_profile, extension_value
 
 
-@attr.s
+@dataclass
 class RtcpReceiverInfo:
-    ssrc = attr.ib()
-    fraction_lost = attr.ib()
-    packets_lost = attr.ib()
-    highest_sequence = attr.ib()
-    jitter = attr.ib()
-    lsr = attr.ib()
-    dlsr = attr.ib()
+    ssrc: int
+    fraction_lost: int
+    packets_lost: int
+    highest_sequence: int
+    jitter: int
+    lsr: int
+    dlsr: int
 
     def __bytes__(self) -> bytes:
         data = pack("!LB", self.ssrc, self.fraction_lost)
@@ -336,12 +335,12 @@ class RtcpReceiverInfo:
         )
 
 
-@attr.s
+@dataclass
 class RtcpSenderInfo:
-    ntp_timestamp: int = attr.ib()
-    rtp_timestamp: int = attr.ib()
-    packet_count: int = attr.ib()
-    octet_count: int = attr.ib()
+    ntp_timestamp: int
+    rtp_timestamp: int
+    packet_count: int
+    octet_count: int
 
     def __bytes__(self) -> bytes:
         return pack(
@@ -363,15 +362,15 @@ class RtcpSenderInfo:
         )
 
 
-@attr.s
+@dataclass
 class RtcpSourceInfo:
-    ssrc = attr.ib()
-    items = attr.ib()
+    ssrc: int
+    items: List[Tuple[Any, bytes]]
 
 
-@attr.s
+@dataclass
 class RtcpByePacket:
-    sources = attr.ib()
+    sources: List[int]
 
     def __bytes__(self) -> bytes:
         payload = b"".join([pack("!L", ssrc) for ssrc in self.sources])
@@ -388,16 +387,16 @@ class RtcpByePacket:
         return cls(sources=sources)
 
 
-@attr.s
+@dataclass
 class RtcpPsfbPacket:
     """"
     Payload-Specific Feedback Message (RFC 4585).
     """
 
-    fmt = attr.ib()
-    ssrc = attr.ib()
-    media_ssrc = attr.ib()
-    fci = attr.ib(default=b"")
+    fmt: int
+    ssrc: int
+    media_ssrc: int
+    fci: bytes = b""
 
     def __bytes__(self) -> bytes:
         payload = pack("!LL", self.ssrc, self.media_ssrc) + self.fci
@@ -413,10 +412,10 @@ class RtcpPsfbPacket:
         return cls(fmt=fmt, ssrc=ssrc, media_ssrc=media_ssrc, fci=fci)
 
 
-@attr.s
+@dataclass
 class RtcpRrPacket:
-    ssrc: int = attr.ib()
-    reports: List[RtcpReceiverInfo] = attr.ib(default=attr.Factory(list))
+    ssrc: int
+    reports: List[RtcpReceiverInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)
@@ -438,18 +437,18 @@ class RtcpRrPacket:
         return cls(ssrc=ssrc, reports=reports)
 
 
-@attr.s
+@dataclass
 class RtcpRtpfbPacket:
     """
     Generic RTP Feedback Message (RFC 4585).
     """
 
-    fmt = attr.ib()
-    ssrc = attr.ib()
-    media_ssrc = attr.ib()
+    fmt: int
+    ssrc: int
+    media_ssrc: int
 
     # generick NACK
-    lost: List[int] = attr.ib(default=attr.Factory(list))
+    lost: List[int] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!LL", self.ssrc, self.media_ssrc)
@@ -483,9 +482,9 @@ class RtcpRtpfbPacket:
         return cls(fmt=fmt, ssrc=ssrc, media_ssrc=media_ssrc, lost=lost)
 
 
-@attr.s
+@dataclass
 class RtcpSdesPacket:
-    chunks: List[RtcpSourceInfo] = attr.ib(default=attr.Factory(list))
+    chunks: List[RtcpSourceInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = b""
@@ -525,11 +524,11 @@ class RtcpSdesPacket:
         return cls(chunks=chunks)
 
 
-@attr.s
+@dataclass
 class RtcpSrPacket:
-    ssrc: int = attr.ib()
-    sender_info: RtcpSenderInfo = attr.ib()
-    reports: List[RtcpReceiverInfo] = attr.ib(default=attr.Factory(list))
+    ssrc: int
+    sender_info: RtcpSenderInfo
+    reports: List[RtcpReceiverInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)

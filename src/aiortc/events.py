@@ -1,20 +1,20 @@
-import attr
+from dataclasses import dataclass
 
 from .mediastreams import MediaStreamTrack
 from .rtcrtpreceiver import RTCRtpReceiver
 from .rtcrtptransceiver import RTCRtpTransceiver
 
 
-@attr.s
+@dataclass
 class RTCTrackEvent:
     """
     This event is fired on :class:`RTCPeerConnection` when a new
     :class:`MediaStreamTrack` is added by the remote party.
     """
 
-    receiver: RTCRtpReceiver = attr.ib()
+    receiver: RTCRtpReceiver
     "The :class:`RTCRtpReceiver` associated with the event."
-    track: MediaStreamTrack = attr.ib()
+    track: MediaStreamTrack
     "The :class:`MediaStreamTrack` associated with the event."
-    transceiver: RTCRtpTransceiver = attr.ib()
+    transceiver: RTCRtpTransceiver
     "The :class:`RTCRtpTransceiver` associated with the event."

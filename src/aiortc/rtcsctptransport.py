@@ -6,6 +6,7 @@ import math
 import os
 import time
 from collections import deque
+from dataclasses import dataclass, field
 from struct import pack, unpack_from
 from typing import (
     Any,
@@ -21,7 +22,6 @@ from typing import (
     no_type_check,
 )
 
-import attr
 from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
@@ -433,12 +433,12 @@ def serialize_packet(
 # RFC 6525
 
 
-@attr.s
+@dataclass
 class StreamResetOutgoingParam:
-    request_sequence = attr.ib()
-    response_sequence = attr.ib()
-    last_tsn = attr.ib()
-    streams = attr.ib(default=attr.Factory(list))
+    request_sequence: int
+    response_sequence: int
+    last_tsn: int
+    streams: List[bytes] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         data = pack(
@@ -462,10 +462,10 @@ class StreamResetOutgoingParam:
         )
 
 
-@attr.s
+@dataclass
 class StreamAddOutgoingParam:
-    request_sequence = attr.ib()
-    new_streams = attr.ib()
+    request_sequence: int
+    new_streams: int
 
     def __bytes__(self) -> bytes:
         data = pack("!LHH", self.request_sequence, self.new_streams, 0)
@@ -477,10 +477,10 @@ class StreamAddOutgoingParam:
         return cls(request_sequence=request_sequence, new_streams=new_streams)
 
 
-@attr.s
+@dataclass
 class StreamResetResponseParam:
-    response_sequence = attr.ib()
-    result = attr.ib()
+    response_sequence: int
+    result: int
 
     def __bytes__(self) -> bytes:
         return pack("!LL", self.response_sequence, self.result)
@@ -575,14 +575,14 @@ class InboundStream:
         return size
 
 
-@attr.s
+@dataclass
 class RTCSctpCapabilities:
     """
     The :class:`RTCSctpCapabilities` dictionary provides information about the
     capabilities of the :class:`RTCSctpTransport`.
     """
 
-    maxMessageSize = attr.ib()
+    maxMessageSize: int
     """
     The maximum size of data that the implementation can send or
     0 if the implementation can handle messages of any size.

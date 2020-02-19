@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import attr
 from aioice import Candidate, Connection
 from pyee import AsyncIOEventEmitter
 
@@ -21,7 +21,7 @@ TURN_REGEX = re.compile(
 logger = logging.getLogger("ice")
 
 
-@attr.s
+@dataclass
 class RTCIceCandidate:
     """
     The :class:`RTCIceCandidate` interface represents a candidate Interactive
@@ -29,34 +29,34 @@ class RTCIceCandidate:
     establish an RTCPeerConnection.
     """
 
-    component: int = attr.ib()
-    foundation: str = attr.ib()
-    ip: str = attr.ib()
-    port: int = attr.ib()
-    priority: int = attr.ib()
-    protocol: str = attr.ib()
-    type = attr.ib()
-    relatedAddress = attr.ib(default=None)
-    relatedPort = attr.ib(default=None)
-    sdpMid = attr.ib(default=None)
-    sdpMLineIndex = attr.ib(default=None)
-    tcpType = attr.ib(default=None)
+    component: int
+    foundation: str
+    ip: str
+    port: int
+    priority: int
+    protocol: str
+    type: str
+    relatedAddress: Optional[str] = None
+    relatedPort: Optional[int] = None
+    sdpMid: Optional[str] = None
+    sdpMLineIndex: Optional[int] = None
+    tcpType: Optional[str] = None
 
 
-@attr.s
+@dataclass
 class RTCIceParameters:
     """
     The :class:`RTCIceParameters` dictionary includes the ICE username
     fragment and password and other ICE-related parameters.
     """
 
-    usernameFragment: Optional[str] = attr.ib(default=None)
+    usernameFragment: Optional[str] = None
     "ICE username fragment."
 
-    password: Optional[str] = attr.ib(default=None)
+    password: Optional[str] = None
     "ICE password."
 
-    iceLite: bool = attr.ib(default=False)
+    iceLite: bool = False
 
 
 def candidate_from_aioice(x: Candidate) -> RTCIceCandidate:

@@ -1,9 +1,8 @@
 import ipaddress
 import re
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple
-
-import attr
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
@@ -128,10 +127,10 @@ def parse_attr(line: str) -> Tuple[str, Optional[str]]:
         return line[2:], None
 
 
-@attr.s
+@dataclass
 class GroupDescription:
-    semantic: str = attr.ib()
-    items = attr.ib()  # List[Union[int, str]]
+    semantic: str
+    items: List[Union[int, str]]
 
     def __str__(self) -> str:
         return f"{self.semantic} {' '.join(map(str, self.items))}"
@@ -143,13 +142,13 @@ def parse_group(dest: List[GroupDescription], value: str, type=str) -> None:
         dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
 
 
-@attr.s
+@dataclass
 class SsrcDescription:
-    ssrc = attr.ib()
-    cname = attr.ib(default=None)
-    msid = attr.ib(default=None)
-    mslabel = attr.ib(default=None)
-    label = attr.ib(default=None)
+    ssrc: int
+    cname: Optional[str] = None
+    msid: Optional[str] = None
+    mslabel: Optional[str] = None
+    label: Optional[str] = None
 
 
 SSRC_INFO_ATTRS = ["cname", "msid", "mslabel", "label"]
