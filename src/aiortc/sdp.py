@@ -186,7 +186,7 @@ class MediaDescription:
         self.dtls: Optional[RTCDtlsParameters] = None
 
         # ICE
-        self.ice = RTCIceParameters()
+        self.ice: Optional[RTCIceParameters] = None
         self.ice_candidates: List[RTCIceCandidate] = []
         self.ice_candidates_complete = False
         self.ice_options: Optional[str] = None
@@ -286,6 +286,8 @@ class SessionDescription:
         dtls_fingerprints = []
         ice_lite = False
         ice_options = None
+        ice_password = None
+        ice_usernameFragment = None
 
         def find_codec(pt: int) -> RTCRtpCodecParameters:
             return next(filter(lambda x: x.payloadType == pt, current_media.rtp.codecs))
@@ -316,6 +318,10 @@ class SessionDescription:
                     ice_lite = True
                 elif attr == "ice-options":
                     ice_options = value
+                elif attr == "ice-pwd":
+                    ice_password = value
+                elif attr == "ice-ufrag":
+                    ice_usernameFragment = value
                 elif attr == "group":
                     parse_group(session.group, value)
                 elif attr == "msid-semantic":
@@ -342,7 +348,11 @@ class SessionDescription:
             current_media.dtls = RTCDtlsParameters(
                 fingerprints=dtls_fingerprints[:], role=None
             )
-            current_media.ice.iceLite = ice_lite
+            current_media.ice = RTCIceParameters(
+                iceLite=ice_lite,
+                usernameFragment=ice_usernameFragment,
+                password=ice_password,
+            )
             current_media.ice_options = ice_options
             session.media.append(current_media)
 
@@ -368,12 +378,12 @@ class SessionDescription:
                         current_media.dtls.fingerprints.append(
                             RTCDtlsFingerprint(algorithm=algorithm, value=fingerprint)
                         )
-                    elif attr == "ice-ufrag":
-                        current_media.ice.usernameFragment = value
-                    elif attr == "ice-pwd":
-                        current_media.ice.password = value
                     elif attr == "ice-options":
                         current_media.ice_options = value
+                    elif attr == "ice-pwd":
+                        current_media.ice.password = value
+                    elif attr == "ice-ufrag":
+                        current_media.ice.usernameFragment = value
                     elif attr == "max-message-size":
                         current_media.sctpCapabilities = RTCSctpCapabilities(
                             maxMessageSize=int(value)
