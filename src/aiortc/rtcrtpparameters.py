@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import List, Optional  # noqa
+from typing import List, Optional
 
 
 @dataclass
@@ -14,7 +14,7 @@ class RTCRtpCodecCapability:
     "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
     clockRate: int
     "The codec clock rate expressed in Hertz."
-    channels: int = None
+    channels: Optional[int] = None
     "The number of channels supported (e.g. two for stereo)."
     parameters: OrderedDict = field(default_factory=OrderedDict)
     "Codec-specific parameters available for signaling."
@@ -35,9 +35,9 @@ class RTCRtpCodecParameters:
     "The codec MIME media type/subtype, for instance `'audio/PCMU'`."
     clockRate: int
     "The codec clock rate expressed in Hertz."
-    channels: int = None
+    channels: Optional[int] = None
     "The number of channels supported (e.g. two for stereo)."
-    payloadType: int = None
+    payloadType: Optional[int] = None
     "The value that goes in the RTP Payload Type Field."
     rtcpFeedback: List["RTCRtcpFeedback"] = field(default_factory=list)
     "Transport layer and codec-specific feedback messages for this codec."
@@ -64,7 +64,7 @@ class RTCRtpRtxParameters:
 class RTCRtpCodingParameters:
     ssrc: int
     payloadType: int
-    rtx: RTCRtpRtxParameters = None
+    rtx: Optional[RTCRtpRtxParameters] = None
 
 
 class RTCRtpDecodingParameters(RTCRtpCodingParameters):
