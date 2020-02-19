@@ -429,11 +429,19 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         assert self._state == State.NEW
         assert len(remoteParameters.fingerprints)
 
-        if self.transport.role == "controlling":
-            self._role = "server"
+        # For WebRTC, the DTLS role is explicitly determined as part of the
+        # offer / answer exchange.
+        #
+        # For ORTC however, we determine the DTLS role based on the ICE role.
+        if self._role == "auto":
+            if self.transport.role == "controlling":
+                self._set_role("server")
+            else:
+                self._set_role("client")
+
+        if self._role == "server":
             lib.SSL_set_accept_state(self.ssl)
         else:
-            self._role = "client"
             lib.SSL_set_connect_state(self.ssl)
 
         self._set_state(State.CONNECTING)
@@ -672,6 +680,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         await self.transport._send(data)
         self.__tx_bytes += len(data)
         self.__tx_packets += 1
+
+    def _set_role(self, role: str) -> None:
+        self._role = role
 
     def _set_state(self, state: State) -> None:
         if state != self._state:
