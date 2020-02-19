@@ -362,7 +362,9 @@ class RTCPeerConnectionTest(TestCase):
 
     def assertHasDtls(self, description, setup):
         self.assertTrue("a=fingerprint:sha-256" in description.sdp)
-        self.assertTrue("a=setup:" + setup in description.sdp)
+        self.assertEqual(
+            set(re.findall("a=setup:(.*)\r$", description.sdp)), set([setup])
+        )
 
     def closeDataChannel(self, dc):
         dc.close()
@@ -3974,6 +3976,24 @@ a=fmtp:98 apt=97
             str(cm.exception), "Media sections in answer do not match offer"
         )
 
+    def test_setRemoteDescription_with_invalid_dtls_setup_for_offer(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # apply offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+        mangled = RTCSessionDescription(
+            sdp=pc1.localDescription.sdp.replace("a=setup:actpass", "a=setup:active"),
+            type=pc1.localDescription.type,
+        )
+        with self.assertRaises(ValueError) as cm:
+            run(pc2.setRemoteDescription(mangled))
+        self.assertEqual(
+            str(cm.exception), "DTLS setup attribute must be 'actpass' for an offer",
+        )
+
     def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4137,6 +4157,7 @@ a=fmtp:98 apt=97
         self.assertTrue("a=group:BUNDLE 0 1" in pc1.localDescription.sdp)
         self.assertTrue("m=audio " in pc1.localDescription.sdp)
         self.assertTrue("m=application " in pc1.localDescription.sdp)
+        self.assertHasDtls(pc1.localDescription, "actpass")
 
         # handle offer
         run(pc2.setRemoteDescription(pc1.localDescription))
@@ -4160,6 +4181,7 @@ a=fmtp:98 apt=97
         self.assertTrue("a=group:BUNDLE 0 1" in pc2.localDescription.sdp)
         self.assertTrue("m=audio " in pc2.localDescription.sdp)
         self.assertTrue("m=application " in pc2.localDescription.sdp)
+        self.assertHasDtls(pc2.localDescription, "active")
 
         # handle answer
         run(pc1.setRemoteDescription(pc2.localDescription))

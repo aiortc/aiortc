@@ -143,11 +143,10 @@ def add_transport_description(
         media.port = DISCARD_PORT
 
     # dtls
-    media.dtls = dtlsTransport.getLocalParameters()
-    if iceTransport.role == "controlling":
-        media.dtls.role = "auto"
+    if media.dtls is None:
+        media.dtls = dtlsTransport.getLocalParameters()
     else:
-        media.dtls.role = "client"
+        media.dtls.fingerprints = dtlsTransport.getLocalParameters().fingerprints
 
 
 def add_remote_candidates(
@@ -473,22 +472,28 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for remote_m in self.__remoteDescription().media:
             if remote_m.kind in ["audio", "video"]:
                 transceiver = self.__getTransceiverByMid(remote_m.rtp.muxId)
-                description.media.append(
-                    create_media_description_for_transceiver(
-                        transceiver,
-                        cname=self.__cname,
-                        direction=and_direction(
-                            transceiver.direction, transceiver._offerDirection
-                        ),
-                        mid=transceiver.mid,
-                    )
+                media = create_media_description_for_transceiver(
+                    transceiver,
+                    cname=self.__cname,
+                    direction=and_direction(
+                        transceiver.direction, transceiver._offerDirection
+                    ),
+                    mid=transceiver.mid,
                 )
+                dtlsTransport = transceiver._transport
             else:
-                description.media.append(
-                    create_media_description_for_sctp(
-                        self.__sctp, legacy=self._sctpLegacySdp, mid=self.__sctp.mid
-                    )
+                media = create_media_description_for_sctp(
+                    self.__sctp, legacy=self._sctpLegacySdp, mid=self.__sctp.mid
                 )
+                dtlsTransport = self.__sctp.transport
+
+            # determine DTLS role, or preserve the currently configured role
+            if dtlsTransport._role == "auto":
+                media.dtls.role = "client"
+            else:
+                media.dtls.role = dtlsTransport._role
+
+            description.media.append(media)
 
         bundle = sdp.GroupDescription(semantic="BUNDLE", items=[])
         for media in description.media:
@@ -701,6 +706,15 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             for iceTransport in self.__iceTransports:
                 iceTransport._connection.ice_controlling = self.__initialOfferer
 
+        # set DTLS role
+        if description.type == "answer":
+            for i, media in enumerate(description.media):
+                if media.kind in ["audio", "video"]:
+                    transceiver = self.__getTransceiverByMLineIndex(i)
+                    transceiver._transport._set_role(media.dtls.role)
+                elif media.kind == "application":
+                    self.__sctp.transport._set_role(media.dtls.role)
+
         # configure direction
         for t in self.__transceivers:
             if description.type in ["answer", "pranswer"]:
@@ -742,6 +756,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # apply description
         trackEvents = []
         for i, media in enumerate(description.media):
+            dtlsTransport: Optional[RTCDtlsTransport] = None
             self.__seenMids.add(media.rtp.muxId)
             if media.kind in ["audio", "video"]:
                 # find transceiver
@@ -767,12 +782,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 transceiver._headerExtensions = find_common_header_extensions(
                     HEADER_EXTENSIONS[media.kind], media.rtp.headerExtensions
                 )
-
-                # configure transport
-                iceTransport = transceiver._transport.transport
-                add_remote_candidates(iceTransport, media)
-                self.__remoteDtls[transceiver] = media.dtls
-                self.__remoteIce[transceiver] = media.ice
 
                 # configure direction
                 direction = reverse_direction(media.direction)
@@ -802,6 +811,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                         )
                     )
 
+                # memorise transport parameters
+                dtlsTransport = transceiver._transport
+                self.__remoteDtls[transceiver] = media.dtls
+                self.__remoteIce[transceiver] = media.ice
+
             elif media.kind == "application":
                 if not self.__sctp:
                     self.__createSctpTransport()
@@ -818,11 +832,21 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     self.__sctpRemotePort = media.sctp_port
                 self.__sctpRemoteCaps = media.sctpCapabilities
 
-                # configure transport
-                iceTransport = self.__sctp.transport.transport
-                add_remote_candidates(iceTransport, media)
+                # memorise transport parameters
+                dtlsTransport = self.__sctp.transport
                 self.__remoteDtls[self.__sctp] = media.dtls
                 self.__remoteIce[self.__sctp] = media.ice
+
+            if dtlsTransport is not None:
+                # add ICE candidates
+                iceTransport = dtlsTransport.transport
+                add_remote_candidates(iceTransport, media)
+
+                # set DTLS role
+                if description.type == "answer":
+                    dtlsTransport._set_role(
+                        role="server" if media.dtls.role == "client" else "client"
+                    )
 
         # remove bundled transports
         bundle = next((x for x in description.group if x.semantic == "BUNDLE"), None)
@@ -1096,6 +1120,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if not media.ice.usernameFragment or not media.ice.password:
                 raise ValueError("ICE username fragment or password is missing")
 
+            # check DTLS role is allowed
+            if description.type == "offer" and media.dtls.role != "auto":
+                raise ValueError("DTLS setup attribute must be 'actpass' for an offer")
             if description.type in ["answer", "pranswer"] and media.dtls.role not in [
                 "client",
                 "server",
