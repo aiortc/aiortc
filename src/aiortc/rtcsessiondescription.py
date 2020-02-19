@@ -1,17 +1,18 @@
-import attr
+from dataclasses import dataclass
 
 
-@attr.s
+@dataclass
 class RTCSessionDescription:
     """
     The :class:`RTCSessionDescription` dictionary describes one end of a
     connection and how it's configured.
     """
 
-    sdp = attr.ib()
-    "A string containing the session description's SDP."
+    sdp: str
+    type: str
 
-    type = attr.ib(
-        validator=attr.validators.in_(["offer", "pranswer", "answer", "rollback"])
-    )
-    "A string describing the session description's type."
+    def __post_init__(self):
+        if self.type not in {"offer", "pranswer", "answer", "rollback"}:
+            raise ValueError(
+                f"'type' must be in ['offer', 'pranswer', 'answer', 'rollback'] (got '{self.type}')"
+            )

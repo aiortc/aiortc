@@ -6,9 +6,9 @@ import enum
 import logging
 import os
 import traceback
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar
 
-import attr
 import pylibsrtp
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -141,17 +141,17 @@ class State(enum.Enum):
     FAILED = 4
 
 
-@attr.s
+@dataclass
 class RTCDtlsFingerprint:
     """
     The :class:`RTCDtlsFingerprint` dictionary includes the hash function
     algorithm and certificate fingerprint.
     """
 
-    algorithm: str = attr.ib()
+    algorithm: str
     "The hash function name, for instance `'sha-256'`."
 
-    value: str = attr.ib()
+    value: str
     "The fingerprint value."
 
 
@@ -235,17 +235,17 @@ class RTCCertificate:
         return ctx
 
 
-@attr.s
+@dataclass
 class RTCDtlsParameters:
     """
     The :class:`RTCDtlsParameters` dictionary includes information relating to
     DTLS configuration.
     """
 
-    fingerprints: List[RTCDtlsFingerprint] = attr.ib(default=attr.Factory(list))
+    fingerprints: List[RTCDtlsFingerprint] = field(default_factory=list)
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
-    role: str = attr.ib(default="auto")
+    role: str = "auto"
     "The DTLS role, with a default of auto."
 
 

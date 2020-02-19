@@ -5,9 +5,9 @@ import queue
 import random
 import threading
 import time
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
 
-import attr
 from av.frame import Frame
 
 from . import clock
@@ -205,29 +205,29 @@ class TimestampMapper:
         return timestamp - self._origin
 
 
-@attr.s
+@dataclass
 class RTCRtpContributingSource:
     """
     The :class:`RTCRtpContributingSource` dictionary contains information about
     a contributing source (CSRC).
     """
 
-    timestamp: datetime.datetime = attr.ib()
+    timestamp: datetime.datetime
     "The timestamp associated with this source."
-    source: int = attr.ib()
+    source: int
     "The CSRC identifier associated with this source."
 
 
-@attr.s
+@dataclass
 class RTCRtpSynchronizationSource:
     """
     The :class:`RTCRtpSynchronizationSource` dictionary contains information about
     a synchronization source (SSRC).
     """
 
-    timestamp: datetime.datetime = attr.ib()
+    timestamp: datetime.datetime
     "The timestamp associated with this source."
-    source: int = attr.ib()
+    source: int
     "The SSRC identifier associated with this source."
 
 

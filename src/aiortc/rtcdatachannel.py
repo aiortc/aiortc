@@ -1,7 +1,7 @@
 import logging
+from dataclasses import dataclass
 from typing import Optional, Union
 
-import attr
 from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
@@ -9,34 +9,34 @@ from .exceptions import InvalidStateError
 logger = logging.getLogger("datachannel")
 
 
-@attr.s
+@dataclass
 class RTCDataChannelParameters:
     """
     The :class:`RTCDataChannelParameters` dictionary describes the
     configuration of an :class:`RTCDataChannel`.
     """
 
-    label: str = attr.ib(default="")
+    label: str = ""
     "A name describing the data channel."
 
-    maxPacketLifeTime: Optional[int] = attr.ib(default=None)
+    maxPacketLifeTime: Optional[int] = None
     "The maximum time in milliseconds during which transmissions are attempted."
 
-    maxRetransmits: Optional[int] = attr.ib(default=None)
+    maxRetransmits: Optional[int] = None
     "The maximum number of retransmissions that are attempted."
 
-    ordered: bool = attr.ib(default=True)
+    ordered: bool = True
     "Whether the data channel guarantees in-order delivery of messages."
 
-    protocol: str = attr.ib(default="")
+    protocol: str = ""
     "The name of the subprotocol in use."
 
-    negotiated: bool = attr.ib(default=False)
+    negotiated: bool = False
     """
     Whether data channel will be negotiated out of-band, where both sides
     create data channel with an agreed-upon ID."""
 
-    id: Optional[int] = attr.ib(default=None)
+    id: Optional[int] = None
     """
     An numeric ID for the channel; permitted values are 0-65534.
     If you don't include this option, the user agent will select an ID for you.
