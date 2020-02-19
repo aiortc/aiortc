@@ -3974,6 +3974,30 @@ a=fmtp:98 apt=97
             str(cm.exception), "Media sections in answer do not match offer"
         )
 
+    def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # apply offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # apply answer
+        answer = run(pc2.createAnswer())
+        run(pc2.setLocalDescription(answer))
+        mangled = RTCSessionDescription(
+            sdp=pc2.localDescription.sdp.replace("a=setup:active", "a=setup:actpass"),
+            type=pc2.localDescription.type,
+        )
+        with self.assertRaises(ValueError) as cm:
+            run(pc1.setRemoteDescription(mangled))
+        self.assertEqual(
+            str(cm.exception),
+            "DTLS setup attribute must be 'active' or 'passive' for an answer",
+        )
+
     def test_setRemoteDescription_without_ice_credentials(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()

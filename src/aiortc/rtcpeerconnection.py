@@ -1096,6 +1096,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if not media.ice.usernameFragment or not media.ice.password:
                 raise ValueError("ICE username fragment or password is missing")
 
+            if description.type in ["answer", "pranswer"] and media.dtls.role not in [
+                "client",
+                "server",
+            ]:
+                raise ValueError(
+                    "DTLS setup attribute must be 'active' or 'passive' for an answer"
+                )
+
             # check RTCP mux is used
             if media.kind in ["audio", "video"] and not media.rtcp_mux:
                 raise ValueError("RTCP mux is not enabled")
