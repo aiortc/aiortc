@@ -282,7 +282,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             else:
                 self._connection.add_remote_candidate(candidate_to_aioice(candidate))
 
-    def getRemoteCandidates(self):
+    def getRemoteCandidates(self) -> List[RTCIceCandidate]:
         """
         Retrieve the list of candidates associated with the remote
         :class:`RTCIceTransport`.
