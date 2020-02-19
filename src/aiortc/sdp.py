@@ -284,6 +284,7 @@ class SessionDescription:
     def parse(cls, sdp: str):
         current_media: Optional[MediaDescription] = None
         dtls_fingerprints = []
+        dtls_role = None
         ice_lite = False
         ice_options = None
         ice_password = None
@@ -326,6 +327,8 @@ class SessionDescription:
                     parse_group(session.group, value)
                 elif attr == "msid-semantic":
                     parse_group(session.msid_semantic, value)
+                elif attr == "setup":
+                    dtls_role = DTLS_SETUP_ROLE[value]
 
         # parse media
         for media_lines in media_groups:
@@ -346,7 +349,7 @@ class SessionDescription:
                 kind=kind, port=int(m.group(2)), profile=m.group(3), fmt=fmt_int or fmt
             )
             current_media.dtls = RTCDtlsParameters(
-                fingerprints=dtls_fingerprints[:], role=None
+                fingerprints=dtls_fingerprints[:], role=dtls_role
             )
             current_media.ice = RTCIceParameters(
                 iceLite=ice_lite,
