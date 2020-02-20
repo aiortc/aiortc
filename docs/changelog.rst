@@ -3,6 +3,37 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.24
+------
+
+Peer connection
+...............
+
+  * Assign DTLS role based on the SDP negotiation, not the resolved ICE role.
+  * When the peer is ICE lite, adopt the ICE controlling role, and do not use
+    agressive nomination.
+  * Do not close transport on `setRemoteDescription` if media and data are
+    bundled.
+  * Set RemoteStreamTrack.id based on the Msid.
+
+Media
+.....
+
+  * Support alsa hardware output in MediaRecorder.
+
+SDP
+...
+
+  * Add support for the `ice-lite` attribute.
+  * Add support for receiving session-level `ice-ufrag`, `ice-pwd` and `setup`
+    attributes.
+
+Miscellaneous
+.............
+
+  * Switch from `attrs` to standard Python `dataclasses`.
+  * Use PEP-526 style variable annotations instead of comments.
+
 0.9.23
 ------
 
