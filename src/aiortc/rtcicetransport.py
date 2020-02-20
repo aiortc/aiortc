@@ -242,6 +242,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         self.__iceGatherer = gatherer
         self.__state = "new"
         self._connection = gatherer._connection
+        self._role_set = False
 
     @property
     def iceGatherer(self) -> RTCIceGatherer:
