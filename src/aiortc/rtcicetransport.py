@@ -306,6 +306,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         self.__start = asyncio.Event()
 
         self.__setState("checking")
+        self._connection.remote_is_lite = remoteParameters.iceLite
         self._connection.remote_username = remoteParameters.usernameFragment
         self._connection.remote_password = remoteParameters.password
         try:
