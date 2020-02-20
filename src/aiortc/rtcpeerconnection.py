@@ -274,7 +274,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
         self.__iceTransports: Set[RTCIceTransport] = set()
-        self.__initialOfferer: Optional[bool] = None
         self.__remoteDtls: Dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters
         ] = ({})
@@ -701,10 +700,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 self.__sctp.mid = mid
 
         # set ICE role
-        if self.__initialOfferer is None:
-            self.__initialOfferer = description.type == "offer"
+        if description.type == "offer":
             for iceTransport in self.__iceTransports:
-                iceTransport._connection.ice_controlling = self.__initialOfferer
+                if not iceTransport._role_set:
+                    iceTransport._connection.ice_controlling = True
+                    iceTransport._role_set = True
 
         # set DTLS role
         if description.type == "answer":
@@ -841,6 +841,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 # add ICE candidates
                 iceTransport = dtlsTransport.transport
                 add_remote_candidates(iceTransport, media)
+
+                # set ICE role
+                if description.type == "offer" and not iceTransport._role_set:
+                    iceTransport._connection.ice_controlling = media.ice.iceLite
+                    iceTransport._role_set = True
 
                 # set DTLS role
                 if description.type == "answer":
