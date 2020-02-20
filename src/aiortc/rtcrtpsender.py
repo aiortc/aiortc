@@ -249,8 +249,10 @@ class RTCRtpSender:
         # encode frame
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
+        force_keyframe = self.__force_keyframe
+        self.__force_keyframe = False
         return await self.__loop.run_in_executor(
-            None, self.__encoder.encode, frame, self.__force_keyframe
+            None, self.__encoder.encode, frame, force_keyframe
         )
 
     async def _retransmit(self, sequence_number: int) -> None:
@@ -272,7 +274,7 @@ class RTCRtpSender:
             packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
             await self.transport._send_rtp(packet_bytes)
 
-    def _send_keyframe(self):
+    def _send_keyframe(self) -> None:
         """
         Request the next frame to be a keyframe.
         """
