@@ -3,6 +3,20 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.25
+------
+
+Media
+.....
+
+  * Do not repeatedly send key frames after receiving a PLI.
+
+SDP
+...
+
+  * Do not try to determine track ID if there is no Msid.
+  * Accept a star in rtcp-fb attributes.
+
 0.9.24
 ------
 
