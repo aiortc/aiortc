@@ -365,6 +365,9 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
         self.assertEqual(d.media[0].rtcp_host, "192.168.99.58")
         self.assertEqual(d.media[0].rtcp_port, 38612)
         self.assertEqual(d.media[0].rtcp_mux, True)
+        self.assertEqual(
+            d.webrtc_track_id(d.media[0]), "{12692dea-686c-47ca-b3e9-48f38fc92b78}"
+        )
 
         # ssrc
         self.assertEqual(
@@ -1419,6 +1422,7 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
+        self.assertEqual(d.webrtc_track_id(d.media[0]), None)
 
         # ssrc
         self.assertEqual(
@@ -1650,6 +1654,9 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
         self.assertEqual(d.media[0].rtcp_host, "192.168.99.7")
         self.assertEqual(d.media[0].rtcp_port, 52914)
         self.assertEqual(d.media[0].rtcp_mux, True)
+        self.assertEqual(
+            d.webrtc_track_id(d.media[0]), "{d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}"
+        )
 
         # formats
         self.assertEqual(d.media[0].fmt, [120, 121])
@@ -1718,3 +1725,167 @@ a=setup:actpass
 """
             ),
         )
+
+    def test_safari(self):
+        d = SessionDescription.parse(
+            lf2crlf(
+                """
+v=0
+o=- 8148572839875102105 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE audio video data
+a=msid-semantic: WMS cb7e185b-6110-4f65-b027-ddb8b5fa78c7
+m=audio 61015 UDP/TLS/RTP/SAVPF 111 103 9 102 0 8 105 13 110 113 126
+c=IN IP4 1.2.3.4
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:3317362580 1 udp 2113937151 192.168.0.87 61015 typ host generation 0 network-cost 999
+a=candidate:3103151263 1 udp 2113939711 2a01:e0a:151:dc10:a8cb:5e93:9627:557c 61016 typ host generation 0 network-cost 999
+a=candidate:842163049 1 udp 1677729535 1.2.3.4 61015 typ srflx raddr 192.168.0.87 rport 61015 generation 0 network-cost 999
+a=ice-ufrag:XSmV
+a=ice-pwd:Ss5xY4RMFEJASRvK5TIPgLN9
+a=ice-options:trickle
+a=fingerprint:sha-256 F2:68:A5:17:E7:85:D6:4E:23:F1:5D:02:39:9E:0F:B5:EA:C0:BD:FC:F5:27:3E:38:9B:BA:4E:AF:8B:35:AF:89
+a=setup:actpass
+a=mid:audio
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=sendrecv
+a=rtcp-mux
+a=rtpmap:111 opus/48000/2
+a=rtcp-fb:111 transport-cc
+a=fmtp:111 minptime=10;useinbandfec=1
+a=rtpmap:103 ISAC/16000
+a=rtpmap:9 G722/8000
+a=rtpmap:102 ILBC/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:105 CN/16000
+a=rtpmap:13 CN/8000
+a=rtpmap:110 telephone-event/48000
+a=rtpmap:113 telephone-event/16000
+a=rtpmap:126 telephone-event/8000
+a=ssrc:205815247 cname:JTNiIZ6eJ7ghkHaB
+a=ssrc:205815247 msid:cb7e185b-6110-4f65-b027-ddb8b5fa78c7 f473166a-7fe5-4ab6-a3af-c5eb806a13b9
+a=ssrc:205815247 mslabel:cb7e185b-6110-4f65-b027-ddb8b5fa78c7
+a=ssrc:205815247 label:f473166a-7fe5-4ab6-a3af-c5eb806a13b9
+m=video 51044 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 127 125 104
+c=IN IP4 1.2.3.4
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:3317362580 1 udp 2113937151 192.168.0.87 51044 typ host generation 0 network-cost 999
+a=candidate:3103151263 1 udp 2113939711 2a01:e0a:151:dc10:a8cb:5e93:9627:557c 51045 typ host generation 0 network-cost 999
+a=candidate:842163049 1 udp 1677729535 82.64.133.208 51044 typ srflx raddr 192.168.0.87 rport 51044 generation 0 network-cost 999
+a=ice-ufrag:XSmV
+a=ice-pwd:Ss5xY4RMFEJASRvK5TIPgLN9
+a=ice-options:trickle
+a=fingerprint:sha-256 F2:68:A5:17:E7:85:D6:4E:23:F1:5D:02:39:9E:0F:B5:EA:C0:BD:FC:F5:27:3E:38:9B:BA:4E:AF:8B:35:AF:89
+a=setup:actpass
+a=mid:video
+a=extmap:2 urn:ietf:params:rtp-hdrext:toffset
+a=extmap:3 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:4 urn:3gpp:video-orientation
+a=extmap:5 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01
+a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+a=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type
+a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/video-timing
+a=extmap:10 http://tools.ietf.org/html/draft-ietf-avtext-framemarking-07
+a=sendrecv
+a=rtcp-mux
+a=rtcp-rsize
+a=rtpmap:96 H264/90000
+a=rtcp-fb:96 goog-remb
+a=rtcp-fb:96 transport-cc
+a=rtcp-fb:96 ccm fir
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=fmtp:96 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtpmap:98 H264/90000
+a=rtcp-fb:98 goog-remb
+a=rtcp-fb:98 transport-cc
+a=rtcp-fb:98 ccm fir
+a=rtcp-fb:98 nack
+a=rtcp-fb:98 nack pli
+a=fmtp:98 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
+a=rtpmap:99 rtx/90000
+a=fmtp:99 apt=98
+a=rtpmap:100 VP8/90000
+a=rtcp-fb:100 goog-remb
+a=rtcp-fb:100 transport-cc
+a=rtcp-fb:100 ccm fir
+a=rtcp-fb:100 nack
+a=rtcp-fb:100 nack pli
+a=rtpmap:101 rtx/90000
+a=fmtp:101 apt=100
+a=rtpmap:127 red/90000
+a=rtpmap:125 rtx/90000
+a=fmtp:125 apt=127
+a=rtpmap:104 ulpfec/90000
+a=ssrc-group:FID 11942296 149700150
+a=ssrc:11942296 cname:JTNiIZ6eJ7ghkHaB
+a=ssrc:11942296 msid:cb7e185b-6110-4f65-b027-ddb8b5fa78c7 bd201f69-1364-40da-828f-cc695ff54a37
+a=ssrc:11942296 mslabel:cb7e185b-6110-4f65-b027-ddb8b5fa78c7
+a=ssrc:11942296 label:bd201f69-1364-40da-828f-cc695ff54a37
+a=ssrc:149700150 cname:JTNiIZ6eJ7ghkHaB
+a=ssrc:149700150 msid:cb7e185b-6110-4f65-b027-ddb8b5fa78c7 bd201f69-1364-40da-828f-cc695ff54a37
+a=ssrc:149700150 mslabel:cb7e185b-6110-4f65-b027-ddb8b5fa78c7
+a=ssrc:149700150 label:bd201f69-1364-40da-828f-cc695ff54a37
+m=application 60277 DTLS/SCTP 5000
+c=IN IP4 1.2.3.4
+a=candidate:3317362580 1 udp 2113937151 192.168.0.87 60277 typ host generation 0 network-cost 999
+a=candidate:3103151263 1 udp 2113939711 2a01:e0a:151:dc10:a8cb:5e93:9627:557c 60278 typ host generation 0 network-cost 999
+a=candidate:842163049 1 udp 1677729535 82.64.133.208 60277 typ srflx raddr 192.168.0.87 rport 60277 generation 0 network-cost 999
+a=ice-ufrag:XSmV
+a=ice-pwd:Ss5xY4RMFEJASRvK5TIPgLN9
+a=ice-options:trickle
+a=fingerprint:sha-256 F2:68:A5:17:E7:85:D6:4E:23:F1:5D:02:39:9E:0F:B5:EA:C0:BD:FC:F5:27:3E:38:9B:BA:4E:AF:8B:35:AF:89
+a=setup:actpass
+a=mid:data
+a=sctpmap:5000 webrtc-datachannel 1024
+"""
+            )
+        )
+
+        self.assertEqual(
+            d.group,
+            [GroupDescription(semantic="BUNDLE", items=["audio", "video", "data"])],
+        )
+        self.assertEqual(
+            d.msid_semantic,
+            [
+                GroupDescription(
+                    semantic="WMS", items=["cb7e185b-6110-4f65-b027-ddb8b5fa78c7"]
+                )
+            ],
+        )
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, "-")
+        self.assertEqual(
+            d.origin, "- 8148572839875102105 2 IN IP4 127.0.0.1",
+        )
+        self.assertEqual(d.time, "0 0")
+        self.assertEqual(d.version, 0)
+
+        self.assertEqual(len(d.media), 3)
+        self.assertEqual(d.media[0].kind, "audio")
+        self.assertEqual(d.media[0].host, "1.2.3.4")
+        self.assertEqual(d.media[0].port, 61015)
+        self.assertEqual(d.media[0].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[0].direction, "sendrecv")
+        self.assertEqual(d.media[0].msid, None)
+        self.assertEqual(d.webrtc_track_id(d.media[0]), None)
+
+        self.assertEqual(d.media[1].kind, "video")
+        self.assertEqual(d.media[1].host, "1.2.3.4")
+        self.assertEqual(d.media[1].port, 51044)
+        self.assertEqual(d.media[1].profile, "UDP/TLS/RTP/SAVPF")
+        self.assertEqual(d.media[1].direction, "sendrecv")
+        self.assertEqual(d.media[1].msid, None)
+        self.assertEqual(d.webrtc_track_id(d.media[0]), None)
+
+        self.assertEqual(d.media[2].kind, "application")
+        self.assertEqual(d.media[2].host, "1.2.3.4")
+        self.assertEqual(d.media[2].port, 60277)
+        self.assertEqual(d.media[2].profile, "DTLS/SCTP")
+        self.assertEqual(d.media[2].direction, None)
+        self.assertEqual(d.media[2].msid, None)

@@ -795,13 +795,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     direction in ["recvonly", "sendrecv"]
                     and not transceiver.receiver._track
                 ):
-                    # determine track ID
-                    track_id = None
-                    if any(x.semantic == "WMS" for x in description.msid_semantic):
-                        stream_id, track_id = media.msid.split()
-
                     transceiver.receiver._track = RemoteStreamTrack(
-                        kind=media.kind, id=track_id
+                        kind=media.kind, id=description.webrtc_track_id(media)
                     )
                     trackEvents.append(
                         RTCTrackEvent(
