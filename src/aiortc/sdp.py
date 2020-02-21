@@ -457,13 +457,14 @@ class SessionDescription:
                         codec.parameters = parameters_from_sdp(format_desc)
                     elif attr == "rtcp-fb":
                         bits = value.split(" ", 2)
-                        codec = find_codec(int(bits[0]))
-                        codec.rtcpFeedback.append(
-                            RTCRtcpFeedback(
-                                type=bits[1],
-                                parameter=bits[2] if len(bits) > 2 else None,
-                            )
-                        )
+                        for codec in current_media.rtp.codecs:
+                            if bits[0] in ["*", str(codec.payloadType)]:
+                                codec.rtcpFeedback.append(
+                                    RTCRtcpFeedback(
+                                        type=bits[1],
+                                        parameter=bits[2] if len(bits) > 2 else None,
+                                    )
+                                )
 
         return session
 

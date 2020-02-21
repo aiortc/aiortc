@@ -1726,6 +1726,74 @@ a=setup:actpass
             ),
         )
 
+    def test_video_session_star_rtcp_fb(self):
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=mozilla...THIS_IS_SDPARTA-61.0 8964514366714082732 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE sdparta_0
+a=msid-semantic:WMS *
+m=video 42738 UDP/TLS/RTP/SAVPF 120 121
+c=IN IP4 192.168.99.7
+a=sendrecv
+a=extmap:3 urn:ietf:params:rtp-hdrext:sdes:mid
+a=extmap:4 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:5 urn:ietf:params:rtp-hdrext:toffset
+a=mid:sdparta_0
+a=msid:{38c9a1f0-d360-4ad8-afe3-4d7f6d4ae4e1} {d27161f3-ab5d-4aff-9dd8-4a24bfbe56d4}
+a=rtcp:52914 IN IP4 192.168.99.7
+a=rtcp-mux
+a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
+a=rtpmap:120 VP8/90000
+a=fmtp:120 max-fs=12288;max-fr=60
+a=rtpmap:121 VP9/90000
+a=fmtp:121 max-fs=12288;max-fr=60
+a=rtcp-fb:* nack
+a=rtcp-fb:* nack pli
+a=rtcp-fb:* goog-remb
+a=candidate:0 1 UDP 2122252543 192.168.99.7 42738 typ host
+a=candidate:1 1 TCP 2105524479 192.168.99.7 9 typ host tcptype active
+a=candidate:0 2 UDP 2122252542 192.168.99.7 52914 typ host
+a=candidate:1 2 TCP 2105524478 192.168.99.7 9 typ host tcptype active
+a=end-of-candidates
+a=ice-ufrag:1a0e6b24
+a=ice-pwd:c43b0306087bb4de15f70e4405c4dafe
+a=ice-options:trickle
+a=fingerprint:sha-256 AF:9E:29:99:AC:F6:F6:A2:86:A7:2E:A5:83:94:21:7F:F1:39:C5:E3:8F:E4:08:04:D9:D8:70:6D:6C:A2:A1:D5
+a=setup:actpass
+"""
+            )
+        )
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8",
+                    clockRate=90000,
+                    payloadType=120,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                        RTCRtcpFeedback(type="goog-remb"),
+                    ],
+                    parameters={"max-fs": 12288, "max-fr": 60},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/VP9",
+                    clockRate=90000,
+                    payloadType=121,
+                    rtcpFeedback=[
+                        RTCRtcpFeedback(type="nack"),
+                        RTCRtcpFeedback(type="nack", parameter="pli"),
+                        RTCRtcpFeedback(type="goog-remb"),
+                    ],
+                    parameters={"max-fs": 12288, "max-fr": 60},
+                ),
+            ],
+        )
+
     def test_safari(self):
         d = SessionDescription.parse(
             lf2crlf(
