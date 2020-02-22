@@ -193,7 +193,8 @@ class RTCRtpSender:
             self.__transport._unregister_rtp_sender(self)
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
-            await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
+            self.__rtp_exited.set()
+            self.__rtcp_exited.set()
 
     async def _handle_rtcp_packet(self, packet):
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
@@ -286,7 +287,7 @@ class RTCRtpSender:
         sequence_number = random16()
         timestamp_origin = random32()
         try:
-            while True:
+            while self.__rtp_exited.is_set is False:
                 if not self.__track:
                     await asyncio.sleep(0.02)
                     continue
@@ -328,17 +329,15 @@ class RTCRtpSender:
 
         # stop track
         if self.__track:
-            self.__track.stop()
             self.__track = None
 
         self.__log_debug("- RTP finished")
-        self.__rtp_exited.set()
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
 
         try:
-            while True:
+            while self.__rtcp_exited.is_set is False:
                 # The interval between RTCP packets is varied randomly over the
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
@@ -380,7 +379,6 @@ class RTCRtpSender:
         await self._send_rtcp([packet])
 
         self.__log_debug("- RTCP finished")
-        self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""

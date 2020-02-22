@@ -280,10 +280,9 @@ class MediaPlayer:
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
-
-        if self.__container:
-            self.__container.close()
-            self.__container = None
+            if self.__container:
+                self.__container.close()
+                self.__container = None
 
     def __log_debug(self, msg, *args):
         logger.debug(f"player(%s) {msg}", self.__container.name, *args)

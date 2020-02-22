@@ -21,6 +21,7 @@ from aiortc.rtcrtpparameters import (
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.sdp import SessionDescription
 from aiortc.stats import RTCStatsReport
+from aiortc.contrib.media import MediaPlayer
 
 from .utils import lf2crlf, run
 
@@ -4234,3 +4235,177 @@ a=fmtp:98 apt=97
                 "closed",
             ],
         )
+
+    def audio_video(self, audioTrack, videoTrack, stopTracks):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1_states = track_states(pc1)
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        """
+        initial negotiation
+        """
+
+        #  create offer
+        if audioTrack is not None:
+            pc1.addTrack(audioTrack)
+        if videoTrack is not None:
+            pc1.addTrack(videoTrack)
+
+        # create offer
+        #  pc1.addTrack(AudioStreamTrack())
+        #  pc1.addTrack(VideoStreamTrack())
+
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, "offer")
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+
+        # create answer
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, "answer")
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, "checking")
+        self.assertEqual(pc2.iceGatheringState, "complete")
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+        self.assertEqual(pc1.iceConnectionState, "checking")
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # allow media to flow long enough to collect stats
+        run(asyncio.sleep(2))
+
+        if stopTracks is True:
+            # stop tracks
+            if audioTrack is not None:
+                audioTrack.stop()
+            if videoTrack is not None:
+                videoTrack.stop()
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            [
+                "stable",
+                "have-local-offer",
+                "stable",
+                "closed",
+            ],
+        )
+
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            [
+                "stable",
+                "have-remote-offer",
+                "stable",
+                "closed",
+            ],
+        )
+
+    def test_audio_live_stoptracks(self):
+        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        self.audio_video(audioPlayer.audio, None, True)
+
+    def test_audio_live_nostoptracks(self):
+        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        self.audio_video(audioPlayer.audio, None, False)
+
+    def test_video_live_stoptracks(self):
+        videoPlayer = MediaPlayer(
+            "default:none",
+            "avfoundation",
+            {"framerate": "30", "video_size": "640x480"}
+        )
+        self.audio_video(None, videoPlayer.video, True)
+
+    def test_video_live_nostoptracks(self):
+        videoPlayer = MediaPlayer(
+            "default:none",
+            "avfoundation",
+            {"framerate": "30", "video_size": "640x480"}
+        )
+        self.audio_video(None, videoPlayer.video, False)
+
+    def test_audio_video_live_stoptracks(self):
+        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        videoPlayer = MediaPlayer(
+            "default:none",
+            "avfoundation",
+            {"framerate": "30", "video_size": "640x480"}
+        )
+        self.audio_video(audioPlayer.audio, videoPlayer.video, True)
+
+    def test_audio_video_live_nostoptracks(self):
+        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        videoPlayer = MediaPlayer(
+            "default:none",
+            "avfoundation",
+            {"framerate": "30", "video_size": "640x480"}
+        )
+        self.audio_video(audioPlayer.audio, videoPlayer.video, False)
+
+    def test_audio_cold_stoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(player.audio, None, True)
+
+    def test_audio_cold_nostoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(player.audio, None, False)
+
+    def test_video_cold_stoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(None, player.video, True)
+
+    def test_video_cold_nostoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(None, player.video, False)
+
+    def test_audio_video_cold_stoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(player.audio, player.video, True)
+
+    def test_audio_video_cold_nostoptracks(self):
+        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        self.audio_video(player.audio, player.video, False)
