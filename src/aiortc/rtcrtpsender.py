@@ -287,7 +287,7 @@ class RTCRtpSender:
         sequence_number = random16()
         timestamp_origin = random32()
         try:
-            while self.__rtp_exited.is_set is False:
+            while self.__rtp_exited.is_set() is False:
                 if not self.__track:
                     await asyncio.sleep(0.02)
                     continue
@@ -337,7 +337,7 @@ class RTCRtpSender:
         self.__log_debug("- RTCP started")
 
         try:
-            while self.__rtcp_exited.is_set is False:
+            while self.__rtcp_exited.is_set() is False:
                 # The interval between RTCP packets is varied randomly over the
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
