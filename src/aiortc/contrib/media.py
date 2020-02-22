@@ -275,13 +275,14 @@ class MediaPlayer:
 
     def _stop(self, track):
         self.__started.discard(track)
+
         if not self.__started and self.__thread is not None:
             self.__log_debug("Stopping worker thread")
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
 
-        if self.__container:
+        if not self.__started and self.__container is not None:
             self.__container.close()
             self.__container = None
 
