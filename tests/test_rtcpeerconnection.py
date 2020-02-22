@@ -4236,6 +4236,29 @@ a=fmtp:98 apt=97
             ],
         )
 
+    def create_player(self, type, audio, video):
+        player = None
+        if type == "device":
+            # NOTE: Only ready for MacOS!
+            if audio is True:
+                player = MediaPlayer("none:0", "avfoundation")
+            elif video is True:
+                player = MediaPlayer(
+                    "default:none",
+                    "avfoundation",
+                    {"framerate": "30", "video_size": "640x480"}
+                )
+        else:
+            player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+
+        return player
+
+    def stop_player(self, player):
+        if player.audio:
+            player.audio.stop()
+        if player.video:
+            player.video.stop()
+
     def audio_video(self, audioTrack, videoTrack, stopTracks):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4345,79 +4368,58 @@ a=fmtp:98 apt=97
         )
 
     def test_audio_live_stoptracks(self):
-        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        audioPlayer = self.create_player("device", True, False)
         self.audio_video(audioPlayer.audio, None, True)
 
     def test_audio_live_nostoptracks(self):
-        audioPlayer = MediaPlayer("none:0", "avfoundation")
+        audioPlayer = self.create_player("device", True, False)
         self.audio_video(audioPlayer.audio, None, False)
-        audioPlayer.audio.stop()
+        self.stop_player(audioPlayer)
 
     def test_video_live_stoptracks(self):
-        videoPlayer = MediaPlayer(
-            "default:none",
-            "avfoundation",
-            {"framerate": "30", "video_size": "640x480"}
-        )
+        videoPlayer = self.create_player("device", False, True)
         self.audio_video(None, videoPlayer.video, True)
 
     def test_video_live_nostoptracks(self):
-        videoPlayer = MediaPlayer(
-            "default:none",
-            "avfoundation",
-            {"framerate": "30", "video_size": "640x480"}
-        )
+        videoPlayer = self.create_player("device", False, True)
         self.audio_video(None, videoPlayer.video, False)
-        videoPlayer.video.stop()
+        self.stop_player(videoPlayer)
 
     def test_audio_video_live_stoptracks(self):
-        audioPlayer = MediaPlayer("none:0", "avfoundation")
-        videoPlayer = MediaPlayer(
-            "default:none",
-            "avfoundation",
-            {"framerate": "30", "video_size": "640x480"}
-        )
+        audioPlayer = self.create_player("device", True, False)
+        videoPlayer = self.create_player("device", False, True)
         self.audio_video(audioPlayer.audio, videoPlayer.video, True)
 
     def test_audio_video_live_nostoptracks(self):
-        audioPlayer = MediaPlayer("none:0", "avfoundation")
-        videoPlayer = MediaPlayer(
-            "default:none",
-            "avfoundation",
-            {"framerate": "30", "video_size": "640x480"}
-        )
+        audioPlayer = self.create_player("device", True, False)
+        videoPlayer = self.create_player("device", False, True)
         self.audio_video(audioPlayer.audio, videoPlayer.video, False)
-        audioPlayer.audio.stop()
-        videoPlayer.video.stop()
+        self.stop_player(audioPlayer)
+        self.stop_player(videoPlayer)
 
     def test_audio_cold_stoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(player.audio, None, True)
-        player.video.stop()
 
     def test_audio_cold_nostoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(player.audio, None, False)
-        player.audio.stop()
-        player.video.stop()
+        self.stop_player(player)
 
     def test_video_cold_stoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(None, player.video, True)
-        player.audio.stop()
 
     def test_video_cold_nostoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(None, player.video, False)
-        player.audio.stop()
-        player.video.stop()
+        self.stop_player(player)
 
     def test_audio_video_cold_stoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(player.audio, player.video, True)
 
     def test_audio_video_cold_nostoptracks(self):
-        player = MediaPlayer("http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+        player = self.create_player("url", True, True)
         self.audio_video(player.audio, player.video, False)
-        player.audio.stop()
-        player.video.stop()
+        self.stop_player(player)
