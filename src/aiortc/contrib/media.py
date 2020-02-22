@@ -3,6 +3,7 @@ import fractions
 import logging
 import threading
 import time
+from typing import Optional, Set
 
 import av
 from av import AudioFrame, VideoFrame
@@ -219,14 +220,14 @@ class MediaPlayer:
 
     def __init__(self, file, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
-        self.__thread = None
-        self.__thread_quit = None
+        self.__thread: Optional[threading.Thread] = None
+        self.__thread_quit: Optional[threading.Event] = None
 
         # examine streams
-        self.__started = set()
+        self.__started: Set[PlayerStreamTrack] = set()
         self.__streams = []
-        self.__audio = None
-        self.__video = None
+        self.__audio: Optional[PlayerStreamTrack] = None
+        self.__video: Optional[PlayerStreamTrack] = None
         for stream in self.__container.streams:
             if stream.type == "audio" and not self.__audio:
                 self.__audio = PlayerStreamTrack(self, kind="audio")
@@ -240,20 +241,20 @@ class MediaPlayer:
         self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
 
     @property
-    def audio(self):
+    def audio(self) -> MediaStreamTrack:
         """
         A :class:`aiortc.MediaStreamTrack` instance if the file contains audio.
         """
         return self.__audio
 
     @property
-    def video(self):
+    def video(self) -> MediaStreamTrack:
         """
         A :class:`aiortc.MediaStreamTrack` instance if the file contains video.
         """
         return self.__video
 
-    def _start(self, track):
+    def _start(self, track: PlayerStreamTrack) -> None:
         self.__started.add(track)
         if self.__thread is None:
             self.__log_debug("Starting worker thread")
@@ -273,7 +274,7 @@ class MediaPlayer:
             )
             self.__thread.start()
 
-    def _stop(self, track):
+    def _stop(self, track: PlayerStreamTrack) -> None:
         self.__started.discard(track)
 
         if not self.__started and self.__thread is not None:
@@ -286,7 +287,7 @@ class MediaPlayer:
             self.__container.close()
             self.__container = None
 
-    def __log_debug(self, msg, *args):
+    def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"player(%s) {msg}", self.__container.name, *args)
 
 
