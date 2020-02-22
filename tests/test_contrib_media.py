@@ -33,6 +33,38 @@ class MediaTestCase(CodecTestCase):
 
         return path
 
+    def create_audio_and_video_file(
+        self, name, width=640, height=480, video_rate=30, duration=1
+    ):
+        path = self.temporary_path(name)
+        audio_pts = 0
+        audio_rate = 48000
+        audio_samples = audio_rate // video_rate
+
+        container = av.open(path, "w")
+        audio_stream = container.add_stream("aac", rate=audio_rate)
+        video_stream = container.add_stream("mpeg4", rate=video_rate)
+        for video_frame in self.create_video_frames(
+            width=width, height=height, count=duration * video_rate
+        ):
+            audio_frame = self.create_audio_frame(
+                samples=audio_samples, pts=audio_pts, sample_rate=audio_rate
+            )
+            audio_pts += audio_samples
+            for packet in audio_stream.encode(audio_frame):
+                container.mux(packet)
+
+            for packet in video_stream.encode(video_frame):
+                container.mux(packet)
+
+        for packet in audio_stream.encode(None):
+            container.mux(packet)
+        for packet in video_stream.encode(None):
+            container.mux(packet)
+        container.close()
+
+        return path
+
     def create_video_file(self, name, width=640, height=480, rate=30, duration=1):
         path = self.temporary_path(name)
 
@@ -149,6 +181,38 @@ class MediaPlayerTest(MediaTestCase):
         with self.assertRaises(MediaStreamError):
             run(player.audio.recv())
         self.assertEqual(player.audio.readyState, "ended")
+
+    def test_audio_and_video_file(self):
+        path = self.create_audio_and_video_file(name="test.mp4", duration=5)
+        player = MediaPlayer(path)
+
+        # check tracks
+        self.assertIsNotNone(player.audio)
+        self.assertIsNotNone(player.video)
+
+        # read some frames
+        self.assertEqual(player.audio.readyState, "live")
+        self.assertEqual(player.video.readyState, "live")
+        for i in range(10):
+            run(asyncio.gather(player.audio.recv(), player.video.recv()))
+
+        # stop audio track
+        player.audio.stop()
+
+        # continue reading
+        for i in range(10):
+            with self.assertRaises(MediaStreamError):
+                run(player.audio.recv())
+            run(player.video.recv())
+
+        # stop video track
+        player.video.stop()
+
+        # continue reading
+        with self.assertRaises(MediaStreamError):
+            run(player.audio.recv())
+        with self.assertRaises(MediaStreamError):
+            run(player.video.recv())
 
     def test_video_file_png(self):
         path = self.create_video_file("test-%3d.png", duration=3)

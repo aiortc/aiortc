@@ -9,18 +9,28 @@ from aiortc.mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE
 
 
 class CodecTestCase(TestCase):
+    def create_audio_frame(self, samples, pts, layout="mono", sample_rate=48000):
+        frame = AudioFrame(format="s16", layout=layout, samples=samples)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
+        frame.pts = pts
+        frame.sample_rate = sample_rate
+        frame.time_base = fractions.Fraction(1, sample_rate)
+        return frame
+
     def create_audio_frames(self, layout, sample_rate, count):
         frames = []
         timestamp = 0
         samples_per_frame = int(AUDIO_PTIME * sample_rate)
         for i in range(count):
-            frame = AudioFrame(format="s16", layout=layout, samples=samples_per_frame)
-            for p in frame.planes:
-                p.update(bytes(p.buffer_size))
-            frame.pts = timestamp
-            frame.sample_rate = sample_rate
-            frame.time_base = fractions.Fraction(1, sample_rate)
-            frames.append(frame)
+            frames.append(
+                self.create_audio_frame(
+                    samples=samples_per_frame,
+                    pts=timestamp,
+                    layout=layout,
+                    sample_rate=sample_rate,
+                )
+            )
             timestamp += samples_per_frame
         return frames
 
