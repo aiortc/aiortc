@@ -16,17 +16,20 @@ except ImportError:  # pragma: no cover
     websockets = None
 
 logger = logging.getLogger("aiortc.contrib.signaling")
+BYE = object()
 
 
 def object_from_string(message_str):
     message = json.loads(message_str)
     if message["type"] in ["answer", "offer"]:
         return RTCSessionDescription(**message)
-    elif message["type"] == "candidate":
+    elif message["type"] == "candidate" and message["candidate"]:
         candidate = candidate_from_sdp(message["candidate"].split(":", 1)[1])
         candidate.sdpMid = message["id"]
         candidate.sdpMLineIndex = message["label"]
         return candidate
+    elif message["type"] == "bye":
+        return BYE
 
 
 def object_to_string(obj):
@@ -40,6 +43,7 @@ def object_to_string(obj):
             "type": "candidate",
         }
     else:
+        assert obj is BYE
         message = {"type": "bye"}
     return json.dumps(message, sort_keys=True)
 
@@ -89,7 +93,7 @@ class ApprtcSignaling:
 
     async def close(self):
         if self._websocket:
-            await self.send(None)
+            await self.send(BYE)
             await self._websocket.close()
         if self._http:
             await self._http.close()
@@ -128,7 +132,7 @@ class CopyAndPasteSignaling:
 
     async def close(self):
         if self._reader is not None:
-            await self.send(None)
+            await self.send(BYE)
             self._read_transport.close()
             self._reader = None
 
@@ -178,7 +182,7 @@ class TcpSocketSignaling:
 
     async def close(self):
         if self._writer is not None:
-            await self.send(None)
+            await self.send(BYE)
             self._writer.close()
             self._reader = None
             self._writer = None
@@ -231,7 +235,7 @@ class UnixSocketSignaling:
 
     async def close(self):
         if self._writer is not None:
-            await self.send(None)
+            await self.send(BYE)
             self._writer.close()
             self._reader = None
             self._writer = None

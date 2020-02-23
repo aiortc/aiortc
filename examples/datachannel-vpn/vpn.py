@@ -5,7 +5,7 @@ import logging
 import tuntap
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 logger = logging.Logger("vpn")
 
@@ -27,7 +27,7 @@ async def consume_signaling(pc, signaling):
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
-        elif obj is None:
+        elif obj is BYE:
             print("Exiting")
             break
 

@@ -4,6 +4,7 @@ from unittest import TestCase
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.signaling import (
+    BYE,
     add_signaling_arguments,
     create_signaling,
     object_from_string,
@@ -232,10 +233,10 @@ class SignalingTest(TestCase):
 
 class SignalingUtilsTest(TestCase):
     def test_bye_from_string(self):
-        self.assertEqual(object_from_string('{"type": "bye"}'), None)
+        self.assertEqual(object_from_string('{"type": "bye"}'), BYE)
 
     def test_bye_to_string(self):
-        self.assertEqual(object_to_string(None), '{"type": "bye"}')
+        self.assertEqual(object_to_string(BYE), '{"type": "bye"}')
 
     def test_candidate_from_string(self):
         candidate = object_from_string(

@@ -14,7 +14,7 @@ from aiortc import (
     VideoStreamTrack,
 )
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.contrib.signaling import ApprtcSignaling
+from aiortc.contrib.signaling import BYE, ApprtcSignaling
 
 ROOT = os.path.dirname(__file__)
 PHOTO_PATH = os.path.join(ROOT, "photo.jpg")
@@ -84,7 +84,7 @@ async def run(pc, player, recorder, signaling):
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
-        elif obj is None:
+        elif obj is BYE:
             print("Exiting")
             break
 

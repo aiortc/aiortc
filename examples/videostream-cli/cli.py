@@ -14,7 +14,7 @@ from aiortc import (
     VideoStreamTrack,
 )
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 
 class FlagVideoStreamTrack(VideoStreamTrack):
@@ -116,7 +116,7 @@ async def run(pc, player, recorder, signaling, role):
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
-        elif obj is None:
+        elif obj is BYE:
             print("Exiting")
             break
 
