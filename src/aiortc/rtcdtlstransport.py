@@ -39,13 +39,14 @@ binding.init_static_locks()
 ffi = binding.ffi
 lib = binding.lib
 
-NID_X9_62_prime256v1 = 415
 SRTP_KEY_LEN = 16
 SRTP_SALT_LEN = 14
 
 CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 
 logger = logging.getLogger("dtls")
+
+assert lib.OpenSSL_version_num() >= 0x10002000, "OpenSSL 1.0.2 or better is required"
 
 
 class DtlsError(Exception):
@@ -198,13 +199,7 @@ class RTCCertificate:
         return cls(key=key, cert=cert)
 
     def _create_ssl_context(self) -> Any:
-        if hasattr(lib, "DTLS_method"):
-            # openssl >= 1.0.2
-            method = lib.DTLS_method
-        else:
-            # openssl < 1.0.2
-            method = lib.DTLSv1_method
-        ctx = lib.SSL_CTX_new(method())
+        ctx = lib.SSL_CTX_new(lib.DTLS_method())
         ctx = ffi.gc(ctx, lib.SSL_CTX_free)
 
         lib.SSL_CTX_set_verify(
@@ -221,15 +216,8 @@ class RTCCertificate:
         )
         _openssl_assert(lib.SSL_CTX_set_read_ahead(ctx, 1) == 0)
 
-        # Configure elliptic curve for ECDHE in server mode for older OpenSSL
-        if lib.OpenSSL_version_num() < 0x10002000:
-            # openssl < 1.0.2
-            ecdh = lib.EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)
-            lib.SSL_CTX_set_options(ctx, lib.SSL_OP_SINGLE_ECDH_USE)
-            lib.SSL_CTX_set_tmp_ecdh(ctx, ecdh)
-            lib.EC_KEY_free(ecdh)
-        elif lib.OpenSSL_version_num() < 0x10100000:
-            # openssl >= 1.0.2, < 1.1.0
+        # Configure elliptic curve for ECDHE in server mode for OpenSSL < 1.1.0
+        if lib.OpenSSL_version_num() < 0x10100000:  # pragma: no cover
             lib.SSL_CTX_set_ecdh_auto(ctx, 1)
 
         return ctx
