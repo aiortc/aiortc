@@ -4,7 +4,7 @@ import logging
 import time
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.signaling import add_signaling_arguments, create_signaling
+from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 
 def channel_log(channel, t, message):
@@ -29,7 +29,7 @@ async def consume_signaling(pc, signaling):
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             pc.addIceCandidate(obj)
-        elif obj is None:
+        elif obj is BYE:
             print("Exiting")
             break
 
