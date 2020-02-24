@@ -171,7 +171,11 @@ class PlayerStreamTrack(MediaStreamTrack):
         frame_time = frame.time
 
         # control playback rate
-        if self._player._throttle_playback and frame_time is not None:
+        if (
+            self._player is not None
+            and self._player._throttle_playback
+            and frame_time is not None
+        ):
             if self._start is None:
                 self._start = time.time() - frame_time
             else:
