@@ -3,6 +3,7 @@ from collections import OrderedDict
 from struct import pack
 from unittest import TestCase
 
+from aiortc import MediaStreamTrack
 from aiortc.codecs import PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
@@ -33,6 +34,13 @@ from .utils import dummy_dtls_transport_pair, run
 VP8_CODEC = RTCRtpCodecParameters(
     mimeType="video/VP8", clockRate=90000, payloadType=100
 )
+
+
+class BuggyStreamTrack(MediaStreamTrack):
+    kind = "audio"
+
+    async def recv(self):
+        raise Exception("I'm a buggy track!")
 
 
 class RTCRtpSenderTest(TestCase):
@@ -350,6 +358,15 @@ class RTCRtpSenderTest(TestCase):
 
     def test_stop_before_send(self):
         sender = RTCRtpSender(AudioStreamTrack(), self.local_transport)
+        run(sender.stop())
+
+    def test_stop_on_exception(self):
+        sender = RTCRtpSender(BuggyStreamTrack(), self.local_transport)
+        self.assertEqual(sender.kind, "audio")
+
+        run(sender.send(RTCRtpParameters(codecs=[PCMU_CODEC])))
+
+        # clean shutdown
         run(sender.stop())
 
     def test_track_ended(self):
