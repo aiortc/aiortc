@@ -156,6 +156,7 @@ class PlayerStreamTrack(MediaStreamTrack):
         super().__init__()
         self.kind = kind
         self._player = player
+        self._throttle_playback = player._throttle_playback
         self._queue = asyncio.Queue()
         self._start = None
 
@@ -171,7 +172,7 @@ class PlayerStreamTrack(MediaStreamTrack):
         frame_time = frame.time
 
         # control playback rate
-        if self._player._throttle_playback and frame_time is not None:
+        if self._player is not None and self._throttle_playback and frame_time is not None:
             if self._start is None:
                 self._start = time.time() - frame_time
             else:
@@ -223,6 +224,10 @@ class MediaPlayer:
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
 
+        # check whether we need to throttle playback
+        container_format = set(self.__container.format.name.split(","))
+        self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
+
         # examine streams
         self.__started: Set[PlayerStreamTrack] = set()
         self.__streams = []
@@ -235,10 +240,6 @@ class MediaPlayer:
             elif stream.type == "video" and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind="video")
                 self.__streams.append(stream)
-
-        # check whether we need to throttle playback
-        container_format = set(self.__container.format.name.split(","))
-        self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
 
     @property
     def audio(self) -> MediaStreamTrack:
