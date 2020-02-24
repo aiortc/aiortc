@@ -3,6 +3,26 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.26
+------
+
+DTLS
+....
+
+  * Drop support for OpenSSL < 1.0.2.
+
+Examples
+........
+
+  * `apprtc` fix handling of empty "candidate" message.
+
+Media
+.....
+
+  * Fix a MediaPlayer crash when stopping one track of a multi-track file (#237, #274).
+  * Fix a MediaPlayer error when stopping a track while waiting for the next frame.
+  * Make `RTCRtpSender` resilient to exceptions raised by media stream tracks (#283).
+
 0.9.25
 ------
 
