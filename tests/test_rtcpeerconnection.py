@@ -1,5 +1,6 @@
 import asyncio
 import re
+import platform
 from unittest import TestCase
 
 import aioice.stun
@@ -1790,17 +1791,12 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-remote-offer", "stable", "closed"],
         )
 
-    def _test_connect_audio_and_video_mediaplayer(self, stop_tracks: bool):
+    def _test_connect_audio_and_video_mediaplayer(self, track_factory, stop_tracks: bool):
         """
         Negotiate bidirectional audio + video, with one party reading media from a file.
 
         We can optionally stop the media tracks before closing the peer connections.
         """
-        media_test = MediaTestCase()
-        media_test.setUp()
-        media_path = media_test.create_audio_and_video_file(name="test.mp4", duration=5)
-        player = MediaPlayer(media_path)
-
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1817,9 +1813,11 @@ a=rtpmap:0 PCMU/8000
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
 
+        audio, video = track_factory()
+
         # create offer
-        pc1.addTrack(player.audio)
-        pc1.addTrack(player.video)
+        pc1.addTrack(audio)
+        pc1.addTrack(video)
         offer = run(pc1.createOffer())
         self.assertEqual(offer.type, "offer")
         self.assertTrue("m=audio " in offer.sdp)
@@ -1869,8 +1867,8 @@ a=rtpmap:0 PCMU/8000
 
         # stop tracks
         if stop_tracks:
-            player.audio.stop()
-            player.video.stop()
+            audio.stop()
+            video.stop()
 
         # close peer connection
         run(pc1.close())
@@ -1900,13 +1898,69 @@ a=rtpmap:0 PCMU/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
-        media_test.tearDown()
 
     def test_connect_audio_and_video_mediaplayer(self):
-        self._test_connect_audio_and_video_mediaplayer(stop_tracks=False)
+        media_test = MediaTestCase()
+        media_test.setUp()
+        media_path = media_test.create_audio_and_video_file(name="test.mp4", duration=5)
+        player = MediaPlayer(media_path)
+
+        def track_factory():
+            return {
+                player.audio,
+                player.video,
+            }
+
+        self._test_connect_audio_and_video_mediaplayer(track_factory, stop_tracks=False)
+
+        media_test.tearDown()
 
     def test_connect_audio_and_video_mediaplayer_stop_tracks(self):
-        self._test_connect_audio_and_video_mediaplayer(stop_tracks=True)
+        media_test = MediaTestCase()
+        media_test.setUp()
+        media_path = media_test.create_audio_and_video_file(name="test.mp4", duration=5)
+        player = MediaPlayer(media_path)
+
+        def track_factory():
+            return {
+                player.audio,
+                player.video,
+            }
+
+        self._test_connect_audio_and_video_mediaplayer(track_factory, stop_tracks=True)
+
+        media_test.tearDown()
+
+    def test_connect_audio_and_video_mediaplayer_device(self):
+        try:
+            audio, video = self.device_track_factory()
+        except OSError:
+            return
+
+        def track_factory():
+            return {
+                audio,
+                video,
+            }
+
+        self._test_connect_audio_and_video_mediaplayer(track_factory, stop_tracks=False)
+
+        audio.stop()
+        video.stop()
+
+    def test_connect_audio_and_video_mediaplayer_device_stop_tracks(self):
+        try:
+            audio, video = self.device_track_factory()
+        except OSError:
+            return
+
+        def track_factory():
+            return {
+                audio,
+                video,
+            }
+
+        self._test_connect_audio_and_video_mediaplayer(track_factory, stop_tracks=True)
 
     def test_connect_audio_and_video_and_data_channel(self):
         pc1 = RTCPeerConnection()
@@ -4354,3 +4408,26 @@ a=fmtp:98 apt=97
                 "closed",
             ],
         )
+
+    def device_track_factory(self):
+        system = platform.system()
+
+        if system == "Darwin":
+            audioPlayer = MediaPlayer("none:0", "avfoundation")
+            videoPlayer = MediaPlayer(
+                "default:none",
+                "avfoundation",
+                {"framerate": "30", "video_size": "640x480"}
+            )
+        elif system == "Linux":
+            audioPlayer = MediaPlayer("hw:0", "alsa")
+            videoPlayer = MediaPlayer(
+                "/dev/video0",
+                "v4l2",
+                {"framerate": "30", "video_size": "640x480"}
+            )
+
+        return {
+            audioPlayer.audio,
+            videoPlayer.video
+        }
