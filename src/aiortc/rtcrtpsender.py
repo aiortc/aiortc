@@ -326,9 +326,8 @@ class RTCRtpSender:
         except (asyncio.CancelledError, ConnectionError, MediaStreamError):
             pass
 
-        # stop track
+        # unreference the track
         if self.__track:
-            self.__track.stop()
             self.__track = None
 
         self.__log_debug("- RTP finished")
