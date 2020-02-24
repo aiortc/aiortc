@@ -57,12 +57,14 @@ class AimdRateControl:
         self.last_change_ms = now_ms
 
     def update(
-        self, bandwidth_usage: BandwidthUsage, estimated_throughput: int, now_ms: int
+        self,
+        bandwidth_usage: BandwidthUsage,
+        estimated_throughput: Optional[int],
+        now_ms: int,
     ) -> Optional[int]:
-        if not self.current_bitrate_initialized:
+        if not self.current_bitrate_initialized and estimated_throughput is not None:
             if self.first_estimated_throughput_time is None:
-                if estimated_throughput is not None:
-                    self.first_estimated_throughput_time = now_ms
+                self.first_estimated_throughput_time = now_ms
             elif now_ms - self.first_estimated_throughput_time > 3000:
                 self.current_bitrate = estimated_throughput
                 self.current_bitrate_initialized = True
