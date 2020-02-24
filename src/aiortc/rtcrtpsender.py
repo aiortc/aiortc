@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import time
+import traceback
 import uuid
 from typing import Dict, List, Optional, Union
 
@@ -325,6 +326,10 @@ class RTCRtpSender:
                     sequence_number = uint16_add(sequence_number, 1)
         except (asyncio.CancelledError, ConnectionError, MediaStreamError):
             pass
+        except Exception:
+            # we *need* to set __rtp_exited, otherwise RTCRtpSender.stop() will hang,
+            # so issue a warning if we hit an unexpected exception
+            self.__log_warning(traceback.format_exc())
 
         # stop track
         if self.__track:
@@ -395,3 +400,6 @@ class RTCRtpSender:
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"sender(%s) {msg}", self.__kind, *args)
+
+    def __log_warning(self, msg: str, *args) -> None:
+        logger.warning(f"sender(%s) {msg}", self.__kind, *args)
