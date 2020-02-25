@@ -273,6 +273,13 @@ class RTCRtpReceiver:
         self.__rtcp_ssrc: Optional[int] = None
 
     @property
+    def track(self) -> MediaStreamTrack:
+        """
+        The :class:`MediaStreamTrack` which is being handled by the receiver.
+        """
+        return self._track
+
+    @property
     def transport(self) -> RTCDtlsTransport:
         """
         The :class:`RTCDtlsTransport` over which the media for the receiver's

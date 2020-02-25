@@ -793,7 +793,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 # create remote stream track
                 if (
                     direction in ["recvonly", "sendrecv"]
-                    and not transceiver.receiver._track
+                    and not transceiver.receiver.track
                 ):
                     transceiver.receiver._track = RemoteStreamTrack(
                         kind=media.kind, id=description.webrtc_track_id(media)
@@ -801,7 +801,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     trackEvents.append(
                         RTCTrackEvent(
                             receiver=transceiver.receiver,
-                            track=transceiver.receiver._track,
+                            track=transceiver.receiver.track,
                             transceiver=transceiver,
                         )
                     )

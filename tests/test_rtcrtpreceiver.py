@@ -316,7 +316,7 @@ class RTCRtpReceiverTest(CodecTestCase):
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._track = RemoteStreamTrack(kind="audio")
-        self.assertEqual(receiver._track.readyState, "live")
+        self.assertEqual(receiver.track.readyState, "live")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC])))
 
         # receive RTP
@@ -345,12 +345,12 @@ class RTCRtpReceiverTest(CodecTestCase):
         self.assertEqual(sources[0].source, 4028317929)
 
         # check remote track
-        frame = run(receiver._track.recv())
+        frame = run(receiver.track.recv())
         self.assertEqual(frame.pts, 0)
         self.assertEqual(frame.sample_rate, 8000)
         self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
 
-        frame = run(receiver._track.recv())
+        frame = run(receiver.track.recv())
         self.assertEqual(frame.pts, 160)
         self.assertEqual(frame.sample_rate, 8000)
         self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
@@ -361,12 +361,12 @@ class RTCRtpReceiverTest(CodecTestCase):
         # read until end
         with self.assertRaises(MediaStreamError):
             while True:
-                run(receiver._track.recv())
-        self.assertEqual(receiver._track.readyState, "ended")
+                run(receiver.track.recv())
+        self.assertEqual(receiver.track.readyState, "ended")
 
         # try reading again
         with self.assertRaises(MediaStreamError):
-            run(receiver._track.recv())
+            run(receiver.track.recv())
 
     def test_rtp_missing_video_packet(self):
         nacks = []
