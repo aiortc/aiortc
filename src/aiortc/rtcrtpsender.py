@@ -142,7 +142,7 @@ class RTCRtpSender:
                 packetsSent=self.__packet_count,
                 bytesSent=self.__octet_count,
                 # RTCOutboundRtpStreamStats
-                trackId=str(id(self.track)),
+                trackId=self._track_id,
             )
         )
         self.__stats.update(self.transport._get_stats())
