@@ -668,7 +668,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         # data channels
         self._data_channel_id: Optional[int] = None
-        self._data_channel_queue: Deque[Tuple[RTCDataChannel, int, bytes]] = (deque())
+        self._data_channel_queue: Deque[Tuple[RTCDataChannel, int, bytes]] = deque()
         self._data_channels: Dict[int, RTCDataChannel] = {}
 
         # FIXME: this is only used by RTCPeerConnection
@@ -1546,7 +1546,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._t3_start()
 
     async def _transmit_reconfig(self):
-        if self._reconfig_queue and not self._reconfig_request:
+        if (
+            self._association_state == self.State.ESTABLISHED
+            and self._reconfig_queue
+            and not self._reconfig_request
+        ):
             streams = self._reconfig_queue[0:RECONFIG_MAX_STREAMS]
             self._reconfig_queue = self._reconfig_queue[RECONFIG_MAX_STREAMS:]
             param = StreamResetOutgoingParam(
@@ -1603,9 +1607,24 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         if channel.readyState not in ["closing", "closed"]:
             channel._setReadyState("closing")
-            self._reconfig_queue.append(channel.id)
-            if len(self._reconfig_queue) == 1:
-                asyncio.ensure_future(self._transmit_reconfig())
+
+            if self._association_state == self.State.ESTABLISHED:
+                # queue a stream reset
+                self._reconfig_queue.append(channel.id)
+                if len(self._reconfig_queue) == 1:
+                    asyncio.ensure_future(self._transmit_reconfig())
+            else:
+                # remove any queued messages for the datachannel
+                new_queue = deque()
+                for queue_item in self._data_channel_queue:
+                    if queue_item[0] != channel:
+                        new_queue.append(queue_item)
+                self._data_channel_queue = new_queue
+
+                # mark the datachannel as closed
+                if channel.id is not None:
+                    self._data_channels.pop(channel.id)
+                channel._setReadyState("closed")
 
     def _data_channel_closed(self, stream_id: int) -> None:
         channel = self._data_channels.pop(stream_id)
