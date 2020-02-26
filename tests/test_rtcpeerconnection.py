@@ -2783,6 +2783,58 @@ a=fmtp:98 apt=97
             ["stable", "have-remote-offer", "stable", "closed"],
         )
 
+    def test_connect_datachannel_and_close_immediately(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # create two data channels
+        dc1 = pc1.createDataChannel("chat", protocol="bob")
+        self.assertEqual(dc1.readyState, "connecting")
+        dc2 = pc1.createDataChannel("chat", protocol="bob")
+        self.assertEqual(dc2.readyState, "connecting")
+
+        # close one data channel
+        dc1.close()
+        self.assertEqual(dc1.readyState, "closed")
+        self.assertEqual(dc2.readyState, "connecting")
+
+        # perform SDP exchange
+        run(pc1.setLocalDescription(run(pc1.createOffer())))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        run(pc2.setLocalDescription(run(pc2.createAnswer())))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertEqual(dc1.readyState, "closed")
+        self.assertDataChannelOpen(dc2)
+
+    def test_connect_datachannel_negotiated_and_close_immediately(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # create two negotiated data channels
+        dc1 = pc1.createDataChannel("chat1", negotiated=True, id=100)
+        self.assertEqual(dc1.readyState, "connecting")
+        dc2 = pc1.createDataChannel("chat2", negotiated=True, id=102)
+        self.assertEqual(dc2.readyState, "connecting")
+
+        # close one data channel
+        dc1.close()
+        self.assertEqual(dc1.readyState, "closed")
+        self.assertEqual(dc2.readyState, "connecting")
+
+        # perform SDP exchange
+        run(pc1.setLocalDescription(run(pc1.createOffer())))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        run(pc2.setLocalDescription(run(pc2.createAnswer())))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertEqual(dc1.readyState, "closed")
+        self.assertDataChannelOpen(dc2)
+
     def test_connect_datachannel_legacy_sdp(self):
         pc1 = RTCPeerConnection()
         pc1._sctpLegacySdp = True
