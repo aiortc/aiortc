@@ -2788,9 +2788,9 @@ a=fmtp:98 apt=97
         pc2 = RTCPeerConnection()
 
         # create two data channels
-        dc1 = pc1.createDataChannel("chat", protocol="bob")
+        dc1 = pc1.createDataChannel("chat1")
         self.assertEqual(dc1.readyState, "connecting")
-        dc2 = pc1.createDataChannel("chat", protocol="bob")
+        dc2 = pc1.createDataChannel("chat2")
         self.assertEqual(dc2.readyState, "connecting")
 
         # close one data channel
@@ -3306,6 +3306,41 @@ a=fmtp:98 apt=97
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    def test_connect_datachannel_recycle_stream_id(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # create three data channels
+        dc1 = pc1.createDataChannel("chat1")
+        self.assertEqual(dc1.readyState, "connecting")
+        dc2 = pc1.createDataChannel("chat2")
+        self.assertEqual(dc2.readyState, "connecting")
+        dc3 = pc1.createDataChannel("chat3")
+        self.assertEqual(dc3.readyState, "connecting")
+
+        # perform SDP exchange
+        run(pc1.setLocalDescription(run(pc1.createOffer())))
+        run(pc2.setRemoteDescription(pc1.localDescription))
+        run(pc2.setLocalDescription(run(pc2.createAnswer())))
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+        self.assertDataChannelOpen(dc1)
+        self.assertEqual(dc1.id, 1)
+        self.assertDataChannelOpen(dc2)
+        self.assertEqual(dc2.id, 3)
+        self.assertDataChannelOpen(dc3)
+        self.assertEqual(dc3.id, 5)
+
+        # close one data channel
+        self.closeDataChannel(dc2)
+
+        # create a new data channel
+        dc4 = pc1.createDataChannel("chat4")
+        self.assertDataChannelOpen(dc4)
+        self.assertEqual(dc4.id, 3)
 
     def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self):
         pc = RTCPeerConnection()

@@ -1649,11 +1649,10 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             # register channel if necessary
             stream_id = channel.id
             if stream_id is None:
-                while self._data_channel_id in self._data_channels:
-                    self._data_channel_id += 2
                 stream_id = self._data_channel_id
+                while stream_id in self._data_channels:
+                    stream_id += 2
                 self._data_channels[stream_id] = channel
-                self._data_channel_id += 2
                 channel._setId(stream_id)
 
             # send data
