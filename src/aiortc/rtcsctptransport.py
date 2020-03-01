@@ -680,6 +680,15 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         return self.transport.transport.role != "controlling"
 
     @property
+    def maxChannels(self) -> Optional[int]:
+        """
+        The maximum number of :class:`RTCDataChannel`s that can be used simultaneously.
+        """
+        if self._inbound_streams_count:
+            return min(self._inbound_streams_count, self._outbound_streams_count)
+        return None
+
+    @property
     def port(self) -> int:
         """
         The local SCTP port number used for data channels.

@@ -725,8 +725,10 @@ class RTCSctpTransportTest(TestCase):
         client._inbound_streams_max = 2048
         client._outbound_streams_count = 256
         self.assertFalse(client.is_server)
+        self.assertEqual(client.maxChannels, None)
         server = RTCSctpTransport(self.server_transport)
         self.assertTrue(server.is_server)
+        self.assertEqual(server.maxChannels, None)
 
         # connect
         run(server.start(client.getCapabilities(), client.port))
@@ -734,10 +736,12 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
+        self.assertEqual(client.maxChannels, 256)
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 2048)
         self.assertEqual(client._outbound_streams_count, 256)
         self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server.maxChannels, 256)
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 256)
         self.assertEqual(server._outbound_streams_count, 2048)
@@ -751,6 +755,7 @@ class RTCSctpTransportTest(TestCase):
 
         run(asyncio.sleep(0.1))
 
+        self.assertEqual(server.maxChannels, 272)
         self.assertEqual(server._inbound_streams_count, 272)
         self.assertEqual(server._outbound_streams_count, 2048)
 
@@ -774,10 +779,12 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
+        self.assertEqual(client.maxChannels, 256)
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 256)
         self.assertEqual(client._outbound_streams_count, 2048)
         self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server.maxChannels, 256)
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 2048)
         self.assertEqual(server._outbound_streams_count, 256)
@@ -794,8 +801,10 @@ class RTCSctpTransportTest(TestCase):
     def test_connect_then_client_creates_data_channel(self):
         client = RTCSctpTransport(self.client_transport)
         self.assertFalse(client.is_server)
+        self.assertEqual(client.maxChannels, None)
         server = RTCSctpTransport(self.server_transport)
         self.assertTrue(server.is_server)
+        self.assertEqual(server.maxChannels, None)
 
         client_channels = track_channels(client)
         server_channels = track_channels(server)
@@ -806,10 +815,12 @@ class RTCSctpTransportTest(TestCase):
 
         # check outcome
         run(wait_for_outcome(client, server))
+        self.assertEqual(client.maxChannels, 65535)
         self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(client._inbound_streams_count, 65535)
         self.assertEqual(client._outbound_streams_count, 65535)
         self.assertEqual(client._remote_extensions, [192, 130])
+        self.assertEqual(server.maxChannels, 65535)
         self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
         self.assertEqual(server._inbound_streams_count, 65535)
         self.assertEqual(server._outbound_streams_count, 65535)
