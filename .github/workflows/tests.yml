@@ -1,0 +1,21 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.6
+      - name: Install packages
+        run: pip install black flake8 isort mypy
+      - name: Run linters
+        run: |
+          flake8 examples src tests
+          isort -c -df -rc examples src tests
+          black --check --diff examples src tests
+          mypy src
