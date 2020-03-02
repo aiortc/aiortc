@@ -446,9 +446,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 if error == lib.SSL_ERROR_WANT_READ:
                     await self._recv_next()
                 else:
-                    self.__log_debug(f"x DTLS handshake failed (error {error})")
+                    self.__log_debug("x DTLS handshake failed (error %d)", error)
                     for info in get_error_queue():
-                        self.__log_debug(f"x {':'.join(info)}")
+                        self.__log_debug("x %s", ":".join(info))
                     self._set_state(State.FAILED)
                     return
         except ConnectionError:
@@ -558,7 +558,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         try:
             packets = RtcpPacket.parse(data)
         except ValueError as exc:
-            self.__log_debug(f"x RTCP parsing failed: {exc}")
+            self.__log_debug("x RTCP parsing failed: %s", exc)
             return
 
         for packet in packets:
@@ -570,7 +570,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         try:
             packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
         except ValueError as exc:
-            self.__log_debug(f"x RTP parsing failed: {exc}")
+            self.__log_debug("x RTP parsing failed: %s", exc)
             return
 
         # route RTP packet
@@ -625,7 +625,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                     data = self._rx_srtp.unprotect(data)
                     await self._handle_rtp_data(data, arrival_time_ms=arrival_time_ms)
             except pylibsrtp.Error as exc:
-                self.__log_debug(f"x SRTP unprotect failed: {exc}")
+                self.__log_debug("x SRTP unprotect failed: %s", exc)
 
     def _register_data_receiver(self, receiver) -> None:
         assert self._data_receiver is None
@@ -674,7 +674,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
 
     def _set_state(self, state: State) -> None:
         if state != self._state:
-            self.__log_debug(f"- {self._state} -> {state}")
+            self.__log_debug("- %s -> %s", self._state, state)
             self._state = state
             self.emit("statechange")
 

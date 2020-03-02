@@ -347,7 +347,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
     def __setState(self, state: str) -> None:
         if state != self.__state:
-            self.__log_debug(f"- {self.__state} -> {state}")
+            self.__log_debug("- %s -> %s", self.__state, state)
             self.__state = state
             self.emit("statechange")
 
