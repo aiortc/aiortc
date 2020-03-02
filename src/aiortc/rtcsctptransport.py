@@ -1342,7 +1342,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 break
         chunk.params.append((param_type, bytes(param)))
 
-        self.__log_debug(f">> {param}", param)
+        self.__log_debug(f">> {param}")
         await self._send_chunk(chunk)
 
     async def _send_sack(self):
