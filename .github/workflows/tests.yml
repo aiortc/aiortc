@@ -19,3 +19,53 @@ jobs:
           isort -c -df -rc examples src tests
           black --check --diff examples src tests
           mypy src
+
+  test-linux:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - {os: ubuntu-latest, python: 3.8}
+          - {os: ubuntu-latest, python: 3.7}
+          - {os: ubuntu-latest, python: 3.6}
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.config.python }}
+      - name: Install OS packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install libmp3lame-dev libopus-dev libvpx-dev libx264-dev yasm
+      - name: Cache FFmpeg
+        uses: actions/cache@v1
+        id: cache-ffmpeg
+        with:
+          path: ~/.local
+          key: ${{ runner.os }}-ffmpeg-4.1
+      - name: Build FFmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          curl http://www.ffmpeg.org/releases/ffmpeg-4.1.3.tar.xz | tar xJ
+          cd ffmpeg-4.1.3
+          ./configure --prefix=$HOME/.local \
+              --disable-static --enable-shared \
+              --enable-gpl \
+              --enable-libmp3lame \
+              --enable-libx264
+          make
+          make install
+          cd ..
+      - name: Run tests
+        run: |
+          export LD_LIBRARY_PATH=$HOME/.local/lib
+          export PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig
+          pip install -U pip setuptools wheel
+          pip install aiohttp coverage opencv-python websockets
+          pip install .
+          coverage run -m unittest discover
+          coverage xml
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
