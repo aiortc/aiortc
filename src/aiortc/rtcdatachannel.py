@@ -199,7 +199,7 @@ class RTCDataChannel(AsyncIOEventEmitter):
 
     def _setReadyState(self, state: str) -> None:
         if state != self.__readyState:
-            self.__log_debug(f"- {self.__readyState} -> {state}")
+            self.__log_debug("- %s -> %s", self.__readyState, state)
             self.__readyState = state
 
             if state == "open":
