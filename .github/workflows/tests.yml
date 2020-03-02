@@ -69,3 +69,26 @@ jobs:
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-osx:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+      - name: Install OS packages
+        run: |
+          brew update
+          brew install ffmpeg opus libvpx
+      - name: Run tests
+        run: |
+          pip install -U pip setuptools wheel
+          pip install aiohttp coverage opencv-python websockets
+          pip install .
+          coverage run -m unittest discover
+          coverage xml
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
