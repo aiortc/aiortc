@@ -3,6 +3,22 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.27
+------
+
+Data channels
+.............
+
+ * Add :attr:`RTCSctpTransport.maxChannels` property.
+ * Recycle stream IDs (#256).
+ * Correctly close data channel when SCTP is not established (#300).
+
+Media
+.....
+
+ * Add add :attr:`RTCRtpReceiver.track` property (#298).
+ * Fix a crash in `AimdRateControl` (#295).
+
 0.9.26
 ------
 
