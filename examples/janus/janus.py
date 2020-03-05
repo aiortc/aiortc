@@ -8,7 +8,9 @@ import time
 import aiohttp
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
-from aiortc.contrib.media import MediaPlayer
+from aiortc.contrib.media import MediaPlayer, MediaRecorder
+
+pcs = set()
 
 
 def transaction_id():
@@ -41,8 +43,12 @@ class JanusSession:
         self._root_url = url
         self._session_url = None
 
-    async def attach(self, plugin):
-        message = {"janus": "attach", "plugin": plugin, "transaction": transaction_id()}
+    async def attach(self, plugin_name: str) -> JanusPlugin:
+        message = {
+            "janus": "attach",
+            "plugin": plugin_name,
+            "transaction": transaction_id(),
+        }
         async with self._http.post(self._session_url, json=message) as response:
             data = await response.json()
             assert data["janus"] == "success"
@@ -91,8 +97,12 @@ class JanusSession:
                         print(data)
 
 
-async def run(pc, player, room, session):
-    await session.create()
+async def publish(plugin, player):
+    """
+    Send video to the room.
+    """
+    pc = RTCPeerConnection()
+    pcs.add(pc)
 
     # configure media
     media = {"audio": False, "video": True}
@@ -104,19 +114,6 @@ async def run(pc, player, room, session):
         pc.addTrack(player.video)
     else:
         pc.addTrack(VideoStreamTrack())
-
-    # join video room
-    plugin = await session.attach("janus.plugin.videoroom")
-    await plugin.send(
-        {
-            "body": {
-                "display": "aiortc",
-                "ptype": "publisher",
-                "request": "join",
-                "room": room,
-            }
-        }
-    )
 
     # send offer
     await pc.setLocalDescription(await pc.createOffer())
@@ -134,10 +131,80 @@ async def run(pc, player, room, session):
     )
 
     # apply answer
-    answer = RTCSessionDescription(
-        sdp=response["jsep"]["sdp"], type=response["jsep"]["type"]
+    await pc.setRemoteDescription(
+        RTCSessionDescription(
+            sdp=response["jsep"]["sdp"], type=response["jsep"]["type"]
+        )
     )
-    await pc.setRemoteDescription(answer)
+
+
+async def subscribe(session, room, feed, recorder):
+    pc = RTCPeerConnection()
+    pcs.add(pc)
+
+    @pc.on("track")
+    async def on_track(track):
+        print("Track %s received" % track.kind)
+        if track.kind == "video":
+            recorder.addTrack(track)
+        if track.kind == "audio":
+            recorder.addTrack(track)
+
+    # subscribe
+    plugin = await session.attach("janus.plugin.videoroom")
+    response = await plugin.send(
+        {"body": {"request": "join", "ptype": "subscriber", "room": room, "feed": feed}}
+    )
+
+    # apply offer
+    await pc.setRemoteDescription(
+        RTCSessionDescription(
+            sdp=response["jsep"]["sdp"], type=response["jsep"]["type"]
+        )
+    )
+
+    # send answer
+    await pc.setLocalDescription(await pc.createAnswer())
+    response = await plugin.send(
+        {
+            "body": {"request": "start"},
+            "jsep": {
+                "sdp": pc.localDescription.sdp,
+                "trickle": False,
+                "type": pc.localDescription.type,
+            },
+        }
+    )
+    await recorder.start()
+
+
+async def run(player, recorder, room, session):
+    await session.create()
+
+    # join video room
+    plugin = await session.attach("janus.plugin.videoroom")
+    response = await plugin.send(
+        {
+            "body": {
+                "display": "aiortc",
+                "ptype": "publisher",
+                "request": "join",
+                "room": room,
+            }
+        }
+    )
+    publishers = response["plugindata"]["data"]["publishers"]
+    for publisher in publishers:
+        print("id: %(id)s, display: %(display)s" % publisher)
+
+    # send video
+    await publish(plugin=plugin, player=player)
+
+    # receive video
+    if recorder is not None and publishers:
+        await subscribe(
+            session=session, room=room, feed=publishers[0]["id"], recorder=recorder
+        )
 
     # exchange media for 10 minutes
     print("Exchanging media")
@@ -154,6 +221,7 @@ if __name__ == "__main__":
         help="The video room ID to join (default: 1234).",
     ),
     parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--record-to", help="Write received media to a file."),
     parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
@@ -162,7 +230,6 @@ if __name__ == "__main__":
 
     # create signaling and peer connection
     session = JanusSession(args.url)
-    pc = RTCPeerConnection()
 
     # create media source
     if args.play_from:
@@ -170,13 +237,24 @@ if __name__ == "__main__":
     else:
         player = None
 
+    # create media sink
+    if args.record_to:
+        recorder = MediaRecorder(args.record_to)
+    else:
+        recorder = None
+
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(
-            run(pc=pc, player=player, room=args.room, session=session)
+            run(player=player, recorder=recorder, room=args.room, session=session)
         )
     except KeyboardInterrupt:
         pass
     finally:
-        loop.run_until_complete(pc.close())
+        if recorder is not None:
+            loop.run_until_complete(recorder.stop())
         loop.run_until_complete(session.destroy())
+
+        # close peer connections
+        coros = [pc.close() for pc in pcs]
+        loop.run_until_complete(asyncio.gather(*coros))
