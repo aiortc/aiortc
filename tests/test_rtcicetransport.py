@@ -233,6 +233,9 @@ class RTCIceGathererTest(TestCase):
         self.assertEqual(gatherer.state, "completed")
         self.assertTrue(len(gatherer.getLocalCandidates()) > 0)
 
+        # close
+        run(gatherer._connection.close())
+
     def test_default_ice_servers(self):
         self.assertEqual(
             RTCIceGatherer.getDefaultIceServers(),
