@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-import unittest
+import os
 from unittest import TestCase
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
@@ -90,7 +90,6 @@ class SignalingTest(TestCase):
         # shutdown
         run(asyncio.gather(sig_server.close(), sig_client.close()))
 
-    @unittest.skip("mocking stdin needs work")
     def test_copy_and_paste(self):
         parser = argparse.ArgumentParser()
         add_signaling_arguments(parser)
@@ -99,36 +98,17 @@ class SignalingTest(TestCase):
         sig_server = create_signaling(args)
         sig_client = create_signaling(args)
 
-        class MockReader:
-            def __init__(self, queue):
-                self.queue = queue
+        def make_pipes():
+            r, w = os.pipe()
+            return os.fdopen(r, "r"), os.fdopen(w, "w")
 
-            async def readline(self):
-                return await self.queue.get()
-
-        class MockWritePipe:
-            def __init__(self, queue, encoding):
-                self.encoding = encoding
-                self.queue = queue
-
-            def write(self, msg):
-                asyncio.ensure_future(self.queue.put(msg.encode(self.encoding)))
-
-        def dummy_stdio(encoding):
-            queue = asyncio.Queue()
-            return MockReader(queue), MockWritePipe(queue, encoding=encoding)
+        # mock out read / write pipes
+        sig_server._read_pipe, sig_client._write_pipe = make_pipes()
+        sig_client._read_pipe, sig_server._write_pipe = make_pipes()
 
         # connect
         run(sig_server.connect())
         run(sig_client.connect())
-
-        # mock out reader / write pipe
-        sig_server._reader, sig_client._write_pipe = dummy_stdio(
-            sig_server._read_pipe.encoding
-        )
-        sig_client._reader, sig_server._write_pipe = dummy_stdio(
-            sig_client._read_pipe.encoding
-        )
 
         res = run(asyncio.gather(sig_server.send(offer), delay(sig_client.receive)))
         self.assertEqual(res[1], offer)
@@ -137,6 +117,10 @@ class SignalingTest(TestCase):
         self.assertEqual(res[1], answer)
 
         run(asyncio.gather(sig_server.close(), sig_client.close()))
+
+        # cleanup mocks
+        sig_client._write_pipe.close()
+        sig_server._write_pipe.close()
 
     def test_tcp_socket(self):
         parser = argparse.ArgumentParser()
