@@ -145,6 +145,7 @@ class CopyAndPasteSignaling:
     async def send(self, descr):
         print("-- Please send this message to the remote party --")
         self._write_pipe.write(object_to_string(descr) + "\n")
+        self._write_pipe.flush()
         print()
 
 
