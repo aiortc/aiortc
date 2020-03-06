@@ -21,18 +21,15 @@ jobs:
           mypy src
 
   test-linux:
-    runs-on: ${{ matrix.config.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        config:
-          - {os: ubuntu-latest, python: 3.8}
-          - {os: ubuntu-latest, python: 3.7}
-          - {os: ubuntu-latest, python: 3.6}
+        python: [3.8, 3.7, 3.6]
     steps:
       - uses: actions/checkout@v1
       - uses: actions/setup-python@v1
         with:
-          python-version: ${{ matrix.config.python }}
+          python-version: ${{ matrix.python }}
       - name: Install OS packages
         run: |
           sudo apt-get update
@@ -63,9 +60,55 @@ jobs:
           pip install -U pip setuptools wheel
           pip install aiohttp coverage opencv-python websockets
           pip install .
-          coverage run -m unittest discover
+          coverage run -m unittest discover -v
           coverage xml
       - name: Upload coverage report
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-osx:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python: [3.8, 3.7, 3.6]
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install OS packages
+        run: |
+          brew update
+          brew install ffmpeg opus pkg-config libvpx
+      - name: Disable firewall
+        run: |
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off
+      - name: Run tests
+        run: |
+          pip install -U pip setuptools wheel
+          pip install aiohttp coverage opencv-python websockets
+          pip install .
+          coverage run -m unittest discover -v
+          coverage xml
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [lint, test-linux, test-osx]
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.6
+      - name: Build package
+        run: python setup.py sdist
+      - name: Publish package
+        if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}
