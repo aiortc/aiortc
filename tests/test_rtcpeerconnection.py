@@ -1872,7 +1872,7 @@ a=rtpmap:0 PCMU/8000
             player.audio.stop()
             player.video.stop()
 
-        # close peer connection
+        # close
         run(pc1.close())
         run(pc2.close())
         self.assertEqual(pc1.iceConnectionState, "closed")
@@ -2809,6 +2809,12 @@ a=fmtp:98 apt=97
         self.assertEqual(dc1.readyState, "closed")
         self.assertDataChannelOpen(dc2)
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
+
     def test_connect_datachannel_negotiated_and_close_immediately(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -2834,6 +2840,12 @@ a=fmtp:98 apt=97
         self.assertIceCompleted(pc1, pc2)
         self.assertEqual(dc1.readyState, "closed")
         self.assertDataChannelOpen(dc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
 
     def test_connect_datachannel_legacy_sdp(self):
         pc1 = RTCPeerConnection()
@@ -3341,6 +3353,12 @@ a=fmtp:98 apt=97
         dc4 = pc1.createDataChannel("chat4")
         self.assertDataChannelOpen(dc4)
         self.assertEqual(dc4.id, 3)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
 
     def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self):
         pc = RTCPeerConnection()
@@ -4130,6 +4148,9 @@ a=fmtp:98 apt=97
             "Cannot create an offer with no media and no data channels",
         )
 
+        # close
+        run(pc.close())
+
     def test_setLocalDescription_unexpected_answer(self):
         pc = RTCPeerConnection()
         pc.addTrack(AudioStreamTrack())
@@ -4140,6 +4161,9 @@ a=fmtp:98 apt=97
         self.assertEqual(
             str(cm.exception), 'Cannot handle answer in signaling state "stable"'
         )
+
+        # close
+        run(pc.close())
 
     def test_setLocalDescription_unexpected_offer(self):
         pc1 = RTCPeerConnection()
@@ -4159,6 +4183,10 @@ a=fmtp:98 apt=97
             str(cm.exception),
             'Cannot handle offer in signaling state "have-remote-offer"',
         )
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
 
     def test_setRemoteDescription_media_mismatch(self):
         pc1 = RTCPeerConnection()
@@ -4183,6 +4211,10 @@ a=fmtp:98 apt=97
             str(cm.exception), "Media sections in answer do not match offer"
         )
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
     def test_setRemoteDescription_with_invalid_dtls_setup_for_offer(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4200,6 +4232,10 @@ a=fmtp:98 apt=97
         self.assertEqual(
             str(cm.exception), "DTLS setup attribute must be 'actpass' for an offer",
         )
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
 
     def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(self):
         pc1 = RTCPeerConnection()
@@ -4225,6 +4261,10 @@ a=fmtp:98 apt=97
             "DTLS setup attribute must be 'active' or 'passive' for an answer",
         )
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
     def test_setRemoteDescription_without_ice_credentials(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4248,6 +4288,10 @@ a=fmtp:98 apt=97
             str(cm.exception), "ICE username fragment or password is missing"
         )
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
     def test_setRemoteDescription_without_rtcp_mux(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4264,6 +4308,10 @@ a=fmtp:98 apt=97
             run(pc2.setRemoteDescription(mangled))
         self.assertEqual(str(cm.exception), "RTCP mux is not enabled")
 
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
     def test_setRemoteDescription_unexpected_answer(self):
         pc = RTCPeerConnection()
         with self.assertRaises(InvalidStateError) as cm:
@@ -4271,6 +4319,9 @@ a=fmtp:98 apt=97
         self.assertEqual(
             str(cm.exception), 'Cannot handle answer in signaling state "stable"'
         )
+
+        # close
+        run(pc.close())
 
     def test_setRemoteDescription_unexpected_offer(self):
         pc = RTCPeerConnection()
@@ -4283,6 +4334,9 @@ a=fmtp:98 apt=97
             str(cm.exception),
             'Cannot handle offer in signaling state "have-local-offer"',
         )
+
+        # close
+        run(pc.close())
 
     def test_setRemoteDescription_media_datachannel_bundled(self):
         pc1 = RTCPeerConnection()
@@ -4401,7 +4455,6 @@ a=fmtp:98 apt=97
         # close
         run(pc1.close())
         run(pc2.close())
-
         self.assertEqual(pc1.iceConnectionState, "closed")
         self.assertEqual(pc2.iceConnectionState, "closed")
 
