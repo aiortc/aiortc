@@ -1,9 +1,6 @@
 import asyncio
 import logging
 import os
-import sys
-
-from cryptography.hazmat.backends.openssl.backend import backend
 
 from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
@@ -104,6 +101,3 @@ def run(coro):
 
 if os.environ.get("AIORTC_DEBUG"):
     logging.basicConfig(level=logging.DEBUG)
-
-if os.environ.get("TRAVIS"):
-    sys.stderr.write(backend.openssl_version_text() + "\n")

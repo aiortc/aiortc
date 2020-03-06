@@ -1,7 +1,7 @@
 aiortc
 =========
 
-|pypi-v| |pypi-pyversions| |pypi-l| |travis| |codecov| |gitter|
+|pypi-v| |pypi-pyversions| |pypi-l| |tests| |codecov| |gitter|
 
 .. |pypi-v| image:: https://img.shields.io/pypi/v/aiortc.svg
     :target: https://pypi.python.org/pypi/aiortc
@@ -12,8 +12,8 @@ aiortc
 .. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
     :target: https://pypi.python.org/pypi/aiortc
 
-.. |travis| image:: https://img.shields.io/travis/com/aiortc/aiortc.svg
-    :target: https://travis-ci.com/aiortc/aiortc
+.. |tests| image:: https://github.com/aiortc/aiortc/workflows/tests/badge.svg
+    :target: https://github.com/aiortc/aiortc/actions
 
 .. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aiortc.svg
     :target: https://codecov.io/gh/aiortc/aiortc
