@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v1
       - uses: actions/setup-python@v1
         with:
-          python-version: 3.6
+          python-version: 3.7
       - name: Install packages
         run: pip install black flake8 isort mypy
       - name: Run linters
@@ -76,17 +76,56 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  package:
+  package-source:
     runs-on: ubuntu-latest
-    needs: [lint, test]
     steps:
       - uses: actions/checkout@v1
       - uses: actions/setup-python@v1
         with:
-          python-version: 3.6
-      - name: Build package
+          python-version: 3.7
+      - name: Build source package
         run: python setup.py sdist
-      - name: Publish package
+      - name: Upload source package
+        uses: actions/upload-artifact@v1
+        with:
+          name: "dist"
+          path: dist/
+
+  package-wheel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.7
+      - name: Build wheels
+        env:
+          CI: true
+          CIBW_BEFORE_BUILD: scripts/build-codecs /tmp/vendor
+          CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
+          CIBW_SKIP: cp27-* cp33-* cp34-* cp35-* pp*
+        run: |
+          pip install cibuildwheel
+          cibuildwheel --output-dir dist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v1
+        with:
+          name: "dist"
+          path: dist/
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [lint, test, package-source, package-wheel]
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/download-artifact@v1
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
         if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@master
         with:
