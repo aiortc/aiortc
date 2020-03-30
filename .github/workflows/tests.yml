@@ -7,7 +7,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
         with:
           python-version: 3.7
@@ -27,7 +27,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         python: [3.8, 3.7, 3.6]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
         with:
           python-version: ${{ matrix.python }}
@@ -71,6 +71,7 @@ jobs:
           pip install .
           coverage run -m unittest discover -v
           coverage xml
+        shell: bash
       - name: Upload coverage report
         uses: codecov/codecov-action@v1
         with:
@@ -79,7 +80,7 @@ jobs:
   package-source:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
         with:
           python-version: 3.7
@@ -88,7 +89,7 @@ jobs:
       - name: Upload source package
         uses: actions/upload-artifact@v1
         with:
-          name: "dist"
+          name: dist
           path: dist/
 
   package-wheel:
@@ -97,30 +98,30 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
         with:
           python-version: 3.7
       - name: Build wheels
         env:
-          CI: true
           CIBW_BEFORE_BUILD: scripts/build-codecs /tmp/vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_SKIP: cp27-* cp33-* cp34-* cp35-* pp*
         run: |
           pip install cibuildwheel
           cibuildwheel --output-dir dist
+        shell: bash
       - name: Upload wheels
         uses: actions/upload-artifact@v1
         with:
-          name: "dist"
+          name: dist
           path: dist/
 
   publish:
     runs-on: ubuntu-latest
     needs: [lint, test, package-source, package-wheel]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions/download-artifact@v1
         with:
           name: dist
