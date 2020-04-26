@@ -23,6 +23,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: [3.8, 3.7, 3.6]
@@ -35,35 +36,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew update
-          brew install ffmpeg opus pkg-config libvpx
+          brew install opus libvpx
           sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off
       - name: Install OS packages
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install libmp3lame-dev libopus-dev libvpx-dev libx264-dev yasm
-          echo "::set-env name=LD_LIBRARY_PATH::$HOME/.local/lib"
-          echo "::set-env name=PKG_CONFIG_PATH::$HOME/.local/lib/pkgconfig"
-      - name: Cache FFmpeg
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/cache@v1
-        id: cache-ffmpeg
-        with:
-          path: ~/.local
-          key: ${{ runner.os }}-ffmpeg-4.1
-      - name: Build FFmpeg
-        if: matrix.os == 'ubuntu-latest' && steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        run: |
-          curl http://www.ffmpeg.org/releases/ffmpeg-4.1.3.tar.xz | tar xJ
-          cd ffmpeg-4.1.3
-          ./configure --prefix=$HOME/.local \
-              --disable-static --enable-shared \
-              --enable-gpl \
-              --enable-libmp3lame \
-              --enable-libx264
-          make
-          make install
-          cd ..
+          sudo apt-get install libopus-dev libvpx-dev
       - name: Run tests
         run: |
           pip install -U pip setuptools wheel
