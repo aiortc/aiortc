@@ -74,8 +74,9 @@ jobs:
   package-wheel:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
@@ -83,8 +84,10 @@ jobs:
           python-version: 3.7
       - name: Build wheels
         env:
-          CIBW_BEFORE_BUILD: scripts/build-codecs /tmp/vendor
+          CIBW_BEFORE_BUILD: python scripts/fetch-codecs /tmp/vendor
+          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-codecs C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
+          CIBW_ENVIRONMENT_WINDOWS: CL="/IC:\cibw\vendor\include" LINK="/LIBPATH:C:\cibw\vendor\lib"
           CIBW_SKIP: cp27-* cp33-* cp34-* cp35-* pp*
         run: |
           pip install cibuildwheel
