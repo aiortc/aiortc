@@ -28,7 +28,7 @@ async def consume_signaling(pc, signaling):
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
-            pc.addIceCandidate(obj)
+            await pc.addIceCandidate(obj)
         elif obj is BYE:
             print("Exiting")
             break

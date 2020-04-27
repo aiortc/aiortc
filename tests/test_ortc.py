@@ -31,9 +31,9 @@ async def start_ice_pair():
     await asyncio.gather(ice_a.iceGatherer.gather(), ice_b.iceGatherer.gather())
 
     for candidate in ice_b.iceGatherer.getLocalCandidates():
-        ice_a.addRemoteCandidate(candidate)
+        await ice_a.addRemoteCandidate(candidate)
     for candidate in ice_a.iceGatherer.getLocalCandidates():
-        ice_b.addRemoteCandidate(candidate)
+        await ice_b.addRemoteCandidate(candidate)
     await asyncio.gather(
         ice_a.start(ice_b.iceGatherer.getLocalParameters()),
         ice_b.start(ice_a.iceGatherer.getLocalParameters()),

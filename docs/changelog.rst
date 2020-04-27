@@ -3,6 +3,15 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.0.0
+-----
+
+Breaking
+........
+
+ * Make :meth:`RTCPeerConnection.addIceCandidate` a coroutine.
+ * Make :meth:`RTCIceTransport.addRemoteCandidate` a coroutine.
+
 0.9.28
 ------
 

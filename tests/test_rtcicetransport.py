@@ -261,11 +261,11 @@ class RTCIceTransportTest(TestCase):
         )
 
         # add candidate
-        connection.addRemoteCandidate(candidate)
+        run(connection.addRemoteCandidate(candidate))
         self.assertEqual(connection.getRemoteCandidates(), [candidate])
 
         # end-of-candidates
-        connection.addRemoteCandidate(None)
+        run(connection.addRemoteCandidate(None))
         self.assertEqual(connection.getRemoteCandidates(), [candidate])
 
     def test_connect(self):
@@ -278,9 +278,9 @@ class RTCIceTransportTest(TestCase):
         # gather candidates
         run(asyncio.gather(gatherer_1.gather(), gatherer_2.gather()))
         for candidate in gatherer_2.getLocalCandidates():
-            transport_1.addRemoteCandidate(candidate)
+            run(transport_1.addRemoteCandidate(candidate))
         for candidate in gatherer_1.getLocalCandidates():
-            transport_2.addRemoteCandidate(candidate)
+            run(transport_2.addRemoteCandidate(candidate))
         self.assertEqual(transport_1.state, "new")
         self.assertEqual(transport_2.state, "new")
 
@@ -309,9 +309,9 @@ class RTCIceTransportTest(TestCase):
         # gather candidates
         run(asyncio.gather(gatherer_1.gather(), gatherer_2.gather()))
         for candidate in gatherer_2.getLocalCandidates():
-            transport_1.addRemoteCandidate(candidate)
+            run(transport_1.addRemoteCandidate(candidate))
         for candidate in gatherer_1.getLocalCandidates():
-            transport_2.addRemoteCandidate(candidate)
+            run(transport_2.addRemoteCandidate(candidate))
         self.assertEqual(transport_1.state, "new")
         self.assertEqual(transport_2.state, "new")
 
