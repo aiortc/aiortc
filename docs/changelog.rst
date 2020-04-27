@@ -3,6 +3,11 @@ Changelog
 
 .. currentmodule:: aiortc
 
+0.9.28
+------
+
+Provide binary wheels for Linux, Mac and Windows on PyPI.
+
 0.9.27
 ------
 

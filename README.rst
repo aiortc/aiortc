@@ -81,11 +81,21 @@ some of its features:
 - Bundling audio / video / data channels
 - RTCP reports, including NACK / PLI to recover from packet loss
 
-Requirements
-------------
+Installing
+----------
 
-In addition to aiortc's Python dependencies you need a couple of libraries
-installed on your system for media codecs:
+Since release 0.9.28 binary wheels are available on PyPI for Linux, Mac and
+Windows. The easiest way to install ``aiortc`` is to run:
+
+.. code:: bash
+
+    pip install aiortc
+
+Building from source
+--------------------
+
+If there are no wheels for your system or if you wish to build aiortc from
+source you will need a couple of libraries installed on your system:
 
 - OpenSSL 1.0.2 or greater
 - FFmpeg 4.0 or greater
