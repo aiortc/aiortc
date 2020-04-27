@@ -394,15 +394,17 @@ class RTCPeerConnectionTest(TestCase):
     def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
-            pc.addIceCandidate(
-                RTCIceCandidate(
-                    component=1,
-                    foundation="0",
-                    ip="192.168.99.7",
-                    port=33543,
-                    priority=2122252543,
-                    protocol="UDP",
-                    type="host",
+            run(
+                pc.addIceCandidate(
+                    RTCIceCandidate(
+                        component=1,
+                        foundation="0",
+                        ip="192.168.99.7",
+                        port=33543,
+                        priority=2122252543,
+                        protocol="UDP",
+                        type="host",
+                    )
                 )
             )
         self.assertEqual(
@@ -826,12 +828,12 @@ a=rtpmap:8 PCMA/8000
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
                 candidate.sdpMid = transceiver.mid
-                pc1.addIceCandidate(candidate)
+                run(pc1.addIceCandidate(candidate))
         for transceiver in pc1.getTransceivers():
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
                 candidate.sdpMid = transceiver.mid
-                pc2.addIceCandidate(candidate)
+                run(pc2.addIceCandidate(candidate))
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)
@@ -3721,10 +3723,10 @@ a=fmtp:98 apt=97
         # trickle candidates
         for candidate in pc2.sctp.transport.transport.iceGatherer.getLocalCandidates():
             candidate.sdpMid = pc2.sctp.mid
-            pc1.addIceCandidate(candidate)
+            run(pc1.addIceCandidate(candidate))
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
             candidate.sdpMid = pc1.sctp.mid
-            pc2.addIceCandidate(candidate)
+            run(pc2.addIceCandidate(candidate))
 
         # check outcome
         self.assertIceCompleted(pc1, pc2)

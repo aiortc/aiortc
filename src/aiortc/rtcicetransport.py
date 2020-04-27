@@ -270,7 +270,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         """
         return self.__state
 
-    def addRemoteCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
+    async def addRemoteCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
         """
         Add a remote candidate.
 

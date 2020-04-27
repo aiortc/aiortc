@@ -149,13 +149,14 @@ def add_transport_description(
         media.dtls.fingerprints = dtlsTransport.getLocalParameters().fingerprints
 
 
-def add_remote_candidates(
+async def add_remote_candidates(
     iceTransport: RTCIceTransport, media: sdp.MediaDescription
 ) -> None:
-    for candidate in media.ice_candidates:
-        iceTransport.addRemoteCandidate(candidate)
+    coros = map(iceTransport.addRemoteCandidate, media.ice_candidates)
+    await asyncio.gather(*coros)
+
     if media.ice_candidates_complete:
-        iceTransport.addRemoteCandidate(None)
+        await iceTransport.addRemoteCandidate(None)
 
 
 def allocate_mid(mids: Set[str]) -> str:
@@ -335,7 +336,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     def signalingState(self):
         return self.__signalingState
 
-    def addIceCandidate(self, candidate: RTCIceCandidate) -> None:
+    async def addIceCandidate(self, candidate: RTCIceCandidate) -> None:
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
 
@@ -349,7 +350,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for transceiver in self.__transceivers:
             if candidate.sdpMid == transceiver.mid and not transceiver._bundled:
                 iceTransport = transceiver._transport.transport
-                iceTransport.addRemoteCandidate(candidate)
+                await iceTransport.addRemoteCandidate(candidate)
                 return
 
         if (
@@ -358,7 +359,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             and not self.__sctp._bundled
         ):
             iceTransport = self.__sctp.transport.transport
-            iceTransport.addRemoteCandidate(candidate)
+            await iceTransport.addRemoteCandidate(candidate)
 
     def addTrack(self, track: MediaStreamTrack) -> RTCRtpSender:
         """
@@ -835,7 +836,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if dtlsTransport is not None:
                 # add ICE candidates
                 iceTransport = dtlsTransport.transport
-                add_remote_candidates(iceTransport, media)
+                await add_remote_candidates(iceTransport, media)
 
                 # set ICE role
                 if description.type == "offer" and not iceTransport._role_set:
