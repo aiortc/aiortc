@@ -81,11 +81,21 @@ if __name__ == "__main__":
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     parser.add_argument("--play-from", help="Read the media from a file and sent it."),
+    parser.add_argument("--bind", default="0.0.0.0")
     parser.add_argument(
         "--port", type=int, default=8080, help="Port for HTTP server (default: 8080)"
     )
     parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
+
+    if args.bind:
+        try:
+            host, port = args.bind.split(":", 1)
+        except ValueError:
+            host = args.bind
+            port = args.port
+    else:
+        port = args.port
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
@@ -101,4 +111,4 @@ if __name__ == "__main__":
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
     app.router.add_post("/offer", offer)
-    web.run_app(app, port=args.port, ssl_context=ssl_context)
+    web.run_app(app, host=host, port=port, ssl_context=ssl_context)
