@@ -195,6 +195,7 @@ if __name__ == "__main__":
             host = args.bind
             port = args.port
     else:
+        host = "0.0.0.0"
         port = args.port
 
     if args.verbose:
