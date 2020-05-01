@@ -84,8 +84,8 @@ jobs:
           python-version: 3.7
       - name: Build wheels
         env:
-          CIBW_BEFORE_BUILD: python scripts/fetch-codecs /tmp/vendor
-          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-codecs C:\cibw\vendor
+          CIBW_BEFORE_BUILD: python scripts/fetch-vendor /tmp/vendor
+          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: CL="/IC:\cibw\vendor\include" LINK="/LIBPATH:C:\cibw\vendor\lib"
           CIBW_SKIP: cp27-* cp35-* pp27-*
