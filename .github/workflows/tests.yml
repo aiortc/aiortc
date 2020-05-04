@@ -45,7 +45,7 @@ jobs:
           sudo apt-get install libopus-dev libvpx-dev
       - name: Run tests
         run: |
-          pip install -U pip setuptools wheel
+          python -m pip install -U pip setuptools wheel
           pip install aiohttp coverage opencv-python websockets
           pip install .
           coverage run -m unittest discover -v
