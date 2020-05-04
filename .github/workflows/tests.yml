@@ -88,6 +88,7 @@ jobs:
           CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: CL="/IC:\cibw\vendor\include" LINK="/LIBPATH:C:\cibw\vendor\lib"
+          CIBW_MANYLINUX_I686_IMAGE: quay.io/pypa/manylinux2010_i686:2020-04-29-0e1afc5
           CIBW_SKIP: cp27-* cp35-* pp27-*
         run: |
           pip install cibuildwheel
