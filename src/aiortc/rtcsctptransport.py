@@ -115,8 +115,8 @@ def encode_params(params: List[Tuple[int, bytes]]) -> bytes:
     return body
 
 
-def padl(l: int) -> int:
-    m = l % 4
+def padl(length: int) -> int:
+    m = length % 4
     return 4 - m if m else 0
 
 

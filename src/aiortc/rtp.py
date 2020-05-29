@@ -209,11 +209,11 @@ def is_rtcp(msg: bytes) -> bool:
     return len(msg) >= 2 and msg[1] >= 192 and msg[1] <= 208
 
 
-def padl(l: int) -> int:
+def padl(length: int) -> int:
     """
     Return amount of padding needed for a 4-byte multiple.
     """
-    return 4 * ((l + 3) // 4) - l
+    return 4 * ((length + 3) // 4) - length
 
 
 def unpack_header_extensions(
