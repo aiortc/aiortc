@@ -432,7 +432,7 @@ class SessionDescription:
                     elif attr == "ssrc":
                         ssrc_str, ssrc_desc = value.split(" ", 1)
                         ssrc = int(ssrc_str)
-                        ssrc_attr, ssrc_value = ssrc_desc.split(":")
+                        ssrc_attr, ssrc_value = ssrc_desc.split(":", 1)
 
                         try:
                             ssrc_info = next(
