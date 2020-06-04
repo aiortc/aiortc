@@ -191,6 +191,10 @@ class MediaDescription:
         self.ice_candidates_complete = False
         self.ice_options: Optional[str] = None
 
+        # Other attributes
+        self.attributes: List[Tuple[str, str]] = []
+        self.assemble_custom_attributes = False
+
     def __str__(self) -> str:
         lines = []
         lines.append(
@@ -265,6 +269,10 @@ class MediaDescription:
                 )
             lines.append(f"a=setup:{DTLS_ROLE_SETUP[self.dtls.role]}")
 
+        # other attributes
+        if self.assemble_custom_attributes:
+            lines.extend((f"a={attr}:{value}" for attr, value in self.attributes))
+
         return "\r\n".join(lines) + "\r\n"
 
 
@@ -279,6 +287,13 @@ class SessionDescription:
         self.msid_semantic: List[GroupDescription] = []
         self.media: List[MediaDescription] = []
         self.type: Optional[str] = None
+        self.attributes: List[Tuple[str, str]] = []
+        self.assemble_custom_attributes = False
+
+    def set_assemble_custom_attributes(self, value):
+        self.assemble_custom_attributes = value
+        for m in self.media:
+            m.assemble_custom_attributes = value
 
     @classmethod
     def parse(cls, sdp: str):
@@ -329,6 +344,8 @@ class SessionDescription:
                     parse_group(session.msid_semantic, value)
                 elif attr == "setup":
                     dtls_role = DTLS_SETUP_ROLE[value]
+                elif value is not None:
+                    session.attributes.append((attr, value))
 
         # parse media
         for media_lines in media_groups:
@@ -443,6 +460,8 @@ class SessionDescription:
                             current_media.ssrc.append(ssrc_info)
                         if ssrc_attr in SSRC_INFO_ATTRS:
                             setattr(ssrc_info, ssrc_attr, ssrc_value)
+                    elif value is not None:
+                        current_media.attributes.append((attr, value))
 
             if current_media.dtls.role is None:
                 current_media.dtls = None
@@ -490,4 +509,6 @@ class SessionDescription:
             lines += [f"a=group:{group}"]
         for group in self.msid_semantic:
             lines += [f"a=msid-semantic:{group}"]
+        if self.assemble_custom_attributes:
+            lines.extend((f"a={attr}:{value}" for attr, value in self.attributes))
         return "\r\n".join(lines) + "\r\n" + "".join([str(m) for m in self.media])

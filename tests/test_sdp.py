@@ -1957,3 +1957,78 @@ a=sctpmap:5000 webrtc-datachannel 1024
         self.assertEqual(d.media[2].profile, "DTLS/SCTP")
         self.assertEqual(d.media[2].direction, None)
         self.assertEqual(d.media[2].msid, None)
+
+    def test_custom_attributes(self):
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=ice-lite
+a=custom-session-attribute:at the end
+m=audio 45076 UDP/TLS/RTP/SAVPF 0 8
+a=custom-media-attribute:at the beginning
+c=IN IP4 192.168.99.58
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host
+a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host generation 0 network-id 1 network-cost 10
+a=custom-media-attribute:in the middle
+a=ice-ufrag:5+Ix
+a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
+a=setup:actpass
+a=mid:audio
+a=sendrecv
+a=rtcp-mux
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=custom-media-attribute:at the end"""
+            )
+        )
+
+        self.assertEqual(
+            d.attributes,
+            [("custom-session-attribute", "at the end")]
+        )
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(
+            d.media[0].attributes,
+            [
+                ("custom-media-attribute", "at the beginning"),
+                ("custom-media-attribute", "in the middle"),
+                ("custom-media-attribute", "at the end"),
+            ]
+        )
+
+        d.set_assemble_custom_attributes(True)
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=ice-lite
+a=custom-session-attribute:at the end
+m=audio 45076 UDP/TLS/RTP/SAVPF 0 8
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=mid:audio
+a=rtcp:9 IN IP4 0.0.0.0
+a=rtcp-mux
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=candidate:2665802302 1 udp 2122262783 2a02:a03f:3eb0:e000:b0aa:d60a:cff2:933c 38475 typ host
+a=candidate:1039001212 1 udp 2122194687 192.168.99.58 45076 typ host
+a=ice-ufrag:5+Ix
+a=ice-pwd:uK8IlylxzDMUhrkVzdmj0M+v
+a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A5:8E:50:55:EA:8C:D3:B6:5C:09:5E:D6:BC
+a=setup:actpass
+a=custom-media-attribute:at the beginning
+a=custom-media-attribute:in the middle
+a=custom-media-attribute:at the end
+"""
+            )
+        )
