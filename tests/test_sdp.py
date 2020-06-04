@@ -1987,10 +1987,7 @@ a=custom-media-attribute:at the end"""
             )
         )
 
-        self.assertEqual(
-            d.attributes,
-            [("custom-session-attribute", "at the end")]
-        )
+        self.assertEqual(d.attributes, [("custom-session-attribute", "at the end")])
 
         self.assertEqual(len(d.media), 1)
         self.assertEqual(
@@ -1999,7 +1996,7 @@ a=custom-media-attribute:at the end"""
                 ("custom-media-attribute", "at the beginning"),
                 ("custom-media-attribute", "in the middle"),
                 ("custom-media-attribute", "at the end"),
-            ]
+            ],
         )
 
         d.set_assemble_custom_attributes(True)
@@ -2030,5 +2027,5 @@ a=custom-media-attribute:at the beginning
 a=custom-media-attribute:in the middle
 a=custom-media-attribute:at the end
 """
-            )
+            ),
         )
