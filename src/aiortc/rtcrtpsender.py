@@ -195,6 +195,12 @@ class RTCRtpSender:
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
+        self._stop_track()
+
+    def _stop_track(self):
+        if self.__track:
+            self.__track.stop()
+            self.__track = None
 
     async def _handle_rtcp_packet(self, packet):
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
@@ -331,10 +337,7 @@ class RTCRtpSender:
             # so issue a warning if we hit an unexpected exception
             self.__log_warning(traceback.format_exc())
 
-        # stop track
-        if self.__track:
-            self.__track.stop()
-            self.__track = None
+        self._stop_track()
 
         self.__log_debug("- RTP finished")
         self.__rtp_exited.set()

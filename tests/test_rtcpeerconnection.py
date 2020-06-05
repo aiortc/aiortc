@@ -506,7 +506,7 @@ class RTCPeerConnectionTest(TestCase):
         run(transceiver.stop())
         self.assertEqual(transceiver.currentDirection, None)
         self.assertEqual(transceiver.direction, "sendonly")
-        self.assertEqual(transceiver.sender.track, track)
+        self.assertEqual(transceiver.sender.track, None)
         self.assertEqual(transceiver.stopped, True)
 
     def test_addTransceiver_audio_sendrecv(self):
