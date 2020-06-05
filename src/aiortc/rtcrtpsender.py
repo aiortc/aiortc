@@ -197,7 +197,7 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
         self._stop_track()
 
-    def _stop_track(self):
+    def _stop_track(self) -> None:
         if self.__track:
             self.__track.stop()
             self.__track = None
