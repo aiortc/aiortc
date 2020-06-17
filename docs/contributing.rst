@@ -10,7 +10,7 @@ This project and everyone participating in it is governed by the `Code of
 Conduct`_. By participating, you are expected to uphold this code. Please
 report inappropriate behavior to jeremy DOT laine AT m4x DOT org.
 
-.. _Code of Conduct: https://github.com/aiortc/aiortc/blob/master/CODE_OF_CONDUCT.md
+.. _Code of Conduct: https://github.com/aiortc/aiortc/blob/main/CODE_OF_CONDUCT.md
 
 Contributions
 -------------
