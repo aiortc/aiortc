@@ -6,4 +6,4 @@ for new users.
 
 The examples can be browsed on GitHub:
 
-https://github.com/aiortc/aiortc/tree/master/examples
+https://github.com/aiortc/aiortc/tree/main/examples
