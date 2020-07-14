@@ -1,0 +1,166 @@
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CV demo - client-side-rendering</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+        }
+
+        #video {
+            width: 100vw;
+            height: 56.25vw;
+            background: black;
+            max-height: 100vh;
+            max-width: 177.78vh;
+            margin: auto;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+
+        #canvas {
+            position: absolute;
+        }
+
+        #stats {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            z-index: 1000;
+        }
+    </style>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+</head>
+
+<body>
+    <p id="stats"></p>
+    <video id="video" playsinline muted controls></video>
+    <canvas id="canvas"></canvas>
+    <script>
+        // get DOM elements
+        var video = document.getElementById('video');
+        var statsDiv = document.getElementById('stats');
+        var stream = null;
+        var pc = null;
+        var dc = null;
+        var canvas = document.getElementById('canvas');
+        var ctx = null;
+        video.onloadeddata = function () {
+            canvas.width = this.clientWidth;
+            canvas.height = this.clientHeight;
+            canvas.style.top = video.offsetTop + "px";
+            canvas.style.left = video.offsetLeft + "px";
+            ctx = canvas.getContext('2d');
+        }
+        // peer connection
+        function onOffer(offer) {
+            //create peer connection
+            pc = new RTCPeerConnection();
+            pc.addEventListener('icegatheringstatechange', function () {
+                console.log('iceGatheringState', pc.iceGatheringState);
+            }, false);
+            pc.addEventListener('iceconnectionstatechange', function () {
+                console.log('iceconnectionstatechange', pc.iceConnectionState);
+            }, false);
+            pc.addEventListener('signalingstatechange', function () {
+                console.log('signalingstatechange', pc.signalingState);
+            }, false);
+            pc.onnegiationneeded = function () {
+                console.log('negotiationneeded', pc);
+            };
+            pc.addEventListener('track', function (evt) {
+                if (evt.track.kind == 'video') {
+                    console.log('video track!', evt.track);
+                    console.log('video stream!', evt.streams[0]);
+                    stream = evt.track;
+                    video.srcObject = evt.streams[0];
+                }
+            });
+            return pc.setRemoteDescription(offer).then(function () {
+                return pc.createAnswer();
+            }).then(function (answer) {
+                return pc.setLocalDescription(answer);
+            }).then(function () {
+                return pc.localDescription;
+            }).catch(function (err) {
+                console.log(err);
+            })
+
+        }
+
+        var ws = null;
+        video.onplay = function () {
+            console.log('clicked!');
+            ws = new WebSocket("ws://127.0.0.1:5678/");
+            let isDrawing = false;
+            ws.onmessage = function (event) {
+                // console.log(event);
+                var d = JSON.parse(event.data),
+                    msgType = d.type,
+                    data = d.data;
+                if (msgType === "rtc") {
+                    onOffer(data).then(function (answer) {
+                        // wait until iceGatheringState is complete:
+                        let complete = function () {
+                            if (pc.iceGatheringState != 'complete') {
+                                console.log("waiting 50ms for iceGatheringState to be complete")
+                                setTimeout(complete, 50);
+                            } else {
+                                console.log('sending answer');
+                                ws.send(JSON.stringify(answer));
+                                // get our stats:
+                                setInterval(function () {
+                                    pc.getStats(null).then(function (stats) {
+                                        stats.forEach(report => {
+                                            if (report.kind === "video" && report.type === "inbound-rtp") {
+                                                let s = "";
+                                                s += "MB received: " + (report.bytesReceived / 1024 / 1024).toFixed(2);
+                                                s += "<br/>Kb/s: " + (report.bitrateMean / 1024).toFixed(2);
+                                                s += "<br/># frames received: " + report.framesDecoded;
+                                                s += "<br/>frame rate: " + report.framerateMean.toFixed(2);
+                                                statsDiv.innerHTML = s;
+                                            }
+                                        })
+                                    }).catch(function (error) {
+                                        console.error(error);
+                                    });
+                                }, 1000)
+                            }
+                        }
+                        complete();
+                    })
+                } else if (msgType === "circle") {
+                    if (!isDrawing) {
+                        isDrawing = true;
+                        requestAnimationFrame(function () {
+                            if (ctx !== null) {
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.lineWidth = 4;
+                                ctx.strokeStyle = 'green'
+                                let cx = data[0] * canvas.width,
+                                    cy = data[1] * canvas.height,
+                                    r = data[2] * canvas.width;
+                                if (r > 0) {
+                                    ctx.strokeRect(cx - r, cy - r, 2 * r, 2 * r);
+                                }
+                            }
+                            isDrawing = false;
+                        })
+                    }
+
+                }
+            };
+        }
+    </script>
+</body>
+
+</html>
