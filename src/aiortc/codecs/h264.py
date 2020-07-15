@@ -169,7 +169,7 @@ class H264Encoder(Encoder):
         payload = bytes()
         try:
             nalu = data  # with header
-            while len(nalu) <= available_size:
+            while len(nalu) <= available_size and counter < 9:
                 stap_header |= nalu[0] & 0x80
 
                 nri = nalu[0] & 0x60
