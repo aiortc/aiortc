@@ -26,11 +26,3 @@ class IndexedArray(object):
             if self.shape is not None:
                 arr = arr.reshape(self.shape)
             arr[:] = x
-
-
-# def to_numpy_array(array, shape=None, dtype=np.uint8, copy=False):
-#     with array.get_lock():
-#         arr = np.frombuffer(array.get_obj(), dtype=dtype)
-#         if shape is not None:
-#             arr = arr.reshape(shape)
-#         return arr.copy() if copy else arr
