@@ -150,6 +150,18 @@ class H264Test(CodecTestCase):
         self.assertEqual(len(packetize_packages), 1)
         self.assertEqual(packetize_packages[0][0] & 0x1F, 24)
 
+    def test_packetize_multiple_small(self):
+        packages = [bytes([0x01, 0xFF])] * 9
+        packetize_packages = H264Encoder._packetize(packages)
+        self.assertEqual(len(packetize_packages), 1)
+        self.assertEqual(packetize_packages[0][0] & 0x1F, 24)
+
+        packages = [bytes([0x01, 0xFF])] * 10
+        packetize_packages = H264Encoder._packetize(packages)
+        self.assertEqual(len(packetize_packages), 2)
+        self.assertEqual(packetize_packages[0][0] & 0x1F, 24)
+        self.assertEqual(packetize_packages[1], packages[-1])
+
     def test_frame_encoder(self):
         encoder = get_encoder(H264_CODEC)
 
