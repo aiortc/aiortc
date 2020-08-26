@@ -90,7 +90,7 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: CL="/IC:\cibw\vendor\include" LINK="/LIBPATH:C:\cibw\vendor\lib"
           CIBW_SKIP: cp27-* cp35-* pp27-*
         run: |
-          pip install cibuildwheel
+          pip install cibuildwheel==1.4.2
           cibuildwheel --output-dir dist
         shell: bash
       - name: Upload wheels
