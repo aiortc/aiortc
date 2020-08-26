@@ -277,10 +277,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__iceTransports: Set[RTCIceTransport] = set()
         self.__remoteDtls: Dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters
-        ] = ({})
+        ] = {}
         self.__remoteIce: Dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCIceParameters
-        ] = ({})
+        ] = {}
         self.__seenMids: Set[str] = set()
         self.__sctp: Optional[RTCSctpTransport] = None
         self.__sctp_mline_index: Optional[int] = None
@@ -1030,7 +1030,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
-            encodings: OrderedDict[int, RTCRtpDecodingParameters] = (OrderedDict())
+            encodings: OrderedDict[int, RTCRtpDecodingParameters] = OrderedDict()
             for codec in transceiver._codecs:
                 if is_rtx(codec):
                     if codec.parameters["apt"] in encodings and len(media.ssrc) == 2:

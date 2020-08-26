@@ -55,7 +55,7 @@ class OpusEncoder(Encoder):
             "unsigned char []", SAMPLES_PER_FRAME * CHANNELS * SAMPLE_WIDTH
         )
         self.buffer = ffi.buffer(self.cdata)
-        self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = (None)
+        self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
 
     def __del__(self) -> None:
         lib.opus_encoder_destroy(self.encoder)

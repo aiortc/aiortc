@@ -4232,7 +4232,8 @@ a=fmtp:98 apt=97
         with self.assertRaises(ValueError) as cm:
             run(pc2.setRemoteDescription(mangled))
         self.assertEqual(
-            str(cm.exception), "DTLS setup attribute must be 'actpass' for an offer",
+            str(cm.exception),
+            "DTLS setup attribute must be 'actpass' for an offer",
         )
 
         # close

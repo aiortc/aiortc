@@ -389,7 +389,7 @@ class RtcpByePacket:
 
 @dataclass
 class RtcpPsfbPacket:
-    """"
+    """
     Payload-Specific Feedback Message (RFC 4585).
     """
 

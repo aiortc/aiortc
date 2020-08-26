@@ -756,18 +756,14 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(
-            d.media[0].rtp.headerExtensions, [],
-        )
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(
-            d.media[0].ssrc, [],
-        )
+        self.assertEqual(d.media[0].ssrc, [])
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
@@ -868,18 +864,14 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(
-            d.media[0].rtp.headerExtensions, [],
-        )
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(
-            d.media[0].ssrc, [],
-        )
+        self.assertEqual(d.media[0].ssrc, [])
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
@@ -980,18 +972,14 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(
-            d.media[0].rtp.headerExtensions, [],
-        )
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
         self.assertEqual(d.media[0].rtcp_mux, True)
 
         # ssrc
-        self.assertEqual(
-            d.media[0].ssrc, [],
-        )
+        self.assertEqual(d.media[0].ssrc, [])
         self.assertEqual(d.media[0].ssrc_group, [])
 
         # formats
@@ -1928,9 +1916,7 @@ a=sctpmap:5000 webrtc-datachannel 1024
         )
         self.assertEqual(d.host, None)
         self.assertEqual(d.name, "-")
-        self.assertEqual(
-            d.origin, "- 8148572839875102105 2 IN IP4 127.0.0.1",
-        )
+        self.assertEqual(d.origin, "- 8148572839875102105 2 IN IP4 127.0.0.1")
         self.assertEqual(d.time, "0 0")
         self.assertEqual(d.version, 0)
 
