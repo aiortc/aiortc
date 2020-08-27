@@ -28,10 +28,6 @@ parser.add_argument("--config-file", default=__file__ + ".json")
 args = parser.parse_args()
 logging.basicConfig(level=logging.INFO)
 
-# work around buggy 'tar' executable on Windows
-if sys.platform == "win32":
-    os.environ["PATH"] = "C:\\Program Files\\Git\\usr\\bin;" + os.environ["PATH"]
-
 # read config file
 with open(args.config_file, "r") as fp:
     config = json.load(fp)
