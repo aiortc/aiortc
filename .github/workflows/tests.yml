@@ -87,10 +87,10 @@ jobs:
           CIBW_BEFORE_BUILD: python scripts/fetch-vendor /tmp/vendor
           CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
-          CIBW_ENVIRONMENT_WINDOWS: CL="/IC:\cibw\vendor\include" LINK="/LIBPATH:C:\cibw\vendor\lib"
+          CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
           CIBW_SKIP: cp27-* cp35-* pp27-*
         run: |
-          pip install cibuildwheel==1.4.2
+          pip install cibuildwheel
           cibuildwheel --output-dir dist
         shell: bash
       - name: Upload wheels
