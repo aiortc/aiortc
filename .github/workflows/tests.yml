@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: 3.7
       - name: Install packages
-        run: pip install black flake8 isort mypy
+        run: pip install black flake8 isort mypy==0.782
       - name: Run linters
         run: |
           flake8 examples src tests
