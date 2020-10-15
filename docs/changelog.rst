@@ -12,6 +12,17 @@ Breaking
  * Make :meth:`RTCPeerConnection.addIceCandidate` a coroutine.
  * Make :meth:`RTCIceTransport.addRemoteCandidate` a coroutine.
 
+Media
+.....
+
+ * Handle SSRC attributes in SDP containing a colon (#372).
+ * Limit number of H.264 NALU per packet (#394, #426).
+
+Examples
+........
+
+ * `server` make it possible to specify bind address (#347).
+
 0.9.28
 ------
 
