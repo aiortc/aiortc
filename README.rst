@@ -116,7 +116,7 @@ built from you will also need to run:
 
 .. code:: bash
 
-    apt install libsrtp2-dev
+    apt install libsrtp2-dev python3-dev
 
 OS X
 ....
