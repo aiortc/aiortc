@@ -10,7 +10,7 @@ from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
-from .mediastreams import MediaStreamError, MediaStreamTrack, EncodedStreamTrack
+from .mediastreams import EncodedStreamTrack, MediaStreamError, MediaStreamTrack
 from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
 from .rtp import (
     RTCP_PSFB_APP,
