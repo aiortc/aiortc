@@ -245,19 +245,18 @@ class RTCRtpSender:
 
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         if isinstance(self.__track, EncodedStreamTrack):
-           force_keyframe = self.__force_keyframe
-           self.__force_keyframe = False
-           return await self.__track.recv(force_keyframe)
+            force_keyframe = self.__force_keyframe
+            self.__force_keyframe = False
+            return await self.__track.recv(force_keyframe)
         else:
-           frame = await self.__track.recv()
-           # encode frame
-           if self.__encoder is None:
-              self.__encoder = get_encoder(codec)
-           force_keyframe = self.__force_keyframe
-           self.__force_keyframe = False
-           return await self.__loop.run_in_executor(
-               None, self.__encoder.encode, frame, force_keyframe
-           )
+            frame = await self.__track.recv()
+            if self.__encoder is None:
+                self.__encoder = get_encoder(codec)
+            force_keyframe = self.__force_keyframe
+            self.__force_keyframe = False
+            return await self.__loop.run_in_executor(
+                None, self.__encoder.encode, frame, force_keyframe
+            )
 
     async def _retransmit(self, sequence_number: int) -> None:
         """
