@@ -247,7 +247,9 @@ class RTCRtpSender:
         if isinstance(self.__track, EncodedStreamTrack):
             force_keyframe = self.__force_keyframe
             self.__force_keyframe = False
-            return await self.__track.recv(force_keyframe)
+            if force_keyframe:
+                EncodedStreamTrack.request_keyframe(self.__track)
+            return await self.__track.recv()
         else:
             frame = await self.__track.recv()
             if self.__encoder is None:
