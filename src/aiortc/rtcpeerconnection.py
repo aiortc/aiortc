@@ -1011,7 +1011,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         if transceiver._preferred_codecs is not None:
             for pref in transceiver._preferred_codecs:
                 for codec in transceiver._codecs:
-                    if (codec.mimeType.lower() == pref.mimeType.lower()):
+                    if codec.mimeType.lower() == pref.mimeType.lower():
                         codecs.append(codec)
         else:
             codecs = transceiver._codecs
