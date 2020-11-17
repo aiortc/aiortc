@@ -10,7 +10,7 @@ from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
-from .mediastreams import MediaStreamError, MediaStreamTrack
+from .mediastreams import MediaStreamError, MediaStreamTrack, EncodedStreamTrack
 from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
 from .rtp import (
     RTCP_PSFB_APP,
@@ -244,17 +244,20 @@ class RTCRtpSender:
                 pass
 
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
-        # get frame
-        frame = await self.__track.recv()
-
-        # encode frame
-        if self.__encoder is None:
-            self.__encoder = get_encoder(codec)
-        force_keyframe = self.__force_keyframe
-        self.__force_keyframe = False
-        return await self.__loop.run_in_executor(
-            None, self.__encoder.encode, frame, force_keyframe
-        )
+        if isinstance(self.__track, EncodedStreamTrack):
+           force_keyframe = self.__force_keyframe
+           self.__force_keyframe = False
+           return await self.__track.recv(force_keyframe)
+        else:
+           frame = await self.__track.recv()
+           # encode frame
+           if self.__encoder is None:
+              self.__encoder = get_encoder(codec)
+           force_keyframe = self.__force_keyframe
+           self.__force_keyframe = False
+           return await self.__loop.run_in_executor(
+               None, self.__encoder.encode, frame, force_keyframe
+           )
 
     async def _retransmit(self, sequence_number: int) -> None:
         """

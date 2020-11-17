@@ -144,3 +144,14 @@ class VideoStreamTrack(MediaStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
+
+class EncodedStreamTrack(MediaStreamTrack):
+    """
+    A single encoded media track within a stream.
+    """
+
+    kind = "unknown"
+
+    def __init__(self) -> None:
+        super().__init__()
