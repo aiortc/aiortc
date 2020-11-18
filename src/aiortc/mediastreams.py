@@ -158,5 +158,5 @@ class EncodedStreamTrack(MediaStreamTrack):
         self.keyframe = False
 
     @abstractmethod
-    async def recv_encoded(self, keyframe : bool) -> Tuple[List[bytes], int]:
+    async def recv_encoded(self, keyframe: bool) -> Tuple[List[bytes], int]:
         pass
