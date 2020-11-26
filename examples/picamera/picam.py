@@ -10,7 +10,6 @@ from pitrack import PiH264StreamTrack
 from aiortc import RTCPeerConnection, RTCRtpSender, RTCSessionDescription
 from aiortc.rtcrtpparameters import RTCRtpCodecCapability
 
-
 RATE = 30
 ROOT = os.path.dirname(__file__)
 camera = None
