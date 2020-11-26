@@ -37,7 +37,9 @@ class PiH264StreamTrack(EncodedStreamTrack):
             self.nal_buffer = buf
         else:
             self.nal_buffer += buf
-        if len(self.nal_buffer) < 64 :  # Just making sure to pack SPS/PPS within a single buffer
+        if (
+            len(self.nal_buffer) < 64
+        ):  # Just making sure to pack SPS/PPS within a single buffer
             return
         if not self.nal_queue.full():
             self.nal_queue.put(self.nal_buffer)
@@ -148,7 +150,9 @@ class PiH264StreamTrack(EncodedStreamTrack):
                 i += 1
             i += 3
             nal_start = i
-            if (buf[nal_start] & 0x1F) != 7 and (buf[nal_start] & 0x1F) != 8 :  # Assuming only SPS/PPS are packaged with other NALs
+            if (buf[nal_start] & 0x1F) != 7 and (
+                buf[nal_start] & 0x1F
+            ) != 8:  # Assuming only SPS/PPS are packaged with other NALs
                 yield buf[nal_start:]
                 return
             while (buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0) and (

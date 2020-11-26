@@ -15,12 +15,16 @@ ROOT = os.path.dirname(__file__)
 camera = None
 
 capabilities = RTCRtpSender.getCapabilities("video")
-codec_parameters = OrderedDict([('packetization-mode', '1'),
-                                ("level-asymmetry-allowed", "1"),
-                                ('profile-level-id', '42001f')])
-pi_capability = RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000,
-                                      channels=None,
-                                      parameters=codec_parameters)
+codec_parameters = OrderedDict(
+    [
+        ("packetization-mode", "1"),
+        ("level-asymmetry-allowed", "1"),
+        ("profile-level-id", "42001f"),
+    ]
+)
+pi_capability = RTCRtpCodecCapability(
+    mimeType="video/H264", clockRate=90000, channels=None, parameters=codec_parameters
+)
 preferences = [pi_capability]
 
 
@@ -43,7 +47,13 @@ async def offer(request):
     camera = picamera.PiCamera()
     camera.resolution = (640, 480)
     camera.framerate = RATE
-    camera.start_recording(video_track, format='h264', profile='constrained', inline_headers=True, sei=False)
+    camera.start_recording(
+        video_track,
+        format="h264",
+        profile="constrained",
+        inline_headers=True,
+        sei=False,
+    )
     pc = RTCPeerConnection()
     pcs.add(pc)
 
@@ -90,4 +100,4 @@ if __name__ == "__main__":
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
     app.router.add_post("/offer", offer)
-    web.run_app(app, host='0.0.0.0', port=8080, ssl_context=ssl_context)
+    web.run_app(app, host="0.0.0.0", port=8080, ssl_context=ssl_context)
