@@ -1,12 +1,14 @@
 import asyncio
 import json
 import os
+from collections import OrderedDict
+
 import picamera
 from aiohttp import web
-from collections import OrderedDict
+from pitrack import PiH264StreamTrack
+
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 from aiortc.rtcrtpparameters import RTCRtpCodecCapability
-from pitrack import PiH264StreamTrack
 
 
 RATE = 30

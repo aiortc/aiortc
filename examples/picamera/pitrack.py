@@ -1,9 +1,9 @@
 import asyncio
 import math
-from typing import Iterator, List, Tuple
-from struct import pack
-
 from queue import Queue
+from struct import pack
+from typing import Iterator, List, Tuple
+
 from aiortc.mediastreams import EncodedStreamTrack
 
 PACKET_MAX = 1300
