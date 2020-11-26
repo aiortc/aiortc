@@ -1,24 +1,11 @@
-import argparse
 import asyncio
 import json
-import logging
 import os
-import platform
-import ssl
 import picamera
-
 from aiohttp import web
-
 from collections import OrderedDict
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
-from aiortc.rtcrtpparameters import (
-    RTCRtcpFeedback,
-    RTCRtpCapabilities,
-    RTCRtpCodecCapability,
-    RTCRtpCodecParameters,
-    RTCRtpHeaderExtensionCapability,
-    RTCRtpHeaderExtensionParameters,
-)
+from aiortc.rtcrtpparameters import RTCRtpCodecCapability
 from pitrack import PiH264StreamTrack
 
 
@@ -27,7 +14,12 @@ ROOT = os.path.dirname(__file__)
 camera = None
 
 capabilities = RTCRtpSender.getCapabilities("video")
-pi_capability = RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000, channels=None, parameters=OrderedDict([('packetization-mode', '1'), ("level-asymmetry-allowed", "1"), ('profile-level-id', '42001f')]))
+codec_parameters = OrderedDict([('packetization-mode', '1'),
+                                ("level-asymmetry-allowed", "1"),
+                                ('profile-level-id', '42001f')])
+pi_capability = RTCRtpCodecCapability(mimeType='video/H264', clockRate=90000,
+                                      channels=None,
+                                      parameters=codec_parameters)
 preferences = [pi_capability]
 
 
