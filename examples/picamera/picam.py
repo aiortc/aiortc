@@ -7,7 +7,7 @@ import picamera
 from aiohttp import web
 from pitrack import PiH264StreamTrack
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
+from aiortc import RTCPeerConnection, RTCRtpSender, RTCSessionDescription
 from aiortc.rtcrtpparameters import RTCRtpCodecCapability
 
 
