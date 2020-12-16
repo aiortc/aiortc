@@ -76,11 +76,11 @@ class H264PayloadDescriptor:
             while pos < len(data):
                 if len(data) < pos + LENGTH_FIELD_SIZE:
                     raise ValueError("STAP-A length field is truncated")
-                nulu_size = unpack_from("!H", data, pos)[0]
+                nalu_size = unpack_from("!H", data, pos)[0]
                 pos += LENGTH_FIELD_SIZE
                 offsets.append(pos)
 
-                pos += nulu_size
+                pos += nalu_size
                 if len(data) < pos:
                     raise ValueError("STAP-A data is truncated")
 
