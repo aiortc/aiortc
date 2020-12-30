@@ -1008,7 +1008,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     def __localRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpSendParameters:
         codecs = []
-        if transceiver._preferred_codecs is not None and len(transceiver._preferred_codecs) > 0:
+        if (
+            transceiver._preferred_codecs is not None
+            and len(transceiver._preferred_codecs) > 0
+        ):
             for pref in transceiver._preferred_codecs:
                 for codec in transceiver._codecs:
                     if codec.mimeType.lower() == pref.mimeType.lower():
