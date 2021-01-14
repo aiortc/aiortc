@@ -1,4 +1,5 @@
 import asyncio
+import argparse
 import json
 import os
 from collections import OrderedDict
@@ -11,7 +12,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 
 
-RATE = 30
+RATE = 15
 ROOT = os.path.dirname(__file__)
 camera = None
 
@@ -27,13 +28,24 @@ h264_capability = RTCRtpCodecCapability(
     mimeType="video/H264", clockRate=90000, channels=None, parameters=codec_parameters
 )
 preferences = [h264_capability]
+rtsp_input = None
+webcam_input = None
 
 
 class GstH264Camera:
-    CAM_PIPELINE = "v4l2src device=/dev/video4 ! video/x-h264,width=1280,height=720,framerate={}/1 ! queue ! appsink emit-signals=True name=h264_sink"
+    WEBCAM_PIPELINE = "v4l2src device=/dev/{} ! video/x-h264,width=1280,height=720,framerate={}/1 ! queue ! appsink emit-signals=True name=h264_sink"
+    RTSP_PIPELINE = "rtspsrc location={} latency=0 ! rtph264depay ! h264parse ! queue ! video/x-h264,alignment=nal,stream-format=byte-stream ! appsink emit-signals=True name=h264_sink"
 
-    def __init__(self, rate, output):
-        self.pipeline = Gst.parse_launch(GstH264Camera.CAM_PIPELINE.format(RATE))
+
+    def __init__(self, rate, output, rtsp_input=None, webcam_input=None):
+        if rtsp_input is not None and webcam_input is not None :
+            raise Exception("Only one inupt can be used at once")
+        if rtsp_input is None and webcam_input is None :
+            raise Exception("Need to specify at least one input")
+        if rtsp_input is not None:
+            self.pipeline = Gst.parse_launch(GstH264Camera.RTSP_PIPELINE.format(rtsp_input))
+        if webcam_input is not None:
+            self.pipeline = Gst.parse_launch(GstH264Camera.WEBCAM_PIPELINE.format(webcam_input,RATE))
         self.output = output
         self.appsink = self.pipeline.get_by_name('h264_sink')
         self.appsink.connect("new-sample", self.on_buffer, None)
@@ -67,7 +79,7 @@ async def offer(request):
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
     video_track = H264EncodedStreamTrack(RATE)
-    camera = GstH264Camera(RATE, video_track)
+    camera = GstH264Camera(RATE, video_track, rtsp_input, webcam_input)
 
     pc = RTCPeerConnection()
     pcs.add(pc)
@@ -100,6 +112,8 @@ pcs = set()
 
 async def on_shutdown(app):
     global camera
+    global rtsp_input
+    global webcam_input
     # close peer connections
     print("Shutting down")
     coros = [pc.close() for pc in pcs]
@@ -111,6 +125,15 @@ async def on_shutdown(app):
 
 if __name__ == "__main__":
     Gst.init(None)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-w", "--webcam", required=False,
+                default=None, help="webcam input as videox")
+    ap.add_argument("-s", "--stream", required=False,
+                default=None, help="RTSP input as rtsp://...")
+
+    args = vars(ap.parse_args())
+    rtsp_input = args['stream']
+    webcam_input = args['webcam']
     ssl_context = None
     app = web.Application()
     app.on_shutdown.append(on_shutdown)

@@ -26,7 +26,7 @@ class H264EncodedStreamTrack(EncodedStreamTrack):
 
     def __init__(self, video_rate, clock_rate=90000) -> None:
         super().__init__()
-        self.nal_queue = Queue(5)
+        self.nal_queue = Queue(3)
         self._timestamp = 0
         self._frame_time = 1 / video_rate
         self._clock_rate = clock_rate
@@ -158,10 +158,14 @@ class H264EncodedStreamTrack(EncodedStreamTrack):
                 # exactly at the end of the data
                 if i + 3 >= len(buf):
                     nal_end = len(buf)
-                    yield buf[nal_start:nal_end]
+                    buf_type = buf[nal_start] & 0x1F
+                    if buf_type != 0x06:  # Make sure to discard SEI NALUs
+                        yield buf[nal_start:nal_end]
                     return  # did not find nal end, stream ended first
             nal_end = i
-            yield buf[nal_start:nal_end]
+            buf_type = buf[nal_start] & 0x1F
+            if buf_type != 0x06:  # Make sure to discard SEI NALUs
+                yield buf[nal_start:nal_end]
 
     async def recv_encoded(self, keyframe=False) -> List[bytes]:
         while True:
