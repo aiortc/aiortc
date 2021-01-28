@@ -179,6 +179,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
         ice_kwargs = connection_kwargs(iceServers)
 
         self._connection = Connection(ice_controlling=False, **ice_kwargs)
+        self._remote_candidates_end = False
         self.__state = "new"
 
     @property
@@ -276,9 +277,9 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
         :param candidate: The new candidate or `None` to signal end of candidates.
         """
-        # FIXME: don't use private member!
-        if not self._connection._remote_candidates_end:
+        if not self.__iceGatherer._remote_candidates_end:
             if candidate is None:
+                self.__iceGatherer._remote_candidates_end = True
                 await self._connection.add_remote_candidate(None)
             else:
                 await self._connection.add_remote_candidate(
