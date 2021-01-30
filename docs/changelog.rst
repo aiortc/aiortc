@@ -3,6 +3,12 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.1.0
+-----
+
+ * Add support for resolving mDNS candidates.
+ * Improve support for TURN, especially long-lived connections.
+
 1.0.0
 -----
 
