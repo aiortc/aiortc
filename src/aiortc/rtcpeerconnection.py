@@ -440,6 +440,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         if self.__sctp:
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
+
+        # update states
+        self.__updateIceGatheringState()
         self.__updateIceConnectionState()
 
         # no more events will be emitted, so remove all event listeners
@@ -755,6 +758,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__validate_description(description, is_local=False)
 
         # apply description
+        iceCandidates: Dict[RTCIceTransport, sdp.MediaDescription] = {}
         trackEvents = []
         for i, media in enumerate(description.media):
             dtlsTransport: Optional[RTCDtlsTransport] = None
@@ -836,7 +840,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if dtlsTransport is not None:
                 # add ICE candidates
                 iceTransport = dtlsTransport.transport
-                await add_remote_candidates(iceTransport, media)
+                iceCandidates[iceTransport] = media
 
                 # set ICE role
                 if description.type == "offer" and not iceTransport._role_set:
@@ -886,10 +890,18 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 await dtlsTransport.stop()
                 await dtlsTransport.transport.stop()
                 self.__iceTransports.discard(dtlsTransport.transport)
+                iceCandidates.pop(dtlsTransport.transport, None)
             self.__updateIceGatheringState()
             self.__updateIceConnectionState()
 
-        # FIXME: in aiortc 1.0.0 emit RTCTrackEvent directly
+        # add remote candidates
+        coros = [
+            add_remote_candidates(iceTransport, media)
+            for iceTransport, media in iceCandidates.items()
+        ]
+        await asyncio.gather(*coros)
+
+        # FIXME: in aiortc 2.0.0 emit RTCTrackEvent directly
         for event in trackEvents:
             self.emit("track", event.track)
 

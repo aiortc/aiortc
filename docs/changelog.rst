@@ -3,6 +3,12 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.1.1
+-----
+
+ * Defer adding remote candidates until after transport bundling to avoid
+   unnecessary mDNS lookups.
+
 1.1.0
 -----
 
