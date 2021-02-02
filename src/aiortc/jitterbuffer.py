@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 
 from .rtp import RtpPacket
@@ -12,32 +13,55 @@ class JitterFrame:
 
 
 class JitterBuffer:
-    def __init__(self, capacity: int, prefetch: int = 0) -> None:
+    def __init__(self, capacity: int, prefetch: int = 0, sendPLI = None) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
         self._origin: Optional[int] = None
         self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
+        self.__max_number = 65536
+        self.sendPLI = sendPLI
 
     @property
     def capacity(self) -> int:
         return self._capacity
 
     def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
+#        print("[INFO][JitterBuffer] Received Seq:",packet.sequence_number)
+        delta = 0
         if self._origin is None:
             self._origin = packet.sequence_number
-        elif packet.sequence_number <= self._origin - MAX_MISORDER:
-            self.remove(self.capacity)
-            self._origin = packet.sequence_number
-        elif packet.sequence_number < self._origin:
-            return None
+        elif self._origin <  MAX_MISORDER and packet.sequence_number > self.__max_number - MAX_MISORDER:
+            if self._origin >= (packet.sequence_number + MAX_MISORDER)%self.__max_number:
+#                print("[INFO][JitterBuffer] Received Seq1:",packet.sequence_number,"In Origin" ,self._origin, 'max_number of ',self.__max_number)
+                self.remove(self.capacity)
+                self._origin = packet.sequence_number
+                if self.sendPLI != None:
+                    asyncio.ensure_future(self.sendPLI(packet.ssrc))
+            else:
+                return None
+        elif packet.sequence_number <  MAX_MISORDER  and self._origin > self.__max_number - MAX_MISORDER:
+            delta = (packet.sequence_number - self._origin)%self.__max_number
+        else:
+            if packet.sequence_number <= self._origin - MAX_MISORDER:
+#                print("[INFO][JitterBuffer] Received Seq2:",packet.sequence_number,"In Origin" ,self._origin, 'max_number of ',self.__max_number)
+                self.remove(self.capacity)
+                self._origin = packet.sequence_number
+                if self.sendPLI != None:
+                    asyncio.ensure_future(self.sendPLI(packet.ssrc))
+            elif packet.sequence_number < self._origin:
+                return None
+            else:
+                delta = (packet.sequence_number - self._origin)%self.__max_number
+#        print("[INFO][JitterBuffer] Received Seq3:",packet.sequence_number,"In Origin" ,self._origin, 'delta ',delta)
 
-        delta = packet.sequence_number - self._origin
         if delta >= 2 * self.capacity:
             # received packet is so far beyond capacity we cannot keep any
             # previous packets, so reset the buffer
             self.remove(self.capacity)
             self._origin = packet.sequence_number
+            if self.sendPLI != None:
+                asyncio.ensure_future(self.sendPLI(packet.ssrc))
         elif delta >= self.capacity:
             # remove just enough packets to fit the received packets
             excess = delta - self.capacity + 1
@@ -89,4 +113,4 @@ class JitterBuffer:
         for i in range(count):
             pos = self._origin % self._capacity
             self._packets[pos] = None
-            self._origin += 1
+            self._origin = (self._origin + 1)%self.__max_number
