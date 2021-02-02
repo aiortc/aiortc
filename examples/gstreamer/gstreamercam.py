@@ -34,7 +34,8 @@ webcam_input = None
 
 class GstH264Camera:
     WEBCAM_PIPELINE = "v4l2src device=/dev/{} ! video/x-h264,width=1280,height=720,framerate={}/1 ! queue ! appsink emit-signals=True name=h264_sink"
-    RTSP_PIPELINE = "rtspsrc location={} latency=0 ! rtph264depay ! h264parse ! queue ! video/x-h264,alignment=nal,stream-format=byte-stream ! appsink emit-signals=True name=h264_sink"
+    RTSP_PIPELINE = "rtspsrc location={} latency=0 ! rtph264depay ! queue ! h264parse ! video/x-h264,alignment=nal,stream-format=byte-stream ! appsink emit-signals=True name=h264_sink"
+    #RTSP_PIPELINE = "rtspsrc location={} latency=0 ! rtph264depay ! queue ! video/x-h264,alignment=nal,stream-format=byte-stream ! appsink emit-signals=True name=h264_sink"
 
 
     def __init__(self, rate, output, rtsp_input=None, webcam_input=None):
