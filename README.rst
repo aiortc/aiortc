@@ -70,7 +70,7 @@ interoperability is regularly tested against both Chrome and Firefox. Here are
 some of its features:
 
 - SDP generation / parsing
-- Interactive Connectivity Establishment, including half-trickle
+- Interactive Connectivity Establishment, with half-trickle and mDNS support
 - DTLS key and certificate generation
 - DTLS handshake, encryption / decryption (for SCTP)
 - SRTP keying, encryption and decryption for RTP and RTCP

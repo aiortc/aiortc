@@ -3,6 +3,18 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.1.1
+-----
+
+ * Defer adding remote candidates until after transport bundling to avoid
+   unnecessary mDNS lookups.
+
+1.1.0
+-----
+
+ * Add support for resolving mDNS candidates.
+ * Improve support for TURN, especially long-lived connections.
+
 1.0.0
 -----
 

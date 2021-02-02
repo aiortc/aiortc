@@ -22,19 +22,13 @@ from typing import (
     no_type_check,
 )
 
+from crc32c import crc32c
 from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCDtlsTransport
 from .utils import random32, uint16_add, uint16_gt, uint32_gt, uint32_gte
-
-try:
-    from crc32c import crc32
-except ImportError:  # pragma: no cover
-    os.environ["CRC32C_SW_MODE"] = "1"
-    from crc32c import crc32
-
 
 logger = logging.getLogger("sctp")
 
@@ -406,7 +400,7 @@ def parse_packet(data: bytes) -> Tuple[int, int, int, List[Any]]:
 
     # verify checksum
     checksum = unpack_from("<L", data, 8)[0]
-    if checksum != crc32(data[0:8] + b"\x00\x00\x00\x00" + data[12:]):
+    if checksum != crc32c(data[0:8] + b"\x00\x00\x00\x00" + data[12:]):
         raise ValueError("SCTP packet has invalid checksum")
 
     chunks = []
@@ -426,7 +420,7 @@ def serialize_packet(
 ) -> bytes:
     header = pack("!HHL", source_port, destination_port, verification_tag)
     data = bytes(chunk)
-    checksum = crc32(header + b"\x00\x00\x00\x00" + data)
+    checksum = crc32c(header + b"\x00\x00\x00\x00" + data)
     return header + pack("<L", checksum) + data
 
 

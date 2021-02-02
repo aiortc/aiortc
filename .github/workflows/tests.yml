@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: 3.7
       - name: Install packages
-        run: pip install black flake8 isort mypy==0.782
+        run: pip install black flake8 isort mypy
       - name: Run linters
         run: |
           flake8 examples src tests
@@ -25,8 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python: [3.8, 3.7, 3.6]
+        os: [ubuntu-latest]
+        python: [3.9, 3.8, 3.7, 3.6]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
