@@ -370,26 +370,37 @@ class RTCRtpReceiverTest(CodecTestCase):
 
     def test_rtp_missing_video_packet(self):
         nacks = []
+        pli = []
 
         async def mock_send_rtcp_nack(*args):
             nacks.append(args)
+
+        async def mock_send_rtcp_pli(*args):
+            pli.append(args[0])
 
         receiver = RTCRtpReceiver("video", self.local_transport)
         self.assertEqual(receiver.transport, self.local_transport)
 
         receiver._send_rtcp_nack = mock_send_rtcp_nack
+        receiver._send_rtcp_pli = mock_send_rtcp_pli
         receiver._track = RemoteStreamTrack(kind="video")
         run(receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC])))
 
         # generate some packets
-        packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=3)
+        packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=129)
 
         # receive RTP with a with a gap
         run(receiver._handle_rtp_packet(packets[0], arrival_time_ms=0))
-        run(receiver._handle_rtp_packet(packets[2], arrival_time_ms=0))
+        run(receiver._handle_rtp_packet(packets[128], arrival_time_ms=0))
 
         # check NACK was triggered
-        self.assertEqual(nacks, [(1234, [1])])
+        lost_packets = []
+        for i in range(127):
+            lost_packets.append(i + 1)
+        self.assertEqual(nacks[0], (1234, lost_packets))
+
+        # check PLI was triggered
+        self.assertEqual(pli, [1234])
 
         # shutdown
         run(receiver.stop())

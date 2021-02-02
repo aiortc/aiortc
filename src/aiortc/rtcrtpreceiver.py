@@ -254,7 +254,7 @@ class RTCRtpReceiver:
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         else:
-            self.__jitter_buffer = JitterBuffer(capacity=128)
+            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track: Optional[RemoteStreamTrack] = None
@@ -487,7 +487,10 @@ class RTCRtpReceiver:
             return
 
         # try to re-assemble encoded frame
-        encoded_frame = self.__jitter_buffer.add(packet)
+        pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
+        # check if the PLI should be sent
+        if pli_flag:
+            await self._send_rtcp_pli(packet.ssrc)
 
         # if we have a complete encoded frame, decode it
         if encoded_frame is not None and self.__decoder_thread:

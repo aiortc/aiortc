@@ -1,6 +1,7 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .rtp import RtpPacket
+from .utils import uint16_add
 
 MAX_MISORDER = 100
 
@@ -12,41 +13,52 @@ class JitterFrame:
 
 
 class JitterBuffer:
-    def __init__(self, capacity: int, prefetch: int = 0) -> None:
+    def __init__(
+        self, capacity: int, prefetch: int = 0, is_video: bool = False
+    ) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
         self._origin: Optional[int] = None
         self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
+        self._is_video = is_video
 
     @property
     def capacity(self) -> int:
         return self._capacity
 
-    def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
+    def add(self, packet: RtpPacket) -> Tuple[bool, Optional[JitterFrame]]:
+        pli_flag = False
         if self._origin is None:
             self._origin = packet.sequence_number
-        elif packet.sequence_number <= self._origin - MAX_MISORDER:
-            self.remove(self.capacity)
-            self._origin = packet.sequence_number
-        elif packet.sequence_number < self._origin:
-            return None
+            delta = 0
+            misorder = 0
+        else:
+            delta = uint16_add(packet.sequence_number, -self._origin)
+            misorder = uint16_add(self._origin, -packet.sequence_number)
 
-        delta = packet.sequence_number - self._origin
-        if delta >= 2 * self.capacity:
-            # received packet is so far beyond capacity we cannot keep any
-            # previous packets, so reset the buffer
-            self.remove(self.capacity)
-            self._origin = packet.sequence_number
-        elif delta >= self.capacity:
-            # remove just enough packets to fit the received packets
+        if misorder < delta:
+            if misorder >= MAX_MISORDER:
+                self.remove(self.capacity)
+                self._origin = packet.sequence_number
+                delta = misorder = 0
+                if self._is_video:
+                    pli_flag = True
+            else:
+                return pli_flag, None
+
+        if delta >= self.capacity:
+            # remove just enough frames to fit the received packets
             excess = delta - self.capacity + 1
-            self.remove(excess)
+            if self.smart_remove(excess):
+                self._origin = packet.sequence_number
+            if self._is_video:
+                pli_flag = True
 
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
 
-        return self._remove_frame(packet.sequence_number)
+        return pli_flag, self._remove_frame(packet.sequence_number)
 
     def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
         frame = None
@@ -89,4 +101,23 @@ class JitterBuffer:
         for i in range(count):
             pos = self._origin % self._capacity
             self._packets[pos] = None
-            self._origin += 1
+            self._origin = uint16_add(self._origin, 1)
+
+    def smart_remove(self, count: int) -> bool:
+        """
+        smart_remove makes sure that all packages belonging to the same frame are removed
+        it prevents sending corrupted frames to decoder
+        """
+        timestamp = None
+        for i in range(self._capacity):
+            pos = self._origin % self._capacity
+            packet = self._packets[pos]
+            if packet is not None:
+                if i >= count and timestamp != packet.timestamp:
+                    break
+                timestamp = packet.timestamp
+            self._packets[pos] = None
+            self._origin = uint16_add(self._origin, 1)
+            if i == self._capacity - 1:
+                return True
+        return False
