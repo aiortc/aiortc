@@ -54,7 +54,7 @@ async def run_answer(pc, signaling, filename):
                 )
 
                 # say goodbye
-                await signaling.send(None)
+                await signaling.send(BYE)
 
     await consume_signaling(pc, signaling)
 
