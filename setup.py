@@ -28,6 +28,12 @@ install_requires = [
     "pylibsrtp>=0.5.6",
 ]
 
+extra_requires = {
+    "test": [
+        "numpy>=1.19.0",
+    ]
+}
+
 if os.environ.get("READTHEDOCS") == "True":
     cffi_modules = []
     install_requires = list(filter(lambda x: not x.startswith("av"), install_requires))
@@ -59,4 +65,5 @@ setuptools.setup(
     packages=["aiortc", "aiortc.codecs", "aiortc.contrib"],
     setup_requires=["cffi>=1.0.0"],
     install_requires=install_requires,
+    extra_requires=extra_requires
 )
