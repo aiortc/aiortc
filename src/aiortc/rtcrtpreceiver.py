@@ -45,7 +45,7 @@ from .stats import (
 )
 from .utils import uint16_add, uint16_gt
 
-logger = logging.getLogger("rtp")
+logger = logging.getLogger(__name__)
 
 
 def decoder_worker(loop, input_q, output_q):
