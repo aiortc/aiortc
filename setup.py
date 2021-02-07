@@ -31,6 +31,8 @@ install_requires = [
 extra_requires = {
     "test": [
         "numpy>=1.19.0",
+        "aiohttp>=3.7.0",
+        "websockets>=8.0"
     ]
 }
 
