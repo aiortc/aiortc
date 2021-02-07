@@ -1,4 +1,5 @@
 # flake8: noqa
+import logging
 
 from .about import __version__
 from .exceptions import InvalidAccessError, InvalidStateError
@@ -46,7 +47,4 @@ from .stats import (
 )
 
 # Set default logging handler to avoid "No handler found" warnings.
-import logging
-from logging import NullHandler
-
-logging.getLogger(__name__).addHandler(NullHandler())
+logging.getLogger(__name__).addHandler(logging.NullHandler())
