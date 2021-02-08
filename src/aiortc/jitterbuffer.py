@@ -40,8 +40,7 @@ class JitterBuffer:
             if misorder >= MAX_MISORDER:
                 # print("[INFO][JitterBuffer] Received Seq1:", packet.sequence_number, " Origin:", self._origin,
                 #       ' misorder:', self.__max_number)
-                self.remove(self.capacity)
-                # self.smart_remove(self.capacity, dumb_mode=True) # "remove" might still be a bit faster
+                self.smart_remove(self.capacity, dumb_mode=True)
                 self._origin = packet.sequence_number
                 delta = misorder = 0
                 if self.sendPLI is not None:
@@ -128,5 +127,5 @@ class JitterBuffer:
             self._origin = (self._origin + 1) % self.__max_number
             if i == self._capacity - 1:
                 print("[Warning][JitterBuffer] JitterBuffer purged !!!")
-                return 1 
-        return 0
+                return True
+        return False

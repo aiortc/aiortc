@@ -4,6 +4,13 @@ from aiortc.jitterbuffer import JitterBuffer
 from aiortc.rtp import RtpPacket
 
 
+async def send_rtcp_pli(media_ssrc: int) -> None:
+    """
+    Send an RTCP packet to report picture loss.
+    """
+    print("[INFO][JitterBuffer] PLI sent to media_ssrc:", media_ssrc)
+
+
 class JitterBufferTest(TestCase):
     def assertPackets(self, jbuffer, expected):
         found = [x.sequence_number if x else None for x in jbuffer._packets]
@@ -60,7 +67,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 1)
 
     def test_add_seq_too_low_drop(self):
-        jbuffer = JitterBuffer(capacity=4)
+        jbuffer = JitterBuffer(capacity=4, sendPLI=send_rtcp_pli)
 
         frame = jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
         self.assertIsNone(frame)
@@ -73,7 +80,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 2)
 
     def test_add_seq_too_low_reset(self):
-        jbuffer = JitterBuffer(capacity=4)
+        jbuffer = JitterBuffer(capacity=4, sendPLI=send_rtcp_pli)
 
         frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
         self.assertIsNone(frame)
@@ -101,9 +108,29 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 0)
 
         jbuffer.add(RtpPacket(sequence_number=4, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 1)
+        self.assertEqual(jbuffer._origin, 4)
 
-        self.assertPackets(jbuffer, [4, 1, 2, 3])
+        self.assertPackets(jbuffer, [4, None, None, None])
+
+    def test_add_seq_too_high_discard_one_v2(self):
+        jbuffer = JitterBuffer(capacity=4, sendPLI=send_rtcp_pli)
+
+        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 0)
+
+        # jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+        # self.assertEqual(jbuffer._origin, 0)
+
+        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
+        self.assertEqual(jbuffer._origin, 0)
+
+        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1235))
+        self.assertEqual(jbuffer._origin, 0)
+
+        jbuffer.add(RtpPacket(sequence_number=4, timestamp=1235))
+        self.assertEqual(jbuffer._origin, 3)
+
+        self.assertPackets(jbuffer, [4, None, None, 3])
 
     def test_add_seq_too_high_discard_four(self):
         jbuffer = JitterBuffer(capacity=4)
@@ -114,14 +141,14 @@ class JitterBufferTest(TestCase):
         jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
         self.assertEqual(jbuffer._origin, 0)
 
-        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
+        #  jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
+        #  self.assertEqual(jbuffer._origin, 0)
 
         jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
         self.assertEqual(jbuffer._origin, 0)
 
-        jbuffer.add(RtpPacket(sequence_number=7, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 4)
+        jbuffer.add(RtpPacket(sequence_number=7, timestamp=1235))
+        self.assertEqual(jbuffer._origin, 7)
 
         self.assertPackets(jbuffer, [None, None, None, 7])
 
@@ -173,6 +200,26 @@ class JitterBufferTest(TestCase):
 
         # remove 2 packets
         jbuffer.remove(2)
+        self.assertEqual(jbuffer._origin, 3)
+        self.assertPackets(jbuffer, [None, None, None, 3])
+
+    def test_smart_remove(self):
+        jbuffer = JitterBuffer(capacity=4)
+
+        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
+        # jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1235))
+        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1235))
+        self.assertEqual(jbuffer._origin, 0)
+        self.assertPackets(jbuffer, [0, None, 2, 3])
+
+        # remove 1 packet
+        jbuffer.smart_remove(1)
+        self.assertEqual(jbuffer._origin, 2)
+        self.assertPackets(jbuffer, [None, None, 2, 3])
+
+        # remove 2 packets
+        jbuffer.smart_remove(1, dumb_mode=True)
         self.assertEqual(jbuffer._origin, 3)
         self.assertPackets(jbuffer, [None, None, None, 3])
 
