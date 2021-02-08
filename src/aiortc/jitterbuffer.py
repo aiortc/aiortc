@@ -28,47 +28,38 @@ class JitterBuffer:
 
     def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
         # print("[INFO][JitterBuffer] Received Seq:", packet.sequence_number)
-        delta = 0
         if self._origin is None:
             self._origin = packet.sequence_number
-        elif self._origin < MAX_MISORDER and packet.sequence_number > self.__max_number - MAX_MISORDER:
-            if self._origin >= (packet.sequence_number + MAX_MISORDER) % self.__max_number:
-                # print("[INFO][JitterBuffer] Received Seq1:", packet.sequence_number, "In Origin", self._origin,
-                #       'max_number of ', self.__max_number)
-                self.remove(self.capacity)
-                self._origin = packet.sequence_number
-                if self.sendPLI is not None:
-                    asyncio.ensure_future(self.sendPLI(packet.ssrc))
-            else:
-                return None
-        elif packet.sequence_number < MAX_MISORDER and self._origin > self.__max_number - MAX_MISORDER:
-            delta = (packet.sequence_number - self._origin) % self.__max_number
+            delta = 0
+            misorder = 0
         else:
-            if packet.sequence_number <= self._origin - MAX_MISORDER:
-                # print("[INFO][JitterBuffer] Received Seq2:", packet.sequence_number, "In Origin", self._origin,
-                #       'max_number of ', self.__max_number)
+            delta = (packet.sequence_number - self._origin) % self.__max_number
+            misorder = (self._origin - packet.sequence_number) % self.__max_number
+
+        if misorder < delta:
+            if misorder >= MAX_MISORDER:
+                # print("[INFO][JitterBuffer] Received Seq1:", packet.sequence_number, " Origin:", self._origin,
+                #       ' misorder:', self.__max_number)
                 self.remove(self.capacity)
+                # self.smart_remove(self.capacity, dumb_mode=True) # "remove" might still be a bit faster
                 self._origin = packet.sequence_number
+                delta = misorder = 0
                 if self.sendPLI is not None:
                     asyncio.ensure_future(self.sendPLI(packet.ssrc))
-            elif packet.sequence_number < self._origin:
-                return None
             else:
-                delta = (packet.sequence_number - self._origin) % self.__max_number
-        # print("[INFO][JitterBuffer] Received Seq3:", packet.sequence_number, "In Origin", self._origin,
-        #       'delta ', delta)
+                return None
 
-        if delta >= 2 * self.capacity:
-            # received packet is so far beyond capacity we cannot keep any
-            # previous packets, so reset the buffer
-            self.remove(self.capacity)
-            self._origin = packet.sequence_number
+        # print("[INFO][JitterBuffer] Received Seq2:", packet.sequence_number, " Origin:", self._origin,
+        #       ' delta:', delta)
+
+        if delta >= self.capacity:
+            # remove just enough frames to fit the received packets
+            excess = delta - self.capacity + 1
+            print("[WARNING][JitterBuffer] At least:", excess, "packets will be lost")
+            if self.smart_remove(excess):
+                self._origin = packet.sequence_number
             if self.sendPLI is not None:
                 asyncio.ensure_future(self.sendPLI(packet.ssrc))
-        elif delta >= self.capacity:
-            # remove just enough packets to fit the received packets
-            excess = delta - self.capacity + 1
-            self.remove(excess)
 
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
@@ -101,6 +92,7 @@ class JitterBuffer:
                 frames += 1
                 if frames >= self._prefetch:
                     self.remove(remove)
+                    # self.smart_remove(remove, dumb_mode=True) # "remove" might still be a bit faster
                     return frame
 
                 # start a new frame
@@ -117,3 +109,24 @@ class JitterBuffer:
             pos = self._origin % self._capacity
             self._packets[pos] = None
             self._origin = (self._origin + 1) % self.__max_number
+
+    def smart_remove(self, count: int, dumb_mode: bool = False) -> bool:
+        # smart_remove makes sure that all packages belonging to the same frame are removed
+        # it prevents sending corrupted frames to decoder
+        timestamp = None
+        for i in range(self._capacity):
+            pos = self._origin % self._capacity
+            packet = self._packets[pos]
+            if dumb_mode:
+                if i == count:
+                    break
+            elif packet is not None:
+                if i >= count and timestamp != packet.timestamp:
+                    break
+                timestamp = packet.timestamp
+            self._packets[pos] = None
+            self._origin = (self._origin + 1) % self.__max_number
+            if i == self._capacity - 1:
+                print("[Warning][JitterBuffer] JitterBuffer purged !!!")
+                return 1 
+        return 0
