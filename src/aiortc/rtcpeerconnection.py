@@ -304,14 +304,35 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     @property
     def connectionState(self) -> str:
+        """
+        The current connection state.
+
+        Possible values: `"connected"`, `"connecting"`, `"closed"`, `"failed"`, `"new`".
+
+        When the state changes, the `"connectionstatechange"` event is fired.
+        """
         return self.__connectionState
 
     @property
     def iceConnectionState(self) -> str:
+        """
+        The current ICE connection state.
+
+        Possible values: `"checking"`, `"completed"`, `"closed"`, `"failed"`, `"new`".
+
+        When the state changes, the `"iceconnectionstatechange"` event is fired.
+        """
         return self.__iceConnectionState
 
     @property
     def iceGatheringState(self) -> str:
+        """
+        The current ICE gathering state.
+
+        Possible values: `"complete"`, `"gathering"`, `"new`".
+
+        When the state changes, the `"icegatheringstatechange"` event is fired.
+        """
         return self.__iceGatheringState
 
     @property
@@ -340,6 +361,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     @property
     def signalingState(self):
+        """
+        The current signaling state.
+
+        Possible values: `"closed"`, `"have-local-offer"`, `"have-remote-offer`", `"stable"`.
+
+        When the state changes, the `"signalingstatechange"` event is fired.
+        """
         return self.__signalingState
 
     async def addIceCandidate(self, candidate: RTCIceCandidate) -> None:
