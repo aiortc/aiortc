@@ -1,0 +1,9 @@
+version: 2
+formats:
+  - pdf
+python:
+  version: 3.7
+  install:
+    - requirements: requirements/doc.txt
+    - method: pip
+      path: .
