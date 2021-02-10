@@ -274,6 +274,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
+        self.__dtlsTransports: Set[RTCDtlsTransport] = set()
         self.__iceTransports: Set[RTCIceTransport] = set()
         self.__remoteDtls: Dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters
@@ -290,6 +291,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__stream_id = str(uuid.uuid4())
         self.__transceivers: List[RTCRtpTransceiver] = []
 
+        self.__connectionState = "new"
         self.__iceConnectionState = "new"
         self.__iceGatheringState = "new"
         self.__isClosed = False
@@ -299,6 +301,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__currentRemoteDescription: Optional[sdp.SessionDescription] = None
         self.__pendingLocalDescription: Optional[sdp.SessionDescription] = None
         self.__pendingRemoteDescription: Optional[sdp.SessionDescription] = None
+
+    @property
+    def connectionState(self) -> str:
+        return self.__connectionState
 
     @property
     def iceConnectionState(self) -> str:
@@ -444,6 +450,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # update states
         self.__updateIceGatheringState()
         self.__updateIceConnectionState()
+        self.__updateConnectionState()
 
         # no more events will be emitted, so remove all event listeners
         # to facilitate garbage collection.
@@ -889,10 +896,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             for dtlsTransport in oldTransports:
                 await dtlsTransport.stop()
                 await dtlsTransport.transport.stop()
+                self.__dtlsTransports.discard(dtlsTransport)
                 self.__iceTransports.discard(dtlsTransport.transport)
                 iceCandidates.pop(dtlsTransport.transport, None)
             self.__updateIceGatheringState()
             self.__updateIceConnectionState()
+            self.__updateConnectionState()
 
         # add remote candidates
         coros = [
@@ -973,13 +982,20 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         iceGatherer.on("statechange", self.__updateIceGatheringState)
         iceTransport = RTCIceTransport(iceGatherer)
         iceTransport.on("statechange", self.__updateIceConnectionState)
+        iceTransport.on("statechange", self.__updateConnectionState)
         self.__iceTransports.add(iceTransport)
+
+        # create DTLS transport
+        dtlsTransport = RTCDtlsTransport(iceTransport, self.__certificates)
+        dtlsTransport.on("statechange", self.__updateConnectionState)
+        self.__dtlsTransports.add(dtlsTransport)
 
         # update states
         self.__updateIceGatheringState()
         self.__updateIceConnectionState()
+        self.__updateConnectionState()
 
-        return RTCDtlsTransport(iceTransport, self.__certificates)
+        return dtlsTransport
 
     def __createSctpTransport(self) -> None:
         self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
@@ -1061,8 +1077,36 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__signalingState = state
         self.emit("signalingstatechange")
 
+    def __updateConnectionState(self) -> None:
+        # compute new state
+        # NOTE: we do not have a "disconnected" state
+        dtlsStates = set(map(lambda x: x.state, self.__dtlsTransports))
+        iceStates = set(map(lambda x: x.state, self.__iceTransports))
+        if self.__isClosed:
+            state = "closed"
+        elif "failed" in iceStates or "failed" in dtlsStates:
+            state = "failed"
+        elif not iceStates.difference(["new", "closed"]) and not dtlsStates.difference(
+            ["new", "closed"]
+        ):
+            state = "new"
+        elif "checking" in iceStates or "connecting" in dtlsStates:
+            state = "connecting"
+        elif "new" in dtlsStates:
+            # this avoids a spurious connecting -> connected -> connecting
+            # transition after ICE connects but before DTLS starts
+            state = "connecting"
+        else:
+            state = "connected"
+
+        # update state
+        if state != self.__connectionState:
+            self.__connectionState = state
+            self.emit("connectionstatechange")
+
     def __updateIceConnectionState(self) -> None:
         # compute new state
+        # NOTE: we do not have "connected" or "disconnected" states
         states = set(map(lambda x: x.state, self.__iceTransports))
         if self.__isClosed:
             state = "closed"
