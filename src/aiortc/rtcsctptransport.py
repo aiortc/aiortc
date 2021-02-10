@@ -30,7 +30,7 @@ from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCDtlsTransport
 from .utils import random32, uint16_add, uint16_gt, uint32_gt, uint32_gte
 
-logger = logging.getLogger("sctp")
+logger = logging.getLogger(__name__)
 
 # local constants
 COOKIE_LENGTH = 24

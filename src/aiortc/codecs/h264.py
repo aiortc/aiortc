@@ -12,7 +12,7 @@ from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 from .base import Decoder, Encoder
 
-logger = logging.getLogger("codec.h264")
+logger = logging.getLogger(__name__)
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300

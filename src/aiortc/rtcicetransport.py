@@ -18,7 +18,7 @@ TURN_REGEX = re.compile(
     r"(\?transport=(?P<transport>.*))?"
 )
 
-logger = logging.getLogger("ice")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
