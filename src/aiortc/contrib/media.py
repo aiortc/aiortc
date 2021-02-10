@@ -10,7 +10,7 @@ from av import AudioFrame, VideoFrame
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 
-logger = logging.getLogger("media")
+logger = logging.getLogger(__name__)
 
 
 REAL_TIME_FORMATS = [
