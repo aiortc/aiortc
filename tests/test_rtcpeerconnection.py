@@ -49,10 +49,15 @@ def strip_ice_candidates(description):
 
 def track_states(pc):
     states = {
+        "connectionState": [pc.connectionState],
         "iceConnectionState": [pc.iceConnectionState],
         "iceGatheringState": [pc.iceGatheringState],
         "signalingState": [pc.signalingState],
     }
+
+    @pc.on("connectionstatechange")
+    def connectionstatechange():
+        states["connectionState"].append(pc.connectionState)
 
     @pc.on("iceconnectionstatechange")
     def iceconnectionstatechange():
@@ -722,6 +727,9 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -732,6 +740,9 @@ a=rtpmap:8 PCMA/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -846,6 +857,9 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -856,6 +870,9 @@ a=rtpmap:8 PCMA/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -986,6 +1003,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -996,6 +1016,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1088,6 +1111,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1098,6 +1124,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1187,6 +1216,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1197,6 +1229,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1287,6 +1322,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1297,6 +1335,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1386,6 +1427,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1396,6 +1440,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1483,6 +1530,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1493,6 +1543,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1581,6 +1634,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1591,6 +1647,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1678,6 +1737,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1688,6 +1750,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1706,11 +1771,13 @@ a=rtpmap:0 PCMU/8000
         pc2 = RTCPeerConnection()
         pc2_states = track_states(pc2)
 
+        self.assertEqual(pc1.connectionState, "new")
         self.assertEqual(pc1.iceConnectionState, "new")
         self.assertEqual(pc1.iceGatheringState, "new")
         self.assertIsNone(pc1.localDescription)
         self.assertIsNone(pc1.remoteDescription)
 
+        self.assertEqual(pc2.connectionState, "new")
         self.assertEqual(pc2.iceConnectionState, "new")
         self.assertEqual(pc2.iceGatheringState, "new")
         self.assertIsNone(pc2.localDescription)
@@ -1771,6 +1838,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1781,6 +1851,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1882,6 +1955,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1892,6 +1968,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -1986,6 +2065,9 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -1996,6 +2078,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -2085,6 +2170,7 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(pc2.iceConnectionState, "closed")
 
         # check state changes
+        self.assertEqual(pc1_states["connectionState"], ["new", "closed"])
         self.assertEqual(pc1_states["iceConnectionState"], ["new", "closed"])
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
@@ -2093,6 +2179,9 @@ a=rtpmap:0 PCMU/8000
             pc1_states["signalingState"], ["stable", "have-local-offer", "closed"]
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "failed", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "failed", "closed"]
         )
@@ -2223,6 +2312,10 @@ a=rtpmap:0 PCMU/8000
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"],
+            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"],
             ["new", "checking", "completed", "new", "completed", "closed"],
         )
@@ -2242,6 +2335,10 @@ a=rtpmap:0 PCMU/8000
             ],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"],
+            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"],
             ["new", "checking", "completed", "new", "completed", "closed"],
@@ -2405,6 +2502,9 @@ a=fmtp:102 apt=101
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -2415,6 +2515,9 @@ a=fmtp:102 apt=101
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -2508,6 +2611,9 @@ a=fmtp:102 apt=101
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -2518,6 +2624,9 @@ a=fmtp:102 apt=101
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -2609,6 +2718,9 @@ a=fmtp:102 apt=101
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -2619,6 +2731,9 @@ a=fmtp:102 apt=101
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -2764,6 +2879,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -2774,6 +2892,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -2991,6 +3112,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3001,6 +3125,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -3148,6 +3275,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3158,6 +3288,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -3300,6 +3433,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3310,6 +3446,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -3583,6 +3722,10 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"],
+            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"],
             ["new", "checking", "completed", "new", "completed", "closed"],
         )
@@ -3602,6 +3745,10 @@ a=fmtp:98 apt=97
             ],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"],
+            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"],
             ["new", "checking", "completed", "new", "completed", "closed"],
@@ -3769,6 +3916,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3779,6 +3929,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -3868,6 +4021,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3878,6 +4034,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -3967,6 +4126,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -3977,6 +4139,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -4098,6 +4263,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -4108,6 +4276,9 @@ a=fmtp:98 apt=97
             ["stable", "have-local-offer", "stable", "closed"],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
@@ -4463,6 +4634,9 @@ a=fmtp:98 apt=97
 
         # check state changes
         self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
             pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )
         self.assertEqual(
@@ -4480,6 +4654,9 @@ a=fmtp:98 apt=97
             ],
         )
 
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
         )

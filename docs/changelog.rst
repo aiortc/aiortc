@@ -3,6 +3,11 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.1.2
+-----
+
+ * Add :attr:`RTCPeerConnection.connectionState` property.
+
 1.1.1
 -----
 
