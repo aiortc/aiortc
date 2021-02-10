@@ -284,7 +284,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__seenMids: Set[str] = set()
         self.__sctp: Optional[RTCSctpTransport] = None
         self.__sctp_mline_index: Optional[int] = None
-        self._sctpLegacySdp = True
+        self.__sctpLegacySdp = True
         self.__sctpRemotePort: Optional[int] = None
         self.__sctpRemoteCaps = None
         self.__stream_id = str(uuid.uuid4())
