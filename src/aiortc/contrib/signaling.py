@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover
     aiohttp = None
     websockets = None
 
-logger = logging.getLogger("aiortc.contrib.signaling")
+logger = logging.getLogger(__name__)
 BYE = object()
 
 

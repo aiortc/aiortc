@@ -12,7 +12,7 @@ from .rtcrtpreceiver import RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .sdp import DIRECTIONS
 
-logger = logging.getLogger("rtp")
+logger = logging.getLogger(__name__)
 
 
 class RTCRtpTransceiver:

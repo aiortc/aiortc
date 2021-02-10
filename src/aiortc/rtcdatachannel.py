@@ -6,7 +6,7 @@ from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 
-logger = logging.getLogger("datachannel")
+logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -36,7 +36,7 @@ from .stats import (
 )
 from .utils import random16, random32, uint16_add, uint32_add
 
-logger = logging.getLogger("rtp")
+logger = logging.getLogger(__name__)
 
 RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85

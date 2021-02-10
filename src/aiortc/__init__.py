@@ -1,4 +1,5 @@
 # flake8: noqa
+import logging
 
 from .about import __version__
 from .exceptions import InvalidAccessError, InvalidStateError
@@ -44,3 +45,6 @@ from .stats import (
     RTCStatsReport,
     RTCTransportStats,
 )
+
+# Set default logging handler to avoid "No handler found" warnings.
+logging.getLogger(__name__).addHandler(logging.NullHandler())

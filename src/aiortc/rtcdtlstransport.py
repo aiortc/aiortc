@@ -44,7 +44,7 @@ SRTP_SALT_LEN = 14
 
 CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 
-logger = logging.getLogger("dtls")
+logger = logging.getLogger(__name__)
 
 assert lib.OpenSSL_version_num() >= 0x10002000, "OpenSSL 1.0.2 or better is required"
 
