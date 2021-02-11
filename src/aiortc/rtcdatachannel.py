@@ -212,4 +212,4 @@ class RTCDataChannel(AsyncIOEventEmitter):
                 self.remove_all_listeners()
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(str(self.id) + " " + msg, *args)
+        logger.debug(f"RTCDataChannel(%s) {msg}", self.__id, *args)

@@ -579,4 +579,4 @@ class RTCRtpReceiver:
             self.__decoder_thread = None
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(f"receiver(%s) {msg}", self.__kind, *args)
+        logger.debug(f"RTCRtpReceiver(%s) {msg}", self.__kind, *args)

@@ -726,7 +726,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             # configure logging
             if logger.isEnabledFor(logging.DEBUG):
-                prefix = self.is_server and "server " or "client "
+                prefix = "RTCSctpTransport(%s) " % (
+                    self.is_server and "server" or "client"
+                )
                 self.__log_debug = lambda msg, *args: logger.debug(prefix + msg, *args)
 
             # initialise local channel ID counter

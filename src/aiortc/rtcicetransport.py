@@ -346,7 +346,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             raise
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(self.role + " " + msg, *args)
+        logger.debug(f"RTCIceTransport(%s) {msg}", self.role, *args)
 
     def __setState(self, state: str) -> None:
         if state != self.__state:

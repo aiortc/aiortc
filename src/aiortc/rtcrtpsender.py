@@ -399,7 +399,7 @@ class RTCRtpSender:
             pass
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(f"sender(%s) {msg}", self.__kind, *args)
+        logger.debug(f"RTCRtpSender(%s) {msg}", self.__kind, *args)
 
     def __log_warning(self, msg: str, *args) -> None:
-        logger.warning(f"sender(%s) {msg}", self.__kind, *args)
+        logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)

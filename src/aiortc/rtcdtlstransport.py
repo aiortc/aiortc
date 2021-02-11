@@ -702,7 +702,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self.__tx_packets += 1
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(self._role + " " + msg, *args)
+        logger.debug(f"RTCDtlsTransport(%s) {msg}", self._role, *args)
 
     def __log_warning(self, msg: str, *args) -> None:
-        logger.warning(self._role + " " + msg, *args)
+        logger.warning(f"RTCDtlsTransport(%s) {msg}", self._role, *args)
