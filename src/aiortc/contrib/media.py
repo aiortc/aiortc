@@ -139,7 +139,9 @@ def player_worker(
                     break
         elif isinstance(frame, VideoFrame) and video_track:
             if frame.pts is None:  # pragma: no cover
-                logger.warning("Skipping video frame with no pts")
+                logger.warning(
+                    "MediaPlayer(%s) Skipping video frame with no pts", container.name
+                )
                 continue
 
             # video from a webcam doesn't start at pts 0, cancel out offset
@@ -292,7 +294,7 @@ class MediaPlayer:
             self.__container = None
 
     def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(f"player(%s) {msg}", self.__container.name, *args)
+        logger.debug(f"MediaPlayer(%s) {msg}", self.__container.name, *args)
 
 
 class MediaRecorderContext:

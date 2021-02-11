@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import logging
 import uuid
 from collections import OrderedDict
 from typing import Dict, List, Optional, Set, Union
@@ -40,6 +41,8 @@ from .stats import RTCStatsReport
 DISCARD_HOST = "0.0.0.0"
 DISCARD_PORT = 9
 MEDIA_KINDS = ["audio", "video"]
+
+logger = logging.getLogger(__name__)
 
 
 def filter_preferred_codecs(
@@ -1073,6 +1076,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         rtp.rtcp.mux = True
         return rtp
 
+    def __log_debug(self, msg: str, *args) -> None:
+        logger.debug(f"RTCPeerConnection() {msg}", *args)
+
     def __remoteDescription(self) -> Optional[sdp.SessionDescription]:
         return self.__pendingRemoteDescription or self.__currentRemoteDescription
 
@@ -1129,6 +1135,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         # update state
         if state != self.__connectionState:
+            self.__log_debug("connectionState %s -> %s", self.__connectionState, state)
             self.__connectionState = state
             self.emit("connectionstatechange")
 
@@ -1149,6 +1156,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         # update state
         if state != self.__iceConnectionState:
+            self.__log_debug(
+                "iceConnectionState %s -> %s", self.__iceConnectionState, state
+            )
             self.__iceConnectionState = state
             self.emit("iceconnectionstatechange")
 
@@ -1164,6 +1174,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         # update state
         if state != self.__iceGatheringState:
+            self.__log_debug(
+                "iceGatheringState %s -> %s", self.__iceGatheringState, state
+            )
             self.__iceGatheringState = state
             self.emit("icegatheringstatechange")
 
