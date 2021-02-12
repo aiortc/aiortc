@@ -555,3 +555,29 @@ class RtpRouterTest(TestCase):
 
         # unknown SSRC and payload type
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=6789, payload_type=100)), None)
+
+    def test_route_rtp_ambiguous_payload_type(self):
+        receiver1 = object()
+        receiver2 = object()
+
+        router = RtpRouter()
+        router.register_receiver(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])
+        router.register_receiver(receiver2, ssrcs=[3456, 4567], payload_types=[96, 97])
+
+        # known SSRC and payload type
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), receiver1
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=2345, payload_type=97)), receiver1
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=3456, payload_type=96)), receiver2
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=4567, payload_type=97)), receiver2
+        )
+
+        # unknown SSRC, ambiguous payload type
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), None)
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=97)), None)
