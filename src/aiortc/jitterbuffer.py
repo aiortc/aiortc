@@ -27,7 +27,6 @@ class JitterBuffer:
         return self._capacity
 
     def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
-        # print("[INFO][JitterBuffer] Received Seq:", packet.sequence_number)
         if self._origin is None:
             self._origin = packet.sequence_number
             delta = 0
@@ -38,8 +37,6 @@ class JitterBuffer:
 
         if misorder < delta:
             if misorder >= MAX_MISORDER:
-                # print("[INFO][JitterBuffer] Received Seq1:", packet.sequence_number, " Origin:", self._origin,
-                #       ' misorder:', self.__max_number)
                 self.smart_remove(self.capacity, dumb_mode=True)
                 self._origin = packet.sequence_number
                 delta = misorder = 0
@@ -48,13 +45,9 @@ class JitterBuffer:
             else:
                 return None
 
-        # print("[INFO][JitterBuffer] Received Seq2:", packet.sequence_number, " Origin:", self._origin,
-        #       ' delta:', delta)
-
         if delta >= self.capacity:
             # remove just enough frames to fit the received packets
             excess = delta - self.capacity + 1
-            print("[WARNING][JitterBuffer] At least:", excess, "packets will be lost")
             if self.smart_remove(excess):
                 self._origin = packet.sequence_number
             if self.sendPLI is not None:
@@ -90,8 +83,7 @@ class JitterBuffer:
                 # check we have prefetched enough
                 frames += 1
                 if frames >= self._prefetch:
-                    self.remove(remove)
-                    # self.smart_remove(remove, dumb_mode=True) # "remove" might still be a bit faster
+                    self.remove(remove)  # this might be a bit faster than smart_remove
                     return frame
 
                 # start a new frame
@@ -126,6 +118,5 @@ class JitterBuffer:
             self._packets[pos] = None
             self._origin = (self._origin + 1) % self.__max_number
             if i == self._capacity - 1:
-                print("[Warning][JitterBuffer] JitterBuffer purged !!!")
                 return True
         return False

@@ -218,7 +218,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 2)
         self.assertPackets(jbuffer, [None, None, 2, 3])
 
-        # remove 2 packets
+        # remove 1 packet using dumb mode
         jbuffer.smart_remove(1, dumb_mode=True)
         self.assertEqual(jbuffer._origin, 3)
         self.assertPackets(jbuffer, [None, None, None, 3])
