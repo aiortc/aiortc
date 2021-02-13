@@ -7,6 +7,9 @@ Changelog
 -----
 
  * Add :attr:`RTCPeerConnection.connectionState` property.
+ * Correctly detect RTCIceTransport `"failed"` state.
+ * Correctly route RTP packets when there are multiple tracks of the same kind.
+ * Use full module name to name loggers.
 
 1.1.1
 -----
