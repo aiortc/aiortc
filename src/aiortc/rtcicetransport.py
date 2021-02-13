@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from aioice import Candidate, Connection
+from aioice import Candidate, Connection, ConnectionClosed
 from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
@@ -239,11 +239,16 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
     def __init__(self, gatherer: RTCIceGatherer) -> None:
         super().__init__()
-        self.__start: Optional[asyncio.Event] = None
         self.__iceGatherer = gatherer
+        self.__monitor_task: Optional[asyncio.Future[None]] = None
+        self.__start: Optional[asyncio.Event] = None
         self.__state = "new"
         self._connection = gatherer._connection
         self._role_set = False
+
+        # expose recv / send methods
+        self._recv = self._connection.recv
+        self._send = self._connection.send
 
     @property
     def iceGatherer(self) -> RTCIceGatherer:
@@ -308,6 +313,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             await self.__start.wait()
             return
         self.__start = asyncio.Event()
+        self.__monitor_task = asyncio.ensure_future(self._monitor())
 
         self.__setState("checking")
         self._connection.remote_is_lite = remoteParameters.iceLite
@@ -328,22 +334,17 @@ class RTCIceTransport(AsyncIOEventEmitter):
         if self.state != "closed":
             self.__setState("closed")
             await self._connection.close()
+            if self.__monitor_task is not None:
+                await self.__monitor_task
+                self.__monitor_task = None
 
-    async def _recv(self) -> bytes:
-        try:
-            return await self._connection.recv()
-        except ConnectionError:
-            if self.state == "completed":
-                self.__setState("failed")
-            raise
-
-    async def _send(self, data: bytes) -> None:
-        try:
-            await self._connection.send(data)
-        except ConnectionError:
-            if self.state == "completed":
-                self.__setState("failed")
-            raise
+    async def _monitor(self) -> None:
+        while True:
+            event = await self._connection.get_event()
+            if isinstance(event, ConnectionClosed):
+                if self.state == "completed":
+                    self.__setState("failed")
+                return
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"RTCIceTransport(%s) {msg}", self.role, *args)
