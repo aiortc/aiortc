@@ -1,6 +1,9 @@
 import asyncio
 from unittest import TestCase
 
+import aioice.stun
+from aioice import ConnectionClosed
+
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcconfiguration import RTCIceServer
 from aiortc.rtcicetransport import (
@@ -15,8 +18,13 @@ from aiortc.rtcicetransport import (
 from .utils import run
 
 
-async def noop():
+async def mock_connect():
     pass
+
+
+async def mock_get_event():
+    await asyncio.sleep(0.5)
+    return ConnectionClosed()
 
 
 class ConnectionKwargsTest(TestCase):
@@ -244,6 +252,20 @@ class RTCIceGathererTest(TestCase):
 
 
 class RTCIceTransportTest(TestCase):
+    def setUp(self):
+        # save timers
+        self.retry_max = aioice.stun.RETRY_MAX
+        self.retry_rto = aioice.stun.RETRY_RTO
+
+        # shorten timers to run tests faster
+        aioice.stun.RETRY_MAX = 1
+        aioice.stun.RETRY_RTO = 0.1
+
+    def tearDown(self):
+        # restore timers
+        aioice.stun.RETRY_MAX = self.retry_max
+        aioice.stun.RETRY_RTO = self.retry_rto
+
     def test_construct(self):
         gatherer = RTCIceGatherer()
         connection = RTCIceTransport(gatherer)
@@ -343,30 +365,21 @@ class RTCIceTransportTest(TestCase):
             )
         self.assertEqual(str(cm.exception), "RTCIceTransport is closed")
 
-    def test_recv_connection_error(self):
+    def test_connection_closed(self):
         gatherer = RTCIceGatherer()
+
+        # mock out methods
+        gatherer._connection.connect = mock_connect
+        gatherer._connection.get_event = mock_get_event
+
         transport = RTCIceTransport(gatherer)
         self.assertEqual(transport.state, "new")
 
-        # fake connection
-        gatherer._connection.connect = noop
         run(transport.start(RTCIceParameters(usernameFragment="foo", password="bar")))
         self.assertEqual(transport.state, "completed")
 
-        with self.assertRaises(ConnectionError):
-            run(transport._recv())
+        run(asyncio.sleep(1))
         self.assertEqual(transport.state, "failed")
 
-    def test_send_connection_error(self):
-        gatherer = RTCIceGatherer()
-        transport = RTCIceTransport(gatherer)
-        self.assertEqual(transport.state, "new")
-
-        # fake connection
-        gatherer._connection.connect = noop
-        run(transport.start(RTCIceParameters(usernameFragment="foo", password="bar")))
-        self.assertEqual(transport.state, "completed")
-
-        with self.assertRaises(ConnectionError):
-            run(transport._send(b"foo"))
-        self.assertEqual(transport.state, "failed")
+        run(transport.stop())
+        self.assertEqual(transport.state, "closed")

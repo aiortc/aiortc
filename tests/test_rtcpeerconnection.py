@@ -2,6 +2,7 @@ import asyncio
 import re
 from unittest import TestCase
 
+import aioice.ice
 import aioice.stun
 
 from aiortc import (
@@ -386,13 +387,22 @@ class RTCPeerConnectionTest(TestCase):
             total += sleep
 
     def setUp(self):
-        # shorten retransmissions to run tests faster
+        # save timers
+        self.consent_failures = aioice.ice.CONSENT_FAILURES
+        self.consent_interval = aioice.ice.CONSENT_INTERVAL
         self.retry_max = aioice.stun.RETRY_MAX
         self.retry_rto = aioice.stun.RETRY_RTO
+
+        # shorten timers to run tests faster
+        aioice.ice.CONSENT_FAILURES = 1
+        aioice.ice.CONSENT_INTERVAL = 1
         aioice.stun.RETRY_MAX = 1
         aioice.stun.RETRY_RTO = 0.1
 
     def tearDown(self):
+        # restore timers
+        aioice.ice.CONSENT_FAILURES = self.consent_failures
+        aioice.ice.CONSENT_INTERVAL = self.consent_interval
         aioice.stun.RETRY_MAX = self.retry_max
         aioice.stun.RETRY_RTO = self.retry_rto
 
@@ -875,6 +885,76 @@ a=rtpmap:8 PCMA/8000
         )
         self.assertEqual(
             pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
+    def test_connect_audio_bidirectional_and_close(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        # create offer
+        track1 = AudioStreamTrack()
+        pc1.addTrack(track1)
+        offer = run(pc1.createOffer())
+        run(pc1.setLocalDescription(offer))
+
+        # handle offer
+        run(pc2.setRemoteDescription(pc1.localDescription))
+
+        # create answer
+        track2 = AudioStreamTrack()
+        pc2.addTrack(track2)
+        answer = run(pc2.createAnswer())
+        run(pc2.setLocalDescription(answer))
+
+        # handle answer
+        run(pc1.setRemoteDescription(pc2.localDescription))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # close one side
+        run(pc1.close())
+        self.assertEqual(pc1.iceConnectionState, "closed")
+
+        # wait for consent to expire
+        run(asyncio.sleep(2))
+
+        # close other side
+        run(pc2.close())
+        self.assertEqual(pc2.iceConnectionState, "closed")
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"],
+            ["new", "connecting", "connected", "failed", "closed"],
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"],
+            ["new", "checking", "completed", "failed", "closed"],
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
