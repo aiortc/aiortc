@@ -31,10 +31,10 @@ async def offer(request):
     pc = RTCPeerConnection()
     pcs.add(pc)
 
-    @pc.on("iceconnectionstatechange")
-    async def on_iceconnectionstatechange():
-        print("ICE connection state is %s" % pc.iceConnectionState)
-        if pc.iceConnectionState == "failed":
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        print("Connection state is %s" % pc.connectionState)
+        if pc.connectionState == "failed":
             await pc.close()
             pcs.discard(pc)
 

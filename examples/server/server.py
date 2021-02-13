@@ -126,10 +126,10 @@ async def offer(request):
             if isinstance(message, str) and message.startswith("ping"):
                 channel.send("pong" + message[4:])
 
-    @pc.on("iceconnectionstatechange")
-    async def on_iceconnectionstatechange():
-        log_info("ICE connection state is %s", pc.iceConnectionState)
-        if pc.iceConnectionState == "failed":
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        log_info("Connection state is %s", pc.connectionState)
+        if pc.connectionState == "failed":
             await pc.close()
             pcs.discard(pc)
 
