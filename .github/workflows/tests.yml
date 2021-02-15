@@ -46,7 +46,7 @@ jobs:
       - name: Run tests
         run: |
           python -m pip install -U pip setuptools wheel
-          pip install aiohttp coverage opencv-python websockets
+          pip install aiohttp coverage numpy websockets
           pip install .
           coverage run -m unittest discover -v
           coverage xml
