@@ -1,7 +1,7 @@
-import asyncio
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .rtp import RtpPacket
+from .utils import uint16_add
 
 MAX_MISORDER = 100
 
@@ -13,50 +13,50 @@ class JitterFrame:
 
 
 class JitterBuffer:
-    def __init__(self, capacity: int, prefetch: int = 0, sendPLI=None) -> None:
+    def __init__(self, capacity: int, prefetch: int = 0) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
         self._origin: Optional[int] = None
         self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
         self.__max_number = 65536
-        self.sendPLI = sendPLI
 
     @property
     def capacity(self) -> int:
         return self._capacity
 
-    def add(self, packet: RtpPacket) -> Optional[JitterFrame]:
+    def add(self, packet: RtpPacket) -> Tuple[bool, Optional[JitterFrame]]:
+        pli_flag = False
         if self._origin is None:
             self._origin = packet.sequence_number
             delta = 0
             misorder = 0
         else:
-            delta = (packet.sequence_number - self._origin) % self.__max_number
-            misorder = (self._origin - packet.sequence_number) % self.__max_number
+            delta = uint16_add(packet.sequence_number, -self._origin)
+            misorder = uint16_add(self._origin, -packet.sequence_number)
 
         if misorder < delta:
             if misorder >= MAX_MISORDER:
-                self.smart_remove(self.capacity, dumb_mode=True)
+                self.remove(self.capacity)
                 self._origin = packet.sequence_number
                 delta = misorder = 0
-                if self.sendPLI is not None:
-                    asyncio.ensure_future(self.sendPLI(packet.ssrc))
+                if self._capacity >= 128:
+                    pli_flag = True
             else:
-                return None
+                return pli_flag, None
 
         if delta >= self.capacity:
             # remove just enough frames to fit the received packets
             excess = delta - self.capacity + 1
             if self.smart_remove(excess):
                 self._origin = packet.sequence_number
-            if self.sendPLI is not None:
-                asyncio.ensure_future(self.sendPLI(packet.ssrc))
+            if self._capacity >= 128:
+                pli_flag = True
 
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
 
-        return self._remove_frame(packet.sequence_number)
+        return pli_flag, self._remove_frame(packet.sequence_number)
 
     def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
         frame = None
@@ -83,7 +83,7 @@ class JitterBuffer:
                 # check we have prefetched enough
                 frames += 1
                 if frames >= self._prefetch:
-                    self.remove(remove)  # this might be a bit faster than smart_remove
+                    self.remove(remove)
                     return frame
 
                 # start a new frame
@@ -101,17 +101,16 @@ class JitterBuffer:
             self._packets[pos] = None
             self._origin = (self._origin + 1) % self.__max_number
 
-    def smart_remove(self, count: int, dumb_mode: bool = False) -> bool:
-        # smart_remove makes sure that all packages belonging to the same frame are removed
-        # it prevents sending corrupted frames to decoder
+    def smart_remove(self, count: int) -> bool:
+        """
+        smart_remove makes sure that all packages belonging to the same frame are removed
+        it prevents sending corrupted frames to decoder
+        """
         timestamp = None
         for i in range(self._capacity):
             pos = self._origin % self._capacity
             packet = self._packets[pos]
-            if dumb_mode:
-                if i == count:
-                    break
-            elif packet is not None:
+            if packet is not None:
                 if i >= count and timestamp != packet.timestamp:
                     break
                 timestamp = packet.timestamp
