@@ -490,7 +490,7 @@ class RTCRtpReceiver:
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
         # check if the PLI should be sent
         if pli_flag:
-            asyncio.ensure_future(self._send_rtcp_pli(packet.ssrc))
+            await self._send_rtcp_pli(packet.ssrc)
 
         # if we have a complete encoded frame, decode it
         if encoded_frame is not None and self.__decoder_thread:

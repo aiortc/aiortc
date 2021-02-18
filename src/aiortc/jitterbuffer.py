@@ -19,7 +19,6 @@ class JitterBuffer:
         self._origin: Optional[int] = None
         self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
-        self.__max_number = 65536
 
     @property
     def capacity(self) -> int:
@@ -99,7 +98,7 @@ class JitterBuffer:
         for i in range(count):
             pos = self._origin % self._capacity
             self._packets[pos] = None
-            self._origin = (self._origin + 1) % self.__max_number
+            self._origin = uint16_add(self._origin, 1)
 
     def smart_remove(self, count: int) -> bool:
         """
@@ -115,7 +114,7 @@ class JitterBuffer:
                     break
                 timestamp = packet.timestamp
             self._packets[pos] = None
-            self._origin = (self._origin + 1) % self.__max_number
+            self._origin = uint16_add(self._origin, 1)
             if i == self._capacity - 1:
                 return True
         return False
