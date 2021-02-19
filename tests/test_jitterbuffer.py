@@ -259,7 +259,7 @@ class JitterBufferTest(TestCase):
         """
         Video jitter buffer.
         """
-        jbuffer = JitterBuffer(capacity=128)
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
         packet._data = b"0000"
@@ -287,7 +287,7 @@ class JitterBufferTest(TestCase):
         """
         Video jitter buffer.
         """
-        jbuffer = JitterBuffer(capacity=128)
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
         self.assertIsNone(frame)

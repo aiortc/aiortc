@@ -13,12 +13,15 @@ class JitterFrame:
 
 
 class JitterBuffer:
-    def __init__(self, capacity: int, prefetch: int = 0) -> None:
+    def __init__(
+        self, capacity: int, prefetch: int = 0, is_video: bool = False
+    ) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
         self._origin: Optional[int] = None
         self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
+        self._is_video = is_video
 
     @property
     def capacity(self) -> int:
@@ -39,7 +42,7 @@ class JitterBuffer:
                 self.remove(self.capacity)
                 self._origin = packet.sequence_number
                 delta = misorder = 0
-                if self._capacity >= 128:
+                if self._is_video:
                     pli_flag = True
             else:
                 return pli_flag, None
@@ -49,7 +52,7 @@ class JitterBuffer:
             excess = delta - self.capacity + 1
             if self.smart_remove(excess):
                 self._origin = packet.sequence_number
-            if self._capacity >= 128:
+            if self._is_video:
                 pli_flag = True
 
         pos = packet.sequence_number % self._capacity
