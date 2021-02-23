@@ -38,7 +38,12 @@ class MockBinding:
     lib = MockLib()
 
 
+class MockAvLogging:
+    restore_default_callback = lambda x: None
+
+
 class MockAv:
+    logging = MockAvLogging()
     AudioFrame = None
     VideoFrame = None
 
@@ -66,6 +71,7 @@ class MockVpx:
 
 sys.modules.update({'av': MockAv()})
 sys.modules.update({'av.frame': MockAvFrame()})
+sys.modules.update({'av.logging': MockAvLogging()})
 sys.modules.update({'pylibsrtp._binding': MockBinding()})
 sys.modules.update({'aiortc.codecs.h264': MockH264()})
 sys.modules.update({'aiortc.codecs.opus': MockOpus()})
