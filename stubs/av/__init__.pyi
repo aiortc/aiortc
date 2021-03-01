@@ -6,6 +6,8 @@ from .frame import Frame
 class AVError(Exception): ...
 
 class CodecContext:
+    bit_rate: int
+    framerate: Fraction
     height: int
     options: Dict[str, str]
     pix_fmt: str
@@ -15,6 +17,7 @@ class CodecContext:
     def create(codec: str, mode: Optional[str] = ...) -> CodecContext: ...
     def decode(self, packet: Packet) -> List[Frame]: ...
     def encode(self, frame: Frame) -> List[Packet]: ...
+    def open(self) -> None: ...
 
 class Packet:
     pts: int

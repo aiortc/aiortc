@@ -14,6 +14,10 @@ from .base import Decoder, Encoder
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_BITRATE = 1000000  # 1 Mbps
+MIN_BITRATE = 500000  # 500 kbps
+MAX_BITRATE = 3000000  # 3 Mbps
+
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
@@ -116,9 +120,32 @@ class H264Decoder(Decoder):
         return frames
 
 
+def create_encoder_context(
+    codec_name: str, width: int, height: int, bitrate: int
+) -> Tuple[av.CodecContext, bool]:
+    codec = av.CodecContext.create(codec_name, "w")
+    codec.width = width
+    codec.height = height
+    codec.bit_rate = bitrate
+    codec.pix_fmt = "yuv420p"
+    codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
+    codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+    codec.options = {
+        "profile": "baseline",
+        "level": "31",
+        "tune": "zerolatency",  # does nothing using h264_omx
+    }
+    codec.open()
+    return codec, codec_name == "h264_omx"
+
+
 class H264Encoder(Encoder):
     def __init__(self) -> None:
+        self.buffer_data = b""
+        self.buffer_pts: Optional[int] = None
         self.codec: Optional[av.CodecContext] = None
+        self.codec_buffering = False
+        self.__target_bitrate = DEFAULT_BITRATE
 
     @staticmethod
     def _packetize_fu_a(data: bytes) -> List[bytes]:
@@ -242,24 +269,46 @@ class H264Encoder(Encoder):
         self, frame: av.VideoFrame, force_keyframe: bool
     ) -> Iterator[bytes]:
         if self.codec and (
-            frame.width != self.codec.width or frame.height != self.codec.height
+            frame.width != self.codec.width
+            or frame.height != self.codec.height
+            # we only adjust bitrate if it changes by over 10%
+            or abs(self.target_bitrate - self.codec.bit_rate) / self.codec.bit_rate
+            > 0.1
         ):
+            self.buffer_data = b""
+            self.buffer_pts = None
             self.codec = None
 
         if self.codec is None:
-            self.codec = av.CodecContext.create("libx264", "w")
-            self.codec.width = frame.width
-            self.codec.height = frame.height
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
-            self.codec.options = {
-                "profile": "baseline",
-                "level": "31",
-                "tune": "zerolatency",
-            }
+            try:
+                self.codec, self.codec_buffering = create_encoder_context(
+                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                )
+            except Exception:
+                self.codec, self.codec_buffering = create_encoder_context(
+                    "libx264",
+                    frame.width,
+                    frame.height,
+                    bitrate=self.target_bitrate,
+                )
 
-        packages = self.codec.encode(frame)
-        yield from self._split_bitstream(b"".join(p.to_bytes() for p in packages))
+        data_to_send = b""
+        for package in self.codec.encode(frame):
+            package_bytes = package.to_bytes()
+            if self.codec_buffering:
+                # delay sending to ensure we accumulate all packages
+                # for a given PTS
+                if package.pts == self.buffer_pts:
+                    self.buffer_data += package_bytes
+                else:
+                    data_to_send += self.buffer_data
+                    self.buffer_data = package_bytes
+                    self.buffer_pts = package.pts
+            else:
+                data_to_send += package_bytes
+
+        if data_to_send:
+            yield from self._split_bitstream(data_to_send)
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -268,6 +317,18 @@ class H264Encoder(Encoder):
         packages = self._encode_frame(frame, force_keyframe)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         return self._packetize(packages), timestamp
+
+    @property
+    def target_bitrate(self) -> int:
+        """
+        Target bitrate in bits per second.
+        """
+        return self.__target_bitrate
+
+    @target_bitrate.setter
+    def target_bitrate(self, bitrate: int) -> None:
+        bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
+        self.__target_bitrate = bitrate
 
 
 def h264_depayload(payload: bytes) -> bytes:
