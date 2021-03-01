@@ -3,7 +3,7 @@ import io
 from contextlib import redirect_stderr
 from unittest import TestCase
 
-from aiortc.codecs import get_decoder, get_encoder
+from aiortc.codecs import get_decoder, get_encoder, h264
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.jitterbuffer import JitterFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
@@ -14,6 +14,28 @@ from .utils import load
 H264_CODEC = RTCRtpCodecParameters(
     mimeType="video/H264", clockRate=90000, payloadType=100
 )
+
+
+class DummyPacket:
+    def __init__(self, dts, pts):
+        self.dts = dts
+        self.pts = pts
+
+    def to_bytes(self):
+        return b""
+
+
+class FragmentedCodecContext:
+    def __init__(self, orig):
+        self.__orig = orig
+
+    def encode(self, frame):
+        packages = self.__orig.encode(frame)
+        packages.append(DummyPacket(packages[0].dts, packages[0].pts))
+        return packages
+
+    def __getattr__(self, name):
+        return getattr(self.__orig, name)
 
 
 class H264PayloadDescriptorTest(TestCase):
@@ -98,6 +120,49 @@ class H264Test(CodecTestCase):
         frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
+
+    def test_encoder_buffering(self):
+        create_encoder_context = h264.create_encoder_context
+
+        def mock_create_encoder_context(*args, **kwargs):
+            codec, _ = create_encoder_context(*args, **kwargs)
+            return FragmentedCodecContext(codec), True
+
+        h264.create_encoder_context = mock_create_encoder_context
+        try:
+            encoder = get_encoder(H264_CODEC)
+            self.assertTrue(isinstance(encoder, H264Encoder))
+
+            frame = self.create_video_frame(width=640, height=480, pts=0)
+            packages, timestamp = encoder.encode(frame)
+            self.assertEqual(len(packages), 0)
+
+            frame = self.create_video_frame(width=640, height=480, pts=3000)
+            packages, timestamp = encoder.encode(frame)
+            self.assertGreaterEqual(len(packages), 1)
+        finally:
+            h264.create_encoder_context = create_encoder_context
+
+    def test_encoder_target_bitrate(self):
+        encoder = get_encoder(H264_CODEC)
+        self.assertTrue(isinstance(encoder, H264Encoder))
+        self.assertEqual(encoder.target_bitrate, 1000000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        packages, timestamp = encoder.encode(frame)
+        self.assertGreaterEqual(len(packages), 1)
+        self.assertTrue(len(packages[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+        # change target bitrate
+        encoder.target_bitrate = 1200000
+        self.assertEqual(encoder.target_bitrate, 1200000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        packages, timestamp = encoder.encode(frame)
+        self.assertGreaterEqual(len(packages), 1)
+        self.assertTrue(len(packages[0]) < 1300)
+        self.assertEqual(timestamp, 3000)
 
     def test_roundtrip_1280_720(self):
         self.roundtrip_video(H264_CODEC, 1280, 720)
