@@ -6,7 +6,13 @@ from unittest import TestCase
 
 import av
 
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import (
+    MediaBlackhole,
+    MediaPlayer,
+    MediaRecorder,
+    MultiplexedMediaSource,
+    MultiplexedMediaStreamTrack,
+)
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
 
 from .codecs import CodecTestCase
@@ -356,3 +362,39 @@ class MediaRecorderTest(MediaTestCase):
         )
         self.assertEqual(container.streams[0].width, 640)
         self.assertEqual(container.streams[0].height, 480)
+
+
+class MultiplexedMediaSourceTest(TestCase):
+    def test_audio(self):
+        track = AudioStreamTrack()
+        mp_source = MultiplexedMediaSource(track)
+        self.assertEqual(mp_source.kind, "audio")
+        run(mp_source.stop())
+
+    def test_video(self):
+        track = VideoStreamTrack()
+        mp_source = MultiplexedMediaSource(track)
+
+        self.assertEqual(mp_source.kind, "video")
+
+        run(mp_source.stop())
+
+
+class MultiplexedMediaStreamTrackTest(TestCase):
+    def test_audio(self):
+        track = AudioStreamTrack()
+        mp_source = MultiplexedMediaSource(track)
+        mp_track = MultiplexedMediaStreamTrack(mp_source)
+
+        self.assertEqual(mp_track.kind, "audio")
+
+        run(mp_source.stop())
+
+    def test_video(self):
+        track = VideoStreamTrack()
+        mp_source = MultiplexedMediaSource(track)
+        mp_track = MultiplexedMediaStreamTrack(mp_source)
+
+        self.assertEqual(mp_track.kind, "video")
+
+        run(mp_source.stop())
