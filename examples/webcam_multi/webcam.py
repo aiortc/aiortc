@@ -9,7 +9,7 @@ import ssl
 from aiohttp import web
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaPlayer, MultiplexedSource
+from aiortc.contrib.media import MediaPlayer, MultiplexedMediaSource
 
 ROOT = os.path.dirname(__file__)
 
@@ -43,7 +43,8 @@ async def offer(request):
         #if t.kind == "audio" and player.audio:
         #    pc.addTrack(player.audio)
         if t.kind == "video":
-            multiplex.add_peer_connection(pc)
+            track = multiplex.new_track()
+            pc.addTrack(track)
 
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
@@ -109,6 +110,6 @@ if __name__ == "__main__":
 
     video_track = player.video
 
-    multiplex = MultiplexedSource(video_track)
+    multiplex = MultiplexedMediaSource(video_track)
 
     web.run_app(app, host=args.host, port=args.port, ssl_context=ssl_context)

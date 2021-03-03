@@ -81,7 +81,7 @@ class MediaBlackhole:
 
 
 def player_worker(
-        loop, container, streams, audio_track, video_track, quit_event, throttle_playback
+    loop, container, streams, audio_track, video_track, quit_event, throttle_playback
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -116,9 +116,9 @@ def player_worker(
 
         if isinstance(frame, AudioFrame) and audio_track:
             if (
-                    frame.format.name != audio_format_name
-                    or frame.layout.name != audio_layout_name
-                    or frame.sample_rate != audio_sample_rate
+                frame.format.name != audio_format_name
+                or frame.layout.name != audio_layout_name
+                or frame.sample_rate != audio_sample_rate
             ):
                 frame.pts = None
                 frame = audio_resampler.resample(frame)
@@ -175,9 +175,9 @@ class PlayerStreamTrack(MediaStreamTrack):
 
         # control playback rate
         if (
-                self._player is not None
-                and self._player._throttle_playback
-                and frame_time is not None
+            self._player is not None
+            and self._player._throttle_playback
+            and frame_time is not None
         ):
             if self._start is None:
                 self._start = time.time() - frame_time
@@ -264,7 +264,7 @@ class MediaPlayer:
     def _start(self, track: PlayerStreamTrack) -> None:
         self.__started.add(track)
         if self.__thread is None:
-            self.__log_debug("Starting worker __thread")
+            self.__log_debug("Starting worker _hread")
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(
                 name="media-player",
@@ -285,7 +285,7 @@ class MediaPlayer:
         self.__started.discard(track)
 
         if not self.__started and self.__thread is not None:
-            self.__log_debug("Stopping worker __thread")
+            self.__log_debug("Stopping worker thread")
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
@@ -406,8 +406,8 @@ class MultiplexedMediaSource:
                 self.__track,
                 self.__streams,
                 self.__stream_lock,
-                self.__thread_quit
-            )
+                self.__thread_quit,
+            ),
         )
         self.__thread.start()
 
@@ -417,7 +417,7 @@ class MultiplexedMediaSource:
 
     async def stop(self):
         """
-        Stop camera thread and release camera resource
+        Stop worker thread and source track
         :return:
         """
         self.__thread_quit.set()
@@ -425,19 +425,27 @@ class MultiplexedMediaSource:
         await loop.run_in_executor(None, self.__thread.join)
         self.__track.stop()
 
-    def add_peer_connection(self, peer_connection):
+    def new_track(self):
         """
-        Create a new streaming track and add this to the peer connection
+        Create a new mediatrack which receives frames from the source mediatrack
         :param peer_connection:
         :return:
         """
-        self.__log_debug("Add track to peer connection")
-        peer_connection.addTrack(MultiplexedMediaStreamTrack(self))
+        self.__log_debug("Create new track from multiplexed source")
+        stream = MultiplexedMediaStreamTrack(self.kind, self._stop_stream)
+        self._start_stream(stream)
+        return stream
 
     @staticmethod
-    def worker(loop: asyncio.unix_events.SelectorEventLoop, track, streams, stream_lock, quit_event):
+    def worker(
+        loop: asyncio.unix_events.SelectorEventLoop,
+        track,
+        streams,
+        stream_lock,
+        quit_event,
+    ):
         """
-        Function which continues get frame from camera and put it to the queues
+        Function which continues get frame from source mediatrack and put it to the queues
         :param loop: the asyncio loop to which all queues on different threads are added
         :param track: a track resource
         :param streams: the shared variable where stream clients are registered
@@ -450,22 +458,23 @@ class MultiplexedMediaSource:
         while not quit_event.is_set():
             future = asyncio.run_coroutine_threadsafe(track.recv(), loop)
             frame = future.result()
-
+            print(frame)
             # put frame on queue for each stream
             stream = None
             futures = []
             with stream_lock:
                 for stream in streams:
-                    futures.append(asyncio.run_coroutine_threadsafe(
-                        MultiplexedMediaSource.put_on_queues(stream, frame),
-                        loop
-                    ))
+                    futures.append(
+                        asyncio.run_coroutine_threadsafe(
+                            MultiplexedMediaSource._put_on_queues(stream, frame), loop
+                        )
+                    )
                 concurrent.futures.wait(futures)
 
     @staticmethod
-    async def put_on_queues(stream, frame):
+    async def _put_on_queues(stream, frame):
         """
-        Put a single videoframe to a single queue
+        Put a single frame to a single queue
         :param stream: stream object which has a queue where frame should be dispatched to
         :param frame: the frame that should be added to the queue
         :return:
@@ -474,49 +483,47 @@ class MultiplexedMediaSource:
         try:
             stream.queue.put_nowait(frame)
         except asyncio.QueueFull:
-            logger.debug('exception on full queue')
+            MultiplexedMediaSource.__log_debug("exception on full queue")
 
-    def start_stream(self, stream):
+    def _start_stream(self, stream):
         """
         A stream is started and calls this function so that its queue is added
         :param stream: stream object which has a queue where frame should be dispatched to
         :return:
         """
-        logger.info("Add a stream to the source")
+        self.__log_debug("Add a stream to the source")
         with self.__stream_lock:
             self.__streams.add(stream)
 
-    def stop_stream(self, stream):
+    def _stop_stream(self, stream):
         """
         A stream notes that it would like to be removed, so it will not receive frames in the future
         :param stream: stream object which has a queue where frame were dispatched to
         :return:
         """
-        logger.info("Remove a stream from the source")
+        self.__log_debug("Remove a stream from the source")
         with self.__stream_lock:
             self.__streams.discard(stream)
 
-    def __log_debug(self, msg: str, *args) -> None:
+    @staticmethod
+    def __log_debug(msg: str, *args) -> None:
         logger.debug(f"MultiplexedSource() {msg}", *args)
 
 
 class MultiplexedMediaStreamTrack(MediaStreamTrack):
-    def __init__(self, source):
+    def __init__(self, kind, stop_callback):
         """
-        Create a stream and add its queue to the webcam __thread
+        Create a stream and add its queue to the mediatracksource
         :param source: webcam source
         """
         super().__init__()
 
         # No need it is already a global shared resource
-        self.source = source
+        self.kind = kind
         self.queue = asyncio.Queue(maxsize=1)
-        self.__log_debug("Start track({})".format(self._id))
-        self.source.start_stream(self)
 
-    @property
-    def kind(self):
-        return self.source.kind
+        self.__log_debug("Start track({})".format(self._id))
+        self.__stop_callback = stop_callback
 
     async def recv(self):
         """
@@ -536,7 +543,7 @@ class MultiplexedMediaStreamTrack(MediaStreamTrack):
     def stop(self):
         self.__log_debug("Stop track({})".format(self._id))
         super().stop()
-        self.source.stop_stream(self)
+        self.__stop_callback(self)
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MultiplexedStream() {msg}", *args)
