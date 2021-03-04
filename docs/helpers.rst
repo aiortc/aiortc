@@ -20,3 +20,9 @@ Media sinks
 
    .. autoclass:: aiortc.contrib.media.MediaBlackhole
       :members:
+
+Media transforms
+----------------
+
+   .. autoclass:: aiortc.contrib.media.MediaRelay
+      :members:
