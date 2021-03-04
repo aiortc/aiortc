@@ -6,7 +6,7 @@ from unittest import TestCase
 
 import av
 
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
 
 from .codecs import CodecTestCase
@@ -135,6 +135,76 @@ class MediaBlackholeTest(TestCase):
         run(asyncio.sleep(1))
 
         run(recorder.stop())
+
+
+class MediaRelayTest(MediaTestCase):
+    def test_audio_stop_consumer(self):
+        source = AudioStreamTrack()
+        broadcaster = MediaRelay()
+        proxy1 = broadcaster.subscribe(source)
+        proxy2 = broadcaster.subscribe(source)
+
+        # read some frames
+        samples_per_frame = 160
+        for pts in range(0, 2 * samples_per_frame, samples_per_frame):
+            frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+
+            self.assertEqual(frame1.format.name, "s16")
+            self.assertEqual(frame1.layout.name, "mono")
+            self.assertEqual(frame1.pts, pts)
+            self.assertEqual(frame1.samples, samples_per_frame)
+
+            self.assertEqual(frame2.format.name, "s16")
+            self.assertEqual(frame2.layout.name, "mono")
+            self.assertEqual(frame2.pts, pts)
+            self.assertEqual(frame2.samples, samples_per_frame)
+
+        # stop a consumer
+        proxy1.stop()
+
+        # continue reading
+        for i in range(2):
+            exc1, frame2 = run(
+                asyncio.gather(proxy1.recv(), proxy2.recv(), return_exceptions=True)
+            )
+            self.assertTrue(isinstance(exc1, MediaStreamError))
+            self.assertTrue(isinstance(frame2, av.AudioFrame))
+
+        # stop source track
+        source.stop()
+
+    def test_audio_stop_source(self):
+        source = AudioStreamTrack()
+        broadcaster = MediaRelay()
+        proxy1 = broadcaster.subscribe(source)
+        proxy2 = broadcaster.subscribe(source)
+
+        # read some frames
+        samples_per_frame = 160
+        for pts in range(0, 2 * samples_per_frame, samples_per_frame):
+            frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+
+            self.assertEqual(frame1.format.name, "s16")
+            self.assertEqual(frame1.layout.name, "mono")
+            self.assertEqual(frame1.pts, pts)
+            self.assertEqual(frame1.samples, samples_per_frame)
+
+            self.assertEqual(frame2.format.name, "s16")
+            self.assertEqual(frame2.layout.name, "mono")
+            self.assertEqual(frame2.pts, pts)
+            self.assertEqual(frame2.samples, samples_per_frame)
+
+        # stop source track
+        source.stop()
+
+        # continue reading
+        run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+        for i in range(2):
+            exc1, exc2 = run(
+                asyncio.gather(proxy1.recv(), proxy2.recv(), return_exceptions=True)
+            )
+            self.assertTrue(isinstance(exc1, MediaStreamError))
+            self.assertTrue(isinstance(exc2, MediaStreamError))
 
 
 class MediaPlayerTest(MediaTestCase):
