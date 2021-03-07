@@ -142,9 +142,9 @@ class MediaBlackholeTest(TestCase):
 class MediaRelayTest(MediaTestCase):
     def test_audio_stop_consumer(self):
         source = AudioStreamTrack()
-        broadcaster = MediaRelay()
-        proxy1 = broadcaster.subscribe(source)
-        proxy2 = broadcaster.subscribe(source)
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source)
+        proxy2 = relay.subscribe(source)
 
         # read some frames
         samples_per_frame = 160
@@ -177,9 +177,9 @@ class MediaRelayTest(MediaTestCase):
 
     def test_audio_stop_source(self):
         source = AudioStreamTrack()
-        broadcaster = MediaRelay()
-        proxy1 = broadcaster.subscribe(source)
-        proxy2 = broadcaster.subscribe(source)
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source)
+        proxy2 = relay.subscribe(source)
 
         # read some frames
         samples_per_frame = 160
