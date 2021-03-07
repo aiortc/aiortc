@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import fractions
 import logging
 import threading
@@ -101,7 +102,10 @@ def player_worker(
     while not quit_event.is_set():
         try:
             frame = next(container.decode(*streams))
-        except (av.AVError, StopIteration):
+        except (av.AVError, StopIteration) as exc:
+            if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
+                time.sleep(0.01)
+                continue
             if audio_track:
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
             if video_track:

@@ -1,8 +1,10 @@
 import asyncio
+import errno
 import os
 import tempfile
 import wave
 from unittest import TestCase
+from unittest.mock import patch
 
 import av
 
@@ -207,6 +209,23 @@ class MediaRelayTest(MediaTestCase):
             self.assertTrue(isinstance(exc2, MediaStreamError))
 
 
+class BufferingInputContainer:
+    def __init__(self, real):
+        self.__failed = False
+        self.__real = real
+
+    def decode(self, *args, **kwargs):
+        # fail with EAGAIN once
+        if not self.__failed:
+            self.__failed = True
+            raise av.AVError(errno.EAGAIN, "EAGAIN")
+
+        return self.__real.decode(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.__real, name)
+
+
 class MediaPlayerTest(MediaTestCase):
     def test_audio_file_8kHz(self):
         path = self.create_audio_file("test.wav")
@@ -305,6 +324,28 @@ class MediaPlayerTest(MediaTestCase):
     def test_video_file_mp4(self):
         path = self.create_video_file("test.mp4", duration=3)
         player = MediaPlayer(path)
+
+        # check tracks
+        self.assertIsNone(player.audio)
+        self.assertIsNotNone(player.video)
+
+        # read all frames
+        self.assertEqual(player.video.readyState, "live")
+        for i in range(90):
+            frame = run(player.video.recv())
+            self.assertEqual(frame.width, 640)
+            self.assertEqual(frame.height, 480)
+        with self.assertRaises(MediaStreamError):
+            run(player.video.recv())
+        self.assertEqual(player.video.readyState, "ended")
+
+    def test_video_file_mp4_eagain(self):
+        path = self.create_video_file("test.mp4", duration=3)
+        container = BufferingInputContainer(av.open(path, "r"))
+
+        with patch("av.open") as mock_open:
+            mock_open.return_value = container
+            player = MediaPlayer(path)
 
         # check tracks
         self.assertIsNone(player.audio)
