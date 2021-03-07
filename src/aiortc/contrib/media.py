@@ -220,6 +220,11 @@ class MediaPlayer:
             'video_size': '640x480'
         })
 
+        # Open webcam on Windows.
+        player = MediaPlayer('video=Integrated Camera', format='dshow', options={
+            'video_size': '640x480'
+        })
+
     :param file: The path to a file, or a file-like object.
     :param format: The format to use, defaults to autodect.
     :param options: Additional options to pass to FFmpeg.
