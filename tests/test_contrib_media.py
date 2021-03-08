@@ -2,6 +2,7 @@ import asyncio
 import errno
 import os
 import tempfile
+import time
 import wave
 from unittest import TestCase
 from unittest.mock import patch
@@ -175,6 +176,41 @@ class MediaRelayTest(MediaTestCase):
         # stop source track
         source.stop()
 
+    def test_audio_stop_consumer_unbuffered(self):
+        source = AudioStreamTrack()
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source, buffered=False)
+        proxy2 = relay.subscribe(source, buffered=False)
+
+        # read some frames
+        samples_per_frame = 160
+        for pts in range(0, 2 * samples_per_frame, samples_per_frame):
+            frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+
+            self.assertEqual(frame1.format.name, "s16")
+            self.assertEqual(frame1.layout.name, "mono")
+            self.assertEqual(frame1.pts, pts)
+            self.assertEqual(frame1.samples, samples_per_frame)
+
+            self.assertEqual(frame2.format.name, "s16")
+            self.assertEqual(frame2.layout.name, "mono")
+            self.assertEqual(frame2.pts, pts)
+            self.assertEqual(frame2.samples, samples_per_frame)
+
+        # stop a consumer
+        proxy1.stop()
+
+        # continue reading
+        for i in range(2):
+            exc1, frame2 = run(
+                asyncio.gather(proxy1.recv(), proxy2.recv(), return_exceptions=True)
+            )
+            self.assertTrue(isinstance(exc1, MediaStreamError))
+            self.assertTrue(isinstance(frame2, av.AudioFrame))
+
+        # stop source track
+        source.stop()
+
     def test_audio_stop_source(self):
         source = AudioStreamTrack()
         relay = MediaRelay()
@@ -207,6 +243,88 @@ class MediaRelayTest(MediaTestCase):
             )
             self.assertTrue(isinstance(exc1, MediaStreamError))
             self.assertTrue(isinstance(exc2, MediaStreamError))
+
+    def test_audio_stop_source_unbuffered(self):
+        source = AudioStreamTrack()
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source, buffered=False)
+        proxy2 = relay.subscribe(source, buffered=False)
+
+        # read some frames
+        samples_per_frame = 160
+        for pts in range(0, 2 * samples_per_frame, samples_per_frame):
+            frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+
+            self.assertEqual(frame1.format.name, "s16")
+            self.assertEqual(frame1.layout.name, "mono")
+            self.assertEqual(frame1.pts, pts)
+            self.assertEqual(frame1.samples, samples_per_frame)
+
+            self.assertEqual(frame2.format.name, "s16")
+            self.assertEqual(frame2.layout.name, "mono")
+            self.assertEqual(frame2.pts, pts)
+            self.assertEqual(frame2.samples, samples_per_frame)
+
+        # stop source track
+        source.stop()
+
+        # continue reading
+        for i in range(2):
+            exc1, exc2 = run(
+                asyncio.gather(proxy1.recv(), proxy2.recv(), return_exceptions=True)
+            )
+            self.assertTrue(isinstance(exc1, MediaStreamError))
+            self.assertTrue(isinstance(exc2, MediaStreamError))
+
+    def test_audio_slow_consumer(self):
+        source = AudioStreamTrack()
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source, buffered=False)
+        proxy2 = relay.subscribe(source, buffered=False)
+
+        # read some frames
+        samples_per_frame = 160
+        for pts in range(0, 2 * samples_per_frame, samples_per_frame):
+            frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+
+            self.assertEqual(frame1.format.name, "s16")
+            self.assertEqual(frame1.layout.name, "mono")
+            self.assertEqual(frame1.pts, pts)
+            self.assertEqual(frame1.samples, samples_per_frame)
+
+            self.assertEqual(frame2.format.name, "s16")
+            self.assertEqual(frame2.layout.name, "mono")
+            self.assertEqual(frame2.pts, pts)
+            self.assertEqual(frame2.samples, samples_per_frame)
+
+        # skip some frames
+        timestamp = 5 * samples_per_frame
+        run(asyncio.sleep(source._start + (timestamp / 8000) - time.time()))
+
+        frame1, frame2 = run(asyncio.gather(proxy1.recv(), proxy2.recv()))
+        self.assertEqual(frame1.format.name, "s16")
+        self.assertEqual(frame1.layout.name, "mono")
+        self.assertEqual(frame1.pts, 5 * samples_per_frame)
+        self.assertEqual(frame1.samples, samples_per_frame)
+
+        self.assertEqual(frame2.format.name, "s16")
+        self.assertEqual(frame2.layout.name, "mono")
+        self.assertEqual(frame2.pts, 5 * samples_per_frame)
+        self.assertEqual(frame2.samples, samples_per_frame)
+
+        # stop a consumer
+        proxy1.stop()
+
+        # continue reading
+        for i in range(2):
+            exc1, frame2 = run(
+                asyncio.gather(proxy1.recv(), proxy2.recv(), return_exceptions=True)
+            )
+            self.assertTrue(isinstance(exc1, MediaStreamError))
+            self.assertTrue(isinstance(frame2, av.AudioFrame))
+
+        # stop source track
+        source.stop()
 
 
 class BufferingInputContainer:
