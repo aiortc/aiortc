@@ -395,23 +395,38 @@ class MediaRecorder:
 
 
 class RelayStreamTrack(MediaStreamTrack):
-    def __init__(self, relay, source: MediaStreamTrack) -> None:
+    def __init__(self, relay, source: MediaStreamTrack, buffered) -> None:
         super().__init__()
         self.kind = source.kind
         self._relay = relay
-        self._queue: asyncio.Queue[Optional[Frame]] = asyncio.Queue()
         self._source: Optional[MediaStreamTrack] = source
+        self._buffered = buffered
+
+        self._frame: Optional[Frame] = None
+        self._queue: Optional[asyncio.Queue[Optional[Frame]]] = None
+        self._new_frame_event: Optional[asyncio.Event] = None
+
+        if self._buffered:
+            self._queue = asyncio.Queue()
+        else:
+            self._new_frame_event = asyncio.Event()
 
     async def recv(self):
         if self.readyState != "live":
             raise MediaStreamError
 
         self._relay._start(self)
-        frame = await self._queue.get()
-        if frame is None:
+
+        if self._buffered:
+            self._frame = await self._queue.get()
+        else:
+            await self._new_frame_event.wait()
+            self._new_frame_event.clear()
+
+        if self._frame is None:
             self.stop()
             raise MediaStreamError
-        return frame
+        return self._frame
 
     def stop(self):
         super().stop()
@@ -433,11 +448,18 @@ class MediaRelay:
         self.__proxies: Dict[MediaStreamTrack, Set[RelayStreamTrack]] = {}
         self.__tasks: Dict[MediaStreamTrack, asyncio.Future[None]] = {}
 
-    def subscribe(self, track: MediaStreamTrack) -> MediaStreamTrack:
+    def subscribe(
+        self, track: MediaStreamTrack, buffered: bool = True
+    ) -> MediaStreamTrack:
         """
         Create a proxy around the given `track` for a new consumer.
+
+        :param track: Source :class:`MediaStreamTrack` which is relayed
+        :param buffered: Whether there need a buffer between the source track and relayed track
+
+        :rtype: :class: MediaStreamTrack
         """
-        proxy = RelayStreamTrack(self, track)
+        proxy = RelayStreamTrack(self, track, buffered)
         self.__log_debug("Create proxy %s for source %s", id(proxy), id(track))
         if track not in self.__proxies:
             self.__proxies[track] = set()
@@ -474,7 +496,11 @@ class MediaRelay:
             except MediaStreamError:
                 frame = None
             for proxy in self.__proxies[track]:
-                proxy._queue.put_nowait(frame)
+                if proxy._buffered:
+                    proxy._queue.put_nowait(frame)
+                else:
+                    proxy._frame = frame
+                    proxy._new_frame_event.set()
             if frame is None:
                 break
 
