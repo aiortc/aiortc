@@ -302,6 +302,16 @@ class MediaPlayer:
         if not self.__started and self.__container is not None:
             self.__container.close()
             self.__container = None
+            
+    def stop(self):
+        """
+        Stop playing all tracks
+        """
+        if not self.__started:
+            self._stop(None)
+        else:
+            for track in self.__started:
+                self._stop(track)
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaPlayer(%s) {msg}", self.__container.name, *args)
