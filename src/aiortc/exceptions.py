@@ -8,3 +8,7 @@ class InvalidAccessError(Exception):
 
 class InvalidStateError(Exception):
     pass
+
+
+class OperationError(Exception):
+    pass

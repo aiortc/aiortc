@@ -12,7 +12,12 @@ from aiortc import (
     RTCSessionDescription,
 )
 from aiortc.contrib.media import MediaPlayer
-from aiortc.exceptions import InternalError, InvalidAccessError, InvalidStateError
+from aiortc.exceptions import (
+    InternalError,
+    InvalidAccessError,
+    InvalidStateError,
+    OperationError,
+)
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcpeerconnection import filter_preferred_codecs, find_common_codecs
 from aiortc.rtcrtpparameters import (
@@ -4545,6 +4550,50 @@ a=fmtp:98 apt=97
         self.assertEqual(
             str(cm.exception),
             'Cannot handle offer in signaling state "have-remote-offer"',
+        )
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
+    def test_setRemoteDescription_no_common_audio(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+
+        mangled_sdp = []
+        for line in offer.sdp.split("\n"):
+            if line.startswith("a=rtpmap:"):
+                continue
+            mangled_sdp.append(line)
+
+        mangled = RTCSessionDescription(sdp="\n".join(mangled_sdp), type=offer.type)
+
+        with self.assertRaises(OperationError) as cm:
+            run(pc2.setRemoteDescription(mangled))
+        self.assertEqual(
+            str(cm.exception), "Failed to set remote audio description send parameters"
+        )
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+
+    def test_setRemoteDescription_no_common_video(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        pc1.addTrack(VideoStreamTrack())
+        offer = run(pc1.createOffer())
+
+        mangled = RTCSessionDescription(
+            sdp=offer.sdp.replace("90000", "92000"),
+            type=offer.type,
+        )
+        with self.assertRaises(OperationError) as cm:
+            run(pc2.setRemoteDescription(mangled))
+        self.assertEqual(
+            str(cm.exception), "Failed to set remote video description send parameters"
         )
 
         # close
