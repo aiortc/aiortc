@@ -10,7 +10,12 @@ from pyee import AsyncIOEventEmitter
 from . import clock, rtp, sdp
 from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
 from .events import RTCTrackEvent
-from .exceptions import InternalError, InvalidAccessError, InvalidStateError
+from .exceptions import (
+    InternalError,
+    InvalidAccessError,
+    InvalidStateError,
+    OperationError,
+)
 from .mediastreams import MediaStreamTrack
 from .rtcconfiguration import RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
@@ -820,7 +825,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     find_common_codecs(CODECS[media.kind], media.rtp.codecs),
                     transceiver._preferred_codecs,
                 )
-                assert len(common)
+
+                if not len(common):
+                    raise OperationError(
+                        "Failed to set remote {} description send parameters".format(
+                            media.kind
+                        )
+                    )
+
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(
                     HEADER_EXTENSIONS[media.kind], media.rtp.headerExtensions
