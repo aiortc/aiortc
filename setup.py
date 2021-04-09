@@ -21,9 +21,9 @@ install_requires = [
     "aioice>=0.7.5,<0.8.0",
     "av>=8.0.0,<9.0.0",
     "cffi>=1.0.0",
-    "crc32c>=2.1",
     "cryptography>=2.2",
     'dataclasses; python_version < "3.7"',
+    "google-crc32c>=1.1",
     "pyee>=6.0.0",
     "pylibsrtp>=0.5.6",
 ]

@@ -22,7 +22,12 @@ from typing import (
     no_type_check,
 )
 
-from crc32c import crc32c
+# The `crc32c` package offers better performance but uses an LGPL license,
+# so we use `google-crc32c` by default.
+try:
+    from crc32c import crc32c
+except ImportError:
+    from google_crc32c import value as crc32c
 from pyee import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
