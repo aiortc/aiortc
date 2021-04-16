@@ -52,8 +52,6 @@ jobs:
         shell: bash
       - name: Upload coverage report
         uses: codecov/codecov-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   package-source:
     runs-on: ubuntu-latest
