@@ -80,6 +80,10 @@ class RTCRtpTransceiver:
         return self.__mid
 
     @property
+    def mline_index(self) -> Optional[int]:
+        return self.__mline_index
+
+    @property
     def receiver(self) -> RTCRtpReceiver:
         """
         The :class:`RTCRtpReceiver` that handles receiving and decoding
@@ -131,9 +135,6 @@ class RTCRtpTransceiver:
 
     def _set_mid(self, mid: str) -> None:
         self.__mid = mid
-
-    def _get_mline_index(self) -> Optional[int]:
-        return self.__mline_index
 
     def _set_mline_index(self, idx: int) -> None:
         self.__mline_index = idx

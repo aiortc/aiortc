@@ -385,7 +385,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             raise ValueError("Candidate must have either sdpMid or sdpMLineIndex")
 
         for transceiver in self.__transceivers:
-            if candidate.sdpMid == transceiver.mid and not transceiver._bundled:
+            if candidate.sdpMLineIndex == transceiver.mline_index or \
+                    (candidate.sdpMid == transceiver.mid and not transceiver._bundled):
                 iceTransport = transceiver._transport.transport
                 await iceTransport.addRemoteCandidate(candidate)
                 return
@@ -1059,7 +1060,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     def __getTransceiverByMLineIndex(self, index: int) -> Optional[RTCRtpTransceiver]:
         return next(
-            filter(lambda x: x._get_mline_index() == index, self.__transceivers), None
+            filter(lambda x: x.mline_index == index, self.__transceivers), None
         )
 
     def __localDescription(self) -> Optional[sdp.SessionDescription]:
@@ -1083,7 +1084,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return self.__pendingRemoteDescription or self.__currentRemoteDescription
 
     def __remoteRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpReceiveParameters:
-        media = self.__remoteDescription().media[transceiver._get_mline_index()]
+        media = self.__remoteDescription().media[transceiver.mline_index]
 
         receiveParameters = RTCRtpReceiveParameters(
             codecs=transceiver._codecs,

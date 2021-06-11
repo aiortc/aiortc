@@ -774,6 +774,126 @@ a=rtpmap:8 PCMA/8000
         pc2 = RTCPeerConnection()
         self._test_connect_audio_bidirectional(pc1, pc2)
 
+    def test_connect_with_mline_index_only(self):
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = run(pc1.createOffer())
+        self.assertEqual(offer.type, "offer")
+        self.assertTrue("m=audio " in offer.sdp)
+        self.assertFalse("a=candidate:" in offer.sdp)
+        self.assertFalse("a=end-of-candidates" in offer.sdp)
+
+        run(pc1.setLocalDescription(offer))
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0"])
+        self.assertTrue("m=audio " in pc1.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, "actpass")
+
+        # strip out candidates
+        desc1 = strip_ice_candidates(pc1.localDescription)
+
+        # handle offer
+        run(pc2.setRemoteDescription(desc1))
+        self.assertEqual(pc2.remoteDescription, desc1)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0"])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = run(pc2.createAnswer())
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("m=audio " in answer.sdp)
+        self.assertFalse("a=candidate:" in answer.sdp)
+        self.assertFalse("a=end-of-candidates" in answer.sdp)
+
+        run(pc2.setLocalDescription(answer))
+        self.assertEqual(pc2.iceConnectionState, "checking")
+        self.assertEqual(pc2.iceGatheringState, "complete")
+        self.assertEqual(mids(pc2), ["0"])
+        self.assertTrue("m=audio " in pc2.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, "active")
+
+        # strip out candidates
+        desc2 = strip_ice_candidates(pc2.localDescription)
+
+        # handle answer
+        run(pc1.setRemoteDescription(desc2))
+        self.assertEqual(pc1.remoteDescription, desc2)
+        self.assertEqual(pc1.iceConnectionState, "checking")
+
+        # add remote candidates with sdpMLineIndex only
+        for transceiver in pc2.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                candidate.sdpMLineIndex = transceiver.mline_index
+                run(pc1.addIceCandidate(candidate))
+        for transceiver in pc1.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                candidate.sdpMLineIndex = transceiver.mline_index
+                run(pc2.addIceCandidate(candidate))
+
+        # check outcome
+        self.assertIceCompleted(pc1, pc2)
+
+        # close
+        run(pc1.close())
+        run(pc2.close())
+        self.assertEqual(pc1.iceConnectionState, "closed")
+        self.assertEqual(pc2.iceConnectionState, "closed")
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
     def test_connect_audio_bidirectional_with_trickle(self):
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
