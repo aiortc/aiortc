@@ -18,7 +18,6 @@ jobs:
           flake8 examples src tests
           isort --check-only --diff examples src tests
           black --check --diff examples src tests
-          mypy src
 
   test:
     runs-on: ${{ matrix.os }}
