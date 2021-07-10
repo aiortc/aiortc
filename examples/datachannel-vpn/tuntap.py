@@ -61,20 +61,20 @@ class Tun:
         self.mtu = struct.unpack("16sh", fcntl.ioctl(self.sockfd, SIOCGIFMTU, ifreq))[1]
 
     def up(self):
-        """ Bring up interface. Equivalent to ifconfig [iface] up. """
+        """Bring up interface. Equivalent to ifconfig [iface] up."""
         # Set new flags
         flags = self.ifflags | IFF_UP
         self.ifflags = flags
         self.get_mtu()
 
     def down(self):
-        """ Bring down interface. Equivalent to ifconfig [iface] down. """
+        """Bring down interface. Equivalent to ifconfig [iface] down."""
         # Set new flags
         flags = self.ifflags & ~IFF_UP
         self.ifflags = flags
 
     def is_up(self):
-        """ Return True if the interface is up, False otherwise. """
+        """Return True if the interface is up, False otherwise."""
 
         if self.ifflags & IFF_UP:
             return True
@@ -82,7 +82,7 @@ class Tun:
             return False
 
     def open(self):
-        """ Open file corresponding to the TUN device. """
+        """Open file corresponding to the TUN device."""
         self.fd = open("/dev/net/tun", "rb+", buffering=0)
         tun_flags = IFF_TAP | IFF_NO_PI | IFF_PERSIST
         ifr = struct.pack("16sH", self.name, tun_flags)
