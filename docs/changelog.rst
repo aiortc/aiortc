@@ -3,6 +3,13 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.2.1
+-----
+
+ * Add a clear error message when no common codec is found.
+ * Replace the `crc32` dependency with `google-crc32c` which offers a more
+   liberal license.
+
 1.2.0
 -----
 
