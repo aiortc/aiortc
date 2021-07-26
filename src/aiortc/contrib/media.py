@@ -388,6 +388,7 @@ class MediaRecorder:
         while True:
             try:
                 frame = await track.recv()
+                self.__log_debug("recevied frame in run track, saving to file")
             except MediaStreamError:
                 return
             for packet in context.stream.encode(frame):

@@ -64,9 +64,13 @@ def decoder_worker(loop, input_q, output_q):
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
+        decoded_frames = decoder.decode(encoded_frame)
+        self.__log_debug("decoding timestamp %s, got %d frames", encoded_frame.timestamp, len(decoded_frames))
+
+        for frame in decoded_frames:
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+
 
     if decoder is not None:
         del decoder
@@ -185,6 +189,7 @@ class RemoteStreamTrack(MediaStreamTrack):
         if frame is None:
             self.stop()
             raise MediaStreamError
+        self.__log_debug("received the next frame")
         return frame
 
 
@@ -498,6 +503,7 @@ class RTCRtpReceiver:
                 encoded_frame.timestamp
             )
             self.__decoder_queue.put((codec, encoded_frame))
+            self.__log_debug("Put frame timestamp %s into decoder queue", encoded_frame.timestamp)
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
