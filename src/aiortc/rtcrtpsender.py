@@ -228,6 +228,7 @@ class RTCRtpSender:
                 )
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
             for seq in packet.lost:
+                self.__log_debug("dispatching retransmit %s", seq)
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
             self._send_keyframe()
@@ -271,7 +272,7 @@ class RTCRtpSender:
                 )
                 self.__rtx_sequence_number = uint16_add(self.__rtx_sequence_number, 1)
 
-            self.__log_debug("> %s", packet)
+            self.__log_debug("> %s retransmission of original %s", packet, sequence_number)
             packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
             await self.transport._send_rtp(packet_bytes)
 
@@ -293,6 +294,8 @@ class RTCRtpSender:
                     continue
 
                 payloads, timestamp = await self._next_encoded_frame(codec)
+                self.__log_debug("encoded frame with timestamp %s", timestamp)
+                old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
                 for i, payload in enumerate(payloads):
@@ -312,7 +315,7 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
 
                     # send packet
-                    self.__log_debug("> %s", packet)
+                    self.__log_debug("> %s (encoded frame ts: %s)", packet, old_timestamp)
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
                     ] = packet

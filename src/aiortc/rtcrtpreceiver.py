@@ -65,7 +65,7 @@ def decoder_worker(loop, input_q, output_q):
             codec_name = codec.name
 
         decoded_frames = decoder.decode(encoded_frame)
-        self.__log_debug("decoding timestamp %s, got %d frames", encoded_frame.timestamp, len(decoded_frames))
+        logger.debug(f"RTCRtpReceiver(%s) decoding timestamp %s, got %d frames", codec_name, encoded_frame.timestamp, len(decoded_frames))
 
         for frame in decoded_frames:
             # pass the decoded frame to the track
@@ -96,6 +96,8 @@ class NackGenerator:
                 missed = True
                 seq = uint16_add(seq, 1)
             self.max_seq = packet.sequence_number
+            if missed:
+                logger.debug(f"RTCRtpReceiver(%s) missed packets", self.missing)
         else:
             self.missing.discard(packet.sequence_number)
 
@@ -189,7 +191,7 @@ class RemoteStreamTrack(MediaStreamTrack):
         if frame is None:
             self.stop()
             raise MediaStreamError
-        self.__log_debug("received the next frame")
+        logger.debug(f"RTCRtpReceiver(%s) received the next frame", self.__kind)
         return frame
 
 
@@ -390,7 +392,7 @@ class RTCRtpReceiver:
         self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
-        self.__log_debug("< %s", packet)
+        self.__log_debug("< RTCP %s", packet)
 
         if isinstance(packet, RtcpSrPacket):
             self.__stats.add(
@@ -423,7 +425,7 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
-        self.__log_debug("< %s", packet)
+        self.__log_debug("< RTP %s", packet)
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
