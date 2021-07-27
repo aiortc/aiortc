@@ -427,6 +427,10 @@ class RTCRtpReceiver:
         """
         self.__log_debug("< RTP %s", packet)
 
+        if (packet.sequence_number == 4 or (packet.sequence_number >= 61495 and packet.sequence_number <= 61497)):
+            self.__log_debug("dropping packet %s", packet.sequence_number)
+            return 
+
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
             if packet.extensions.abs_send_time is not None:
