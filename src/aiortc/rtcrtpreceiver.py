@@ -191,7 +191,7 @@ class RemoteStreamTrack(MediaStreamTrack):
         if frame is None:
             self.stop()
             raise MediaStreamError
-        logger.debug(f"RTCRtpReceiver(%s) received the next frame", self.__kind)
+        logger.debug(f"RTCRtpReceiver(%s) received the next frame", self.kind)
         return frame
 
 
