@@ -2,9 +2,11 @@ from typing import List, Optional, Tuple
 
 from .rtp import RtpPacket
 from .utils import uint16_add
+import logging
 
 MAX_MISORDER = 100
 
+logger = logging.getLogger(__name__)
 
 class JitterFrame:
     def __init__(self, data: bytes, timestamp: int) -> None:
@@ -44,6 +46,7 @@ class JitterBuffer:
                 delta = misorder = 0
                 if self._is_video:
                     pli_flag = True
+                    logger.debug(f"Generating PLI because misorder %s exceeds max %s (Delta %s, capacity %s)", misorder, MAX_MISORDER, delta, self.capacity)
             else:
                 return pli_flag, None
 
@@ -54,9 +57,12 @@ class JitterBuffer:
                 self._origin = packet.sequence_number
             if self._is_video:
                 pli_flag = True
+                logger.debug(f"Generating PLI because delta %s exceeds capacity %s", delta, self.capacity)
 
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
+        if self._is_video:
+            logger.debug(f"Adding packet with sequence number %s to pos %s", packet.sequence_number, pos)
 
         return pli_flag, self._remove_frame(packet.sequence_number)
 
@@ -85,6 +91,8 @@ class JitterBuffer:
                 # check we have prefetched enough
                 frames += 1
                 if frames >= self._prefetch:
+                    if self._is_video:
+                        logger.debug(f"removing %s packets from origin %s", remove, self._origin)
                     self.remove(remove)
                     return frame
 
@@ -120,4 +128,7 @@ class JitterBuffer:
             self._origin = uint16_add(self._origin, 1)
             if i == self._capacity - 1:
                 return True
+
+        if self._is_video:
+            logger.debug(f"Smart remove resulting in false with origin %s", self._origin)
         return False

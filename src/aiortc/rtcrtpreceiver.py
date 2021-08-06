@@ -501,6 +501,7 @@ class RTCRtpReceiver:
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
         # check if the PLI should be sent
         if pli_flag:
+            self.__log_debug("Generating a PLI for %s", encoded_frame.timestamp)
             await self._send_rtcp_pli(packet.ssrc)
 
         # if we have a complete encoded frame, decode it
