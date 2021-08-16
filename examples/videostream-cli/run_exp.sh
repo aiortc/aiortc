@@ -8,7 +8,7 @@
 # the sent video until the point where you killed the process
 
 python3 cli.py offer \
-    --play-from ~/sundar_pichai.mp4 \
+    --play-from sundar_pichai.mp4 \
     --signaling-path /tmp/test.sock \
     --signaling unix-socket \
     --verbose 2>sender_output
