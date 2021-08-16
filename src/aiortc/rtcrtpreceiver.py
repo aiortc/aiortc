@@ -430,6 +430,7 @@ class RTCRtpReceiver:
         """
         self.__log_debug("< RTP %s arrival time:%d", packet, arrival_time_ms)
 
+        """
         if (packet.sequence_number == 3000):
             self.__dropped_packet_time = arrival_time_ms
             self.__log_debug("dropping packet %s", packet.sequence_number)
@@ -438,6 +439,7 @@ class RTCRtpReceiver:
         if arrival_time_ms - self.__dropped_packet_time < 10000: # 10seconds
             self.__log_debug("dropping more packets %s", packet.sequence_number)
             return
+        """
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
