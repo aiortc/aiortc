@@ -279,6 +279,9 @@ class RTCRtpReceiver:
         self.__remote_streams: Dict[int, StreamStatistics] = {}
         self.__rtcp_ssrc: Optional[int] = None
 
+        # dropping
+        self.__dropped_packet_time = -10000
+
     @property
     def track(self) -> MediaStreamTrack:
         """
@@ -425,11 +428,16 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
-        self.__log_debug("< RTP %s", packet)
+        self.__log_debug("< RTP %s arrival time:%d", packet, arrival_time_ms)
 
-        if (packet.sequence_number == 4 or (packet.sequence_number >= 61495 and packet.sequence_number <= 61497)):
+        if (packet.sequence_number == 3000):
+            self.__dropped_packet_time = arrival_time_ms
             self.__log_debug("dropping packet %s", packet.sequence_number)
             return 
+
+        if arrival_time_ms - self.__dropped_packet_time < 10000: # 10seconds
+            self.__log_debug("dropping more packets %s", packet.sequence_number)
+            return
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
@@ -501,7 +509,10 @@ class RTCRtpReceiver:
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
         # check if the PLI should be sent
         if pli_flag:
-            self.__log_debug("Generating a PLI for %s", encoded_frame.timestamp)
+            if encoded_frame is not None:
+                self.__log_debug("Generating a PLI for %s", encoded_frame.timestamp)
+            else:
+                self.__log_debug("Generating a PLI for None")
             await self._send_rtcp_pli(packet.ssrc)
 
         # if we have a complete encoded frame, decode it

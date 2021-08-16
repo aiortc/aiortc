@@ -111,6 +111,7 @@ class H264Decoder(Decoder):
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
             frames = self.codec.decode(packet)
+            logger.warning("Decoded Frame, frame type" + str(frames[0].pict_type))
         except av.AVError as e:
             logger.warning(
                 "H264Decoder() failed to decode, skipping package: " + str(e)
@@ -278,6 +279,8 @@ class H264Encoder(Encoder):
             self.buffer_data = b""
             self.buffer_pts = None
             self.codec = None
+
+        logger.warning("encoding frame" + str(frame.pict_type))
 
         if self.codec is None:
             try:

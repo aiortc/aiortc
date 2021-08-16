@@ -1,4 +1,5 @@
 import multiprocessing
+import logging
 import random
 from struct import pack, unpack_from
 from typing import List, Tuple, Type, TypeVar, cast
@@ -19,6 +20,7 @@ MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
+logger = logging.getLogger(__name__)
 
 
 def number_of_threads(pixels: int, cpus: int) -> int:
@@ -191,6 +193,7 @@ class Vp8Decoder(Decoder):
             ffi.NULL,
             lib.VPX_DL_REALTIME,
         )
+        
         if result == lib.VPX_CODEC_OK:
             it = ffi.new("vpx_codec_iter_t *")
             while True:
@@ -249,6 +252,7 @@ class Vp8Encoder(Encoder):
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
+        
 
         if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
             lib.vpx_codec_destroy(self.codec)
@@ -362,6 +366,7 @@ class Vp8Encoder(Encoder):
         self.picture_id = (self.picture_id + 1) % (1 << 15)
 
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
+        logger.warning("encoding frame " + str(timestamp) + " type:" +  str(frame.pict_type) + " force keyframe:" + str(force_keyframe))
         return payloads, timestamp
 
     @property

@@ -43,10 +43,10 @@ class JitterBuffer:
             if misorder >= MAX_MISORDER:
                 self.remove(self.capacity)
                 self._origin = packet.sequence_number
-                delta = misorder = 0
                 if self._is_video:
                     pli_flag = True
                     logger.debug(f"Generating PLI because misorder %s exceeds max %s (Delta %s, capacity %s)", misorder, MAX_MISORDER, delta, self.capacity)
+                delta = misorder = 0
             else:
                 return pli_flag, None
 
