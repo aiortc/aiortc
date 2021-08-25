@@ -174,6 +174,8 @@ class RTCRtpSender:
             self.__rtp_header_extensions_map.configure(parameters)
 
             # make note of RTX payload type
+            # Vibhaa: to change codec type to h264 - change this 0 to 2
+            # one is some weird retransmission protocol
             for codec in parameters.codecs:
                 if (
                     is_rtx(codec)
