@@ -14,12 +14,18 @@ from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
+from .keypointcodec import KeypointsEncoder, KeypointsDecoder
 
 PCMU_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
 )
 PCMA_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+)
+
+
+KEYPOINTS_CODEC = RTCRtpCodecParameters(
+    mimeType="keypoints/dummy", clockRate=8000, channels=1, payloadType=8
 )
 
 CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
@@ -31,6 +37,9 @@ CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
         PCMA_CODEC,
     ],
     "video": [],
+    "keypoints": [
+        KEYPOINTS_CODEC
+    ],
 }
 HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
@@ -43,6 +52,9 @@ HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
         RTCRtpHeaderExtensionParameters(
             id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
         ),
+    ],
+    "keypoints": [
+        RTCRtpHeaderExtensionParameters(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid")
     ],
 }
 
@@ -154,6 +166,8 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
         return H264Decoder()
     elif mimeType == "video/vp8":
         return Vp8Decoder()
+    elif mimeType == "keypoints/dummy":
+        return KeypointsDecoder()
     else:
         raise ValueError(f"No decoder found for MIME type `{mimeType}`")
 
@@ -171,6 +185,8 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
         return H264Encoder()
     elif mimeType == "video/vp8":
         return Vp8Encoder()
+    elif mimeType == "keypoints/dummy":
+        return KeypointsEncoder()
     else:
         raise ValueError(f"No encoder found for MIME type `{mimeType}`")
 

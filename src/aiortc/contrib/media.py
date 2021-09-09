@@ -10,7 +10,8 @@ import av
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
 
-from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
+from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
+from aiortc.contrib.getkeypoints import KeypointsGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class MediaBlackhole:
 
 
 def player_worker(
-    loop, container, streams, audio_track, video_track, quit_event, throttle_playback
+    loop, container, streams, audio_track, video_track, keypoints_track, quit_event, throttle_playback
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -110,6 +111,7 @@ def player_worker(
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
             if video_track:
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
+                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(None), loop)
             break
 
         # read up to 1 second ahead
@@ -153,9 +155,21 @@ def player_worker(
             if video_first_pts is None:
                 video_first_pts = frame.pts
             frame.pts -= video_first_pts
-
+            print("Video frame %s retrieved: %s" % (str(frame.index), str(frame)))
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
+            # Extract the keypoints from the frame
+            keypoints_generator = KeypointsGenerator()
+            try:
+                keypoints= keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
+                keypoints_frame = KeypointsFrame(bytes("Fetched!", encoding='utf8'), frame.pts)
+                print("Keypoints for frame index %s retrieved." % str(frame.index))
+            except:
+                keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
+                print("Could not extract the keypoints for frame index %s" % str(frame.index))
+
+            asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
+
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -244,6 +258,7 @@ class MediaPlayer:
         self.__streams = []
         self.__audio: Optional[PlayerStreamTrack] = None
         self.__video: Optional[PlayerStreamTrack] = None
+        self.__keypoints: Optional[PlayerStreamTrack] = None
         for stream in self.__container.streams:
             if stream.type == "audio" and not self.__audio:
                 self.__audio = PlayerStreamTrack(self, kind="audio")
@@ -251,6 +266,7 @@ class MediaPlayer:
             elif stream.type == "video" and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind="video")
                 self.__streams.append(stream)
+                self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
 
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(","))
@@ -270,6 +286,13 @@ class MediaPlayer:
         """
         return self.__video
 
+    @property
+    def keypoints(self) -> MediaStreamTrack:
+        """
+        A :class:`aiortc.MediaStreamTrack` instance if the file contains keypoints.
+        """
+        return self.__keypoints
+
     def _start(self, track: PlayerStreamTrack) -> None:
         self.__started.add(track)
         if self.__thread is None:
@@ -284,6 +307,7 @@ class MediaPlayer:
                     self.__streams,
                     self.__audio,
                     self.__video,
+                    self.__keypoints,
                     self.__thread_quit,
                     self._throttle_playback,
                 ),
@@ -334,6 +358,7 @@ class MediaRecorder:
 
     def __init__(self, file, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
+        self.__keypoints_file_name = "recorded_keypoints.txt"
         self.__tracks = {}
 
     def addTrack(self, track):
@@ -350,6 +375,8 @@ class MediaRecorder:
             else:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
+        elif track.kind == "keypoints":
+            stream = None
         else:
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
@@ -390,8 +417,13 @@ class MediaRecorder:
                 frame = await track.recv()
             except MediaStreamError:
                 return
-            for packet in context.stream.encode(frame):
-                self.__container.mux(packet)
+            if track.kind != "keypoints":
+                for packet in context.stream.encode(frame):
+                    self.__container.mux(packet)
+            else:
+                keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
+                keypoints_file.write(frame)
+                keypoints_file.close()
 
 
 class RelayStreamTrack(MediaStreamTrack):

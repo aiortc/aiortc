@@ -62,6 +62,7 @@ def decoder_worker(loop, input_q, output_q):
 
         if codec.name != codec_name:
             decoder = get_decoder(codec)
+            logger.debug(f"RTCRtpReceiver(%s) retrieved the decoder", codec_name)
             codec_name = codec.name
 
         decoded_frames = decoder.decode(encoded_frame)
@@ -69,6 +70,8 @@ def decoder_worker(loop, input_q, output_q):
 
         for frame in decoded_frames:
             # pass the decoded frame to the track
+            if codec_name == "dummy":
+                print(frame, "decoded for keypoints")
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
 
@@ -243,7 +246,7 @@ class RTCRtpReceiver:
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
     of data for a :class:`MediaStreamTrack`.
 
-    :param kind: The kind of media (`'audio'` or `'video'`).
+    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'`).
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
@@ -258,6 +261,10 @@ class RTCRtpReceiver:
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
+            self.__nack_generator = None
+            self.__remote_bitrate_estimator = None
+        elif kind == "keypoints":
+            self.__jitter_buffer = JitterBuffer(capacity=16)
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         else:

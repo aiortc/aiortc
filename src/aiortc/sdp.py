@@ -339,7 +339,7 @@ class SessionDescription:
             kind = m.group(1)
             fmt = m.group(4).split()
             fmt_int: Optional[List[int]] = None
-            if kind in ["audio", "video"]:
+            if kind in ["keypoints", "audio", "video"]:
                 fmt_int = [int(x) for x in fmt]
                 for pt in fmt_int:
                     assert pt >= 0 and pt < 256

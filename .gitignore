@@ -18,3 +18,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Media
+.DS_Store
+*.mov
+*.mp4
+*.jpg
+*.txt
