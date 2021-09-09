@@ -222,32 +222,30 @@ class H264Encoder(Encoder):
 
     @staticmethod
     def _split_bitstream(buf: bytes) -> Iterator[bytes]:
-        # TODO: write in a more pytonic way,
-        # translate from: https://github.com/aizvorski/h264bitstream/blob/master/h264_nal.c#L134
+        # Translated from: https://github.com/aizvorski/h264bitstream/blob/master/h264_nal.c#L134
         i = 0
         while True:
-            while (buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01) and (
-                buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0 or buf[i + 3] != 0x01
-            ):
-                i += 1  # skip leading zero
-                if i + 4 >= len(buf):
-                    return
-            if buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01:
-                i += 1
+            # Find the start of the NAL unit
+            # NAL Units start with a 3-byte or 4 byte start code of 0x000001 or 0x00000001
+            # while buf[i:i+3] != b'\x00\x00\x01':
+            i = buf.find(b"\x00\x00\x01", i)
+            if i == -1:
+                return
+
+            # Jump past the start code
             i += 3
             nal_start = i
-            while (buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0) and (
-                buf[i] != 0 or buf[i + 1] != 0 or buf[i + 2] != 0x01
-            ):
-                i += 1
-                # FIXME: the next line fails when reading a nal that ends
-                # exactly at the end of the data
-                if i + 3 >= len(buf):
-                    nal_end = len(buf)
-                    yield buf[nal_start:nal_end]
-                    return  # did not find nal end, stream ended first
-            nal_end = i
-            yield buf[nal_start:nal_end]
+
+            # Find the end of the NAL unit (end of buffer OR next start code)
+            i = buf.find(b"\x00\x00\x01", i)
+            if i == -1:
+                yield buf[nal_start : len(buf)]
+                return
+            elif buf[i - 1] == 0:
+                # 4-byte start code case, jump back one byte
+                yield buf[nal_start : i - 1]
+            else:
+                yield buf[nal_start:i]
 
     @classmethod
     def _packetize(cls, packages: Iterator[bytes]) -> List[bytes]:
