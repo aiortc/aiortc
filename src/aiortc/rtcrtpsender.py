@@ -179,12 +179,12 @@ class RTCRtpSender:
             for codec in parameters.codecs:
                 if (
                     is_rtx(codec)
-                    and codec.parameters["apt"] == parameters.codecs[2].payloadType
+                    and codec.parameters["apt"] == parameters.codecs[0].payloadType
                 ):
                     self.__rtx_payload_type = codec.payloadType
                     break
 
-            self.__rtp_task = asyncio.ensure_future(self._run_rtp(parameters.codecs[2]))
+            self.__rtp_task = asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
