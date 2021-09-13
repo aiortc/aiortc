@@ -14,11 +14,11 @@ class KeypointsDecoder(Decoder):
         pass  # pragma: no cover
 
     def decode(self, encoded_frame: JitterFrame) -> List[KeypointsFrame]:
-        print("Keypoints decoder is being called with input ", encoded_frame.data, encoded_frame.timestamp)
-        frame = KeypointsFrame()
-        frame.data = encoded_frame.data
-        frame.pts = encoded_frame.timestamp
-        print("Decoded frame in keypointcodec is", frame)
+        keypoints_bytearray = encoded_frame.data
+        keypoints = []
+        for i in range(0, int(len(keypoints_bytearray)/4)):
+            keypoints.append([int.from_bytes(keypoints_bytearray[4*i:4*i + 2], 'big'), int.from_bytes(keypoints_bytearray[4*i + 2:4*i + 4], 'big')])
+        frame = KeypointsFrame(keypoints, encoded_frame.timestamp)
         return [frame]
 
 
@@ -29,13 +29,18 @@ class KeypointsEncoder(Encoder):
 
     def __init__(self) -> None:
         pass
-
+    
     def encode(
         self, frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
-        print("Keypoints encoder is being called!")
+
         timestamp = frame.pts
-        data = frame.data
+        keypoints = frame.data
+        keypoints_bytearray = bytearray()
+        for i in range(0, len(keypoints)):
+            keypoint = keypoints[i]
+            keypoint_x, keypoint_y = int(keypoint[0].item()), int(keypoint[1].item())
+            keypoints_bytearray.extend((keypoint_x).to_bytes(2, 'big'))
+            keypoints_bytearray.extend((keypoint_y).to_bytes(2, 'big'))
+        data = keypoints_bytearray
         return [data], timestamp
-
-

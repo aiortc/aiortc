@@ -17,7 +17,7 @@ class KeypointsGenerator():
         self.to_tensor = transforms.ToTensor()
         self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=True, device='cpu')
 
-    def get_keypoints(self, input_frames, image_size = 256, crop_data = True):
+    def get_keypoints(self, input_frames, image_size = 256, crop_data = False):
         """Generates dataset images, keypoints (also called poses), and segmenatations from input_frames/ frames
 
         Inputs
@@ -75,10 +75,10 @@ class KeypointsGenerator():
                 # This sets the range of pose to 0-256. This is what is needed for voxceleb.py 
                 pose = image_size*pose / float(output_size)
             ## poses.append(torch.from_numpy((pose - 0.5) * 2).view(-1))            
-            poses.append(torch.from_numpy((pose)).view(-1))
+            poses.append(torch.from_numpy((pose))) #poses.append(torch.from_numpy((pose)).view(-1))
 
         # Stack the poses from different images
         poses = torch.stack(poses, 0)[None]
 
-        return poses
+        return poses.squeeze()
 

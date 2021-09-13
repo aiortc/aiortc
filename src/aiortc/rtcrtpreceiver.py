@@ -62,16 +62,15 @@ def decoder_worker(loop, input_q, output_q):
 
         if codec.name != codec_name:
             decoder = get_decoder(codec)
-            logger.debug(f"RTCRtpReceiver(%s) retrieved the decoder", codec_name)
             codec_name = codec.name
+            logger.debug(f"RTCRtpReceiver(%s) retrieved the decoder", codec_name)
+
 
         decoded_frames = decoder.decode(encoded_frame)
         logger.debug(f"RTCRtpReceiver(%s) decoding timestamp %s, got %d frames", codec_name, encoded_frame.timestamp, len(decoded_frames))
 
         for frame in decoded_frames:
             # pass the decoded frame to the track
-            if codec_name == "dummy":
-                print(frame, "decoded for keypoints")
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
 

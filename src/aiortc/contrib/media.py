@@ -161,8 +161,8 @@ def player_worker(
             # Extract the keypoints from the frame
             keypoints_generator = KeypointsGenerator()
             try:
-                keypoints= keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
-                keypoints_frame = KeypointsFrame(bytes("Fetched!", encoding='utf8'), frame.pts)
+                keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
+                keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
@@ -358,7 +358,7 @@ class MediaRecorder:
 
     def __init__(self, file, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
-        self.__keypoints_file_name = "recorded_keypoints.txt"
+        self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
         self.__tracks = {}
 
     def addTrack(self, track):
@@ -416,13 +416,16 @@ class MediaRecorder:
             try:
                 frame = await track.recv()
             except MediaStreamError:
+                print("Couldn't receive the track!")
                 return
             if track.kind != "keypoints":
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
             else:
+                print("Keypoints are being recorded!!!", str(frame.data))
                 keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
-                keypoints_file.write(frame)
+                keypoints_file.write(str(frame.data))
+                keypoints_file.write("\n")
                 keypoints_file.close()
 
 
