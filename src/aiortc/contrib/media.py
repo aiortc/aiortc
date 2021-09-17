@@ -259,7 +259,7 @@ class MediaPlayer:
                 self.__streams.append(stream)
             elif stream.type == "video" and not self.__video:
                 if fps is not None and fps < stream.base_rate:
-                    fps_factor = int(float(stream.base_rate) / fps)
+                    fps_factor = round(float(stream.base_rate) / fps)
                 else:
                     fps_factor = 1
                 self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
