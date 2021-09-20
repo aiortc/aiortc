@@ -1,0 +1,6 @@
+aiortc
+aiohttp
+av
+python-socketio[asyncio-client]
+asyncio
+opencv-python
