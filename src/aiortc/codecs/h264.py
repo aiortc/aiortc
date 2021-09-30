@@ -133,6 +133,7 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
+        "preset": "ultrafast",
         "tune": "zerolatency",  # does nothing using h264_omx
     }
     codec.open()
