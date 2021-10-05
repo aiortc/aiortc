@@ -25,3 +25,10 @@ venv.bak/
 *.mp4
 *.jpg
 *.txt
+
+# Answer/Offer files
+examples/videostream-cli/answer
+examples/videostream-cli/offer
+examples/videostream-cli/sender_output
+examples/videostream-cli/receiver_output
+
