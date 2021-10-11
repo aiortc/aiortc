@@ -158,6 +158,7 @@ def player_worker(
             print("Video frame %s retrieved: %s" % (str(frame.index), str(frame)))
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
+            
             # Extract the keypoints from the frame
             keypoints_generator = KeypointsGenerator()
             try:
@@ -259,6 +260,7 @@ class MediaPlayer:
         self.__audio: Optional[PlayerStreamTrack] = None
         self.__video: Optional[PlayerStreamTrack] = None
         self.__keypoints: Optional[PlayerStreamTrack] = None
+        
         for stream in self.__container.streams:
             if stream.type == "audio" and not self.__audio:
                 self.__audio = PlayerStreamTrack(self, kind="audio")
