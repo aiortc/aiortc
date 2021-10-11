@@ -17,7 +17,9 @@ class KeypointsDecoder(Decoder):
         keypoints_bytearray = encoded_frame.data
         keypoints = []
         for i in range(0, int(len(keypoints_bytearray)/4)):
-            keypoints.append([int.from_bytes(keypoints_bytearray[4*i:4*i + 2], 'big'), int.from_bytes(keypoints_bytearray[4*i + 2:4*i + 4], 'big')])
+            keypoint_x = int.from_bytes(keypoints_bytearray[4*i:4*i + 2], 'big')
+            keypoint_y = int.from_bytes(keypoints_bytearray[4*i + 2:4*i + 4], 'big')
+            keypoints.append([keypoint_x, keypoint_y])
         frame = KeypointsFrame(keypoints, encoded_frame.timestamp)
         return [frame]
 
