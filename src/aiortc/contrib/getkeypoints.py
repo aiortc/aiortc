@@ -68,8 +68,8 @@ class KeypointsGenerator():
                 # If the image is small, this action would add black border around the image
                 img = img.resize((image_size, image_size), Image.BICUBIC)
 
+            # This sets the range of pose to 0-256.
             if crop_data:
-                # This sets the range of pose to 0-256. This is what is needed for voxceleb.py 
                 pose = image_size * pose / float(output_size)
 
             poses.append(torch.from_numpy((pose)))
