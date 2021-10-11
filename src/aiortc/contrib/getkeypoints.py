@@ -15,16 +15,19 @@ from torchvision.utils import save_image
 class KeypointsGenerator():
     def __init__(self):        
         self.to_tensor = transforms.ToTensor()
-        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=True, device='cpu')
+        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, \
+                                               flip_input=True, device='cpu')
 
     def get_keypoints(self, input_frames, image_size = 256, crop_data = False):
-        """Generates dataset images, keypoints (also called poses), and segmenatations from input_frames/ frames
+        """Generates dataset images, keypoints (also called poses),
+         and segmenatations from input_frames/ frames
 
         Inputs
         ----------
         input_frames: list of images
-        crop_data : A flag used center-crop output images and poses (the original paper used crop_data=True,
-                    so for consistency we use crop_data=True as well) 
+        crop_data : A flag used center-crop output images and poses
+        (the original paper used crop_data=True,
+        so for consistency we use crop_data=True as well)
 
         Returns
         -------
@@ -67,10 +70,12 @@ class KeypointsGenerator():
                     output_size = img.size[0]
                     pose -= center - size
                 
-                # Resizing the image before storing it. If the image is small, this action would add black border around the image
+                # Resizing the image before storing it.
+                # If the image is small, this action would add black border around the image
                 img = img.resize((image_size, image_size), Image.BICUBIC)
 
-            # This following action (scaling the poses) is done in training pipeline, and should not be done for generating the dataset. 
+            # This following action (scaling the poses) is done in training pipeline,
+            # and should not be done for generating the dataset.
             if crop_data:
                 # This sets the range of pose to 0-256. This is what is needed for voxceleb.py 
                 pose = image_size*pose / float(output_size)
