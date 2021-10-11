@@ -2,7 +2,6 @@
 The following module extracts 68 tuples of facial keypoints. 
 """
 
-# Importing libraries
 import torch
 from torchvision import transforms
 from PIL import Image
@@ -39,13 +38,11 @@ class KeypointsGenerator():
         if len(input_frames.shape) == 3:
             input_frames = input_frames[None]
             N = 1
-
         else:
             N = input_frames.shape[0]
 
         # Iterate over all the images in the batch
         for i in range(N):
-            
             pose = self.fa.get_landmarks(input_frames[i])[0]
             # Finding the center of the face using the pose coordinates
             center = ((pose.min(0) + pose.max(0)) / 2).round().astype(int)
@@ -59,11 +56,8 @@ class KeypointsGenerator():
                     # Crop poses
                     output_size = size * 2
                     pose -= center - size
-
             else:
-                
                 img = Image.fromarray(np.array(input_frames[i]))
-
                 if crop_data:
                     # Crop images and poses
                     img = img.crop((center[0]-size, center[1]-size, center[0]+size, center[1]+size))
@@ -74,16 +68,13 @@ class KeypointsGenerator():
                 # If the image is small, this action would add black border around the image
                 img = img.resize((image_size, image_size), Image.BICUBIC)
 
-            # This following action (scaling the poses) is done in training pipeline,
-            # and should not be done for generating the dataset.
             if crop_data:
                 # This sets the range of pose to 0-256. This is what is needed for voxceleb.py 
-                pose = image_size*pose / float(output_size)
-            ## poses.append(torch.from_numpy((pose - 0.5) * 2).view(-1))            
-            poses.append(torch.from_numpy((pose))) #poses.append(torch.from_numpy((pose)).view(-1))
+                pose = image_size * pose / float(output_size)
+
+            poses.append(torch.from_numpy((pose)))
 
         # Stack the poses from different images
         poses = torch.stack(poses, 0)[None]
 
         return poses.squeeze()
-

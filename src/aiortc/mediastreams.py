@@ -174,7 +174,6 @@ class KeypointsStreamTrack(MediaStreamTrack):
         return self._timestamp, VIDEO_TIME_BASE
 
     async def recv(self) -> KeypointsFrame:
-
         pts, time_base = await self.next_timestamp()
         frame = KeypointFrame()
         frame.pts = pts

@@ -35,7 +35,6 @@ class KeypointsEncoder(Encoder):
     def encode(
         self, frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
-
         timestamp = frame.pts
         keypoints = frame.data
         keypoints_bytearray = bytearray()
