@@ -12,6 +12,14 @@ from av.frame import Frame
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 from aiortc.contrib.getkeypoints import KeypointsGenerator
+# Adding Bilayer
+import sys
+sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/original_bilayer')
+from bilayer_wrapper import BilayerAPI
+config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
+model = BilayerAPI(config_path)
+frame_num = 0
+SOURCE_UPDATE_FREQ = 2
 
 logger = logging.getLogger(__name__)
 
@@ -163,13 +171,15 @@ def player_worker(
             keypoints_generator = KeypointsGenerator()
             try:
                 keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts)
+                # keypoints = model.extract_keypoints(frame.to_rgb().to_ndarray())
+                keypoints_frame = KeypointsFrame(keypoints.squeeze(), frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
                 print("Could not extract the keypoints for frame index %s" % str(frame.index))
 
             asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
+            frame_num += 1
 
 
 
@@ -424,11 +434,19 @@ class MediaRecorder:
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
             else:
-                print("Keypoints are being recorded!!!", str(frame.data))
+                print("Keypoints are being recorded!!!")
+                received_keypoints = frame.data
+                
+                # Store keypoints in file
                 keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
-                keypoints_file.write(str(frame.data))
+                keypoints_file.write(str(received_keypoints))
                 keypoints_file.write("\n")
                 keypoints_file.close()
+
+                # Generate Model's prediction
+                print("Generate Model's prediction!!!")
+                predicted_target = model.predict(received_keypoints, None)
+                predicted_target.save("pred_target.png")
 
 
 class RelayStreamTrack(MediaStreamTrack):
