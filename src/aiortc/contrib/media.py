@@ -13,6 +13,13 @@ from av.frame import Frame
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 from aiortc.contrib.getkeypoints import KeypointsGenerator
 
+# Add Bilayer
+import sys
+sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/original_bilayer')
+from bilayer_wrapper import BilayerAPI
+config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
+model = BilayerAPI(config_path)
+
 logger = logging.getLogger(__name__)
 
 
@@ -160,9 +167,10 @@ def player_worker(
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
             # Extract the keypoints from the frame
-            keypoints_generator = KeypointsGenerator()
+            # keypoints_generator = KeypointsGenerator()
             try:
-                keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
+                # keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
+                keypoints =  model.extract_keypoints(frame.to_rgb().to_ndarray())
                 keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
             except:
