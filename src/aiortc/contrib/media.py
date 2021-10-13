@@ -19,6 +19,7 @@ sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/or
 from bilayer_wrapper import BilayerAPI
 config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
 model = BilayerAPI(config_path)
+UPDATE_SRC_FREQ = 2
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +171,14 @@ def player_worker(
             # keypoints_generator = KeypointsGenerator()
             try:
                 # keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
-                keypoints =  model.extract_keypoints(frame.to_rgb().to_ndarray())
+                frame_array = frame.to_rgb().to_ndarray()
+                keypoints =  model.extract_keypoints(frame_array)
                 keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
+                if frame.index % UPDATE_SRC_FREQ == 0:
+                    print("Update source image")
+                    model.update_source(keypoints, frame_array)
+
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
                 print("Could not extract the keypoints for frame index %s" % str(frame.index))
