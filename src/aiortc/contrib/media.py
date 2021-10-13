@@ -176,7 +176,7 @@ def player_worker(
                 keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
                 if frame.index % UPDATE_SRC_FREQ == 0:
-                    print("Update source image")
+                    print("Update source image in sender")
                     model.update_source(keypoints, frame_array)
 
             except:
@@ -437,12 +437,23 @@ class MediaRecorder:
             if track.kind != "keypoints":
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
+
+                # Model-based operations
+                if track.kind == "video":
+                    frame_array = frame.to_rgb().to_ndarray()
+                    if frame.index % UPDATE_SRC_FREQ == 0:
+                        print("Update source image in receiver")
+                        model.update_source(keypoints, frame_array)
             else:
-                print("Keypoints are being recorded!!!", str(frame.data))
+                received_keypoints = frame.data
+                print("Keypoints are being recorded!!!")
                 keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
-                keypoints_file.write(str(frame.data))
+                keypoints_file.write(str(received_keypoints))
                 keypoints_file.write("\n")
                 keypoints_file.close()
+                # print("Predicting the target image based on Bilayer")
+                # predicted_target = model.predict(received_keypoints)
+                # predicted_target.save("/Users/panteababaahmadi/Documents/GitHub/aiortc/predicted_target_in_aiortc.png")
 
 
 class RelayStreamTrack(MediaStreamTrack):
