@@ -174,7 +174,7 @@ def player_worker(
             try:
                 frame_array = frame.to_rgb().to_ndarray()
                 keypoints =  model.extract_keypoints(frame_array)
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts) # We mght just be able to use frame.index
+                keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
                 if frame.index % UPDATE_SRC_FREQ == 0:
                     print("Update source image in sender")
@@ -392,15 +392,15 @@ class MediaRecorder:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
         elif track.kind == "keypoints":
-            if use_generated_video:
-                if self.__container.format.name == "image2":
-                    stream = self.__container.add_stream("png", rate=30)
-                    stream.pix_fmt = "rgb24"
-                else:
-                    stream = self.__container.add_stream("libx264", rate=30)
-                    stream.pix_fmt = "yuv420p"            
-            else:
-                stream = None
+            # if use_generated_video:
+            #     if self.__container.format.namegit == "image2":
+            #         stream = self.__container.add_stream("png", rate=30)
+            #         stream.pix_fmt = "rgb24"
+            #     else:
+            #         stream = self.__container.add_stream("libx264", rate=30)
+            #         stream.pix_fmt = "yuv420p"            
+            # else:
+            stream = None
         else:
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
@@ -444,22 +444,22 @@ class MediaRecorder:
                 return
             if track.kind != "keypoints":
                 # Flag for use_from_original or use_from_model
-                if not (track.kind == "video" and  use_generated_video):
-                    if track.kind == "video":
-                        print("Video from Original frames")
-                    for packet in context.stream.encode(frame):
-                        self.__container.mux(packet)
+                # if not (track.kind == "video" and  use_generated_video):
+                #     if track.kind == "video":
+                #         print("Video from Original frames")
+                for packet in context.stream.encode(frame):
+                    self.__container.mux(packet)
 
                 # Model-based operations
                 # import pdb
                 # pdb.set_trace()
-                if track.kind == "video":
-                    print("received video frame:", frame)
-                    if frame.index % UPDATE_SRC_FREQ == 0:
-                        print("Update source image in receiver")
-                        source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
-                        source_keypoints =  model.extract_keypoints(source_frame_array)
-                        model.update_source(source_frame_array, source_keypoints)
+                # if track.kind == "video":
+                #     print("received video frame:", frame)
+                #     if frame.index % UPDATE_SRC_FREQ == 0:
+                #         print("Update source image in receiver")
+                #         source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
+                #         source_keypoints =  model.extract_keypoints(source_frame_array)
+                #         model.update_source(source_frame_array, source_keypoints)
             else:
                 received_keypoints = frame.data
                 print("Keypoints are being recorded!!!")
@@ -468,17 +468,17 @@ class MediaRecorder:
                 keypoints_file.write("\n")
                 keypoints_file.close()
 
-                if use_generated_video:
-                    print("Video from Predicted frames")
-                    try:
-                        predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
-                    except:
-                        print("Could not predict the target based on received keypoints")
+                # if use_generated_video:
+                #     print("Video from Predicted frames")
+                #     try:
+                #         predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
+                #     except:
+                #         print("Could not predict the target based on received keypoints")
 
-                    predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
-                    predicted_frame.pts = frame.pts
-                    for packet in context.stream.encode(predicted_frame):
-                        self.__container.mux(packet)
+                #     predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
+                #     predicted_frame.pts = frame.pts
+                #     for packet in context.stream.encode(predicted_frame):
+                #         self.__container.mux(packet)
 
 class RelayStreamTrack(MediaStreamTrack):
     def __init__(self, relay, source: MediaStreamTrack) -> None:
