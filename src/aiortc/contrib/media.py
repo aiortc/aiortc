@@ -13,11 +13,13 @@ from av.frame import Frame
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 from aiortc.contrib.getkeypoints import KeypointsGenerator
 
+import numpy as np
 # Add Bilayer
 import sys
 sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/original_bilayer')
 from bilayer_wrapper import BilayerAPI
 config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
+use_generated_video = True
 model = BilayerAPI(config_path)
 UPDATE_SRC_FREQ = 2
 
@@ -168,17 +170,14 @@ def player_worker(
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
             # Extract the keypoints from the frame
-            # keypoints_generator = KeypointsGenerator()
             try:
-                # keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
                 frame_array = frame.to_rgb().to_ndarray()
                 keypoints =  model.extract_keypoints(frame_array)
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts)
+                keypoints_frame = KeypointsFrame(keypoints, frame.pts) # We mght just be able to use frame.index
                 print("Keypoints for frame index %s retrieved." % str(frame.index))
                 if frame.index % UPDATE_SRC_FREQ == 0:
                     print("Update source image in sender")
-                    model.update_source(keypoints, frame_array)
-
+                    model.update_source(frame_array, keypoints)
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
                 print("Could not extract the keypoints for frame index %s" % str(frame.index))
@@ -392,6 +391,7 @@ class MediaRecorder:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
         elif track.kind == "keypoints":
+            # Video container stream for it
             stream = None
         else:
             if self.__container.format.name == "image2":
@@ -435,15 +435,20 @@ class MediaRecorder:
                 print("Couldn't receive the track!")
                 return
             if track.kind != "keypoints":
+                # Flag for use_from_original or use_from_model
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
 
                 # Model-based operations
+                # import pdb
+                # pdb.set_trace()
                 if track.kind == "video":
-                    frame_array = frame.to_rgb().to_ndarray()
+                    print("received video frame:", frame.index, frame)
                     if frame.index % UPDATE_SRC_FREQ == 0:
                         print("Update source image in receiver")
-                        model.update_source(keypoints, frame_array)
+                        source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
+                        source_keypoints =  model.extract_keypoints(source_frame_array)
+                        model.update_source(source_frame_array, source_keypoints)
             else:
                 received_keypoints = frame.data
                 print("Keypoints are being recorded!!!")
@@ -451,8 +456,15 @@ class MediaRecorder:
                 keypoints_file.write(str(received_keypoints))
                 keypoints_file.write("\n")
                 keypoints_file.close()
-                # print("Predicting the target image based on Bilayer")
-                # predicted_target = model.predict(received_keypoints)
+
+                # Single flag that set ups at the begining of the experimnet to tell whether to use the original
+                # Stream of the generated stream
+
+                print("Predicting the target image based on Bilayer")
+                try:
+                    predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
+                except:
+                    print("Could not predict the target based on received keypoints")
                 # predicted_target.save("/Users/panteababaahmadi/Documents/GitHub/aiortc/predicted_target_in_aiortc.png")
 
 
