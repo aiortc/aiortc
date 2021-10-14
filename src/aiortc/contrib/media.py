@@ -20,9 +20,11 @@ sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/or
 from bilayer_wrapper import BilayerAPI
 config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
 model = BilayerAPI(config_path)
-
-UPDATE_SRC_FREQ = 200
+# Constants
+UPDATE_SRC_FREQ = 2
 use_generated_video = False
+# Global changable vars
+frame_counter = -1
 
 logger = logging.getLogger(__name__)
 
@@ -451,15 +453,14 @@ class MediaRecorder:
                     self.__container.mux(packet)
 
                 # Model-based operations
-                # import pdb
-                # pdb.set_trace()
-                # if track.kind == "video":
-                #     print("received video frame:", frame)
-                #     if frame.index % UPDATE_SRC_FREQ == 0:
-                #         print("Update source image in receiver")
-                #         source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
-                #         source_keypoints =  model.extract_keypoints(source_frame_array)
-                #         model.update_source(source_frame_array, source_keypoints)
+                if track.kind == "video":
+                    frame_counter += 1
+                    print("received video frame:", frame)
+                    if frame_counter % UPDATE_SRC_FREQ == 0:
+                        print("Update source image in receiver")
+                        source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
+                        source_keypoints =  model.extract_keypoints(source_frame_array)
+                        model.update_source(source_frame_array, source_keypoints)
             else:
                 received_keypoints = frame.data
                 print("Keypoints are being recorded!!!")
