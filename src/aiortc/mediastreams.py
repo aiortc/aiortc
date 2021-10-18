@@ -150,7 +150,7 @@ class VideoStreamTrack(MediaStreamTrack):
         frame.time_base = time_base
         return frame
 
-class KeypointsStreamTrack(VideoStreamTrack):
+class KeypointsStreamTrack(MediaStreamTrack):
     """
     A dummy keypoints track which reads the constant keypoints.
     """
@@ -159,6 +159,19 @@ class KeypointsStreamTrack(VideoStreamTrack):
 
     _start: float
     _timestamp: int
+
+    async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
+        if self.readyState != "live":
+            raise MediaStreamError
+
+        if hasattr(self, "_timestamp"):
+            self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
+            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+            await asyncio.sleep(wait)
+        else:
+            self._start = time.time()
+            self._timestamp = 0
+        return self._timestamp, VIDEO_TIME_BASE
 
     async def recv(self) -> KeypointsFrame:
         pts, time_base = await self.next_timestamp()
