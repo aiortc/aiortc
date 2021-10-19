@@ -473,8 +473,6 @@ class MediaRecorder:
                 keypoints_file.close()
 
                 if use_generated_video:
-                    # Single flag that set ups at the begining of the experimnet to tell whether to use the original
-                    # Stream of the generated stream
                     print("Video from predicted frames")
                     try:
                         predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
