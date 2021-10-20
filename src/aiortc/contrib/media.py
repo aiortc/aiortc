@@ -15,11 +15,9 @@ from aiortc.contrib.getkeypoints import KeypointsGenerator
 
 import numpy as np
 # Add Bilayer
-import sys
-sys.path.append('/Users/panteababaahmadi/Documents/GitHub/nets_implementation/original_bilayer')
-from bilayer_wrapper import BilayerAPI
-config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs/my_model_no_frozen_yaw_V9mbKUqFx0o/args.yaml'
-model = BilayerAPI(config_path)
+from first_order_model.fom_wrapper import FirstOrderModel
+config_path = '/data/vibhaa/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
+model = FirstOrderModel(config_path)
 
 UPDATE_SRC_FREQ = 20
 enable_prediction = True
