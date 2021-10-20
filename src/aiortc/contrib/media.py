@@ -22,7 +22,7 @@ config_path = '/Users/panteababaahmadi/Documents/GitHub/Bilayer_Checkpoints/runs
 model = BilayerAPI(config_path)
 
 UPDATE_SRC_FREQ = 20
-use_generated_video = True
+enable_prediction = True
 
 logger = logging.getLogger(__name__)
 
@@ -167,23 +167,27 @@ def player_worker(
                 video_first_pts = frame.pts
             frame.pts -= video_first_pts
             print("Video frame %s retrieved: %s" % (str(frame.index), str(frame)))
+            
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
             # Extract the keypoints from the frame
-            try:
-                frame_array = frame.to_rgb().to_ndarray()
-                keypoints =  model.extract_keypoints(frame_array)
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts) # We mght just be able to use frame.index
-                print("Keypoints for frame index %s retrieved." % str(frame.index))
-                if frame.index % UPDATE_SRC_FREQ == 0:
-                    print("Update source image in sender")
-                    model.update_source(frame_array, keypoints)
-            except:
-                keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
-                print("Could not extract the keypoints for frame index %s" % str(frame.index))
+            if enable_prediction:
+                try:
+                    frame_array = frame.to_rgb().to_ndarray()
+                    keypoints =  model.extract_keypoints(frame_array)
+                    # We mght just be able to use frame.index
+                    keypoints_frame = KeypointsFrame(keypoints, frame.pts) 
+                    print("Keypoints for frame index %s retrieved." % str(frame.index))
+                    
+                    if frame.index % UPDATE_SRC_FREQ == 0:
+                        print("Update source image in sender")
+                        model.update_source(frame_array, keypoints)
+                except:
+                    keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
+                    print("Could not extract the keypoints for frame index %s" % str(frame.index))
 
-            asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
+                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
 
 
 
@@ -282,7 +286,8 @@ class MediaPlayer:
             elif stream.type == "video" and not self.__video:
                 self.__video = PlayerStreamTrack(self, kind="video")
                 self.__streams.append(stream)
-                self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
+                if enable_prediction:
+                    self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
 
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(","))
@@ -392,27 +397,17 @@ class MediaRecorder:
             else:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
-        elif track.kind == "keypoints":
-            # Video container stream for it
-            if use_generated_video:
-                if self.__container.format.name == "image2":
-                    stream = self.__container.add_stream("png", rate=30)
-                    stream.pix_fmt = "rgb24"
-                else:
-                    stream = self.__container.add_stream("libx264", rate=30)
-                    stream.pix_fmt = "yuv420p"
+        elif (track.kind == "keypoints" and enable_prediction == True) or \
+                (track.kind == "video" and enable_prediction == False):
+            # repurpose video container stream for predicted video w/ keypoints
+            if self.__container.format.name == "image2":
+                stream = self.__container.add_stream("png", rate=30)
+                stream.pix_fmt = "rgb24"
             else:
-                stream = None
+                stream = self.__container.add_stream("libx264", rate=30)
+                stream.pix_fmt = "yuv420p"
         else:
-            if not use_generated_video:
-                if self.__container.format.name == "image2":
-                    stream = self.__container.add_stream("png", rate=30)
-                    stream.pix_fmt = "rgb24"
-                else:
-                    stream = self.__container.add_stream("libx264", rate=30)
-                    stream.pix_fmt = "yuv420p"
-            else:
-                stream = None
+            stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
 
     async def start(self):
@@ -448,31 +443,38 @@ class MediaRecorder:
             except MediaStreamError:
                 print("Couldn't receive the track!")
                 return
-            if track.kind != "keypoints":
-                # Flag for use_from_original or use_from_model
-                if not (track.kind == "video" and  use_generated_video):
-                    print("Video from original frames")
-                    for packet in context.stream.encode(frame):
-                        self.__container.mux(packet)
 
-                # Model-based operations
-                if track.kind == "video":
+            if track.kind == "video":
+                if enable_prediction:
+                    # update model related info with most recent frame
                     self.received_video_frame += 1
                     print("received video frame:", self.received_video_frame, frame)
                     if self.received_video_frame % UPDATE_SRC_FREQ == 0:
                         print("Update source image in receiver")
-                        source_frame_array = frame.to_rgb().to_ndarray() #TODO how to synchronize this with received keypoints
+                        #TODO how to synchronize this with received keypoints
+                        source_frame_array = frame.to_rgb().to_ndarray()
                         source_keypoints =  model.extract_keypoints(source_frame_array)
                         model.update_source(source_frame_array, source_keypoints)
+                else:
+                    # regular video stream
+                    print("Video from original frames")
+                    for packet in context.stream.encode(frame):
+                        self.__container.mux(packet)
+
+            elif track.kind == "audio":
+                for packet in context.stream.encode(frame):
+                    self.__container.mux(packet)
+
             else:
+                # keypoint stream
                 received_keypoints = frame.data
                 print("Keypoints are being recorded!!!")
-                keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
+                keypoints_file = open(self.__keypoints_file_name, "a")
                 keypoints_file.write(str(received_keypoints))
                 keypoints_file.write("\n")
                 keypoints_file.close()
 
-                if use_generated_video:
+                if enable_prediction:
                     print("Video from predicted frames")
                     try:
                         predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
