@@ -20,7 +20,3 @@ python3 cli.py answer \
     --signaling-path /tmp/test.sock \
     --signaling unix-socket \
     --verbose 2>receiver_output
-
-
-# python3 cli.py offer --play-from sundar_pichai.mp4 --signaling-path /tmp/test.sock --signaling unix-socket --verbose 2>sender_output
-# python3 cli.py answer --record-to received_video.mp4 --signaling-path /tmp/test.sock --signaling unix-socket --verbose 2>receiver_output
