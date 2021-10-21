@@ -48,7 +48,7 @@ class KeypointsGenerator():
                 img = Image.fromarray(np.array(input_frames[i]))
                 if crop_data:
                     # Crop images and poses
-                    img = img.crop((center[0]-size, center[1]-size, center[0]+size, center[1]+size))
+                    img = img.crop((center[0] - size, center[1] - size, center[0] + size, center[1] + size))
                     output_size = img.size[0]
                     pose -= center - size
                 
