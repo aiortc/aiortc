@@ -155,7 +155,6 @@ def player_worker(
             if video_first_pts is None:
                 video_first_pts = frame.pts
             frame.pts -= video_first_pts
-            print("Video frame %s retrieved: %s" % (str(frame.index), str(frame)))
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
@@ -164,10 +163,14 @@ def player_worker(
             try:
                 keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
                 keypoints_frame = KeypointsFrame(keypoints, frame.pts)
-                print("Keypoints for frame index %s retrieved." % str(frame.index))
+                logger.warning(
+                    "MediaPlayer(%s) Keypoints for frame index %s retrieved.", container.name, str(frame.index)
+                )
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
-                print("Could not extract the keypoints for frame index %s" % str(frame.index))
+                logger.warning(
+                    "MediaPlayer(%s) Could not extract the keypoints for frame index %s.", container.name, str(frame.index)
+                )
 
             asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
 
@@ -419,17 +422,21 @@ class MediaRecorder:
             try:
                 frame = await track.recv()
             except MediaStreamError:
-                print("Couldn't receive the track!")
+                self.__log_debug("Couldn't receive the track!")
                 return
             if track.kind != "keypoints":
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
             else:
-                print("Keypoints are being recorded!!!")
                 keypoints_file = open(self.__keypoints_file_name, "a")  # append mode
                 keypoints_file.write(str(frame.data))
                 keypoints_file.write("\n")
                 keypoints_file.close()
+
+                self.__log_debug("Keypoint with pts {} is recorded.".format(frame.pts))
+
+    def __log_debug(self, msg: str, *args) -> None:
+        logger.debug(f"MediaRecorder(%s) {msg}", id(self), *args)
 
 
 class RelayStreamTrack(MediaStreamTrack):

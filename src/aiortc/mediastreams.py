@@ -152,7 +152,7 @@ class VideoStreamTrack(MediaStreamTrack):
 
 class KeypointsStreamTrack(VideoStreamTrack):
     """
-    A dummy keypoints track which reads the constant keypoints.
+    A dummy keypoints track which reads constant keypoints.
     """
 
     kind = "keypoints"
