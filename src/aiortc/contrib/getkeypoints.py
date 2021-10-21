@@ -18,20 +18,8 @@ class KeypointsGenerator():
                                                flip_input=True, device='cpu')
 
     def get_keypoints(self, input_frames, image_size = 256, crop_data = False):
-        """Generates dataset images, keypoints (also called poses),
+        """ Generates dataset images, keypoints (also called poses),
          and segmenatations from input_frames/ frames
-
-        Inputs
-        ----------
-        input_frames: list of images
-        crop_data : A flag used center-crop output images and poses
-        (the original paper used crop_data=True,
-        so for consistency we use crop_data=True as well)
-
-        Returns
-        -------
-        poses:  torch tensor of keypoints 
-
         """        
         poses = []
         # Finding the batch-size of the input imgs
