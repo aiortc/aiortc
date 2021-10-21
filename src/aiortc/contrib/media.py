@@ -481,7 +481,7 @@ class MediaRecorder:
                     # Put the predicted frame in a av video frame
                     predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                     # predicted_frame.pts = frame.pts #/ 512
-                    print(predicted_frame)
+                    print("predicted_frame", predicted_frame)
                     for packet in context.stream.encode(predicted_frame):
                         self.__container.mux(packet)
 
