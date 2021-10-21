@@ -4,6 +4,7 @@ import fractions
 import logging
 import threading
 import time
+import sys
 from typing import Dict, Optional, Set
 
 import av
@@ -102,6 +103,13 @@ def player_worker(
     while not quit_event.is_set():
         try:
             frame = next(container.decode(*streams))
+            if isinstance(frame, VideoFrame) and video_track:
+                logger.debug(f"MediaPlayerWorker Frame size:%d Index:%d Factor:%d",
+                        sys.getsizeof(frame), 
+                        frame.index, video_track._fps_factor)
+                if frame.index % video_track._fps_factor != 0:
+                    continue
+        
         except (av.AVError, StopIteration) as exc:
             if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
                 time.sleep(0.01)
@@ -159,12 +167,13 @@ def player_worker(
 
 
 class PlayerStreamTrack(MediaStreamTrack):
-    def __init__(self, player, kind):
+    def __init__(self, player, kind, fps_factor=1):
         super().__init__()
         self.kind = kind
         self._player = player
         self._queue = asyncio.Queue()
         self._start = None
+        self._fps_factor = fps_factor
 
     async def recv(self):
         if self.readyState != "live":
@@ -234,7 +243,7 @@ class MediaPlayer:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, options={}):
+    def __init__(self, file, fps=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
@@ -249,7 +258,11 @@ class MediaPlayer:
                 self.__audio = PlayerStreamTrack(self, kind="audio")
                 self.__streams.append(stream)
             elif stream.type == "video" and not self.__video:
-                self.__video = PlayerStreamTrack(self, kind="video")
+                if fps is not None and fps < stream.base_rate:
+                    fps_factor = round(float(stream.base_rate) / fps)
+                else:
+                    fps_factor = 1
+                self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
                 self.__streams.append(stream)
 
         # check whether we need to throttle playback

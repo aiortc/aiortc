@@ -127,6 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("--play-from", help="Read the media from a file and sent it."),
     parser.add_argument("--record-to", help="Write received media to a file."),
     parser.add_argument("--verbose", "-v", action="count")
+    parser.add_argument("--fps", type=int, help="fps you want to sample at")
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
@@ -139,7 +140,7 @@ if __name__ == "__main__":
 
     # create media source
     if args.play_from:
-        player = MediaPlayer(args.play_from)
+        player = MediaPlayer(args.play_from, args.fps)
     else:
         player = None
 
