@@ -164,12 +164,14 @@ def player_worker(
                 keypoints = keypoints_generator.get_keypoints(frame.to_rgb().to_ndarray())
                 keypoints_frame = KeypointsFrame(keypoints, frame.pts)
                 logger.warning(
-                    "MediaPlayer(%s) Keypoints for frame index %s retrieved.", container.name, str(frame.index)
+                    "MediaPlayer(%s) Keypoints for frame index %s retrieved.", \
+                    container.name, str(frame.index)
                 )
             except:
                 keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
                 logger.warning(
-                    "MediaPlayer(%s) Could not extract the keypoints for frame index %s.", container.name, str(frame.index)
+                    "MediaPlayer(%s) Could not extract the keypoints for frame index %s.", \
+                    container.name, str(frame.index)
                 )
 
             asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)

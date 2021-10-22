@@ -19,7 +19,7 @@ class KeypointsGenerator():
 
     def get_keypoints(self, input_frames, image_size = 256, crop_data = False):
         """ Generates dataset images, keypoints (also called poses),
-         and segmenatations from input_frames/ frames
+            and segmenatations from input_frames/ frames
         """        
         poses = []
         # Finding the batch-size of the input imgs
