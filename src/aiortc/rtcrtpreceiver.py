@@ -63,6 +63,8 @@ def decoder_worker(loop, input_q, output_q):
         if codec.name != codec_name:
             decoder = get_decoder(codec)
             codec_name = codec.name
+            logger.debug(f"RTCRtpReceiver(%s) retrieved the decoder", codec_name)
+
 
         decoded_frames = decoder.decode(encoded_frame)
         logger.debug(f"RTCRtpReceiver(%s) decoding timestamp %s, got %d frames", codec_name, encoded_frame.timestamp, len(decoded_frames))
@@ -243,7 +245,7 @@ class RTCRtpReceiver:
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
     of data for a :class:`MediaStreamTrack`.
 
-    :param kind: The kind of media (`'audio'` or `'video'`).
+    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'`).
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
@@ -258,6 +260,10 @@ class RTCRtpReceiver:
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
+            self.__nack_generator = None
+            self.__remote_bitrate_estimator = None
+        elif kind == "keypoints":
+            self.__jitter_buffer = JitterBuffer(capacity=16)
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         else:

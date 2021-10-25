@@ -14,6 +14,11 @@ VIDEO_CLOCK_RATE = 90000
 VIDEO_PTIME = 1 / 30  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
+class KeypointsFrame():
+    def __init__(self, data, pts):
+        self.data = data
+        self.pts = pts
+        self.time = time.time()
 
 def convert_timebase(
     pts: int, from_base: fractions.Fraction, to_base: fractions.Fraction
@@ -143,4 +148,17 @@ class VideoStreamTrack(MediaStreamTrack):
             p.update(bytes(p.buffer_size))
         frame.pts = pts
         frame.time_base = time_base
+        return frame
+
+class KeypointsStreamTrack(VideoStreamTrack):
+    """
+    A dummy keypoints track which reads constant keypoints.
+    """
+
+    kind = "keypoints"
+
+    async def recv(self) -> KeypointsFrame:
+        pts, time_base = await self.next_timestamp()
+        frame = KeypointFrame()
+        frame.pts = pts
         return frame
