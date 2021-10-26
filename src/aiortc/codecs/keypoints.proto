@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+package keypoint;
+
+message Keypoint {
+    required float xloc = 1;
+    required float yloc = 2;
+}
+
+message Jacobian {
+    required float d11 = 1;
+    required float d12 = 2;
+    required float d21 = 3;
+    required float d22 = 4;
+}
+
+message KeypointInfo {
+    repeated Keypoint keypoints = 1;
+    repeated Jacobian jacobians = 2;
+}

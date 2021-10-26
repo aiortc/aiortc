@@ -14,7 +14,6 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 from aiortc.contrib.getkeypoints import KeypointsGenerator
 
 import numpy as np
-# Add Bilayer
 from first_order_model.fom_wrapper import FirstOrderModel
 config_path = '/data/vibhaa/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
@@ -475,7 +474,7 @@ class MediaRecorder:
                 if enable_prediction:
                     print("Video from predicted frames")
                     try:
-                        predicted_target = model.predict(np.array(received_keypoints).astype(dtype=np.float32))
+                        predicted_target = model.predict(received_keypoints)
                     except:
                         print("Could not predict the target based on received keypoints")
 
