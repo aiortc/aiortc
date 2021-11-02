@@ -26,7 +26,7 @@ pip install av opencv-python face_alignment
 
 If you only want to get the model working, skip the next few steps and go directly to the "FOM and Model" section
 
-Compile the aiortc code
+Compile aiortc
 ```bash
 cd aiortc
 sudo python setup.py install
