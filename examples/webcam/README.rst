@@ -34,7 +34,7 @@ If you want to play a media file instead of using the webcam, run:
 
 .. code-block:: console
 
-   $ python server.py --play-from video.mp4
+   $ python webcam.py --play-from video.mp4
 
 Credits
 -------
