@@ -195,7 +195,7 @@ def player_worker(
                     keypoints =  model.extract_keypoints(frame_array)
                     time_after_keypoints = time.time()
                     logger.warning(
-                        "Keypoints extract time for frame index %s in sender: %s",
+                        "Keypoints extraction time for frame index %s in sender: %s",
                         str(frame.index), str(time_after_keypoints - time_before_keypoints)
                     )
                     keypoints_frame = KeypointsFrame(keypoints, frame.pts) 
@@ -205,7 +205,7 @@ def player_worker(
                         model.update_source(frame_array, keypoints)
                         time_after_update = time.time()
                         logger.warning(
-                            "Source update time for frame index %s in sender: %s",
+                            "Time to update source frame with index %s in sender: %s",
                             str(frame.index), str(time_after_update - time_before_update)
                         )
                 except:
@@ -485,9 +485,7 @@ class MediaRecorder:
             try:
                 frame = await track.recv()
             except MediaStreamError:
-                # if using __log_debug yields error
                 logger.warning("Couldn't receive the %s track.", track.kind)
-                # self.__log_debug("Couldn't receive the %s track.", track.kind)
                 return
 
             if track.kind == "video":
@@ -504,13 +502,13 @@ class MediaRecorder:
                     time_before_keypoints = time.time()
                     source_keypoints =  model.extract_keypoints(source_frame_array)
                     time_after_keypoints = time.time()
-                    self.__log_debug("Source keypoints extract time in receiver: %s",
+                    self.__log_debug("Source keypoints extraction time in receiver: %s",
                                     str(time_after_keypoints - time_before_keypoints))
 
                     time_before_update = time.time()
                     model.update_source(source_frame_array, source_keypoints)
                     time_after_update = time.time()
-                    self.__log_debug("Update source frame time in receiver: %s",
+                    self.__log_debug("Time to update source frame in receiver: %s",
                                     str(time_after_keypoints - time_before_keypoints))
                 else:
                     # regular video stream
