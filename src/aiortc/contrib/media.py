@@ -17,7 +17,7 @@ from first_order_model.fom_wrapper import FirstOrderModel
 config_path = '/data/vibhaa/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
 
-UPDATE_SRC_FREQ = 20
+REFERENCE_FRAME_UPDATE_FREQ = 20
 enable_prediction = True
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,9 @@ def player_worker(
             )
             frame_time = frame.time
 
-            if (enable_prediction and frame.index % UPDATE_SRC_FREQ == 0) or \
+            # Only add video frame is this is meant to be used as a source \
+            # frame or if prediction is disabled
+            if (enable_prediction and frame.index % REFERENCE_FRAME_UPDATE_FREQ == 0) or \
                     not enable_prediction:
                 logger.warning(
                     "MediaPlayer(%s) Put video frame %s in the queue: %s",
@@ -198,7 +200,7 @@ def player_worker(
                     )
                     keypoints_frame = KeypointsFrame(keypoints, frame.pts) 
                     
-                    if frame.index % UPDATE_SRC_FREQ == 0:
+                    if frame.index % REFERENCE_FRAME_UPDATE_FREQ == 0:
                         time_before_update = time.time()
                         model.update_source(frame_array, keypoints)
                         time_after_update = time.time()
