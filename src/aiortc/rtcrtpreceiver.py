@@ -188,7 +188,7 @@ class RemoteStreamTrack(MediaStreamTrack):
         """
         if self.readyState != "live":
             raise MediaStreamError
-        # await asyncio.sleep(3)
+
         frame = await self._queue.get()
         if frame is None:
             self.stop()
