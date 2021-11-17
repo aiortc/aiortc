@@ -489,9 +489,8 @@ class MediaRecorder:
                 return
 
             if track.kind == "video":
-                if self.frame_height != frame.height:
-                    self.frame_height = frame.height
-                    self.frame_width = frame.width
+                self.frame_height = frame.height
+                self.frame_width = frame.width
 
                 if enable_prediction:
                     # update model related info with most recent frame
