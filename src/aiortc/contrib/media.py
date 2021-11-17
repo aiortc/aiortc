@@ -198,7 +198,6 @@ def player_worker(
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
             # Extract the keypoints from the frame
-
             if enable_prediction:
                 try:
                     frame_array = frame.to_rgb().to_ndarray()
@@ -490,14 +489,6 @@ class MediaRecorder:
 
     async def __run_track(self, track, context):
         while True:
-            # if self.frame_width is not None and self.frame_height is not None:
-            #     if (track.kind == "keypoints" and enable_prediction == True) or \
-            #     (track.kind == "video" and enable_prediction == False):
-            #         if self.__tracks[track].stream.height != self.frame_height or \
-            #         self.__tracks[track].stream.width != self.frame_width:
-            #             self.__tracks[track].stream.height = self.frame_height
-            #             self.__tracks[track].stream.width = self.frame_width
-
             try:
                 frame = await track.recv()
             except MediaStreamError:
