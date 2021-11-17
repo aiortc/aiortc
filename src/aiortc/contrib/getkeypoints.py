@@ -18,20 +18,8 @@ class KeypointsGenerator():
                                                flip_input=True, device='cpu')
 
     def get_keypoints(self, input_frames, image_size = 256, crop_data = False):
-        """Generates dataset images, keypoints (also called poses),
-         and segmenatations from input_frames/ frames
-
-        Inputs
-        ----------
-        input_frames: list of images
-        crop_data : A flag used center-crop output images and poses
-        (the original paper used crop_data=True,
-        so for consistency we use crop_data=True as well)
-
-        Returns
-        -------
-        poses:  torch tensor of keypoints 
-
+        """ Generates dataset images, keypoints (also called poses),
+            and segmenatations from input_frames/ frames
         """        
         poses = []
         # Finding the batch-size of the input imgs
@@ -60,7 +48,7 @@ class KeypointsGenerator():
                 img = Image.fromarray(np.array(input_frames[i]))
                 if crop_data:
                     # Crop images and poses
-                    img = img.crop((center[0]-size, center[1]-size, center[0]+size, center[1]+size))
+                    img = img.crop((center[0] - size, center[1] - size, center[0] + size, center[1] + size))
                     output_size = img.size[0]
                     pose -= center - size
                 
@@ -68,8 +56,8 @@ class KeypointsGenerator():
                 # If the image is small, this action would add black border around the image
                 img = img.resize((image_size, image_size), Image.BICUBIC)
 
+            # This sets the range of pose to 0-256.
             if crop_data:
-                # This sets the range of pose to 0-256. This is what is needed for voxceleb.py 
                 pose = image_size * pose / float(output_size)
 
             poses.append(torch.from_numpy((pose)))

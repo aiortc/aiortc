@@ -1,0 +1,3 @@
+[submodule "nets_implementation"]
+	path = nets_implementation
+	url = git@github.mit.edu:NeTS/nets_implementation.git
