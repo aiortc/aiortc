@@ -84,12 +84,12 @@ async def run(pc, player, recorder, signaling, role):
 
         if player and player.video:
             pc.addTrack(player.video)
+        else:
+            pc.addTrack(FlagVideoStreamTrack())
 
         if player and player.keypoints:
             pc.addTrack(player.keypoints)
 
-        else:
-            pc.addTrack(FlagVideoStreamTrack())
 
     @pc.on("track")
     def on_track(track):

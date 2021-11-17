@@ -15,6 +15,7 @@ from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
 from .keypointcodec import KeypointsEncoder, KeypointsDecoder
+from .keypoints_pb2 import KeypointInfo
 
 PCMU_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
