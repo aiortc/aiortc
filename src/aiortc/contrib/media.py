@@ -7,7 +7,7 @@ import time
 import sys
 from typing import Dict, Optional, Set
 import numpy as np
-
+import concurrent.futures
 import av
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
@@ -20,6 +20,7 @@ model = FirstOrderModel(config_path)
 
 REFERENCE_FRAME_UPDATE_FREQ = 20
 enable_prediction = True
+save_keypoints_to_file = False
 
 logger = logging.getLogger(__name__)
 
@@ -487,7 +488,12 @@ class MediaRecorder:
                 self.__container.close()
                 self.__container = None
 
+    def blocking_io(self, received_keypoints):
+        predicted_target = model.predict(received_keypoints)
+        return predicted_target
+
     async def __run_track(self, track, context):
+        loop = asyncio.get_running_loop()
         while True:
             try:
                 frame = await track.recv()
@@ -532,16 +538,18 @@ class MediaRecorder:
                 received_keypoints = frame.data
                 self.__log_debug("Keypoints for frame %s received at time %s",
                                 str(self.received_keypoints_frame), time.time())
-
-                keypoints_file = open(self.__keypoints_file_name, "a")
-                keypoints_file.write(str(received_keypoints))
-                keypoints_file.write("\n")
-                keypoints_file.close()
+                if save_keypoints_to_file:
+                    keypoints_file = open(self.__keypoints_file_name, "a")
+                    keypoints_file.write(str(received_keypoints))
+                    keypoints_file.write("\n")
+                    keypoints_file.close()
 
                 if enable_prediction:
                     try:
                         before_predict_time = time.time()
-                        predicted_target = model.predict(received_keypoints)
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            predicted_target = await loop.run_in_executor(pool, self.blocking_io, received_keypoints)
+                        # predicted_target = model.predict(received_keypoints)
                         after_predict_time = time.time()
                         self.__log_debug("Prediction time for received keypoints %s: %s",
                                         self.received_keypoints_frame,
@@ -551,7 +559,8 @@ class MediaRecorder:
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
 
-                    except:
+                    except Exception as e:
+                        print(e)
                         self.__log_debug("Couldn't predict based on received keypoints frame %s",
                                         self.received_keypoints_frame)
 
