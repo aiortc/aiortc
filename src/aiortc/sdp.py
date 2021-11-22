@@ -33,6 +33,12 @@ FMTP_INT_PARAMETERS = [
 
 def candidate_from_sdp(sdp: str) -> RTCIceCandidate:
     bits = sdp.split()
+
+    # Workaround to manage a more relaxed version of the protocol (which is accepted by Google Chrome) that doesn't include the foundation (first argument of the candidate)
+    assert len(bits) >= 7
+    if bits[0].isdigit() and not bits[1].isdigit():
+        bits.insert(0, "0")
+
     assert len(bits) >= 8
 
     candidate = RTCIceCandidate(
