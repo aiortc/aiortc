@@ -7,6 +7,8 @@ import time
 import sys
 from typing import Dict, Optional, Set
 import numpy as np
+import PIL
+import os
 
 import av
 from av import AudioFrame, VideoFrame
@@ -91,7 +93,7 @@ class MediaBlackhole:
 
 
 def player_worker(
-    loop, container, streams, audio_track, video_track, keypoints_track, quit_event, throttle_playback
+    loop, container, streams, audio_track, video_track, keypoints_track, quit_event, throttle_playback, save_dir
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -186,6 +188,8 @@ def player_worker(
             )
 
             frame_time = frame.time
+            img = frame.to_image()
+            img.save(os.path.join(save_dir, 'sender_frame_%05d.jpg' % frame.index))
 
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
@@ -309,10 +313,11 @@ class MediaPlayer:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, fps=None, format=None, options={}):
+    def __init__(self, file, fps=None, save_dir=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
+        self.__save_dir = save_dir
 
         # examine streams
         self.__started: Set[PlayerStreamTrack] = set()
@@ -377,6 +382,7 @@ class MediaPlayer:
                     self.__keypoints,
                     self.__thread_quit,
                     self._throttle_playback,
+                    self.__save_dir,
                 ),
             )
             self.__thread.start()
@@ -424,12 +430,13 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, options={}):
+    def __init__(self, file, format=None, save_dir=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
         self.__tracks = {}
         self.frame_height = None
         self.frame_width = None
+        self.save_dir = save_dir
 
     def addTrack(self, track):
         """
@@ -550,6 +557,9 @@ class MediaRecorder:
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                         predicted_frame = predicted_frame.reformat(format='yuv420p')
                         predicted_frame.pts = received_keypoints['pts']
+
+                        img = predicted_frame.to_image()
+                        img.save(os.path.join(self.save_dir, 'receiver_frame_%05d.jpg' % frame_index))
                         
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
