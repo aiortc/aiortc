@@ -15,9 +15,10 @@ VIDEO_PTIME = 1 / 30  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
 class KeypointsFrame():
-    def __init__(self, data, pts):
+    def __init__(self, data, pts, index):
         self.data = data
         self.pts = pts
+        self.index = index
         self.time = time.time()
 
 def convert_timebase(

@@ -181,8 +181,8 @@ def player_worker(
             frame.pts -= video_first_pts
 
             logger.warning(
-                "MediaPlayer(%s) Video frame %s read from media: %s",
-                container.name, str(frame.index), str(frame)
+                "MediaPlayer(%s) Video frame %s read from media: %s at time %s",
+                container.name, str(frame.index), str(frame), time.time()
             )
 
             frame_time = frame.time
@@ -208,7 +208,7 @@ def player_worker(
                         "Keypoints extraction time for frame index %s in sender: %s",
                         str(frame.index), str(time_after_keypoints - time_before_keypoints)
                     )
-                    keypoints_frame = KeypointsFrame(keypoints, frame.pts) 
+                    keypoints_frame = KeypointsFrame(keypoints, frame.pts, frame.index) 
                     
                     if frame.index % REFERENCE_FRAME_UPDATE_FREQ == 0:
                         time_before_update = time.time()
@@ -219,7 +219,7 @@ def player_worker(
                             str(frame.index), str(time_after_update - time_before_update)
                         )
                 except:
-                    keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
+                    keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts, frame.index)
                     logger.warning(
                         "MediaPlayer(%s) Could not extract the keypoints for frame index %s", str(frame.index)
                     )
@@ -426,7 +426,6 @@ class MediaRecorder:
 
     def __init__(self, file, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
-        self.received_keypoints_frame = 0
         self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
         self.__tracks = {}
         self.frame_height = None
@@ -501,8 +500,8 @@ class MediaRecorder:
 
                 if enable_prediction:
                     # update model related info with most recent frame
-                    self.__log_debug("Received source video frame %s at time %s",
-                                    frame, time.time())
+                    self.__log_debug("Received source video frame %s with index %s at time %s",
+                                    frame, frame.index, time.time())
                     source_frame_array = frame.to_rgb().to_ndarray()
 
                     time_before_keypoints = time.time()
@@ -530,8 +529,9 @@ class MediaRecorder:
             else:
                 # keypoint stream
                 received_keypoints = frame.data
+                frame_index = received_keypoints['index']
                 self.__log_debug("Keypoints for frame %s received at time %s",
-                                str(self.received_keypoints_frame), time.time())
+                                str(frame_index), time.time())
 
                 keypoints_file = open(self.__keypoints_file_name, "a")
                 keypoints_file.write(str(received_keypoints))
@@ -543,19 +543,21 @@ class MediaRecorder:
                         before_predict_time = time.time()
                         predicted_target = model.predict(received_keypoints)
                         after_predict_time = time.time()
-                        self.__log_debug("Prediction time for received keypoints %s: %s",
-                                        self.received_keypoints_frame,
-                                        str(after_predict_time - before_predict_time))
+                        self.__log_debug("Prediction time for received keypoints %s: %s at time %s",
+                                frame_index, str(after_predict_time - before_predict_time), 
+                                after_predict_time)
 
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
+                        predicted_frame = predicted_frame.reformat(format='yuv420p')
+                        predicted_frame.pts = received_keypoints['pts']
+                        
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
 
                     except:
                         self.__log_debug("Couldn't predict based on received keypoints frame %s",
-                                        self.received_keypoints_frame)
+                                        received_keypoints['index'])
 
-                self.received_keypoints_frame += 1
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaRecorder(%s) {msg}", self.__container.name, *args)

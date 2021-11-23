@@ -17,4 +17,6 @@ message Jacobian {
 message KeypointInfo {
     repeated Keypoint keypoints = 1;
     repeated Jacobian jacobians = 2;
+    required float pts = 3;
+    required int32 index = 4;
 }
