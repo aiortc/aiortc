@@ -1128,7 +1128,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # NOTE: we do not have a "disconnected" state
         dtlsStates = set(map(lambda x: x.state, self.__dtlsTransports))
         iceStates = set(map(lambda x: x.state, self.__iceTransports))
-        if self.__isClosed:
+        if self.__isClosed or "closed" in iceStates or "closed" in dtlsStates:
             state = "closed"
         elif "failed" in iceStates or "failed" in dtlsStates:
             state = "failed"
