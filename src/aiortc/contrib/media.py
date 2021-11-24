@@ -188,8 +188,9 @@ def player_worker(
             )
 
             frame_time = frame.time
-            img = frame.to_image()
-            img.save(os.path.join(save_dir, 'sender_frame_%05d.jpg' % frame.index))
+            if save_dir is not None:
+                img = frame.to_image()
+                img.save(os.path.join(save_dir, 'sender_frame_%05d.jpg' % frame.index))
 
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
@@ -558,8 +559,9 @@ class MediaRecorder:
                         predicted_frame = predicted_frame.reformat(format='yuv420p')
                         predicted_frame.pts = received_keypoints['pts']
 
-                        img = predicted_frame.to_image()
-                        img.save(os.path.join(self.save_dir, 'receiver_frame_%05d.jpg' % frame_index))
+                        if self.save_dir is not None:
+                            img = predicted_frame.to_image()
+                            img.save(os.path.join(self.save_dir, 'receiver_frame_%05d.jpg' % frame_index))
                         
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
