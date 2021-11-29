@@ -460,6 +460,7 @@ class MediaRelay:
         if track is not None and track in self.__proxies:
             # unregister proxy
             self.__log_debug("Stop proxy %s", id(proxy))
+            self.__tasks[track].cancel()
             self.__proxies[track].discard(proxy)
 
     def __log_debug(self, msg: str, *args) -> None:
