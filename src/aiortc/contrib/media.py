@@ -557,7 +557,7 @@ class MediaRecorder:
 
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                         predicted_frame = predicted_frame.reformat(format='yuv420p')
-                        predicted_frame.pts = received_keypoints['pts']
+                        #predicted_frame.pts = received_keypoints['pts']
 
                         if self.save_dir is not None:
                             img = predicted_frame.to_image()
