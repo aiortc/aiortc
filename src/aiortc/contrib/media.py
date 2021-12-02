@@ -8,6 +8,7 @@ import sys
 from typing import Dict, Optional, Set
 import numpy as np
 import concurrent.futures
+
 import av
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
@@ -427,13 +428,13 @@ class MediaRecorder:
 
     def __init__(self, file, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
-        self.received_keypoints_frame = 0
+        self.__received_keypoints_frame_num = 0
         self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
         self.__tracks = {}
-        self.frame_height = None
-        self.frame_width = None
-        self.keypoints_queue = asyncio.Queue()
-        self.video_queue = asyncio.Queue()
+        self.__frame_height = None
+        self.__frame_width = None
+        self.__keypoints_queue = asyncio.Queue()
+        self.__video_queue = asyncio.Queue()
 
     def addTrack(self, track):
         """
@@ -498,24 +499,24 @@ class MediaRecorder:
                 return
 
             if track.kind == "video":
-                self.frame_height = frame.height
-                self.frame_width = frame.width
+                self.__frame_height = frame.height
+                self.__frame_width = frame.width
 
                 # Set video height and width
-                if self.frame_width is not None and self.frame_height is not None:
+                if self.__frame_width is not None and self.__frame_height is not None:
                     if (track.kind == "keypoints" and enable_prediction == True) or \
                     (track.kind == "video" and enable_prediction == False):
-                        if self.__tracks[track].stream.height != self.frame_height or \
-                        self.__tracks[track].stream.width != self.frame_width:
-                            self.__tracks[track].stream.height = self.frame_height
-                            self.__tracks[track].stream.width = self.frame_width
+                        if self.__tracks[track].stream.height != self.__frame_height or \
+                        self.__tracks[track].stream.width != self.__frame_width:
+                            self.__tracks[track].stream.height = self.__frame_height
+                            self.__tracks[track].stream.width = self.__frame_width
 
                 if enable_prediction:
                     # update model related info with most recent frame
                     self.__log_debug("Received source video frame %s at time %s",
                                     frame, time.time())
                     source_frame_array = frame.to_rgb().to_ndarray()
-                    asyncio.run_coroutine_threadsafe(self.video_queue.put(source_frame_array), loop)
+                    asyncio.run_coroutine_threadsafe(self.__video_queue.put(source_frame_array), loop)
 
                     time_before_keypoints = time.time()
                     source_keypoints =  model.extract_keypoints(source_frame_array)
@@ -542,9 +543,9 @@ class MediaRecorder:
             else:
                 # keypoint stream
                 received_keypoints = frame.data
-                asyncio.run_coroutine_threadsafe(self.keypoints_queue.put(received_keypoints), loop)
+                asyncio.run_coroutine_threadsafe(self.__keypoints_queue.put(received_keypoints), loop)
                 self.__log_debug("Keypoints for frame %s received at time %s",
-                                str(self.received_keypoints_frame), time.time())
+                                str(self.__received_keypoints_frame_num), time.time())
 
                 if save_keypoints_to_file:
                     keypoints_file = open(self.__keypoints_file_name, "a")
@@ -552,16 +553,16 @@ class MediaRecorder:
                     keypoints_file.write("\n")
                     keypoints_file.close()
 
-                if enable_prediction and not self.video_queue.empty():
+                if enable_prediction and not self.__video_queue.empty():
                     try:
-                        received_keypoints = await self.keypoints_queue.get()
+                        received_keypoints = await self.__keypoints_queue.get()
 
                         before_predict_time = time.time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:
                             predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
                         after_predict_time = time.time()
                         self.__log_debug("Prediction time for received keypoints %s: %s",
-                                        self.received_keypoints_frame,
+                                        self.__received_keypoints_frame_num,
                                         str(after_predict_time - before_predict_time))
 
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
@@ -570,9 +571,9 @@ class MediaRecorder:
 
                     except:
                         self.__log_debug("Couldn't predict based on received keypoints frame %s",
-                                        self.received_keypoints_frame)
+                                        self.__received_keypoints_frame_num)
 
-                self.received_keypoints_frame += 1
+                self.__received_keypoints_frame_num += 1
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaRecorder(%s) {msg}", self.__container.name, *args)
