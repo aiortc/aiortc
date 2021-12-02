@@ -458,8 +458,6 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
-                stream.width = 256 #TODO add functionality ro change the width/height of the stream
-                stream.height = 256
         else:
             stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
@@ -502,6 +500,15 @@ class MediaRecorder:
             if track.kind == "video":
                 self.frame_height = frame.height
                 self.frame_width = frame.width
+
+                # Set video height and width
+                if self.frame_width is not None and self.frame_height is not None:
+                    if (track.kind == "keypoints" and enable_prediction == True) or \
+                    (track.kind == "video" and enable_prediction == False):
+                        if self.__tracks[track].stream.height != self.frame_height or \
+                        self.__tracks[track].stream.width != self.frame_width:
+                            self.__tracks[track].stream.height = self.frame_height
+                            self.__tracks[track].stream.width = self.frame_width
 
                 if enable_prediction:
                     # update model related info with most recent frame
