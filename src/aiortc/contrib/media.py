@@ -7,8 +7,8 @@ import time
 import sys
 from typing import Dict, Optional, Set
 import numpy as np
-import PIL
 import os
+import datetime
 
 import av
 from av import AudioFrame, VideoFrame
@@ -93,7 +93,8 @@ class MediaBlackhole:
 
 
 def player_worker(
-    loop, container, streams, audio_track, video_track, keypoints_track, quit_event, throttle_playback, save_dir
+    loop, container, streams, audio_track, video_track, keypoints_track, quit_event, 
+    throttle_playback, save_dir, send_times_file
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -186,6 +187,9 @@ def player_worker(
                 "MediaPlayer(%s) Video frame %s read from media: %s at time %s",
                 container.name, str(frame.index), str(frame), time.time()
             )
+            
+            if send_times_file is not None:
+                send_times_file.write(f'Sent {frame.index} at {datetime.datetime.now()}\n')
 
             frame_time = frame.time
             if save_dir is not None:
@@ -319,6 +323,11 @@ class MediaPlayer:
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
         self.__save_dir = save_dir
+        
+        if self.__save_dir is not None:
+            self.__send_times_file = open(os.path.join(save_dir, "send_times.txt"), "w")
+        else:
+            self.__send_times_file = None
 
         # examine streams
         self.__started: Set[PlayerStreamTrack] = set()
@@ -384,6 +393,7 @@ class MediaPlayer:
                     self.__thread_quit,
                     self._throttle_playback,
                     self.__save_dir,
+                    self.__send_times_file,
                 ),
             )
             self.__thread.start()
@@ -401,6 +411,9 @@ class MediaPlayer:
         if not self.__started and self.__container is not None:
             self.__container.close()
             self.__container = None
+
+        if self.__send_times_file is not None:
+            self.__send_times_file.close()
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaPlayer(%s) {msg}", self.__container.name, *args)
@@ -437,7 +450,12 @@ class MediaRecorder:
         self.__tracks = {}
         self.frame_height = None
         self.frame_width = None
-        self.save_dir = save_dir
+        self.__save_dir = save_dir
+
+        if self.__save_dir is not None:
+            self.__recv_times_file = open(os.path.join(save_dir, "recv_times.txt"), "w")
+        else:
+            self.__recv_times_file = None
 
     def addTrack(self, track):
         """
@@ -493,6 +511,9 @@ class MediaRecorder:
             if self.__container:
                 self.__container.close()
                 self.__container = None
+
+        if self.__recv_times_file is not None:
+            self.__recv_times_file.close()
 
     async def __run_track(self, track, context):
         while True:
@@ -554,6 +575,9 @@ class MediaRecorder:
                         self.__log_debug("Prediction time for received keypoints %s: %s at time %s",
                                 frame_index, str(after_predict_time - before_predict_time), 
                                 after_predict_time)
+                        
+                        if self.__recv_times_file is not None:
+                            self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
 
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                         predicted_frame = predicted_frame.reformat(format='yuv420p')
