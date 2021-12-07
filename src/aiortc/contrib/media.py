@@ -190,6 +190,7 @@ def player_worker(
             
             if send_times_file is not None:
                 send_times_file.write(f'Sent {frame.index} at {datetime.datetime.now()}\n')
+                send_times_file.flush()
 
             frame_time = frame.time
             if save_dir is not None:
@@ -579,6 +580,7 @@ class MediaRecorder:
                         
                         if self.__recv_times_file is not None:
                             self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
+                            self.__recv_times_file.flush()
 
                         predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                         predicted_frame = predicted_frame.reformat(format='yuv420p')
