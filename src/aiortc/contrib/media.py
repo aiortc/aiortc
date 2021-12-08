@@ -463,6 +463,17 @@ class MediaRecorder:
             stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
 
+    def setsize(self, track):
+        """
+        Set video height and width.
+        """
+        if self.__frame_width is not None and self.__frame_height is not None:
+            if self.__tracks[track].stream.height != self.__frame_height or \
+            self.__tracks[track].stream.width != self.__frame_width:
+                self.__log_debug("Setting video width to %s and video height to %s.", str(self.__frame_width), str(self.__frame_height))
+                self.__tracks[track].stream.height = self.__frame_height
+                self.__tracks[track].stream.width = self.__frame_width
+
     async def start(self):
         """
         Start recording.
@@ -502,15 +513,6 @@ class MediaRecorder:
                 self.__frame_height = frame.height
                 self.__frame_width = frame.width
 
-                # Set video height and width
-                if self.__frame_width is not None and self.__frame_height is not None:
-                    if (track.kind == "keypoints" and enable_prediction == True) or \
-                    (track.kind == "video" and enable_prediction == False):
-                        if self.__tracks[track].stream.height != self.__frame_height or \
-                        self.__tracks[track].stream.width != self.__frame_width:
-                            self.__tracks[track].stream.height = self.__frame_height
-                            self.__tracks[track].stream.width = self.__frame_width
-
                 if enable_prediction:
                     # update model related info with most recent frame
                     self.__log_debug("Received source video frame %s at time %s",
@@ -533,6 +535,7 @@ class MediaRecorder:
                     # regular video stream
                     self.__log_debug("Received original video frame %s at time %s",
                                     frame, time.time())
+                    self.setsize(track)
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
 
@@ -554,6 +557,7 @@ class MediaRecorder:
                     keypoints_file.close()
 
                 if enable_prediction and not self.__video_queue.empty():
+                    self.setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
 
