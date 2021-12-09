@@ -132,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--record-to", help="Write received media to a file."),
     parser.add_argument("--verbose", "-v", action="count")
     parser.add_argument("--fps", type=int, help="fps you want to sample at")
-    parser.add_argument("--save-dir", type=str, help="folder to save all images in")
+    parser.add_argument("--save-dir", type=str, help="folder to save frames + latency data in")
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
