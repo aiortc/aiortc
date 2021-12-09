@@ -221,12 +221,13 @@ def player_worker(
                             str(frame.index), str(time_after_update - time_before_update)
                         )
                 except:
-                    keypoints_frame = KeypointsFrame(bytes("Error!", encoding='utf8'), frame.pts)
+                    keypoints_frame = None
                     logger.warning(
                         "MediaPlayer(%s) Could not extract the keypoints for frame index %s", str(frame.index)
                     )
 
-                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
+                if keypoints_frame is not None:
+                    asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
 
 
 
@@ -463,7 +464,7 @@ class MediaRecorder:
             stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
 
-    def setsize(self, track):
+    def __setsize(self, track):
         """
         Set video height and width.
         """
@@ -535,7 +536,7 @@ class MediaRecorder:
                     # regular video stream
                     self.__log_debug("Received original video frame %s at time %s",
                                     frame, time.time())
-                    self.setsize(track)
+                    self.__setsize(track)
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
 
@@ -557,7 +558,7 @@ class MediaRecorder:
                     keypoints_file.close()
 
                 if enable_prediction and not self.__video_queue.empty():
-                    self.setsize(track)
+                    self.__setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
 
