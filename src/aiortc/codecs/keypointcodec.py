@@ -34,6 +34,9 @@ def keypoint_dict_to_struct(keypoint_dict):
             jacobian.d21 = j[1][0]
             jacobian.d22 = j[1][1]
 
+    keypoint_info_struct.pts = keypoint_dict['pts']
+    keypoint_info_struct.index = keypoint_dict['index']
+    
     return keypoint_info_struct
 
 
@@ -55,6 +58,9 @@ def keypoint_struct_to_dict(keypoint_info_struct):
             jacobian_array.append(np.array([[j.d11, j.d12], [j.d21, j.d22]]))
         keypoint_dict['jacobians'] = np.array(jacobian_array)
 
+    keypoint_dict['pts'] = keypoint_info_struct.pts
+    keypoint_dict['index'] = keypoint_info_struct.index
+
     return keypoint_dict
 
 
@@ -71,7 +77,7 @@ class KeypointsDecoder(Decoder):
         assert(keypoint_info_struct.IsInitialized())
 
         keypoint_dict = keypoint_struct_to_dict(keypoint_info_struct)
-        frame = KeypointsFrame(keypoint_dict, encoded_frame.timestamp)
+        frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
         return [frame]
 
 
@@ -88,6 +94,8 @@ class KeypointsEncoder(Encoder):
     ) -> Tuple[List[bytes], int]:
         timestamp = frame.pts
         keypoint_dict = frame.data
+        keypoint_dict['pts'] = frame.pts
+        keypoint_dict['index'] = frame.index
         
         keypoint_info_struct = keypoint_dict_to_struct(keypoint_dict)
         assert(keypoint_info_struct.IsInitialized())

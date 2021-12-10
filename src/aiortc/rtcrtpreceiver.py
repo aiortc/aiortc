@@ -264,8 +264,8 @@ class RTCRtpReceiver:
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         elif kind == "keypoints":
-            self.__jitter_buffer = JitterBuffer(capacity=16)
-            self.__nack_generator = None
+            self.__jitter_buffer = JitterBuffer(capacity=128)
+            self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = None
         else:
             self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
