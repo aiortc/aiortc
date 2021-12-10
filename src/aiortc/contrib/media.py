@@ -22,7 +22,6 @@ config_path = '/data/vibhaa/aiortc/nets_implementation/first_order_model/config/
 model = FirstOrderModel(config_path)
 
 REFERENCE_FRAME_UPDATE_FREQ = 20
-enable_prediction = True
 save_keypoints_to_file = False
 
 logger = logging.getLogger(__name__)
@@ -96,7 +95,7 @@ class MediaBlackhole:
 
 def player_worker(
     loop, container, streams, audio_track, video_track, keypoints_track, quit_event, 
-    throttle_playback, save_dir, send_times_file
+    throttle_playback, save_dir, send_times_file, enable_prediction
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -323,11 +322,12 @@ class MediaPlayer:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, fps=None, save_dir=None, format=None, options={}):
+    def __init__(self, file, enable_prediction=False, fps=None, save_dir=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
         self.__save_dir = save_dir
+        self.__enable_prediction = enable_prediction
         
         if self.__save_dir is not None:
             self.__send_times_file = open(os.path.join(save_dir, "send_times.txt"), "w")
@@ -352,7 +352,7 @@ class MediaPlayer:
                     fps_factor = 1
                 self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
                 self.__streams.append(stream)
-                if enable_prediction:
+                if self.__enable_prediction:
                     self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
 
         # check whether we need to throttle playback
@@ -399,6 +399,7 @@ class MediaPlayer:
                     self._throttle_playback,
                     self.__save_dir,
                     self.__send_times_file,
+                    self.__enable_prediction
                 ),
             )
             self.__thread.start()
@@ -449,7 +450,7 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, save_dir=None, options={}):
+    def __init__(self, file, enable_prediction=False, format=None, save_dir=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__received_keypoints_frame_num = 0
         self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
@@ -459,6 +460,7 @@ class MediaRecorder:
         self.__keypoints_queue = asyncio.Queue()
         self.__video_queue = asyncio.Queue()
         self.__save_dir = save_dir
+        self.__enable_prediction = enable_prediction
         
         if self.__save_dir is not None:
             self.__recv_times_file = open(os.path.join(save_dir, "recv_times.txt"), "w")
@@ -479,8 +481,8 @@ class MediaRecorder:
             else:
                 codec_name = "aac"
             stream = self.__container.add_stream(codec_name)
-        elif (track.kind == "keypoints" and enable_prediction == True) or \
-                (track.kind == "video" and enable_prediction == False):
+        elif (track.kind == "keypoints" and self.__enable_prediction == True) or \
+                (track.kind == "video" and self.__enable_prediction == False):
             # repurpose video container stream for predicted video w/ keypoints
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
@@ -545,7 +547,7 @@ class MediaRecorder:
                 self.__frame_height = frame.height
                 self.__frame_width = frame.width
 
-                if enable_prediction:
+                if self.__enable_prediction:
                     # update model related info with most recent frame
                     self.__log_debug("Received source video frame %s with index %s at time %s",
                                     frame, frame.index, time.time())
@@ -589,7 +591,7 @@ class MediaRecorder:
                     keypoints_file.write("\n")
                     keypoints_file.close()
 
-                if enable_prediction and not self.__video_queue.empty():
+                if self.__enable_prediction and not self.__video_queue.empty():
                     self.__setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
