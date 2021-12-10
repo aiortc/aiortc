@@ -3,6 +3,7 @@ import asyncio
 import logging
 import math
 
+import os
 import cv2
 import numpy
 from av import VideoFrame
@@ -142,6 +143,11 @@ if __name__ == "__main__":
     # create signaling and peer connection
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
+
+    # create save directory
+    if args.save_dir is not None:
+        if not os.path.exists(args.save_dir):
+            os.makedirs(args.save_dir)
 
     # create media source
     if args.play_from:
