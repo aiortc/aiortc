@@ -462,7 +462,7 @@ class MediaRecorder:
         self.__video_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
-        self.__output_fps=output_fps
+        self.__output_fps = output_fps
         
         if self.__save_dir is not None:
             self.__recv_times_file = open(os.path.join(save_dir, "recv_times.txt"), "w")
