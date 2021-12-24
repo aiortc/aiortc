@@ -321,7 +321,8 @@ class MediaPlayer:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, enable_prediction=False, reference_update_freq=30, fps=None, save_dir=None, format=None, options={}):
+    def __init__(self, file, enable_prediction=False, reference_update_freq=30, fps=None,
+                 save_dir=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
