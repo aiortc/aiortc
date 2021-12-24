@@ -9,6 +9,7 @@ python3 cli.py offer \
 --play-from ${video_name} \
 --signaling-path /tmp/test.sock \
 --signaling unix-socket \
+--enable-prediction \
 --verbose 2>${record_name}/sender_output &
 
 sleep 10 
@@ -18,6 +19,7 @@ python3 cli.py answer \
 --record-to ${record_name}.mp4 \
 --signaling-path /tmp/test.sock \
 --signaling unix-socket \
+--enable-prediction \
 --verbose 2>${record_name}/receiver_output
 
 echo "Done"
