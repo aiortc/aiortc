@@ -3,6 +3,7 @@ import asyncio
 import logging
 import math
 
+import os
 import cv2
 import numpy
 from av import VideoFrame
@@ -133,6 +134,12 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", "-v", action="count")
     parser.add_argument("--fps", type=int, help="fps you want to sample at")
     parser.add_argument("--save-dir", type=str, help="folder to save frames + latency data in")
+    parser.add_argument('--enable-prediction', action='store_true')
+    parser.add_argument("--output-fps", type=int, default=30,
+                        help="fps you want to save the video with")
+    parser.add_argument("--reference-update-freq", type=int, default=30,
+                        help="the frequency that the reference frame is updated")
+
     add_signaling_arguments(parser)
     args = parser.parse_args()
 
@@ -143,15 +150,21 @@ if __name__ == "__main__":
     signaling = create_signaling(args)
     pc = RTCPeerConnection()
 
+    # create save directory
+    if args.save_dir is not None:
+        if not os.path.exists(args.save_dir):
+            os.makedirs(args.save_dir)
+
     # create media source
     if args.play_from:
-        player = MediaPlayer(args.play_from, args.fps, args.save_dir)
+        player = MediaPlayer(args.play_from, args.enable_prediction, args.reference_update_freq, args.fps, args.save_dir)
     else:
         player = None
 
     # create media sink
     if args.record_to:
-        recorder = MediaRecorder(args.record_to, save_dir=args.save_dir)
+        recorder = MediaRecorder(args.record_to, enable_prediction=args.enable_prediction, \
+                                output_fps=args.output_fps, save_dir=args.save_dir)
     else:
         recorder = MediaBlackhole()
 
