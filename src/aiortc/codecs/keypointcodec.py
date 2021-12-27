@@ -1,6 +1,7 @@
 import audioop
 import fractions
 import numpy as np
+import os
 from typing import List, Optional, Tuple
 
 from ..jitterbuffer import JitterFrame
@@ -8,6 +9,11 @@ from .base import Decoder, Encoder
 from .keypoints_pb2 import KeypointInfo
 
 from ..mediastreams import KeypointsFrame
+
+SCALE_FACTOR = 256//2
+NUM_KP = 10
+NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', 6))
+INDEX_BITS = 16
 
 """ custom codec that uses the protobuf module 
     to generically serialize and de-serialize 
@@ -63,8 +69,6 @@ def keypoint_struct_to_dict(keypoint_info_struct):
 
     return keypoint_dict
 
-SCALE_FACTOR = 256//2
-NUM_KP = 10
 
 """ compute the bin corresponding to the jacobian value
     based on the Huffman dictionary for the desired
@@ -112,10 +116,14 @@ def custom_encode(keypoint_dict):
     binary_str = ""
     num_bins = 2**(NUM_JACOBIAN_BITS - 1)
     bit_format = f'0{NUM_JACOBIAN_BITS - 1}b'
+
+    index = keypoint_dict['index']
+    index_bit_format = f'0{INDEX_BITS}b'
+    binary_str += f'{index:{index_bit_format}}'
         
     for k in keypoint_dict['keypoints']:
         x = round(k[0] * SCALE_FACTOR + SCALE_FACTOR)
-        y = round(k[1] * SCALE_FACTOR + SCLAE_FACTOR)
+        y = round(k[1] * SCALE_FACTOR + SCALE_FACTOR)
         binary_str += f'{x:08b}'
         binary_str += f'{y:08b}'
 
@@ -142,6 +150,10 @@ def custom_decode(serialized_data):
     kp_locations = []
     jacobians = []
 
+    index = int(bitstring[:INDEX_BITS], 2)
+    keypoint_dict['index'] = index
+    bitstring = bitstring[INDEX_BITS:]
+    
     while len(bitstring) > 0:
         num_bits = NUM_JACOBIAN_BITS if num_read_so_far >= 2*NUM_KP else 8
         word = bitstring[:num_bits]
@@ -181,6 +193,7 @@ class KeypointsDecoder(Decoder):
     def decode(self, encoded_frame: JitterFrame) -> List[KeypointsFrame]:
         keypoint_str = encoded_frame.data
         keypoint_dict = custom_decode(keypoint_str)
+        keypoint_dict['pts'] = 5
         frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
         return [frame]
 
