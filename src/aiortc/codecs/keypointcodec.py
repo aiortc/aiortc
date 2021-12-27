@@ -12,7 +12,7 @@ from ..mediastreams import KeypointsFrame
 
 SCALE_FACTOR = 256//2
 NUM_KP = 10
-NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', 6))
+NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', -1))
 INDEX_BITS = 16
 
 """ custom codec that uses the protobuf module 
@@ -192,8 +192,16 @@ class KeypointsDecoder(Decoder):
 
     def decode(self, encoded_frame: JitterFrame) -> List[KeypointsFrame]:
         keypoint_str = encoded_frame.data
-        keypoint_dict = custom_decode(keypoint_str)
-        keypoint_dict['pts'] = 5
+
+        if NUM_JACOBIAN_BITS == -1:
+            keypoint_info_struct = KeypointInfo()
+            keypoint_info_struct.ParseFromString(keypoint_str)
+            assert(keypoint_info_struct.IsInitialized())
+            keypoint_dict = keypoint_struct_to_dict(keypoint_info_struct)
+        else:
+            keypoint_dict = custom_decode(keypoint_str)
+            keypoint_dict['pts'] = 5
+        
         frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
         return [frame]
 
@@ -213,6 +221,12 @@ class KeypointsEncoder(Encoder):
         keypoint_dict = frame.data
         keypoint_dict['pts'] = frame.pts
         keypoint_dict['index'] = frame.index
-        
-        data = custom_encode(keypoint_dict)
+
+        if NUM_JACOBIAN_BITS == -1:
+            keypoint_info_struct = keypoint_dict_to_struct(keypoint_dict)
+            assert(keypoint_info_struct.IsInitialized())
+            data = keypoint_info_struct.SerializeToString()
+        else:
+            data = custom_encode(keypoint_dict)
+
         return [data], timestamp
