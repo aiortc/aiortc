@@ -14,6 +14,7 @@ SCALE_FACTOR = 256//2
 NUM_KP = 10
 NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', -1))
 INDEX_BITS = 16
+DUMMY_PTS = 5
 
 """ custom codec that uses the protobuf module 
     to generically serialize and de-serialize 
@@ -114,7 +115,7 @@ def bin_to_jacobian(bin_num, num_bins):
 """
 def custom_encode(keypoint_dict):
     binary_str = ""
-    num_bins = 2**(NUM_JACOBIAN_BITS - 1)
+    num_bins = 2 ** (NUM_JACOBIAN_BITS - 1)
     bit_format = f'0{NUM_JACOBIAN_BITS - 1}b'
 
     index = keypoint_dict['index']
@@ -200,7 +201,7 @@ class KeypointsDecoder(Decoder):
             keypoint_dict = keypoint_struct_to_dict(keypoint_info_struct)
         else:
             keypoint_dict = custom_decode(keypoint_str)
-            keypoint_dict['pts'] = 5
+            keypoint_dict['pts'] = DUMMY_PTS
         
         frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
         return [frame]
