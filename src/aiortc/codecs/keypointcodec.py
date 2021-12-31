@@ -1,6 +1,7 @@
 import audioop
 import fractions
 import numpy as np
+import os
 from typing import List, Optional, Tuple
 
 from ..jitterbuffer import JitterFrame
@@ -8,6 +9,12 @@ from .base import Decoder, Encoder
 from .keypoints_pb2 import KeypointInfo
 
 from ..mediastreams import KeypointsFrame
+
+SCALE_FACTOR = 256//2
+NUM_KP = 10
+NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', -1))
+INDEX_BITS = 16
+DUMMY_PTS = 5
 
 """ custom codec that uses the protobuf module 
     to generically serialize and de-serialize 
@@ -64,6 +71,121 @@ def keypoint_struct_to_dict(keypoint_info_struct):
     return keypoint_dict
 
 
+""" compute the bin corresponding to the jacobian value
+    based on the Huffman dictionary for the desired
+    number of bins/bits
+"""
+def jacobian_to_bin(value, num_bins):
+    sign = int(value > 0)
+    value = abs(value)
+
+    if value > 3:
+        bin_num = num_bins - 1
+    elif value > 2.5:
+        bin_num = num_bins - 2
+    elif value > 2:
+        bin_num = num_bins - 3
+    else:
+        bin_num = int(value / 2.0 * (num_bins - 3))
+
+    return sign, bin_num
+
+
+""" compute the approximate jacobian from the bin number
+    based on the Huffman dictionary for the desired
+    number of bins/bits
+"""
+def bin_to_jacobian(bin_num, num_bins):
+    if bin_num < num_bins - 3:
+        num_intervals = num_bins - 3
+        interval_size = 2.0
+        return (interval_size / num_intervals) * (bin_num + 0.5)
+    elif bin_num == num_bins - 3:
+        value = 2.25
+    elif bin_num == num_bins - 2:
+        value = 2.75
+    else:
+        value = 3
+    return value
+
+
+""" custom encoding for keypoint data using lossless
+    8-bit encoding for keypoint locations and lossy
+    Huffman binning/encoding of jacobians
+"""
+def custom_encode(keypoint_dict):
+    binary_str = ""
+    num_bins = 2 ** (NUM_JACOBIAN_BITS - 1)
+    bit_format = f'0{NUM_JACOBIAN_BITS - 1}b'
+
+    index = keypoint_dict['index']
+    index_bit_format = f'0{INDEX_BITS}b'
+    binary_str += f'{index:{index_bit_format}}'
+        
+    for k in keypoint_dict['keypoints']:
+        x = round(k[0] * SCALE_FACTOR + SCALE_FACTOR)
+        y = round(k[1] * SCALE_FACTOR + SCALE_FACTOR)
+        binary_str += f'{x:08b}'
+        binary_str += f'{y:08b}'
+
+    for j in keypoint_dict['jacobians']:
+        flattened_jacobians = j.flatten()
+        for element in flattened_jacobians:
+            sign, binary = jacobian_to_bin(element, num_bins)
+            binary_str += f'{sign}{binary:{bit_format}}'
+
+    return int(binary_str, 2).to_bytes(len(binary_str) // 8, byteorder='big')
+
+
+""" custom decoding for keypoint data using lossless
+    decoding for 8-bit keypoint locations and lossy
+    decoding of jacobians based on Huffman bins
+"""
+def custom_decode(serialized_data):
+    num_bins = 2**(NUM_JACOBIAN_BITS - 1)
+    bitstring = ''.join(format(byte, '08b') for byte in serialized_data)
+
+    keypoint_dict = {'jacobians': [], 'keypoints': []}
+    num_read_so_far = 0
+    x, y = 0, 0
+    kp_locations = []
+    jacobians = []
+
+    index = int(bitstring[:INDEX_BITS], 2)
+    keypoint_dict['index'] = index
+    bitstring = bitstring[INDEX_BITS:]
+    
+    while len(bitstring) > 0:
+        num_bits = NUM_JACOBIAN_BITS if num_read_so_far >= 2*NUM_KP else 8
+        word = bitstring[:num_bits]
+        bitstring = bitstring[num_bits:]
+        sign = -1 if word[0] == '0' else 1
+        bin_number = int(word[1:num_bits], 2)
+        num_read_so_far += 1
+
+        if num_read_so_far <= 2 * NUM_KP:
+            value = ((int(word, 2) - SCALE_FACTOR) / float(SCALE_FACTOR))
+            if num_read_so_far % 2 == 0:
+                kp_locations.append(value)
+                keypoint_dict['keypoints'].append(np.array(kp_locations))
+                kp_locations = []
+            else:
+                kp_locations.append(value)
+        else:
+            value = sign * bin_to_jacobian(bin_number, num_bins)
+            if num_read_so_far % 4 == 0:
+                jacobians.append(value)
+                jacobians = np.array(jacobians).reshape((2, 2))
+                keypoint_dict['jacobians'].append(jacobians)
+                jacobians = []
+            else:
+                jacobians.append(value)
+
+    keypoint_dict['jacobians'] = np.array(keypoint_dict['jacobians'])
+    keypoint_dict['keypoints'] = np.array(keypoint_dict['keypoints'])
+    return keypoint_dict
+
+
 class KeypointsDecoder(Decoder): 
     @staticmethod
     def _convert(data: bytes, width: int) -> bytes:
@@ -71,12 +193,16 @@ class KeypointsDecoder(Decoder):
 
     def decode(self, encoded_frame: JitterFrame) -> List[KeypointsFrame]:
         keypoint_str = encoded_frame.data
-        
-        keypoint_info_struct = KeypointInfo()
-        keypoint_info_struct.ParseFromString(keypoint_str)
-        assert(keypoint_info_struct.IsInitialized())
 
-        keypoint_dict = keypoint_struct_to_dict(keypoint_info_struct)
+        if NUM_JACOBIAN_BITS == -1:
+            keypoint_info_struct = KeypointInfo()
+            keypoint_info_struct.ParseFromString(keypoint_str)
+            assert(keypoint_info_struct.IsInitialized())
+            keypoint_dict = keypoint_struct_to_dict(keypoint_info_struct)
+        else:
+            keypoint_dict = custom_decode(keypoint_str)
+            keypoint_dict['pts'] = DUMMY_PTS
+        
         frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
         return [frame]
 
@@ -96,9 +222,12 @@ class KeypointsEncoder(Encoder):
         keypoint_dict = frame.data
         keypoint_dict['pts'] = frame.pts
         keypoint_dict['index'] = frame.index
-        
-        keypoint_info_struct = keypoint_dict_to_struct(keypoint_dict)
-        assert(keypoint_info_struct.IsInitialized())
 
-        data = keypoint_info_struct.SerializeToString()
+        if NUM_JACOBIAN_BITS == -1:
+            keypoint_info_struct = keypoint_dict_to_struct(keypoint_dict)
+            assert(keypoint_info_struct.IsInitialized())
+            data = keypoint_info_struct.SerializeToString()
+        else:
+            data = custom_encode(keypoint_dict)
+
         return [data], timestamp

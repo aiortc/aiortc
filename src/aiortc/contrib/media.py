@@ -598,6 +598,7 @@ class MediaRecorder:
                     self.__setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
+                        frame_index = received_keypoints['index']
 
                         before_predict_time = time.time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:
