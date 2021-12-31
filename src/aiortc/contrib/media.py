@@ -49,7 +49,7 @@ REAL_TIME_FORMATS = [
 ]
 
 NUM_ROWS = 2
-NUMBER_OF_BITS = 16
+NUMBER_OF_BITS = 8
 
 def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
     """ stamp frame with barcode for frame index before transmission
@@ -59,7 +59,7 @@ def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
                             frame_array.shape[1], frame_array.shape[2]))
     k = frame_array.shape[1] // NUMBER_OF_BITS
     stamped_frame[:-NUM_ROWS, :, :] = frame_array
-    id_str = "%016d" % int(bin(frame_index)[2:])
+    id_str = f'{frame_index:0{NUMBER_OF_BITS}b}' 
 
     for i in range(len(id_str)):
         if id_str[i] == '0':
@@ -188,14 +188,14 @@ def player_worker(
                     "MediaPlayer(%s) Put None in audio in player_worker",
                     container.name
                 )
-                asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
+                asyncio.run_coroutine_threadsafe(audio_track._queue.put((None, None)), loop)
             if video_track:
                 logger.warning(
                     "MediaPlayer(%s) Put None in video and keypoints in player_worker",
                     container.name
                 )
-                asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
-                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(None), loop)
+                asyncio.run_coroutine_threadsafe(video_track._queue.put((None, None)), loop)
+                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((None, None)), loop)
             break
 
         # read up to 1 second ahead
@@ -224,7 +224,7 @@ def player_worker(
                 if frame:
                     frame_time = frame.time
                     asyncio.run_coroutine_threadsafe(
-                        audio_track._queue.put(frame), loop
+                        audio_track._queue.put((frame, frame_time)), loop
                     )
                 else:
                     break
@@ -284,7 +284,7 @@ def player_worker(
                     )
 
                 if keypoints_frame is not None:
-                    asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
+                    asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((keypoints_frame, frame_time)), loop)
 
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
@@ -627,8 +627,8 @@ class MediaRecorder:
                     time_before_update = time.time()
                     model.update_source(source_frame_array, source_keypoints)
                     time_after_update = time.time()
-                    self.__log_debug("Time to update source frame in receiver: %s",
-                                    str(time_after_keypoints - time_before_keypoints))
+                    self.__log_debug("Time to update source frame with index %s in receiver: %s",
+                                    video_frame_index, str(time_after_keypoints - time_before_keypoints))
                 else:
                     # regular video stream
                     self.__log_debug("Received original video frame %s with index %s at time %s",
