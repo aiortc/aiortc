@@ -48,6 +48,64 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
+NUM_ROWS = 2
+NUMBER_OF_BITS = 16
+
+def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
+    """ stamp frame with barcode for frame index before transmission
+    """
+    frame_array = frame.to_rgb().to_ndarray()
+    stamped_frame = np.zeros((frame_array.shape[0] + NUM_ROWS, 
+                            frame_array.shape[1], frame_array.shape[2]))
+    k = frame_array.shape[1] // NUMBER_OF_BITS
+    stamped_frame[:-NUM_ROWS, :, :] = frame_array
+    id_str = "%016d" % int(bin(frame_index)[2:])
+
+    for i in range(len(id_str)):
+        if id_str[i] == '0':
+            for j in range(k):
+                for s in range(NUM_ROWS):
+                    stamped_frame[-s-1, i * k + j, 0] = 0
+                    stamped_frame[-s-1, i * k + j, 1] = 0
+                    stamped_frame[-s-1, i * k + j, 2] = 0
+        elif id_str[i] == '1':
+            for j in range(k):
+                for s in range(NUM_ROWS):
+                    stamped_frame[-s-1, i * k + j, 0] = 255
+                    stamped_frame[-s-1, i * k + j, 1] = 255
+                    stamped_frame[-s-1, i * k + j, 2] = 255
+
+    stamped_frame = np.uint8(stamped_frame)
+    final_frame = av.VideoFrame.from_ndarray(stamped_frame)
+    final_frame.pts = frame_pts
+    final_frame.time_base = frame_time_base
+    return final_frame
+
+
+def destamp_frame(frame):
+    """ retrieve frame index and original frame from barcoded frame
+    """
+    frame_array = frame.to_rgb().to_ndarray()
+    k = frame_array.shape[1] // NUMBER_OF_BITS
+    destamped_frame = frame_array[:-NUM_ROWS]
+
+    frame_id = frame_array[-NUM_ROWS:, :, :]
+    frame_id = frame_id.mean(0)
+    frame_id = frame_id[frame_array.shape[1] - k*NUMBER_OF_BITS:, :]
+
+    frame_id = np.reshape(frame_id, [NUMBER_OF_BITS, k, 3])
+    frame_id = frame_id.mean(axis=(1,2))
+
+    frame_id = (frame_id > (frame_id.max() + frame_id.min()) / 2 * 1.2 ).astype(int)
+    frame_id = ((2 ** (NUMBER_OF_BITS - 1 - np.arange(NUMBER_OF_BITS))) * frame_id).sum()
+    
+    # hack for corruption
+    frame_id = 0 if frame_id > 60000 else frame_id 
+
+    destamped_frame = np.uint8(destamped_frame)
+    final_frame = av.VideoFrame.from_ndarray(destamped_frame)
+    return final_frame, frame_id
+
 
 async def blackhole_consume(track):
     while True:
@@ -198,16 +256,6 @@ def player_worker(
                 np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index), 
                         frame_array)
 
-            # Only add video frame is this is meant to be used as a source \
-            # frame or if prediction is disabled
-            if (enable_prediction and frame.index % reference_update_freq == 0) or \
-                    not enable_prediction:
-                logger.warning(
-                    "MediaPlayer(%s) Put video frame %s in the queue: %s",
-                     container.name, str(frame.index), str(frame)
-                )
-                asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
-
             # Extract the keypoints from the frame
             if enable_prediction:
                 try:
@@ -238,6 +286,19 @@ def player_worker(
                 if keypoints_frame is not None:
                     asyncio.run_coroutine_threadsafe(keypoints_track._queue.put(keypoints_frame), loop)
 
+            # Only add video frame is this is meant to be used as a source \
+            # frame or if prediction is disabled
+            if (enable_prediction and frame.index % reference_update_freq == 0) or \
+                    not enable_prediction:
+                frame_time = frame.time
+                frame_index = frame.index
+                frame = stamp_frame(frame, frame.index, frame.pts, frame.time_base)
+                
+                logger.warning(
+                    "MediaPlayer(%s) Put video frame %s in the queue: %s",
+                     container.name, str(frame_index), str(frame)
+                )
+                asyncio.run_coroutine_threadsafe(video_track._queue.put((frame, frame_time)), loop)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -254,12 +315,11 @@ class PlayerStreamTrack(MediaStreamTrack):
             raise MediaStreamError
 
         self._player._start(self)
-        frame = await self._queue.get()
+        frame, frame_time = await self._queue.get()
         if frame is None:
             self.__log_debug("Received frame from queue is None %s", self.kind)
             self.stop()
             raise MediaStreamError
-        frame_time = frame.time
 
         # control playback rate
         if (
@@ -547,13 +607,14 @@ class MediaRecorder:
                 return
 
             if track.kind == "video":
+                frame, video_frame_index = destamp_frame(frame)
                 self.__frame_height = frame.height
                 self.__frame_width = frame.width
 
                 if self.__enable_prediction:
                     # update model related info with most recent frame
                     self.__log_debug("Received source video frame %s with index %s at time %s",
-                                    frame, frame.index, time.time())
+                                    frame, video_frame_index, time.time())
                     source_frame_array = frame.to_rgb().to_ndarray()
                     asyncio.run_coroutine_threadsafe(self.__video_queue.put(source_frame_array), loop)
 
@@ -570,8 +631,8 @@ class MediaRecorder:
                                     str(time_after_keypoints - time_before_keypoints))
                 else:
                     # regular video stream
-                    self.__log_debug("Received original video frame %s at time %s",
-                                    frame, time.time())
+                    self.__log_debug("Received original video frame %s with index %s at time %s",
+                                    frame, video_frame_index, time.time())
                     self.__setsize(track)
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
