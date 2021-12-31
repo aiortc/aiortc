@@ -634,6 +634,16 @@ class MediaRecorder:
                     self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, time.time())
                     self.__setsize(track)
+                        
+                    if self.__recv_times_file is not None:
+                        self.__recv_times_file.write(f'Received {video_frame_index} at {datetime.datetime.now()}\n')
+                        self.__recv_times_file.flush()
+
+                    if self.__save_dir is not None:
+                        frame_array = frame.to_rgb().to_ndarray()
+                        np.save(os.path.join(self.__save_dir, 
+                            'receiver_frame_%05d.npy' % video_frame_index), frame_array)
+
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
 
