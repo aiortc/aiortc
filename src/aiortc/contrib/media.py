@@ -512,7 +512,8 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, enable_prediction=False, output_fps=30, format=None, save_dir=None, options={}):
+    def __init__(self, file, enable_prediction=False, reference_update_freq=30, 
+                output_fps=30, format=None, save_dir=None, options={}):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__received_keypoints_frame_num = 0
         self.__keypoints_file_name = str(file).split('.')[0] + "_recorded_keypoints.txt"
@@ -523,6 +524,7 @@ class MediaRecorder:
         self.__video_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
+        self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
         
         if self.__save_dir is not None:
@@ -616,19 +618,8 @@ class MediaRecorder:
                     self.__log_debug("Received source video frame %s with index %s at time %s",
                                     frame, video_frame_index, time.time())
                     source_frame_array = frame.to_rgb().to_ndarray()
-                    asyncio.run_coroutine_threadsafe(self.__video_queue.put(source_frame_array), loop)
+                    asyncio.run_coroutine_threadsafe(self.__video_queue.put((source_frame_array, video_frame_index)), loop)
 
-                    time_before_keypoints = time.time()
-                    source_keypoints =  model.extract_keypoints(source_frame_array)
-                    time_after_keypoints = time.time()
-                    self.__log_debug("Source keypoints extraction time in receiver: %s",
-                                    str(time_after_keypoints - time_before_keypoints))
-
-                    time_before_update = time.time()
-                    model.update_source(source_frame_array, source_keypoints)
-                    time_after_update = time.time()
-                    self.__log_debug("Time to update source frame with index %s in receiver: %s",
-                                    video_frame_index, str(time_after_keypoints - time_before_keypoints))
                 else:
                     # regular video stream
                     self.__log_debug("Received original video frame %s with index %s at time %s",
@@ -670,6 +661,21 @@ class MediaRecorder:
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
                         frame_index = received_keypoints['index']
+
+                        if frame_index % self.__reference_update_freq == 0:
+                            source_frame_array, video_frame_index = await self.__video_queue.get()
+
+                            time_before_keypoints = time.time()
+                            source_keypoints =  model.extract_keypoints(source_frame_array)
+                            time_after_keypoints = time.time()
+                            self.__log_debug("Source keypoints extraction time in receiver: %s",
+                                            str(time_after_keypoints - time_before_keypoints))
+
+                            time_before_update = time.time()
+                            model.update_source(source_frame_array, source_keypoints)
+                            time_after_update = time.time()
+                            self.__log_debug("Time to update source frame %s in receiver when receiving keypoint %s: %s",
+                                            video_frame_index, frame_index, str(time_after_update - time_before_update))
 
                         before_predict_time = time.time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:

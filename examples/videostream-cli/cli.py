@@ -164,6 +164,7 @@ if __name__ == "__main__":
     # create media sink
     if args.record_to:
         recorder = MediaRecorder(args.record_to, enable_prediction=args.enable_prediction, \
+                                reference_update_freq=args.reference_update_freq, \
                                 output_fps=args.output_fps, save_dir=args.save_dir)
     else:
         recorder = MediaBlackhole()
