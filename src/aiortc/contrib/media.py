@@ -676,6 +676,9 @@ class MediaRecorder:
                             time_after_update = time.time()
                             self.__log_debug("Time to update source frame %s in receiver when receiving keypoint %s: %s",
                                             video_frame_index, frame_index, str(time_after_update - time_before_update))
+                            if self.__save_dir is not None:
+                                np.save(os.path.join(self.__save_dir, 
+                                    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
 
                         before_predict_time = time.time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:
