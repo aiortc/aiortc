@@ -59,7 +59,7 @@ def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
                             frame_array.shape[1], frame_array.shape[2]))
     k = frame_array.shape[1] // NUMBER_OF_BITS
     stamped_frame[:-NUM_ROWS, :, :] = frame_array
-    id_str = f'{frame_index:0{NUMBER_OF_BITS}b}' 
+    id_str = f'{frame_index+1:0{NUMBER_OF_BITS}b}' 
 
     for i in range(len(id_str)):
         if id_str[i] == '0':
@@ -98,9 +98,7 @@ def destamp_frame(frame):
 
     frame_id = (frame_id > (frame_id.max() + frame_id.min()) / 2 * 1.2 ).astype(int)
     frame_id = ((2 ** (NUMBER_OF_BITS - 1 - np.arange(NUMBER_OF_BITS))) * frame_id).sum()
-    
-    # hack for corruption
-    frame_id = 0 if frame_id > 60000 else frame_id 
+    frame_id = frame_id - 1
 
     destamped_frame = np.uint8(destamped_frame)
     final_frame = av.VideoFrame.from_ndarray(destamped_frame)
