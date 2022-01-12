@@ -389,6 +389,26 @@ class MediaPlayerTest(MediaTestCase):
             run(player.audio.recv())
         self.assertEqual(player.audio.readyState, "ended")
 
+    def test_audio_file_looping(self):
+        path = self.create_audio_file("test.wav", sample_rate=48000)
+        player = MediaPlayer(path, loop=True)
+
+        # read all frames, then loop and re-read all frames
+        self.assertEqual(player.audio.readyState, "live")
+        for i in range(100):
+            frame = run(player.audio.recv())
+            self.assertEqual(frame.format.name, "s16")
+            self.assertEqual(frame.layout.name, "stereo")
+            self.assertEqual(frame.samples, 960)
+            self.assertEqual(frame.sample_rate, 48000)
+
+        # read one more time, forcing a second loop
+        run(player.audio.recv())
+        self.assertEqual(player.audio.readyState, "live")
+
+        # stop the player
+        player.audio.stop()
+
     def test_audio_and_video_file(self):
         path = self.create_audio_and_video_file(name="test.mp4", duration=5)
         player = MediaPlayer(path)
