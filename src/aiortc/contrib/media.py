@@ -302,8 +302,14 @@ class PlayerStreamTrack(MediaStreamTrack):
                 await asyncio.sleep(wait)
 
         # record send time just before sending it on wire
-        if self._player._send_times_file is not None and self.kind != "audio":
-            self._player._send_times_file.write(f'Sent {frame_index} at {datetime.datetime.now()}\n')
+        if self._player._send_times_file is not None:
+            if self._player._enable_prediction and self.kind == "keypoints":
+                self._player._send_times_file.write(f'Sent {frame_index} at {datetime.datetime.now()}\n')
+            elif self._player._enable_prediction and self.kind == "video":
+                self._player._send_times_file.write(
+                        f'Sent {frame_index} at {datetime.datetime.now()} (video) \n')
+            elif self.kind == "video":
+                self._player._send_times_file.write(f'Sent {frame_index} at {datetime.datetime.now()}\n')
             self._player._send_times_file.flush()
         
         # extract keypoints before sending
@@ -390,7 +396,7 @@ class MediaPlayer:
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
         self.__save_dir = save_dir
-        self.__enable_prediction = enable_prediction
+        self._enable_prediction = enable_prediction
         self._reference_update_freq = reference_update_freq
         
         if self.__save_dir is not None:
@@ -416,7 +422,7 @@ class MediaPlayer:
                     fps_factor = 1
                 self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
                 self.__streams.append(stream)
-                if self.__enable_prediction:
+                if self._enable_prediction:
                     self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
 
         # check whether we need to throttle playback
@@ -462,7 +468,7 @@ class MediaPlayer:
                     self.__thread_quit,
                     self._throttle_playback,
                     self.__save_dir,
-                    self.__enable_prediction,
+                    self._enable_prediction,
                     self._reference_update_freq,
                 ),
             )
