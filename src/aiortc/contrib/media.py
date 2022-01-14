@@ -317,7 +317,9 @@ class PlayerStreamTrack(MediaStreamTrack):
             try:
                 frame_array = frame.to_rgb().to_ndarray()
                 time_before_keypoints = time.time()
-                keypoints =  model.extract_keypoints(frame_array)
+                loop = asyncio.get_running_loop()
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    keypoints = await loop.run_in_executor(pool, model.extract_keypoints, frame_array)
                 time_after_keypoints = time.time()
                 logger.warning(
                     "Keypoints extraction time for frame index %s in sender: %s",
@@ -664,7 +666,7 @@ class MediaRecorder:
                     keypoints_file.write("\n")
                     keypoints_file.close()
 
-                if self.__enable_prediction and not self.__video_queue.empty():
+                if self.__enable_prediction:
                     self.__setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
@@ -674,7 +676,9 @@ class MediaRecorder:
                             source_frame_array, video_frame_index = await self.__video_queue.get()
 
                             time_before_keypoints = time.time()
-                            source_keypoints =  model.extract_keypoints(source_frame_array)
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                source_keypoints = await loop.run_in_executor(pool, 
+                                                    model.extract_keypoints, source_frame_array)
                             time_after_keypoints = time.time()
                             self.__log_debug("Source keypoints extraction time in receiver: %s",
                                             str(time_after_keypoints - time_before_keypoints))
