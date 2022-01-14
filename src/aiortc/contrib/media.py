@@ -624,14 +624,14 @@ class MediaRecorder:
                 if self.__enable_prediction:
                     # update model related info with most recent frame
                     self.__log_debug("Received source video frame %s with index %s at time %s",
-                                    frame, video_frame_index, time.time())
+                                    frame, video_frame_index, datetime.datetime.now())
                     source_frame_array = frame.to_rgb().to_ndarray()
                     asyncio.run_coroutine_threadsafe(self.__video_queue.put((source_frame_array, video_frame_index)), loop)
 
                 else:
                     # regular video stream
                     self.__log_debug("Received original video frame %s with index %s at time %s",
-                                    frame, video_frame_index, time.time())
+                                    frame, video_frame_index, datetime.datetime.now())
                     self.__setsize(track)
                         
                     if self.__recv_times_file is not None:
@@ -678,12 +678,14 @@ class MediaRecorder:
                             time_after_keypoints = time.time()
                             self.__log_debug("Source keypoints extraction time in receiver: %s",
                                             str(time_after_keypoints - time_before_keypoints))
-
+                            self.__log_debug("Video queue size: %s", self.__video_queue.qsize())
+                            
                             time_before_update = time.time()
                             model.update_source(source_frame_array, source_keypoints)
                             time_after_update = time.time()
-                            self.__log_debug("Time to update source frame %s in receiver when receiving keypoint %s: %s",
-                                            video_frame_index, frame_index, str(time_after_update - time_before_update))
+                            self.__log_debug("Time to update source frame %s in receiver" \
+                                    " when receiving keypoint %s: %s",
+                                    video_frame_index, frame_index, str(time_after_update - time_before_update))
                             if self.__save_dir is not None:
                                 np.save(os.path.join(self.__save_dir, 
                                     'reference_frame_%05d.npy' % video_frame_index), source_frame_array)

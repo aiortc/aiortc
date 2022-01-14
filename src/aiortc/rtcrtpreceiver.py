@@ -435,7 +435,8 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
-        self.__log_debug("< RTP %s arrival time:%d", packet, arrival_time_ms)
+        self.__log_debug("< RTP %s arrival time:%d %s", 
+                         packet, arrival_time_ms, datetime.datetime.now())
 
         """
         if (packet.sequence_number == 3000):
@@ -530,7 +531,8 @@ class RTCRtpReceiver:
                 encoded_frame.timestamp
             )
             self.__decoder_queue.put((codec, encoded_frame))
-            self.__log_debug("Put frame timestamp %s into decoder queue", encoded_frame.timestamp)
+            self.__log_debug("Put frame timestamp %s into decoder queue at time %s", 
+                             encoded_frame.timestamp, datetime.datetime.now())
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")

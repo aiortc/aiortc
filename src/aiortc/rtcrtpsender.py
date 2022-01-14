@@ -5,6 +5,7 @@ import time
 import traceback
 import uuid
 from typing import Dict, List, Optional, Union
+import datetime
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
@@ -255,7 +256,8 @@ class RTCRtpSender:
             self.__encoder = get_encoder(codec)
         force_keyframe = self.__force_keyframe
         self.__force_keyframe = False
-        self.__log_debug("encoding frame with force keyframe %s", force_keyframe)
+        self.__log_debug("encoding frame with force keyframe %s at time %s", 
+                        force_keyframe, datetime.datetime.now())
         return await self.__loop.run_in_executor(
             None, self.__encoder.encode, frame, force_keyframe
         )
@@ -297,7 +299,8 @@ class RTCRtpSender:
                     continue
 
                 payloads, timestamp = await self._next_encoded_frame(codec)
-                self.__log_debug("encoded frame with timestamp %s", timestamp)
+                self.__log_debug("encoded frame with timestamp %s at time %s", 
+                                timestamp, datetime.datetime.now())
                 old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
@@ -318,7 +321,8 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
 
                     # send packet
-                    self.__log_debug("> %s (encoded frame ts: %s)", packet, old_timestamp)
+                    self.__log_debug("> %s (encoded frame ts: %s) %s", packet, old_timestamp, 
+                                    datetime.datetime.now())
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
                     ] = packet
