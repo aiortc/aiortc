@@ -235,6 +235,9 @@ class RTCRtpReceiverTest(CodecTestCase):
             [
                 RTCRtpHeaderExtensionCapability(
                     uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+                ),
+                RTCRtpHeaderExtensionCapability(
+                    uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
                 )
             ],
         )

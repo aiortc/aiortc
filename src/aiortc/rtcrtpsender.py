@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import random
 import time
 import traceback
@@ -36,12 +37,19 @@ from .stats import (
 )
 from .utils import random16, random32, uint16_add, uint32_add
 
+from av.audio.frame import AudioFrame
+
 logger = logging.getLogger(__name__)
 
 RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
 
-
+class RTCEncodedFrame:
+    def __init__(self, payloads: List[bytes], timestamp: int, level: int):
+        self.payloads = payloads
+        self.timestamp = timestamp
+        self.level = level
+        
 class RTCRtpSender:
     """
     The :class:`RTCRtpSender` interface provides the ability to control and
@@ -246,15 +254,39 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get frame
         frame = await self.__track.recv()
-
+        level = None
+        if isinstance(frame, AudioFrame):
+            level = self._compute_level_dbov(frame)
+        
         # encode frame
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
         force_keyframe = self.__force_keyframe
         self.__force_keyframe = False
-        return await self.__loop.run_in_executor(
+        payloads, timestamp = await self.__loop.run_in_executor(
             None, self.__encoder.encode, frame, force_keyframe
         )
+        
+        return RTCEncodedFrame(payloads, timestamp, level)
+
+    def _compute_level_dbov(self, frame: AudioFrame):
+        """
+        Compure the energy level as spelled out in RFC 6465, Appendix A.
+        """
+        MAX_SAMPLE_VALUE = 32767
+        MAX_AUDIO_LEVEL = 0
+        MIN_AUDIO_LEVEL = -127
+        rms = 0
+        for sample in frame.samples:
+            rms += sample * sample
+        rms /= (len(frame.samples) * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE)
+        if rms > 0:        
+            db = 20 * math.log10(rms)
+            db = max(db, MIN_AUDIO_LEVEL)
+            db = min(db, MAX_AUDIO_LEVEL)
+        else:
+            db = MIN_AUDIO_LEVEL
+        return math.round(db)
 
     async def _retransmit(self, sequence_number: int) -> None:
         """
@@ -292,10 +324,10 @@ class RTCRtpSender:
                     await asyncio.sleep(0.02)
                     continue
 
-                payloads, timestamp = await self._next_encoded_frame(codec)
-                timestamp = uint32_add(timestamp_origin, timestamp)
+                enc_frame = await self._next_encoded_frame(codec)
+                timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
 
-                for i, payload in enumerate(payloads):
+                for i, payload in enumerate(enc_frame.payloads):
                     packet = RtpPacket(
                         payload_type=codec.payloadType,
                         sequence_number=sequence_number,
@@ -303,13 +335,14 @@ class RTCRtpSender:
                     )
                     packet.ssrc = self._ssrc
                     packet.payload = payload
-                    packet.marker = (i == len(payloads) - 1) and 1 or 0
+                    packet.marker = (i == len(enc_frame.payloads) - 1) and 1 or 0
 
                     # set header extensions
                     packet.extensions.abs_send_time = (
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
+                    packet.extensions.audio_level = (False, enc_frame.level)
 
                     # send packet
                     self.__log_debug("> %s", packet)
