@@ -34,7 +34,12 @@ CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
 }
 HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
-        RTCRtpHeaderExtensionParameters(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid")
+        RTCRtpHeaderExtensionParameters(
+            id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+        ),
+        RTCRtpHeaderExtensionParameters(
+            id=2, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+        ),
     ],
     "video": [
         RTCRtpHeaderExtensionParameters(
