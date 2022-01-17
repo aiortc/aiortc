@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import random
+import struct
 import time
 import traceback
 import uuid
@@ -277,16 +278,18 @@ class RTCRtpSender:
         MAX_AUDIO_LEVEL = 0
         MIN_AUDIO_LEVEL = -127
         rms = 0
-        for sample in frame.samples:
+        buf = bytes(frame.planes[0])     
+        s = struct.Struct("h")   
+        for sample in s.iter_unpack(buf):            
             rms += sample * sample
-        rms /= (len(frame.samples) * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE)
+        rms /= (len(buf) * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE)
         if rms > 0:        
             db = 20 * math.log10(rms)
             db = max(db, MIN_AUDIO_LEVEL)
             db = min(db, MAX_AUDIO_LEVEL)
         else:
             db = MIN_AUDIO_LEVEL
-        return math.round(db)
+        return round(db)
 
     async def _retransmit(self, sequence_number: int) -> None:
         """
@@ -342,7 +345,7 @@ class RTCRtpSender:
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
-                    packet.extensions.audio_level = (False, enc_frame.level)
+                    packet.extensions.audio_level = (False, -enc_frame.level)
 
                     # send packet
                     self.__log_debug("> %s", packet)
