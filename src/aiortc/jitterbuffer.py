@@ -71,22 +71,21 @@ class JitterBuffer:
         frames = 0
         packets = []
         remove = 0
-        timestamp = None
 
         for count in range(self.capacity):
             pos = (self._origin + count) % self._capacity
             packet = self._packets[pos]
             if packet is None:
                 break
-            if timestamp is None:
-                timestamp = packet.timestamp
-            elif packet.timestamp != timestamp:
+            packets.append(packet)
+
+            if packet.marker == 1:
                 # we now have a complete frame, only store the first one
                 if frame is None:
                     frame = JitterFrame(
-                        data=b"".join([x._data for x in packets]), timestamp=timestamp
+                        data=b"".join([x._data for x in packets]), timestamp=packet.timestamp
                     )
-                    remove = count
+                    remove = count + 1
 
                 # check we have prefetched enough
                 frames += 1
@@ -98,9 +97,6 @@ class JitterBuffer:
 
                 # start a new frame
                 packets = []
-                timestamp = packet.timestamp
-
-            packets.append(packet)
 
         return None
 
