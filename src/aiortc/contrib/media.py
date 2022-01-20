@@ -18,11 +18,21 @@ from av.frame import Frame
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 
 from first_order_model.fom_wrapper import FirstOrderModel
-config_path = '/data/vibhaa/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
+
+# instantiate and warm up the model
+"""
+time_before_instantiation = time.time()
+zero_array = np.zeros((256, 256, 3))
+"""
+config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
+zero_kps = model.extract_keypoints(zero_array)
+model.update_source(zero_array, zero_kps)
+model.predict(zero_kps)
+time_after_instantiation = time.time()
+print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
 
 save_keypoints_to_file = False
-
 logger = logging.getLogger(__name__)
 
 
