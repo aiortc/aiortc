@@ -33,7 +33,6 @@ extras_require = {
         'aiohttp>=3.7.0',
         'coverage>=5.0',
         'numpy>=1.19.0',
-        'websockets>=8.0',
     ]
 }
 
