@@ -259,7 +259,7 @@ class RTCRtpSender:
         frame = await self.__track.recv()
         audio_level = None
         if isinstance(frame, AudioFrame):
-            level = self._compute_audio_level_dbov(frame)
+            audio_level = self._compute_audio_level_dbov(frame)
 
         # encode frame
         if self.__encoder is None:
