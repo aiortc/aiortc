@@ -1,3 +1,6 @@
+import fractions
+import sys
+
 from unittest import TestCase
 
 from aiortc import rtp
@@ -21,8 +24,23 @@ from aiortc.rtp import (
     unwrap_rtx,
     wrap_rtx,
 )
+from av import AudioFrame
 
 from .utils import load
+
+
+def create_audio_frame(samples, pts, layout="mono", sample_rate=48000, gen=None):
+    frame = AudioFrame(format="s16", layout=layout, samples=samples)
+    for p in frame.planes:
+        buf = bytes(p.buffer_size)
+        if gen:
+            for i in range(samples):
+                (buf[i*2], buf[i*2+1]) = int.to_bytes(gen(i), 2, sys.byteorder, signed=True)                
+        p.update(buf)
+    frame.pts = pts
+    frame.sample_rate = sample_rate
+    frame.time_base = fractions.Fraction(1, sample_rate)
+    return frame
 
 
 class RtcpPacketTest(TestCase):
@@ -666,3 +684,7 @@ class RtpUtilTest(TestCase):
         self.assertEqual(recovered.csrc, packet.csrc)
         self.assertEqual(recovered.extensions, packet.extensions)
         self.assertEqual(recovered.payload, packet.payload)
+
+    def test_compute_audio_level_dbov(self):
+        blank_frame = create_audio_frame(480, 0) 
+        self.assertEqual(rtp.compute_audio_level_dbov(blank_frame), -127)

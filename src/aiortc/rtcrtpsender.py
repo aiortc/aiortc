@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import math
 import random
-import struct
 import time
 import traceback
 import uuid
@@ -259,7 +257,7 @@ class RTCRtpSender:
         frame = await self.__track.recv()
         audio_level = None
         if isinstance(frame, AudioFrame):
-            audio_level = self._compute_audio_level_dbov(frame)
+            audio_level = rtp.compute_audio_level_dbov(frame)
 
         # encode frame
         if self.__encoder is None:
@@ -272,27 +270,6 @@ class RTCRtpSender:
 
         return RTCEncodedFrame(payloads, timestamp, audio_level)
 
-    def _compute_audio_level_dbov(self, frame: AudioFrame):
-        """
-        Compute the energy level as spelled out in RFC 6465, Appendix A.
-        """
-        MAX_SAMPLE_VALUE = 32767
-        MAX_AUDIO_LEVEL = 0
-        MIN_AUDIO_LEVEL = -127
-        rms = 0
-        buf = bytes(frame.planes[0])
-        s = struct.Struct("h")
-        for unpack in s.iter_unpack(buf):
-            sample = unpack[0]
-            rms += sample * sample
-        rms = math.sqrt(rms / (frame.samples * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE))
-        if rms > 0:
-            db = 20 * math.log10(rms)
-            db = max(db, MIN_AUDIO_LEVEL)
-            db = min(db, MAX_AUDIO_LEVEL)
-        else:
-            db = MIN_AUDIO_LEVEL
-        return round(db)
 
     async def _retransmit(self, sequence_number: int) -> None:
         """
