@@ -45,12 +45,14 @@ logger = logging.getLogger(__name__)
 RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
 
+
 class RTCEncodedFrame:
-    def __init__(self, payloads: List[bytes], timestamp: int, level: int):
+    def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
         self.payloads = payloads
         self.timestamp = timestamp
-        self.level = level
-        
+        self.audio_level = audio_level
+
+
 class RTCRtpSender:
     """
     The :class:`RTCRtpSender` interface provides the ability to control and
@@ -255,10 +257,10 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get frame
         frame = await self.__track.recv()
-        level = None
+        audio_level = None
         if isinstance(frame, AudioFrame):
-            level = self._compute_level_dbov(frame)
-        
+            level = self._compute_audio_level_dbov(frame)
+
         # encode frame
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
@@ -267,10 +269,10 @@ class RTCRtpSender:
         payloads, timestamp = await self.__loop.run_in_executor(
             None, self.__encoder.encode, frame, force_keyframe
         )
-        
-        return RTCEncodedFrame(payloads, timestamp, level)
 
-    def _compute_level_dbov(self, frame: AudioFrame):
+        return RTCEncodedFrame(payloads, timestamp, audio_level)
+
+    def _compute_audio_level_dbov(self, frame: AudioFrame):
         """
         Compute the energy level as spelled out in RFC 6465, Appendix A.
         """
@@ -284,7 +286,7 @@ class RTCRtpSender:
             sample = unpack[0]
             rms += sample * sample
         rms = math.sqrt(rms / (frame.samples * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE))
-        if rms > 0:        
+        if rms > 0:
             db = 20 * math.log10(rms)
             db = max(db, MIN_AUDIO_LEVEL)
             db = min(db, MAX_AUDIO_LEVEL)
@@ -346,7 +348,8 @@ class RTCRtpSender:
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
-                    packet.extensions.audio_level = (False, -enc_frame.level)
+                    if enc_frame.audio_level is not None:
+                        packet.extensions.audio_level = (False, -enc_frame.audio_level)
 
                     # send packet
                     self.__log_debug("> %s", packet)
