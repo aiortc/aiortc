@@ -3,6 +3,11 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.2.x
+-----
+
+ * Remove `apprtc` code as the service is no longer publicly hosted.
+
 1.2.1
 -----
 

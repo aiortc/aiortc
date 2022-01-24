@@ -5,8 +5,7 @@ This example illustrates the establishment of a video stream using an
 RTCPeerConnection.
 
 By default the signaling channel used is "copy and paste", but a number of
-other signaling mecanisms are available, including Google's AppRTC demo
-application.
+other signaling mecanisms are available.
 
 By default the sent video is an animated French flag, but it is also possible
 to use a MediaPlayer to read media from a file.
@@ -18,10 +17,7 @@ First install the required packages:
 
 .. code-block:: console
 
-   $ pip install aiohttp aiortc opencv-python websockets
-
-The `aiohttp` and `websockets` packages are only needed if using AppRTC for
-signaling.
+   $ pip install aiortc opencv-python
 
 Running the example
 -------------------
@@ -49,7 +45,7 @@ If you want to play a media file instead of sending the example image, run:
 
 .. code-block:: console
 
-   $ python apprtc.py --play-from video.mp4
+   $ python cli.py --play-from video.mp4
 
 If you want to recording the received video you can run one of the following:
 
