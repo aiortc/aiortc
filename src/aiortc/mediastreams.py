@@ -7,7 +7,7 @@ from typing import Tuple
 
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
-from pyee import AsyncIOEventEmitter
+from pyee.asyncio import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
 VIDEO_CLOCK_RATE = 90000

@@ -24,7 +24,7 @@ install_requires = [
     "cryptography>=2.2",
     'dataclasses; python_version < "3.7"',
     "google-crc32c>=1.1",
-    "pyee>=6.0.0",
+    "pyee>=9.0.0",
     "pylibsrtp>=0.5.6",
 ]
 

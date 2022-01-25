@@ -23,7 +23,7 @@ from typing import (
 )
 
 from google_crc32c import value as crc32c
-from pyee import AsyncIOEventEmitter
+from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
