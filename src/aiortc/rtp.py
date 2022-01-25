@@ -4,6 +4,7 @@ import struct
 from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
 from typing import Any, List, Optional, Tuple, Union
+
 from av import AudioFrame
 
 from .rtcrtpparameters import RTCRtpParameters
@@ -307,26 +308,26 @@ def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, by
 
 
 def compute_audio_level_dbov(frame: AudioFrame):
-        """
-        Compute the energy level as spelled out in RFC 6465, Appendix A.
-        """
-        MAX_SAMPLE_VALUE = 32767
-        MAX_AUDIO_LEVEL = 0
-        MIN_AUDIO_LEVEL = -127
-        rms = 0
-        buf = bytes(frame.planes[0])
-        s = struct.Struct("h")
-        for unpack in s.iter_unpack(buf):
-            sample = unpack[0]
-            rms += sample * sample
-        rms = math.sqrt(rms / (frame.samples * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE))
-        if rms > 0:
-            db = 20 * math.log10(rms)
-            db = max(db, MIN_AUDIO_LEVEL)
-            db = min(db, MAX_AUDIO_LEVEL)
-        else:
-            db = MIN_AUDIO_LEVEL
-        return round(db)
+    """
+    Compute the energy level as spelled out in RFC 6465, Appendix A.
+    """
+    MAX_SAMPLE_VALUE = 32767
+    MAX_AUDIO_LEVEL = 0
+    MIN_AUDIO_LEVEL = -127
+    rms = 0
+    buf = bytes(frame.planes[0])
+    s = struct.Struct("h")
+    for unpacked in s.iter_unpack(buf):
+        sample = unpacked[0]
+        rms += sample * sample
+    rms = math.sqrt(rms / (frame.samples * MAX_SAMPLE_VALUE * MAX_SAMPLE_VALUE))
+    if rms > 0:
+        db = 20 * math.log10(rms)
+        db = max(db, MIN_AUDIO_LEVEL)
+        db = min(db, MAX_AUDIO_LEVEL)
+    else:
+        db = MIN_AUDIO_LEVEL
+    return round(db)
 
 
 @dataclass

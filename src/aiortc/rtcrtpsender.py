@@ -6,6 +6,8 @@ import traceback
 import uuid
 from typing import Dict, List, Optional, Union
 
+from av.audio.frame import AudioFrame
+
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
@@ -35,8 +37,6 @@ from .stats import (
     RTCStatsReport,
 )
 from .utils import random16, random32, uint16_add, uint32_add
-
-from av.audio.frame import AudioFrame
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +269,6 @@ class RTCRtpSender:
         )
 
         return RTCEncodedFrame(payloads, timestamp, audio_level)
-
 
     async def _retransmit(self, sequence_number: int) -> None:
         """

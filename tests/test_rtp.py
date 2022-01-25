@@ -1,7 +1,9 @@
 import fractions
+import math
 import sys
-
 from unittest import TestCase
+
+from av import AudioFrame
 
 from aiortc import rtp
 from aiortc.rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
@@ -24,18 +26,17 @@ from aiortc.rtp import (
     unwrap_rtx,
     wrap_rtx,
 )
-from av import AudioFrame
 
 from .utils import load
 
 
-def create_audio_frame(samples, pts, layout="mono", sample_rate=48000, gen=None):
+def create_audio_frame(sample_func, samples, pts, layout="mono", sample_rate=48000):
     frame = AudioFrame(format="s16", layout=layout, samples=samples)
     for p in frame.planes:
-        buf = bytes(p.buffer_size)
-        if gen:
-            for i in range(samples):
-                (buf[i*2], buf[i*2+1]) = int.to_bytes(gen(i), 2, sys.byteorder, signed=True)                
+        buf = bytearray()
+        for i in range(samples):
+            sample = int(sample_func(i) * 32767)
+            buf.extend(int.to_bytes(sample, 2, sys.byteorder, signed=True))
         p.update(buf)
     frame.pts = pts
     frame.sample_rate = sample_rate
@@ -686,5 +687,17 @@ class RtpUtilTest(TestCase):
         self.assertEqual(recovered.payload, packet.payload)
 
     def test_compute_audio_level_dbov(self):
-        blank_frame = create_audio_frame(480, 0) 
-        self.assertEqual(rtp.compute_audio_level_dbov(blank_frame), -127)
+        num_samples = 960  # 20ms @ 48kHz
+        # test a frame of all zeroes (-127 dBov, the minimum value)
+        silent_frame = create_audio_frame(lambda n: 0.0, num_samples, 0)
+        self.assertEqual(rtp.compute_audio_level_dbov(silent_frame), -127)
+        # test a 50Hz square wave (0 dBov, the maximum value)
+        square_frame = create_audio_frame(
+            lambda n: 1.0 if n < num_samples / 2 else -1.0, num_samples, 0
+        )
+        self.assertEqual(rtp.compute_audio_level_dbov(square_frame), 0)
+        # test a 50Hz sine wave (-3 dBov, the maximum value for a sine wave)
+        sine_frame = create_audio_frame(
+            lambda n: math.sin(2 * math.pi * n / num_samples), num_samples, 0
+        )
+        self.assertEqual(rtp.compute_audio_level_dbov(sine_frame), -3)
