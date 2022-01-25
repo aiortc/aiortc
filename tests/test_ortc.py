@@ -9,7 +9,7 @@ from aiortc import (
     RTCSctpTransport,
 )
 
-from .utils import run
+from .utils import asynctest
 
 
 async def start_dtls_pair(ice_a, ice_b):
@@ -55,21 +55,22 @@ async def start_sctp_pair(dtls_a, dtls_b):
 
 
 class OrtcTest(TestCase):
-    def test_sctp(self):
+    @asynctest
+    async def test_sctp(self):
         # start ICE transports
-        ice_a, ice_b = run(start_ice_pair())
+        ice_a, ice_b = await start_ice_pair()
 
         # start DTLS transports
-        dtls_a, dtls_b = run(start_dtls_pair(ice_a, ice_b))
+        dtls_a, dtls_b = await start_dtls_pair(ice_a, ice_b)
 
         # start SCTP transports
-        sctp_a, sctp_b = run(start_sctp_pair(dtls_a, dtls_b))
+        sctp_a, sctp_b = await start_sctp_pair(dtls_a, dtls_b)
 
         # stop SCTP transports
-        run(asyncio.gather(sctp_a.stop(), sctp_b.stop()))
+        await asyncio.gather(sctp_a.stop(), sctp_b.stop())
 
         # stop DTLS transports
-        run(asyncio.gather(dtls_a.stop(), dtls_b.stop()))
+        await asyncio.gather(dtls_a.stop(), dtls_b.stop())
 
         # stop ICE transports
-        run(asyncio.gather(ice_a.stop(), ice_b.stop()))
+        await asyncio.gather(ice_a.stop(), ice_b.stop())
