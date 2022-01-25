@@ -75,7 +75,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-latest
+            arch: x86_64
+          - os: ubuntu-latest
+            arch: i686
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: windows-latest
+            arch: AMD64
+          - os: windows-latest
+            arch: x86
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
@@ -83,8 +95,9 @@ jobs:
           python-version: 3.7
       - name: Build wheels
         env:
-          CIBW_BEFORE_BUILD: python scripts/fetch-vendor /tmp/vendor
-          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor C:\cibw\vendor
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BEFORE_BUILD: python scripts/fetch-vendor.py /tmp/vendor
+          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor.py C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
           CIBW_SKIP: cp36-* pp36-* *-musllinux*
