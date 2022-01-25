@@ -15,7 +15,7 @@ from aiortc.rtcicetransport import (
     parse_stun_turn_uri,
 )
 
-from .utils import run
+from .utils import asynctest
 
 
 async def mock_connect():
@@ -233,16 +233,17 @@ class ParseStunTurnUriTest(TestCase):
 
 
 class RTCIceGathererTest(TestCase):
-    def test_gather(self):
+    @asynctest
+    async def test_gather(self):
         gatherer = RTCIceGatherer()
         self.assertEqual(gatherer.state, "new")
         self.assertEqual(gatherer.getLocalCandidates(), [])
-        run(gatherer.gather())
+        await gatherer.gather()
         self.assertEqual(gatherer.state, "completed")
         self.assertTrue(len(gatherer.getLocalCandidates()) > 0)
 
         # close
-        run(gatherer._connection.close())
+        await gatherer._connection.close()
 
     def test_default_ice_servers(self):
         self.assertEqual(
@@ -266,7 +267,8 @@ class RTCIceTransportTest(TestCase):
         aioice.stun.RETRY_MAX = self.retry_max
         aioice.stun.RETRY_RTO = self.retry_rto
 
-    def test_construct(self):
+    @asynctest
+    async def test_construct(self):
         gatherer = RTCIceGatherer()
         connection = RTCIceTransport(gatherer)
         self.assertEqual(connection.state, "new")
@@ -283,14 +285,15 @@ class RTCIceTransportTest(TestCase):
         )
 
         # add candidate
-        run(connection.addRemoteCandidate(candidate))
+        await connection.addRemoteCandidate(candidate)
         self.assertEqual(connection.getRemoteCandidates(), [candidate])
 
         # end-of-candidates
-        run(connection.addRemoteCandidate(None))
+        await connection.addRemoteCandidate(None)
         self.assertEqual(connection.getRemoteCandidates(), [candidate])
 
-    def test_connect(self):
+    @asynctest
+    async def test_connect(self):
         gatherer_1 = RTCIceGatherer()
         transport_1 = RTCIceTransport(gatherer_1)
 
@@ -298,30 +301,29 @@ class RTCIceTransportTest(TestCase):
         transport_2 = RTCIceTransport(gatherer_2)
 
         # gather candidates
-        run(asyncio.gather(gatherer_1.gather(), gatherer_2.gather()))
+        await asyncio.gather(gatherer_1.gather(), gatherer_2.gather())
         for candidate in gatherer_2.getLocalCandidates():
-            run(transport_1.addRemoteCandidate(candidate))
+            await transport_1.addRemoteCandidate(candidate)
         for candidate in gatherer_1.getLocalCandidates():
-            run(transport_2.addRemoteCandidate(candidate))
+            await transport_2.addRemoteCandidate(candidate)
         self.assertEqual(transport_1.state, "new")
         self.assertEqual(transport_2.state, "new")
 
         # connect
-        run(
-            asyncio.gather(
-                transport_1.start(gatherer_2.getLocalParameters()),
-                transport_2.start(gatherer_1.getLocalParameters()),
-            )
+        await asyncio.gather(
+            transport_1.start(gatherer_2.getLocalParameters()),
+            transport_2.start(gatherer_1.getLocalParameters()),
         )
         self.assertEqual(transport_1.state, "completed")
         self.assertEqual(transport_2.state, "completed")
 
         # cleanup
-        run(asyncio.gather(transport_1.stop(), transport_2.stop()))
+        await asyncio.gather(transport_1.stop(), transport_2.stop())
         self.assertEqual(transport_1.state, "closed")
         self.assertEqual(transport_2.state, "closed")
 
-    def test_connect_fail(self):
+    @asynctest
+    async def test_connect_fail(self):
         gatherer_1 = RTCIceGatherer()
         transport_1 = RTCIceTransport(gatherer_1)
 
@@ -329,43 +331,43 @@ class RTCIceTransportTest(TestCase):
         transport_2 = RTCIceTransport(gatherer_2)
 
         # gather candidates
-        run(asyncio.gather(gatherer_1.gather(), gatherer_2.gather()))
+        await asyncio.gather(gatherer_1.gather(), gatherer_2.gather())
         for candidate in gatherer_2.getLocalCandidates():
-            run(transport_1.addRemoteCandidate(candidate))
+            await transport_1.addRemoteCandidate(candidate)
         for candidate in gatherer_1.getLocalCandidates():
-            run(transport_2.addRemoteCandidate(candidate))
+            await transport_2.addRemoteCandidate(candidate)
         self.assertEqual(transport_1.state, "new")
         self.assertEqual(transport_2.state, "new")
 
         # connect
-        run(transport_2.stop())
-        run(transport_1.start(gatherer_2.getLocalParameters()))
+        await transport_2.stop()
+        await transport_1.start(gatherer_2.getLocalParameters())
         self.assertEqual(transport_1.state, "failed")
         self.assertEqual(transport_2.state, "closed")
 
         # cleanup
-        run(asyncio.gather(transport_1.stop(), transport_2.stop()))
+        await asyncio.gather(transport_1.stop(), transport_2.stop())
         self.assertEqual(transport_1.state, "closed")
         self.assertEqual(transport_2.state, "closed")
 
-    def test_connect_when_closed(self):
+    @asynctest
+    async def test_connect_when_closed(self):
         gatherer = RTCIceGatherer()
         transport = RTCIceTransport(gatherer)
 
         # stop transport
-        run(transport.stop())
+        await transport.stop()
         self.assertEqual(transport.state, "closed")
 
         # try to start it
         with self.assertRaises(InvalidStateError) as cm:
-            run(
-                transport.start(
-                    RTCIceParameters(usernameFragment="foo", password="bar")
-                )
+            await transport.start(
+                RTCIceParameters(usernameFragment="foo", password="bar")
             )
         self.assertEqual(str(cm.exception), "RTCIceTransport is closed")
 
-    def test_connection_closed(self):
+    @asynctest
+    async def test_connection_closed(self):
         gatherer = RTCIceGatherer()
 
         # mock out methods
@@ -375,11 +377,11 @@ class RTCIceTransportTest(TestCase):
         transport = RTCIceTransport(gatherer)
         self.assertEqual(transport.state, "new")
 
-        run(transport.start(RTCIceParameters(usernameFragment="foo", password="bar")))
+        await transport.start(RTCIceParameters(usernameFragment="foo", password="bar"))
         self.assertEqual(transport.state, "completed")
 
-        run(asyncio.sleep(1))
+        await asyncio.sleep(1)
         self.assertEqual(transport.state, "failed")
 
-        run(transport.stop())
+        await transport.stop()
         self.assertEqual(transport.state, "closed")

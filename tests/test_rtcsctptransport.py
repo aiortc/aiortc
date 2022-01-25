@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -34,7 +35,38 @@ from aiortc.rtcsctptransport import (
     tsn_plus_one,
 )
 
-from .utils import dummy_dtls_transport_pair, load, run
+from .utils import ClosedDtlsTransport, asynctest, dummy_dtls_transport_pair, load
+
+
+@contextlib.asynccontextmanager
+async def client_and_server():
+    async with dummy_dtls_transport_pair() as (client_transport, server_transport):
+        client = RTCSctpTransport(client_transport)
+        server = RTCSctpTransport(server_transport)
+        assert client.is_server is False
+        assert server.is_server is True
+
+        try:
+            yield client, server
+        finally:
+            await client.stop()
+            await server.stop()
+            assert client._association_state == RTCSctpTransport.State.CLOSED
+            assert client.state == "closed"
+            assert server._association_state == RTCSctpTransport.State.CLOSED
+            assert server.state == "closed"
+
+
+@contextlib.asynccontextmanager
+async def client_standalone():
+    async with dummy_dtls_transport_pair() as (client_transport, server_transport):
+        client = RTCSctpTransport(client_transport)
+        assert client.is_server is False
+
+        try:
+            yield client
+        finally:
+            await client.stop()
 
 
 def outstanding_tsns(client):
@@ -583,13 +615,6 @@ class SctpUtilTest(TestCase):
 
 
 class RTCSctpTransportTest(TestCase):
-    def setUp(self):
-        self.client_transport, self.server_transport = dummy_dtls_transport_pair()
-
-    def tearDown(self):
-        run(self.client_transport.stop())
-        run(self.server_transport.stop())
-
     def assertTimerPreserved(self, client):
         test = self
 
@@ -628,827 +653,760 @@ class RTCSctpTransportTest(TestCase):
 
         return Ctx()
 
-    def test_construct(self):
-        sctpTransport = RTCSctpTransport(self.client_transport)
-        self.assertEqual(sctpTransport.transport, self.client_transport)
-        self.assertEqual(sctpTransport.port, 5000)
+    @asynctest
+    async def test_construct(self):
+        async with dummy_dtls_transport_pair() as (client_transport, _):
+            sctpTransport = RTCSctpTransport(client_transport)
+            self.assertEqual(sctpTransport.transport, client_transport)
+            self.assertEqual(sctpTransport.port, 5000)
 
-    def test_construct_invalid_dtls_transport_state(self):
-        run(self.client_transport.stop())
+    @asynctest
+    async def test_construct_invalid_dtls_transport_state(self):
+        dtlsTransport = ClosedDtlsTransport()
         with self.assertRaises(InvalidStateError):
-            RTCSctpTransport(self.client_transport)
+            RTCSctpTransport(dtlsTransport)
 
-    def test_connect_broken_transport(self):
+    @asynctest
+    async def test_connect_broken_transport(self):
         """
         Transport with 100% loss never connects.
         """
         loss_pattern = [True]
-        self.client_transport.transport._connection.loss_pattern = loss_pattern
-        self.server_transport.transport._connection.loss_pattern = loss_pattern
 
-        client = RTCSctpTransport(self.client_transport)
-        client._rto = 0.1
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        server._rto = 0.1
-        self.assertTrue(server.is_server)
+        async with client_and_server() as (client, server):
+            client._rto = 0.1
+            client.transport.transport._connection.loss_pattern = loss_pattern
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            server._rto = 0.1
+            server.transport.transport._connection.loss_pattern = loss_pattern
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(client.state, "closed")
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, "connecting")
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(client.state, "closed")
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, "closed")
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(client.state, "closed")
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(server.state, "connecting")
 
-    def test_connect_lossy_transport(self):
+    @asynctest
+    async def test_connect_lossy_transport(self):
         """
         Transport with 25% loss eventually connects.
         """
         loss_pattern = [True, False, False, False]
-        self.client_transport.transport._connection.loss_pattern = loss_pattern
-        self.server_transport.transport._connection.loss_pattern = loss_pattern
 
-        client = RTCSctpTransport(self.client_transport)
-        client._rto = 0.1
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        server._rto = 0.1
-        self.assertTrue(server.is_server)
+        async with client_and_server() as (client, server):
+            client._rto = 0.1
+            client.transport.transport._connection.loss_pattern = loss_pattern
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            server._rto = 0.1
+            server.transport.transport._connection.loss_pattern = loss_pattern
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client.state, "connected")
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server.state, "connected")
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # transmit data
-        server_queue = asyncio.Queue()
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client.state, "connected")
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server.state, "connected")
 
-        async def server_fake_receive(*args):
-            await server_queue.put(args)
+            # transmit data
+            server_queue = asyncio.Queue()
 
-        server._receive = server_fake_receive
+            async def server_fake_receive(*args):
+                await server_queue.put(args)
 
-        for i in range(20):
-            message = (123, i, b"ping")
-            run(client._send(*message))
-            received = run(server_queue.get())
-            self.assertEqual(received, message)
+            server._receive = server_fake_receive
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(client.state, "closed")
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server.state, "closed")
+            for i in range(20):
+                message = (123, i, b"ping")
+                await client._send(*message)
+                received = await server_queue.get()
+                self.assertEqual(received, message)
 
-    def test_connect_client_limits_streams(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._inbound_streams_max = 2048
-        client._outbound_streams_count = 256
-        self.assertFalse(client.is_server)
-        self.assertEqual(client.maxChannels, None)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-        self.assertEqual(server.maxChannels, None)
+    @asynctest
+    async def test_connect_client_limits_streams(self):
+        async with client_and_server() as (client, server):
+            client._inbound_streams_max = 2048
+            client._outbound_streams_count = 256
+            self.assertEqual(client.maxChannels, None)
+            self.assertEqual(server.maxChannels, None)
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client.maxChannels, 256)
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 2048)
-        self.assertEqual(client._outbound_streams_count, 256)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server.maxChannels, 256)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 256)
-        self.assertEqual(server._outbound_streams_count, 2048)
-        self.assertEqual(server._remote_extensions, [192, 130])
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(client.maxChannels, 256)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 2048)
+            self.assertEqual(client._outbound_streams_count, 256)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(server.maxChannels, 256)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 256)
+            self.assertEqual(server._outbound_streams_count, 2048)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # client requests additional outbound streams
-        param = StreamAddOutgoingParam(
-            request_sequence=client._reconfig_request_seq, new_streams=16
-        )
-        run(client._send_reconfig_param(param))
+            # client requests additional outbound streams
+            param = StreamAddOutgoingParam(
+                request_sequence=client._reconfig_request_seq, new_streams=16
+            )
+            await client._send_reconfig_param(param)
 
-        run(asyncio.sleep(0.1))
+            await asyncio.sleep(0.1)
 
-        self.assertEqual(server.maxChannels, 272)
-        self.assertEqual(server._inbound_streams_count, 272)
-        self.assertEqual(server._outbound_streams_count, 2048)
+            self.assertEqual(server.maxChannels, 272)
+            self.assertEqual(server._inbound_streams_count, 272)
+            self.assertEqual(server._outbound_streams_count, 2048)
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+    @asynctest
+    async def test_connect_server_limits_streams(self):
+        async with client_and_server() as (client, server):
+            server._inbound_streams_max = 2048
+            server._outbound_streams_count = 256
 
-    def test_connect_server_limits_streams(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        server._inbound_streams_max = 2048
-        server._outbound_streams_count = 256
-        self.assertTrue(server.is_server)
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(client.maxChannels, 256)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 256)
+            self.assertEqual(client._outbound_streams_count, 2048)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(server.maxChannels, 256)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 2048)
+            self.assertEqual(server._outbound_streams_count, 256)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client.maxChannels, 256)
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 256)
-        self.assertEqual(client._outbound_streams_count, 2048)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server.maxChannels, 256)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 2048)
-        self.assertEqual(server._outbound_streams_count, 256)
-        self.assertEqual(server._remote_extensions, [192, 130])
+            await asyncio.sleep(0.1)
 
-        run(asyncio.sleep(0.1))
+    @asynctest
+    async def test_connect_then_client_creates_data_channel(self):
+        async with client_and_server() as (client, server):
+            self.assertFalse(client.is_server)
+            self.assertEqual(client.maxChannels, None)
+            self.assertTrue(server.is_server)
+            self.assertEqual(server.maxChannels, None)
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
 
-    def test_connect_then_client_creates_data_channel(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        self.assertEqual(client.maxChannels, None)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-        self.assertEqual(server.maxChannels, None)
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(client.maxChannels, 65535)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(server.maxChannels, 65535)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # create data channel
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            self.assertEqual(channel.id, None)
+            self.assertEqual(channel.label, "chat")
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client.maxChannels, 65535)
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server.maxChannels, 65535)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.id, 1)
+            self.assertEqual(channel.label, "chat")
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 1)
+            self.assertEqual(server_channels[0].id, 1)
+            self.assertEqual(server_channels[0].label, "chat")
 
-        # create data channel
-        channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
-        self.assertEqual(channel.id, None)
-        self.assertEqual(channel.label, "chat")
+    @asynctest
+    async def test_connect_then_client_creates_data_channel_with_custom_id(self):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
 
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel.id, 1)
-        self.assertEqual(channel.label, "chat")
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 1)
-        self.assertEqual(server_channels[0].id, 1)
-        self.assertEqual(server_channels[0].label, "chat")
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-    def test_connect_then_client_creates_data_channel_with_custom_id(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel
-        channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat", id=100))
-        self.assertEqual(channel.id, 100)
-        self.assertEqual(channel.label, "chat")
-
-        # create second data channel
-        channel2 = RTCDataChannel(
-            client, RTCDataChannelParameters(label="chat", id=101)
-        )
-        self.assertEqual(channel2.id, 101)
-        self.assertEqual(channel2.label, "chat")
-
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel.id, 100)
-        self.assertEqual(channel.label, "chat")
-        self.assertEqual(channel2.id, 101)
-        self.assertEqual(channel2.label, "chat")
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 2)
-        self.assertEqual(server_channels[0].id, 100)
-        self.assertEqual(server_channels[0].label, "chat")
-        self.assertEqual(server_channels[1].id, 101)
-        self.assertEqual(server_channels[1].label, "chat")
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(
-        self,
-    ):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel
-        channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat", id=1))
-        self.assertEqual(channel.id, 1)
-        self.assertEqual(channel.label, "chat")
-
-        # create second data channel
-        channel2 = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
-        self.assertEqual(channel2.id, None)
-        self.assertEqual(channel2.label, "chat")
-
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel.id, 1)
-        self.assertEqual(channel.label, "chat")
-        self.assertEqual(channel2.id, 3)
-        self.assertEqual(channel2.label, "chat")
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 2)
-        self.assertEqual(server_channels[0].id, 1)
-        self.assertEqual(server_channels[0].label, "chat")
-        self.assertEqual(server_channels[1].id, 3)
-        self.assertEqual(server_channels[1].label, "chat")
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(
-        self,
-    ):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel
-        channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat", id=100))
-        self.assertEqual(channel.id, 100)
-        self.assertEqual(channel.label, "chat")
-
-        # create second data channel with the same id
-        self.assertRaises(
-            ValueError,
-            lambda: RTCDataChannel(
+            # create data channel
+            channel = RTCDataChannel(
                 client, RTCDataChannelParameters(label="chat", id=100)
-            ),
-        )
+            )
+            self.assertEqual(channel.id, 100)
+            self.assertEqual(channel.label, "chat")
 
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel.id, 100)
-        self.assertEqual(channel.label, "chat")
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 1)
-        self.assertEqual(server_channels[0].id, 100)
-        self.assertEqual(server_channels[0].label, "chat")
+            # create second data channel
+            channel2 = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", id=101)
+            )
+            self.assertEqual(channel2.id, 101)
+            self.assertEqual(channel2.label, "chat")
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.id, 100)
+            self.assertEqual(channel.label, "chat")
+            self.assertEqual(channel2.id, 101)
+            self.assertEqual(channel2.label, "chat")
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 2)
+            self.assertEqual(server_channels[0].id, 100)
+            self.assertEqual(server_channels[0].label, "chat")
+            self.assertEqual(server_channels[1].id, 101)
+            self.assertEqual(server_channels[1].label, "chat")
 
-    def test_connect_then_client_creates_negotiated_data_channel_without_id(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel
-        self.assertRaises(
-            ValueError,
-            lambda: RTCDataChannel(
-                client, RTCDataChannelParameters(label="chat", negotiated=True)
-            ),
-        )
-
-        run(asyncio.sleep(0.1))
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_connect_then_client_and_server_creates_negotiated_data_channel(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel for client
-        channel_client = RTCDataChannel(
-            client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-        )
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-
-        # create data channel for server
-        channel_server = RTCDataChannel(
-            server, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-        )
-        self.assertEqual(channel_server.id, 100)
-        self.assertEqual(channel_server.label, "chat")
-
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-        self.assertEqual(channel_server.id, 100)
-        self.assertEqual(channel_server.label, "chat")
-        # both arrays should be 0 as they track data channels created by event
-        #   which is not the case in out-of-band
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 0)
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_connect_then_client_creates_negotiated_data_channel_with_used_id(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
-
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
-
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
-
-        # create data channel for client
-        channel_client = RTCDataChannel(
-            client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-        )
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-
-        self.assertRaises(
-            ValueError,
-            lambda: RTCDataChannel(
-                client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-            ),
-        )
-
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-        # both arrays should be 0 as they track data channels created by event
-        #   which is not the case in out-of-band
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 0)
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(
+    @asynctest
+    async def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(
         self,
     ):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
 
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # create data channel for client
-        channel_client = RTCDataChannel(
-            client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-        )
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-        self.assertEqual(channel_client.readyState, "connecting")
+            # create data channel
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", id=1)
+            )
+            self.assertEqual(channel.id, 1)
+            self.assertEqual(channel.label, "chat")
 
-        # create data channel for server
-        channel_server = RTCDataChannel(
-            server, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
-        )
-        self.assertEqual(channel_server.id, 100)
-        self.assertEqual(channel_server.label, "chat")
-        self.assertEqual(channel_server.readyState, "connecting")
+            # create second data channel
+            channel2 = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            self.assertEqual(channel2.id, None)
+            self.assertEqual(channel2.label, "chat")
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.id, 1)
+            self.assertEqual(channel.label, "chat")
+            self.assertEqual(channel2.id, 3)
+            self.assertEqual(channel2.label, "chat")
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 2)
+            self.assertEqual(server_channels[0].id, 1)
+            self.assertEqual(server_channels[0].label, "chat")
+            self.assertEqual(server_channels[1].id, 3)
+            self.assertEqual(server_channels[1].label, "chat")
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._inbound_streams_count, 65535)
-        self.assertEqual(client._outbound_streams_count, 65535)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._inbound_streams_count, 65535)
-        self.assertEqual(server._outbound_streams_count, 65535)
-        self.assertEqual(server._remote_extensions, [192, 130])
+    @asynctest
+    async def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(
+        self,
+    ):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
 
-        self.assertEqual(channel_client.readyState, "open")
-        self.assertEqual(channel_server.readyState, "open")
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        run(asyncio.sleep(0.1))
-        self.assertEqual(channel_client.id, 100)
-        self.assertEqual(channel_client.label, "chat")
-        self.assertEqual(channel_server.id, 100)
-        self.assertEqual(channel_server.label, "chat")
-        # both arrays should be 0 as they track data channels created by event
-        #   which is not the case in out-of-band
-        self.assertEqual(len(client_channels), 0)
-        self.assertEqual(len(server_channels), 0)
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # create data channel
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", id=100)
+            )
+            self.assertEqual(channel.id, 100)
+            self.assertEqual(channel.label, "chat")
 
-    def test_connect_then_server_creates_data_channel(self):
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
+            # create second data channel with the same id
+            self.assertRaises(
+                ValueError,
+                lambda: RTCDataChannel(
+                    client, RTCDataChannelParameters(label="chat", id=100)
+                ),
+            )
 
-        client_channels = track_channels(client)
-        server_channels = track_channels(server)
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.id, 100)
+            self.assertEqual(channel.label, "chat")
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 1)
+            self.assertEqual(server_channels[0].id, 100)
+            self.assertEqual(server_channels[0].label, "chat")
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+    @asynctest
+    async def test_connect_then_client_creates_negotiated_data_channel_without_id(self):
+        async with client_and_server() as (client, server):
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._remote_extensions, [192, 130])
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._remote_extensions, [192, 130])
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
 
-        # create data channel
-        channel = RTCDataChannel(server, RTCDataChannelParameters(label="chat"))
-        self.assertEqual(channel.id, None)
-        self.assertEqual(channel.label, "chat")
+            # create data channel
+            self.assertRaises(
+                ValueError,
+                lambda: RTCDataChannel(
+                    client, RTCDataChannelParameters(label="chat", negotiated=True)
+                ),
+            )
 
-        run(asyncio.sleep(0.1))
-        self.assertEqual(len(client_channels), 1)
-        self.assertEqual(client_channels[0].id, 0)
-        self.assertEqual(client_channels[0].label, "chat")
-        self.assertEqual(len(server_channels), 0)
+            await asyncio.sleep(0.1)
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+    @asynctest
+    async def test_connect_then_client_and_server_creates_negotiated_data_channel(self):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
+
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
+
+            # create data channel for client
+            channel_client = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
+            )
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+
+            # create data channel for server
+            channel_server = RTCDataChannel(
+                server, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
+            )
+            self.assertEqual(channel_server.id, 100)
+            self.assertEqual(channel_server.label, "chat")
+
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+            self.assertEqual(channel_server.id, 100)
+            self.assertEqual(channel_server.label, "chat")
+            # both arrays should be 0 as they track data channels created by event
+            #   which is not the case in out-of-band
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 0)
+
+    @asynctest
+    async def test_connect_then_client_creates_negotiated_data_channel_with_used_id(
+        self,
+    ):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
+
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
+
+            # create data channel for client
+            channel_client = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
+            )
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+
+            self.assertRaises(
+                ValueError,
+                lambda: RTCDataChannel(
+                    client,
+                    RTCDataChannelParameters(label="chat", negotiated=True, id=100),
+                ),
+            )
+
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+            # both arrays should be 0 as they track data channels created by event
+            #   which is not the case in out-of-band
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 0)
+
+    @asynctest
+    async def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(
+        self,
+    ):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
+
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+
+            # create data channel for client
+            channel_client = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
+            )
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+            self.assertEqual(channel_client.readyState, "connecting")
+
+            # create data channel for server
+            channel_server = RTCDataChannel(
+                server, RTCDataChannelParameters(label="chat", negotiated=True, id=100)
+            )
+            self.assertEqual(channel_server.id, 100)
+            self.assertEqual(channel_server.label, "chat")
+            self.assertEqual(channel_server.readyState, "connecting")
+
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._inbound_streams_count, 65535)
+            self.assertEqual(client._outbound_streams_count, 65535)
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._inbound_streams_count, 65535)
+            self.assertEqual(server._outbound_streams_count, 65535)
+            self.assertEqual(server._remote_extensions, [192, 130])
+
+            self.assertEqual(channel_client.readyState, "open")
+            self.assertEqual(channel_server.readyState, "open")
+
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel_client.id, 100)
+            self.assertEqual(channel_client.label, "chat")
+            self.assertEqual(channel_server.id, 100)
+            self.assertEqual(channel_server.label, "chat")
+            # both arrays should be 0 as they track data channels created by event
+            #   which is not the case in out-of-band
+            self.assertEqual(len(client_channels), 0)
+            self.assertEqual(len(server_channels), 0)
+
+    @asynctest
+    async def test_connect_then_server_creates_data_channel(self):
+        async with client_and_server() as (client, server):
+            client_channels = track_channels(client)
+            server_channels = track_channels(server)
+
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._remote_extensions, [192, 130])
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._remote_extensions, [192, 130])
+
+            # create data channel
+            channel = RTCDataChannel(server, RTCDataChannelParameters(label="chat"))
+            self.assertEqual(channel.id, None)
+            self.assertEqual(channel.label, "chat")
+
+            await asyncio.sleep(0.1)
+            self.assertEqual(len(client_channels), 1)
+            self.assertEqual(client_channels[0].id, 0)
+            self.assertEqual(client_channels[0].label, "chat")
+            self.assertEqual(len(server_channels), 0)
 
     @patch("aiortc.rtcsctptransport.logger.isEnabledFor")
-    def test_connect_with_logging(self, mock_is_enabled_for):
+    @asynctest
+    async def test_connect_with_logging(self, mock_is_enabled_for):
         mock_is_enabled_for.return_value = True
 
-        client = RTCSctpTransport(self.client_transport)
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        self.assertTrue(server.is_server)
+        async with client_and_server() as (client, server):
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+    @asynctest
+    async def test_connect_with_partial_reliability(self):
+        async with client_and_server() as (client, server):
+            client._local_partial_reliability = True
+            server._local_partial_reliability = False
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-    def test_connect_with_partial_reliability(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._local_partial_reliability = True
-        self.assertFalse(client.is_server)
-        server = RTCSctpTransport(self.server_transport)
-        server._local_partial_reliability = False
-        self.assertTrue(server.is_server)
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(client._remote_extensions, [130])
+            self.assertEqual(client._remote_partial_reliability, False)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(server._remote_extensions, [192, 130])
+            self.assertEqual(server._remote_partial_reliability, True)
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(client._remote_extensions, [130])
-        self.assertEqual(client._remote_partial_reliability, False)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._remote_extensions, [192, 130])
-        self.assertEqual(server._remote_partial_reliability, True)
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_abrupt_disconnect(self):
+    @asynctest
+    async def test_abrupt_disconnect(self):
         """
         Abrupt disconnect causes sending ABORT chunk to fail.
         """
-        client = RTCSctpTransport(self.client_transport)
-        server = RTCSctpTransport(self.server_transport)
+        async with client_and_server() as (client, server):
+            # connect
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        # connect
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
 
-        # check outcome
-        run(wait_for_outcome(client, server))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.ESTABLISHED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.ESTABLISHED)
+            # break connection
+            await client.transport.stop()
+            await server.transport.stop()
+            await asyncio.sleep(0)  # FIXME
 
-        # break connection
-        run(self.client_transport.stop())
-        run(self.server_transport.stop())
+    @asynctest
+    async def test_garbage(self):
+        async with client_and_server() as (client, server):
+            await server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
+            await server._handle_data(b"garbage")
 
-        # stop
-        run(client.stop())
-        run(server.stop())
+            # check outcome
+            await asyncio.sleep(0.1)
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
-    def test_garbage(self):
-        server = RTCSctpTransport(self.server_transport)
-        run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
-        asyncio.ensure_future(self.client_transport._send_data(b"garbage"))
-
-        # check outcome
-        run(asyncio.sleep(0.1))
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-        # shutdown
-        run(server.stop())
-
-    def test_bad_verification_tag(self):
+    @asynctest
+    async def test_bad_verification_tag(self):
         # verification tag is 12345 instead of 0
         data = load("sctp_init_bad_verification.bin")
 
-        server = RTCSctpTransport(self.server_transport)
-        run(server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000))
-        asyncio.ensure_future(self.client_transport._send_data(data))
+        async with client_and_server() as (client, server):
+            await server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
+            await server._handle_data(data)
 
-        # check outcome
-        run(asyncio.sleep(0.1))
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # check outcome
+            await asyncio.sleep(0.1)
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
-        # shutdown
-        run(server.stop())
+    @asynctest
+    async def test_bad_cookie(self):
+        async with client_and_server() as (client, server):
+            # corrupt cookie
+            real_send_chunk = client._send_chunk
 
-    def test_bad_cookie(self):
-        client = RTCSctpTransport(self.client_transport)
-        server = RTCSctpTransport(self.server_transport)
+            async def mock_send_chunk(chunk):
+                if isinstance(chunk, CookieEchoChunk):
+                    chunk.body = b"garbage"
+                return await real_send_chunk(chunk)
 
-        # corrupt cookie
-        real_send_chunk = client._send_chunk
+            client._send_chunk = mock_send_chunk
 
-        async def mock_send_chunk(chunk):
-            if isinstance(chunk, CookieEchoChunk):
-                chunk.body = b"garbage"
-            return await real_send_chunk(chunk)
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        client._send_chunk = mock_send_chunk
+            # check outcome
+            await asyncio.sleep(0.1)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.COOKIE_ECHOED
+            )
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
-
-        # check outcome
-        run(asyncio.sleep(0.1))
-        self.assertEqual(
-            client._association_state, RTCSctpTransport.State.COOKIE_ECHOED
-        )
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-
-    def test_maybe_abandon(self):
+    @asynctest
+    async def test_maybe_abandon(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._local_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._local_tsn = 0
+            client._send_chunk = mock_send_chunk
 
-        # send 3 chunks
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 3))
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [])
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._abandoned, False)
+            # send 3 chunks
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 3)
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [])
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._abandoned, False)
 
-        # try abandon middle chunk
-        client._maybe_abandon(client._sent_queue[1])
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._abandoned, False)
+            # try abandon middle chunk
+            client._maybe_abandon(client._sent_queue[1])
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._abandoned, False)
 
-    def test_maybe_abandon_max_retransmits(self):
+    @asynctest
+    async def test_maybe_abandon_max_retransmits(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._local_tsn = 1
-        client._last_sacked_tsn = 0
-        client._advanced_peer_ack_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._local_tsn = 1
+            client._last_sacked_tsn = 0
+            client._advanced_peer_ack_tsn = 0
+            client._send_chunk = mock_send_chunk
 
-        # send 3 chunks
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 3, max_retransmits=0))
-        self.assertEqual(outstanding_tsns(client), [1, 2, 3])
-        self.assertEqual(queued_tsns(client), [])
-        self.assertEqual(client._local_tsn, 4)
-        self.assertEqual(client._advanced_peer_ack_tsn, 0)
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._abandoned, False)
+            # send 3 chunks
+            await client._send(
+                123, 456, b"M" * USERDATA_MAX_LENGTH * 3, max_retransmits=0
+            )
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._local_tsn, 4)
+            self.assertEqual(client._advanced_peer_ack_tsn, 0)
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._abandoned, False)
 
-        # try abandon middle chunk
-        client._maybe_abandon(client._sent_queue[1])
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._abandoned, True)
+            # try abandon middle chunk
+            client._maybe_abandon(client._sent_queue[1])
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._abandoned, True)
 
-        # try abandon middle chunk (again)
-        client._maybe_abandon(client._sent_queue[1])
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._abandoned, True)
+            # try abandon middle chunk (again)
+            client._maybe_abandon(client._sent_queue[1])
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._abandoned, True)
 
-        # update advanced peer ack point
-        client._update_advanced_peer_ack_point()
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
-        self.assertEqual(client._advanced_peer_ack_tsn, 3)
+            # update advanced peer ack point
+            client._update_advanced_peer_ack_point()
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._advanced_peer_ack_tsn, 3)
 
-        # check forward TSN
-        self.assertIsNotNone(client._forward_tsn_chunk)
-        self.assertEqual(client._forward_tsn_chunk.cumulative_tsn, 3)
-        self.assertEqual(client._forward_tsn_chunk.streams, [(123, 0)])
+            # check forward TSN
+            self.assertIsNotNone(client._forward_tsn_chunk)
+            self.assertEqual(client._forward_tsn_chunk.cumulative_tsn, 3)
+            self.assertEqual(client._forward_tsn_chunk.streams, [(123, 0)])
 
-        # transmit
-        client._t3_cancel()
-        run(client._transmit())
-        self.assertIsNone(client._forward_tsn_chunk)
-        self.assertIsNotNone(client._t3_handle)
+            # transmit
+            client._t3_cancel()
+            await client._transmit()
+            self.assertIsNone(client._forward_tsn_chunk)
+            self.assertIsNotNone(client._t3_handle)
 
-    def test_stale_cookie(self):
+    @asynctest
+    async def test_stale_cookie(self):
         def mock_timestamp():
             mock_timestamp.calls += 1
             if mock_timestamp.calls == 1:
@@ -1458,920 +1416,929 @@ class RTCSctpTransportTest(TestCase):
 
         mock_timestamp.calls = 0
 
-        client = RTCSctpTransport(self.client_transport)
-        server = RTCSctpTransport(self.server_transport)
+        async with client_and_server() as (client, server):
+            server._get_timestamp = mock_timestamp
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
 
-        server._get_timestamp = mock_timestamp
-        run(server.start(client.getCapabilities(), client.port))
-        run(client.start(server.getCapabilities(), server.port))
+            # check outcome
+            await asyncio.sleep(0.1)
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
-        # check outcome
-        run(asyncio.sleep(0.1))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+    @asynctest
+    async def test_receive_data(self):
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
 
-        # shutdown
-        run(client.stop())
-        run(server.stop())
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
-        self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            # receive chunk
+            chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
+            chunk.user_data = b"foo"
+            chunk.tsn = 1
+            await client._receive_chunk(chunk)
 
-    def test_receive_data(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set())
+            self.assertEqual(client._last_received_tsn, 1)
+            client._sack_needed = False
 
-        # receive chunk
-        chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
-        chunk.user_data = b"foo"
-        chunk.tsn = 1
-        run(client._receive_chunk(chunk))
+            # receive chunk again
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [1])
+            self.assertEqual(client._sack_misordered, set())
+            self.assertEqual(client._last_received_tsn, 1)
 
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set())
-        self.assertEqual(client._last_received_tsn, 1)
-        client._sack_needed = False
+    @asynctest
+    async def test_receive_data_out_of_order(self):
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
 
-        # receive chunk again
-        run(client._receive_chunk(chunk))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [1])
-        self.assertEqual(client._sack_misordered, set())
-        self.assertEqual(client._last_received_tsn, 1)
+            # build chunks
+            chunks = []
 
-    def test_receive_data_out_of_order(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
+            chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
+            chunk.user_data = b"foo"
+            chunk.tsn = 1
+            chunks.append(chunk)
 
-        # build chunks
-        chunks = []
+            chunk = DataChunk()
+            chunk.user_data = b"bar"
+            chunk.tsn = 2
+            chunks.append(chunk)
 
-        chunk = DataChunk(flags=SCTP_DATA_FIRST_FRAG)
-        chunk.user_data = b"foo"
-        chunk.tsn = 1
-        chunks.append(chunk)
+            chunk = DataChunk(flags=SCTP_DATA_LAST_FRAG)
+            chunk.user_data = b"baz"
+            chunk.tsn = 3
+            chunks.append(chunk)
 
-        chunk = DataChunk()
-        chunk.user_data = b"bar"
-        chunk.tsn = 2
-        chunks.append(chunk)
+            # receive first chunk
+            await client._receive_chunk(chunks[0])
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set())
+            self.assertEqual(client._last_received_tsn, 1)
+            client._sack_needed = False
 
-        chunk = DataChunk(flags=SCTP_DATA_LAST_FRAG)
-        chunk.user_data = b"baz"
-        chunk.tsn = 3
-        chunks.append(chunk)
+            # receive last chunk
+            await client._receive_chunk(chunks[2])
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set([3]))
+            self.assertEqual(client._last_received_tsn, 1)
+            client._sack_needed = False
 
-        # receive first chunk
-        run(client._receive_chunk(chunks[0]))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set())
-        self.assertEqual(client._last_received_tsn, 1)
-        client._sack_needed = False
+            # receive middle chunk
+            await client._receive_chunk(chunks[1])
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set([]))
+            self.assertEqual(client._last_received_tsn, 3)
+            client._sack_needed = False
 
-        # receive last chunk
-        run(client._receive_chunk(chunks[2]))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set([3]))
-        self.assertEqual(client._last_received_tsn, 1)
-        client._sack_needed = False
+            # receive last chunk again
+            await client._receive_chunk(chunks[2])
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [3])
+            self.assertEqual(client._sack_misordered, set([]))
+            self.assertEqual(client._last_received_tsn, 3)
+            client._sack_needed = False
 
-        # receive middle chunk
-        run(client._receive_chunk(chunks[1]))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set([]))
-        self.assertEqual(client._last_received_tsn, 3)
-        client._sack_needed = False
-
-        # receive last chunk again
-        run(client._receive_chunk(chunks[2]))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [3])
-        self.assertEqual(client._sack_misordered, set([]))
-        self.assertEqual(client._last_received_tsn, 3)
-        client._sack_needed = False
-
-    def test_receive_forward_tsn(self):
+    @asynctest
+    async def test_receive_forward_tsn(self):
         received = []
 
         async def fake_receive(*args):
             received.append(args)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 101
-        client._receive = fake_receive
+        async with client_standalone() as client:
+            client._last_received_tsn = 101
+            client._receive = fake_receive
 
-        factory = ChunkFactory(tsn=102)
-        chunks = (
-            factory.create([b"foo"])
-            + factory.create([b"baz"])
-            + factory.create([b"qux"])
-            + factory.create([b"quux"])
-            + factory.create([b"corge"])
-            + factory.create([b"grault"])
-        )
+            factory = ChunkFactory(tsn=102)
+            chunks = (
+                factory.create([b"foo"])
+                + factory.create([b"baz"])
+                + factory.create([b"qux"])
+                + factory.create([b"quux"])
+                + factory.create([b"corge"])
+                + factory.create([b"grault"])
+            )
 
-        # receive chunks with gaps
-        for i in [0, 2, 3, 5]:
-            run(client._receive_chunk(chunks[i]))
+            # receive chunks with gaps
+            for i in [0, 2, 3, 5]:
+                await client._receive_chunk(chunks[i])
 
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set([104, 105, 107]))
-        self.assertEqual(client._last_received_tsn, 102)
-        self.assertEqual(received, [(456, 123, b"foo")])
-        received.clear()
-        client._sack_needed = False
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set([104, 105, 107]))
+            self.assertEqual(client._last_received_tsn, 102)
+            self.assertEqual(received, [(456, 123, b"foo")])
+            received.clear()
+            client._sack_needed = False
 
-        # receive forward tsn
-        chunk = ForwardTsnChunk()
-        chunk.cumulative_tsn = 103
-        chunk.streams = [(456, 1)]
-        run(client._receive_chunk(chunk))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set([107]))
-        self.assertEqual(client._last_received_tsn, 105)
-        self.assertEqual(received, [(456, 123, b"qux"), (456, 123, b"quux")])
-        received.clear()
-        client._sack_needed = False
+            # receive forward tsn
+            chunk = ForwardTsnChunk()
+            chunk.cumulative_tsn = 103
+            chunk.streams = [(456, 1)]
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set([107]))
+            self.assertEqual(client._last_received_tsn, 105)
+            self.assertEqual(received, [(456, 123, b"qux"), (456, 123, b"quux")])
+            received.clear()
+            client._sack_needed = False
 
-        # receive forward tsn again
-        run(client._receive_chunk(chunk))
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set([107]))
-        self.assertEqual(client._last_received_tsn, 105)
-        self.assertEqual(received, [])
-        client._sack_needed = False
+            # receive forward tsn again
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set([107]))
+            self.assertEqual(client._last_received_tsn, 105)
+            self.assertEqual(received, [])
+            client._sack_needed = False
 
-        # receive chunk
-        run(client._receive_chunk(chunks[4]))
+            # receive chunk
+            await client._receive_chunk(chunks[4])
 
-        self.assertEqual(client._sack_needed, True)
-        self.assertEqual(client._sack_duplicates, [])
-        self.assertEqual(client._sack_misordered, set())
-        self.assertEqual(client._last_received_tsn, 107)
-        self.assertEqual(received, [(456, 123, b"corge"), (456, 123, b"grault")])
-        received.clear()
-        client._sack_needed = False
+            self.assertEqual(client._sack_needed, True)
+            self.assertEqual(client._sack_duplicates, [])
+            self.assertEqual(client._sack_misordered, set())
+            self.assertEqual(client._last_received_tsn, 107)
+            self.assertEqual(received, [(456, 123, b"corge"), (456, 123, b"grault")])
+            received.clear()
+            client._sack_needed = False
 
-    def test_receive_heartbeat(self):
+    @asynctest
+    async def test_receive_heartbeat(self):
         ack = None
 
         async def mock_send_chunk(chunk):
             nonlocal ack
             ack = chunk
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
-        client._remote_port = 5000
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._send_chunk = mock_send_chunk
 
-        # receive heartbeat
-        chunk = HeartbeatChunk()
-        chunk.params.append((1, b"\x01\x02\x03\x04"))
-        chunk.tsn = 1
-        run(client._receive_chunk(chunk))
+            # receive heartbeat
+            chunk = HeartbeatChunk()
+            chunk.params.append((1, b"\x01\x02\x03\x04"))
+            chunk.tsn = 1
+            await client._receive_chunk(chunk)
 
-        # check response
-        self.assertTrue(isinstance(ack, HeartbeatAckChunk))
-        self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
+            # check response
+            self.assertTrue(isinstance(ack, HeartbeatAckChunk))
+            self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
 
-    def test_receive_sack_discard(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
+    @asynctest
+    async def test_receive_sack_discard(self):
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
 
-        # receive sack
-        sack_point = client._last_sacked_tsn
-        chunk = SackChunk()
-        chunk.cumulative_tsn = tsn_minus_one(sack_point)
-        run(client._receive_chunk(chunk))
+            # receive sack
+            sack_point = client._last_sacked_tsn
+            chunk = SackChunk()
+            chunk.cumulative_tsn = tsn_minus_one(sack_point)
+            await client._receive_chunk(chunk)
 
-        # sack point must not changed
-        self.assertEqual(client._last_sacked_tsn, sack_point)
+            # sack point must not changed
+            self.assertEqual(client._last_sacked_tsn, sack_point)
 
-    def test_receive_shutdown(self):
+    @asynctest
+    async def test_receive_shutdown(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
-        client._send_chunk = mock_send_chunk
-        client._set_state(RTCSctpTransport.State.ESTABLISHED)
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._send_chunk = mock_send_chunk
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
-        # receive shutdown
-        chunk = ShutdownChunk()
-        chunk.cumulative_tsn = tsn_minus_one(client._last_sacked_tsn)
-        run(client._receive_chunk(chunk))
-        self.assertEqual(
-            client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
-        )
+            # receive shutdown
+            chunk = ShutdownChunk()
+            chunk.cumulative_tsn = tsn_minus_one(client._last_sacked_tsn)
+            await client._receive_chunk(chunk)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+            )
 
-        # receive shutdown complete
-        chunk = ShutdownCompleteChunk()
-        run(client._receive_chunk(chunk))
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            # receive shutdown complete
+            chunk = ShutdownCompleteChunk()
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
 
-    def test_mark_received(self):
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
+    @asynctest
+    async def test_mark_received(self):
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
 
-        # receive 1
-        self.assertFalse(client._mark_received(1))
-        self.assertEqual(client._last_received_tsn, 1)
-        self.assertEqual(client._sack_misordered, set())
+            # receive 1
+            self.assertFalse(client._mark_received(1))
+            self.assertEqual(client._last_received_tsn, 1)
+            self.assertEqual(client._sack_misordered, set())
 
-        # receive 3
-        self.assertFalse(client._mark_received(3))
-        self.assertEqual(client._last_received_tsn, 1)
-        self.assertEqual(client._sack_misordered, set([3]))
+            # receive 3
+            self.assertFalse(client._mark_received(3))
+            self.assertEqual(client._last_received_tsn, 1)
+            self.assertEqual(client._sack_misordered, set([3]))
 
-        # receive 4
-        self.assertFalse(client._mark_received(4))
-        self.assertEqual(client._last_received_tsn, 1)
-        self.assertEqual(client._sack_misordered, set([3, 4]))
+            # receive 4
+            self.assertFalse(client._mark_received(4))
+            self.assertEqual(client._last_received_tsn, 1)
+            self.assertEqual(client._sack_misordered, set([3, 4]))
 
-        # receive 6
-        self.assertFalse(client._mark_received(6))
-        self.assertEqual(client._last_received_tsn, 1)
-        self.assertEqual(client._sack_misordered, set([3, 4, 6]))
+            # receive 6
+            self.assertFalse(client._mark_received(6))
+            self.assertEqual(client._last_received_tsn, 1)
+            self.assertEqual(client._sack_misordered, set([3, 4, 6]))
 
-        # receive 2
-        self.assertFalse(client._mark_received(2))
-        self.assertEqual(client._last_received_tsn, 4)
-        self.assertEqual(client._sack_misordered, set([6]))
+            # receive 2
+            self.assertFalse(client._mark_received(2))
+            self.assertEqual(client._last_received_tsn, 4)
+            self.assertEqual(client._sack_misordered, set([6]))
 
-    def test_send_sack(self):
+    @asynctest
+    async def test_send_sack(self):
         sack = None
 
         async def mock_send_chunk(c):
             nonlocal sack
             sack = c
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 123
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_received_tsn = 123
+            client._send_chunk = mock_send_chunk
 
-        run(client._send_sack())
-        self.assertIsNotNone(sack)
-        self.assertEqual(sack.duplicates, [])
-        self.assertEqual(sack.gaps, [])
-        self.assertEqual(sack.cumulative_tsn, 123)
+            await client._send_sack()
+            self.assertIsNotNone(sack)
+            self.assertEqual(sack.duplicates, [])
+            self.assertEqual(sack.gaps, [])
+            self.assertEqual(sack.cumulative_tsn, 123)
 
-    def test_send_sack_with_duplicates(self):
+    @asynctest
+    async def test_send_sack_with_duplicates(self):
         sack = None
 
         async def mock_send_chunk(c):
             nonlocal sack
             sack = c
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 123
-        client._sack_duplicates = [125, 127]
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_received_tsn = 123
+            client._sack_duplicates = [125, 127]
+            client._send_chunk = mock_send_chunk
 
-        run(client._send_sack())
-        self.assertIsNotNone(sack)
-        self.assertEqual(sack.duplicates, [125, 127])
-        self.assertEqual(sack.gaps, [])
-        self.assertEqual(sack.cumulative_tsn, 123)
+            await client._send_sack()
+            self.assertIsNotNone(sack)
+            self.assertEqual(sack.duplicates, [125, 127])
+            self.assertEqual(sack.gaps, [])
+            self.assertEqual(sack.cumulative_tsn, 123)
 
-    def test_send_sack_with_gaps(self):
+    @asynctest
+    async def test_send_sack_with_gaps(self):
         sack = None
 
         async def mock_send_chunk(c):
             nonlocal sack
             sack = c
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 12
-        client._sack_misordered = [14, 15, 17]
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_received_tsn = 12
+            client._sack_misordered = [14, 15, 17]
+            client._send_chunk = mock_send_chunk
 
-        run(client._send_sack())
-        self.assertIsNotNone(sack)
-        self.assertEqual(sack.duplicates, [])
-        self.assertEqual(sack.gaps, [(2, 3), (5, 5)])
-        self.assertEqual(sack.cumulative_tsn, 12)
+            await client._send_sack()
+            self.assertIsNotNone(sack)
+            self.assertEqual(sack.duplicates, [])
+            self.assertEqual(sack.gaps, [(2, 3), (5, 5)])
+            self.assertEqual(sack.cumulative_tsn, 12)
 
-    def test_send_data(self):
+    @asynctest
+    async def test_send_data(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._local_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._local_tsn = 0
+            client._send_chunk = mock_send_chunk
 
-        # no data
-        run(client._transmit())
-        self.assertIsNone(client._t3_handle)
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
-        self.assertEqual(client._outbound_stream_seq, {})
+            # no data
+            await client._transmit()
+            self.assertIsNone(client._t3_handle)
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._outbound_stream_seq, {})
 
-        # 1 chunk
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH))
-        self.assertIsNotNone(client._t3_handle)
-        self.assertEqual(outstanding_tsns(client), [0])
-        self.assertEqual(queued_tsns(client), [])
-        self.assertEqual(client._outbound_stream_seq, {123: 1})
+            # 1 chunk
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH)
+            self.assertIsNotNone(client._t3_handle)
+            self.assertEqual(outstanding_tsns(client), [0])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._outbound_stream_seq, {123: 1})
 
-    def test_send_data_unordered(self):
+    @asynctest
+    async def test_send_data_unordered(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._local_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._local_tsn = 0
+            client._send_chunk = mock_send_chunk
 
-        # 1 chunk
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH, ordered=False))
-        self.assertIsNotNone(client._t3_handle)
-        self.assertEqual(outstanding_tsns(client), [0])
-        self.assertEqual(queued_tsns(client), [])
-        self.assertEqual(client._outbound_stream_seq, {})
+            # 1 chunk
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH, ordered=False)
+            self.assertIsNotNone(client._t3_handle)
+            self.assertEqual(outstanding_tsns(client), [0])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._outbound_stream_seq, {})
 
-    def test_send_data_congestion_control(self):
+    @asynctest
+    async def test_send_data_congestion_control(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._cwnd = 4800
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 4800
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._cwnd = 4800
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 4800
+            client._send_chunk = mock_send_chunk
 
-        # queue 16 chunks, but cwnd only allows 4
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 16))
+            # queue 16 chunks, but cwnd only allows 4
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 16)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3])
-        self.assertEqual(
-            queued_tsns(client), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-        )
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3])
+            self.assertEqual(
+                queued_tsns(client), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            )
 
-        # SACK comes in acknowledging 2 chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 6000)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6])
-        self.assertEqual(queued_tsns(client), [7, 8, 9, 10, 11, 12, 13, 14, 15])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 6000)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6])
+            self.assertEqual(queued_tsns(client), [7, 8, 9, 10, 11, 12, 13, 14, 15])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 3
-        run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 3
+            await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 6000)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8])
-        self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7, 8])
-        self.assertEqual(queued_tsns(client), [9, 10, 11, 12, 13, 14, 15])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 6000)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7, 8])
+            self.assertEqual(queued_tsns(client), [9, 10, 11, 12, 13, 14, 15])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 5
-        run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 5
+            await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 6000)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-        self.assertEqual(outstanding_tsns(client), [6, 7, 8, 9, 10])
-        self.assertEqual(queued_tsns(client), [11, 12, 13, 14, 15])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 6000)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            self.assertEqual(outstanding_tsns(client), [6, 7, 8, 9, 10])
+            self.assertEqual(queued_tsns(client), [11, 12, 13, 14, 15])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 7200)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 7200)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-        self.assertEqual(outstanding_tsns(client), [8, 9, 10, 11, 12, 13])
-        self.assertEqual(queued_tsns(client), [14, 15])
+            self.assertEqual(client._cwnd, 7200)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 7200)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+            self.assertEqual(outstanding_tsns(client), [8, 9, 10, 11, 12, 13])
+            self.assertEqual(queued_tsns(client), [14, 15])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 9
-        run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 9
+            await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 7200)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 7200)
-        self.assertEqual(
-            sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-        )
-        self.assertEqual(outstanding_tsns(client), [10, 11, 12, 13, 14, 15])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 7200)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 7200)
+            self.assertEqual(
+                sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            )
+            self.assertEqual(outstanding_tsns(client), [10, 11, 12, 13, 14, 15])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_send_data_slow_start(self):
+    @asynctest
+    async def test_send_data_slow_start(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 131072
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 131072
+            client._send_chunk = mock_send_chunk
 
-        # queue 8 chunks, but cwnd only allows 3
-        with self.assertTimerRestarted(client):
-            run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8))
+            # queue 8 chunks, but cwnd only allows 3
+            with self.assertTimerRestarted(client):
+                await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
 
-        # SACK comes in acknowledging 2 chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5])
-        self.assertEqual(queued_tsns(client), [6, 7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5])
+            self.assertEqual(queued_tsns(client), [6, 7])
 
-        # SACK sack comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 3
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK sack comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 3
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 5
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 5
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 2400)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 2400)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging final chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        with self.assertTimerStopped(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging final chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            with self.assertTimerStopped(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 0)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 0)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_send_data_with_gap(self):
+    @asynctest
+    async def test_send_data_with_gap(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 131072
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 131072
+            client._send_chunk = mock_send_chunk
 
-        # queue 8 chunks, but cwnd only allows 3
-        with self.assertTimerRestarted(client):
-            run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8))
+            # queue 8 chunks, but cwnd only allows 3
+            with self.assertTimerRestarted(client):
+                await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
 
-        # SACK comes in acknowledging chunks 0 and 2
-        sack = SackChunk()
-        sack.cumulative_tsn = 0
-        sack.gaps = [(2, 2)]  # TSN 1 is missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunks 0 and 2
+            sack = SackChunk()
+            sack.cumulative_tsn = 0
+            sack.gaps = [(2, 2)]  # TSN 1 is missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5])
-        self.assertEqual(queued_tsns(client), [6, 7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5])
+            self.assertEqual(queued_tsns(client), [6, 7])
 
-        # SACK comes in acknowledging chunks 1 and 3
-        sack = SackChunk()
-        sack.cumulative_tsn = 3
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunks 1 and 3
+            sack = SackChunk()
+            sack.cumulative_tsn = 3
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 5
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 5
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 2400)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 2400)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging final chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        with self.assertTimerStopped(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging final chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            with self.assertTimerStopped(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 6000)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 0)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 6000)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 0)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_send_data_with_gap_1_retransmit(self):
+    @asynctest
+    async def test_send_data_with_gap_1_retransmit(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 131072
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 131072
+            client._send_chunk = mock_send_chunk
 
-        # queue 8 chunks, but cwnd only allows 3
-        with self.assertTimerRestarted(client):
-            run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8))
+            # queue 8 chunks, but cwnd only allows 3
+            with self.assertTimerRestarted(client):
+                await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
 
-        # SACK comes in acknowledging chunks 0 and 2
-        sack = SackChunk()
-        sack.cumulative_tsn = 0
-        sack.gaps = [(2, 2)]  # TSN 1 is missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunks 0 and 2
+            sack = SackChunk()
+            sack.cumulative_tsn = 0
+            sack.gaps = [(2, 2)]  # TSN 1 is missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5])
-        self.assertEqual(queued_tsns(client), [6, 7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5])
+            self.assertEqual(queued_tsns(client), [6, 7])
 
-        # SACK comes in acknowledging chunks 3 and 4
-        sack = SackChunk()
-        sack.cumulative_tsn = 0
-        sack.gaps = [(2, 4)]  # TSN 1 is missing
-        with self.assertTimerPreserved(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunks 3 and 4
+            sack = SackChunk()
+            sack.cumulative_tsn = 0
+            sack.gaps = [(2, 4)]  # TSN 1 is missing
+            with self.assertTimerPreserved(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging 2 more chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 0
-        sack.gaps = [(2, 6)]  # TSN 1 is missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging 2 more chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 0
+            sack.gaps = [(2, 6)]  # TSN 1 is missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, 7)
-        self.assertEqual(client._flight_size, 2400)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
-        self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, 7)
+            self.assertEqual(client._flight_size, 2400)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging final chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        with self.assertTimerStopped(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging final chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            with self.assertTimerStopped(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 0)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 0)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 1])
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_send_data_with_gap_2_retransmit(self):
+    @asynctest
+    async def test_send_data_with_gap_2_retransmit(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 131072
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 131072
+            client._send_chunk = mock_send_chunk
 
-        # queue 8 chunks, but cwnd only allows 3
-        with self.assertTimerRestarted(client):
-            run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8))
+            # queue 8 chunks, but cwnd only allows 3
+            with self.assertTimerRestarted(client):
+                await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
 
-        # SACK comes in acknowledging chunk 2
-        sack = SackChunk()
-        sack.cumulative_tsn = 4294967295
-        sack.gaps = [(3, 3)]  # TSN 0 and 1 are missing
-        with self.assertTimerPreserved(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 2
+            sack = SackChunk()
+            sack.cumulative_tsn = 4294967295
+            sack.gaps = [(3, 3)]  # TSN 0 and 1 are missing
+            with self.assertTimerPreserved(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3])
-        self.assertEqual(queued_tsns(client), [4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3])
+            self.assertEqual(queued_tsns(client), [4, 5, 6, 7])
 
-        # SACK comes in acknowledging chunk 3
-        sack = SackChunk()
-        sack.cumulative_tsn = 4294967295
-        sack.gaps = [(3, 4)]  # TSN 0 and 1 are missing
-        with self.assertTimerPreserved(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 3
+            sack = SackChunk()
+            sack.cumulative_tsn = 4294967295
+            sack.gaps = [(3, 4)]  # TSN 0 and 1 are missing
+            with self.assertTimerPreserved(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3, 4])
-        self.assertEqual(queued_tsns(client), [5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3, 4])
+            self.assertEqual(queued_tsns(client), [5, 6, 7])
 
-        # SACK comes in acknowledging chunk 4
-        sack = SackChunk()
-        sack.cumulative_tsn = 4294967295
-        sack.gaps = [(3, 5)]  # TSN 0 and 1 are missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 4
+            sack = SackChunk()
+            sack.cumulative_tsn = 4294967295
+            sack.gaps = [(3, 5)]  # TSN 0 and 1 are missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, 4)
-        self.assertEqual(client._flight_size, 2400)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3, 4])
-        self.assertEqual(queued_tsns(client), [5, 6, 7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, 4)
+            self.assertEqual(client._flight_size, 2400)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2, 3, 4])
+            self.assertEqual(queued_tsns(client), [5, 6, 7])
 
-        # SACK comes in acknowledging all chunks up to 4
-        sack = SackChunk()
-        sack.cumulative_tsn = 4
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging all chunks up to 4
+            sack = SackChunk()
+            sack.cumulative_tsn = 4
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging final chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        with self.assertTimerStopped(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging final chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            with self.assertTimerStopped(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 0)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 0)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 0, 1, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_send_data_with_gap_3_retransmit(self):
+    @asynctest
+    async def test_send_data_with_gap_3_retransmit(self):
         sent_tsns = []
 
         async def mock_send_chunk(chunk):
             sent_tsns.append(chunk.tsn)
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_sacked_tsn = 4294967295
-        client._local_tsn = 0
-        client._ssthresh = 131072
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._ssthresh = 131072
+            client._send_chunk = mock_send_chunk
 
-        # queue 8 chunks, but cwnd only allows 3
-        with self.assertTimerRestarted(client):
-            run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8))
+            # queue 8 chunks, but cwnd only allows 3
+            with self.assertTimerRestarted(client):
+                await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 8)
 
-        self.assertEqual(client._cwnd, 3600)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2])
-        self.assertEqual(outstanding_tsns(client), [0, 1, 2])
-        self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
+            self.assertEqual(client._cwnd, 3600)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2])
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3, 4, 5, 6, 7])
 
-        # SACK comes in acknowledging chunks 0 and 1
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunks 0 and 1
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5])
-        self.assertEqual(queued_tsns(client), [6, 7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5])
+            self.assertEqual(queued_tsns(client), [6, 7])
 
-        # SACK comes in acknowledging chunk 5
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        sack.gaps = [(4, 4)]  # TSN 2, 3 and 4 are missing
-        with self.assertTimerPreserved(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 5
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            sack.gaps = [(4, 4)]  # TSN 2, 3 and 4 are missing
+            with self.assertTimerPreserved(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6])
-        self.assertEqual(queued_tsns(client), [7])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6])
+            self.assertEqual(queued_tsns(client), [7])
 
-        # SACK comes in acknowledging chunk 6
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        sack.gaps = [(4, 5)]  # TSN 2, 3 and 4 are missing
-        with self.assertTimerPreserved(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 6
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            sack.gaps = [(4, 5)]  # TSN 2, 3 and 4 are missing
+            with self.assertTimerPreserved(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # artificially raise flight size to hit cwnd
-        client._flight_size += 2400
+            # artificially raise flight size to hit cwnd
+            client._flight_size += 2400
 
-        # SACK comes in acknowledging chunk 7
-        sack = SackChunk()
-        sack.cumulative_tsn = 1
-        sack.gaps = [(4, 6)]  # TSN 2, 3 and 4 are missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging chunk 7
+            sack = SackChunk()
+            sack.cumulative_tsn = 1
+            sack.gaps = [(4, 6)]  # TSN 2, 3 and 4 are missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, 7)
-        self.assertEqual(client._flight_size, 4800)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3])
-        self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, 7)
+            self.assertEqual(client._flight_size, 4800)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3])
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in acknowledging all chunks up to 3, and 5, 6, 7
-        sack = SackChunk()
-        sack.cumulative_tsn = 3
-        sack.gaps = [(2, 4)]  # TSN 4 is missing
-        with self.assertTimerRestarted(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in acknowledging all chunks up to 3, and 5, 6, 7
+            sack = SackChunk()
+            sack.cumulative_tsn = 3
+            sack.gaps = [(2, 4)]  # TSN 4 is missing
+            with self.assertTimerRestarted(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, 7)
-        self.assertEqual(client._flight_size, 3600)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
-        self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, 7)
+            self.assertEqual(client._flight_size, 3600)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
+            self.assertEqual(outstanding_tsns(client), [4, 5, 6, 7])
+            self.assertEqual(queued_tsns(client), [])
 
-        # SACK comes in ackowledging all chunks
-        sack = SackChunk()
-        sack.cumulative_tsn = 7
-        with self.assertTimerStopped(client):
-            run(client._receive_chunk(sack))
+            # SACK comes in ackowledging all chunks
+            sack = SackChunk()
+            sack.cumulative_tsn = 7
+            with self.assertTimerStopped(client):
+                await client._receive_chunk(sack)
 
-        self.assertEqual(client._cwnd, 4800)
-        self.assertEqual(client._fast_recovery_exit, None)
-        self.assertEqual(client._flight_size, 2400)
-        self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
-        self.assertEqual(outstanding_tsns(client), [])
-        self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._cwnd, 4800)
+            self.assertEqual(client._fast_recovery_exit, None)
+            self.assertEqual(client._flight_size, 2400)
+            self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
 
-    def test_t2_expired_when_shutdown_ack_sent(self):
+    @asynctest
+    async def test_t2_expired_when_shutdown_ack_sent(self):
         async def mock_send_chunk(chunk):
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._last_received_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._send_chunk = mock_send_chunk
 
-        chunk = ShutdownAckChunk()
+            chunk = ShutdownAckChunk()
 
-        # fails once
-        client._set_state(RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
-        client._t2_start(chunk)
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 1)
-        self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(
-            client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
-        )
+            # fails once
+            client._set_state(RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+            client._t2_start(chunk)
+            client._t2_expired()
+            self.assertEqual(client._t2_failures, 1)
+            self.assertIsNotNone(client._t2_handle)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+            )
 
-        # fails 10 times
-        client._t2_failures = 9
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 10)
-        self.assertIsNotNone(client._t2_handle)
-        self.assertEqual(
-            client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
-        )
+            # fails 10 times
+            client._t2_failures = 9
+            client._t2_expired()
+            self.assertEqual(client._t2_failures, 10)
+            self.assertIsNotNone(client._t2_handle)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+            )
 
-        # fails 11 times
-        client._t2_expired()
-        self.assertEqual(client._t2_failures, 11)
-        self.assertIsNone(client._t2_handle)
-        self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            # fails 11 times
+            client._t2_expired()
+            self.assertEqual(client._t2_failures, 11)
+            self.assertIsNone(client._t2_handle)
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
 
-        # let async code complete
-        run(asyncio.sleep(0))
+            # let async code complete
+            await asyncio.sleep(0)
 
-    def test_t3_expired(self):
+    @asynctest
+    async def test_t3_expired(self):
         async def mock_send_chunk(chunk):
             pass
 
         async def mock_transmit():
             pass
 
-        client = RTCSctpTransport(self.client_transport)
-        client._local_tsn = 0
-        client._send_chunk = mock_send_chunk
+        async with client_standalone() as client:
+            client._local_tsn = 0
+            client._send_chunk = mock_send_chunk
 
-        # 1 chunk
-        run(client._send(123, 456, b"M" * USERDATA_MAX_LENGTH))
-        self.assertIsNotNone(client._t3_handle)
-        self.assertEqual(outstanding_tsns(client), [0])
-        self.assertEqual(queued_tsns(client), [])
+            # 1 chunk
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH)
+            self.assertIsNotNone(client._t3_handle)
+            self.assertEqual(outstanding_tsns(client), [0])
+            self.assertEqual(queued_tsns(client), [])
 
-        # t3 expires
-        client._transmit = mock_transmit
-        client._t3_expired()
-        self.assertIsNone(client._t3_handle)
-        self.assertEqual(outstanding_tsns(client), [0])
-        self.assertEqual(queued_tsns(client), [])
-        for chunk in client._outbound_queue:
-            self.assertEqual(chunk._retransmit, True)
+            # t3 expires
+            client._transmit = mock_transmit
+            client._t3_expired()
+            self.assertIsNone(client._t3_handle)
+            self.assertEqual(outstanding_tsns(client), [0])
+            self.assertEqual(queued_tsns(client), [])
+            for chunk in client._outbound_queue:
+                self.assertEqual(chunk._retransmit, True)
 
-        # let async code complete
-        run(asyncio.sleep(0))
+            # let async code complete
+            await asyncio.sleep(0)

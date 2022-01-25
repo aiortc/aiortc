@@ -1,4 +1,6 @@
 import asyncio
+import contextlib
+import functools
 import logging
 import os
 
@@ -7,6 +9,10 @@ from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 def lf2crlf(x):
     return x.replace("\n", "\r\n")
+
+
+class ClosedDtlsTransport:
+    state = "closed"
 
 
 class DummyConnection:
@@ -59,6 +65,14 @@ class DummyIceTransport:
         await self._connection.send(data)
 
 
+def asynctest(coro):
+    @functools.wraps(coro)
+    def wrap(*args, **kwargs):
+        asyncio.run(coro(*args, **kwargs))
+
+    return wrap
+
+
 def dummy_connection_pair():
     queue_a = asyncio.Queue()
     queue_b = asyncio.Queue()
@@ -76,27 +90,27 @@ def dummy_ice_transport_pair():
     )
 
 
-def dummy_dtls_transport_pair():
+@contextlib.asynccontextmanager
+async def dummy_dtls_transport_pair():
     ice_a, ice_b = dummy_ice_transport_pair()
     dtls_a = RTCDtlsTransport(ice_a, [RTCCertificate.generateCertificate()])
     dtls_b = RTCDtlsTransport(ice_b, [RTCCertificate.generateCertificate()])
-    run(
-        asyncio.gather(
-            dtls_b.start(dtls_a.getLocalParameters()),
-            dtls_a.start(dtls_b.getLocalParameters()),
-        )
+    await asyncio.gather(
+        dtls_b.start(dtls_a.getLocalParameters()),
+        dtls_a.start(dtls_b.getLocalParameters()),
     )
-    return (dtls_a, dtls_b)
+
+    try:
+        yield (dtls_a, dtls_b)
+    finally:
+        await dtls_a.stop()
+        await dtls_b.stop()
 
 
 def load(name: str) -> bytes:
     path = os.path.join(os.path.dirname(__file__), name)
     with open(path, "rb") as fp:
         return fp.read()
-
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 
 if os.environ.get("AIORTC_DEBUG"):
