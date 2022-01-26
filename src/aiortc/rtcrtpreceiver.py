@@ -259,6 +259,7 @@ class RTCRtpReceiver:
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track: Optional[RemoteStreamTrack] = None
         self.__rtcp_exited = asyncio.Event()
+        self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_ssrc: Dict[int, int] = {}
         self.__started = False
@@ -378,6 +379,9 @@ class RTCRtpReceiver:
         if self.__started:
             self.__transport._unregister_rtp_receiver(self)
             self.__stop_decoder()
+
+            # shutdown RTCP task
+            await self.__rtcp_started.wait()
             self.__rtcp_task.cancel()
             await self.__rtcp_exited.wait()
 
@@ -501,6 +505,7 @@ class RTCRtpReceiver:
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
+        self.__rtcp_started.set()
 
         try:
             while True:
