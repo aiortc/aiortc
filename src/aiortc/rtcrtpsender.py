@@ -83,9 +83,11 @@ class RTCRtpSender:
         self.__mid: Optional[str] = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
+        self.__rtp_started = asyncio.Event()
         self.__rtp_task: Optional[asyncio.Future[None]] = None
         self.__rtp_history: Dict[int, RtpPacket] = {}
         self.__rtcp_exited = asyncio.Event()
+        self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random16()
@@ -201,6 +203,9 @@ class RTCRtpSender:
         """
         if self.__started:
             self.__transport._unregister_rtp_sender(self)
+
+            # shutdown RTP and RTCP tasks
+            await asyncio.gather(self.__rtp_started.wait(), self.__rtcp_started.wait())
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
@@ -297,6 +302,7 @@ class RTCRtpSender:
 
     async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
         self.__log_debug("- RTP started")
+        self.__rtp_started.set()
 
         sequence_number = random16()
         timestamp_origin = random32()
@@ -357,6 +363,7 @@ class RTCRtpSender:
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
+        self.__rtcp_started.set()
 
         try:
             while True:
