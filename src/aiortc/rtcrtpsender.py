@@ -6,7 +6,7 @@ import traceback
 import uuid
 from typing import Dict, List, Optional, Union
 
-from av.audio.frame import AudioFrame
+from av import AudioFrame
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
