@@ -24,7 +24,7 @@ install_requires = [
     "cryptography>=2.2",
     'dataclasses; python_version < "3.7"',
     "google-crc32c>=1.1",
-    "pyee>=6.0.0",
+    "pyee>=9.0.0",
     "pylibsrtp>=0.5.6",
 ]
 
@@ -33,7 +33,6 @@ extras_require = {
         'aiohttp>=3.7.0',
         'coverage>=5.0',
         'numpy>=1.19.0',
-        'websockets>=8.0',
     ]
 }
 
@@ -58,10 +57,10 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
     ],
     cffi_modules=cffi_modules,
     package_dir={"": "src"},

@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, Union
 
-from pyee import AsyncIOEventEmitter
+from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 

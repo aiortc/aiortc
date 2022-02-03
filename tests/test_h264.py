@@ -182,16 +182,41 @@ class H264Test(CodecTestCase):
         self.roundtrip_video(H264_CODEC, 320, 240)
 
     def test_split_bitstream(self):
-        packages = list(H264Encoder._split_bitstream(b"\00\00\01\ff\00\00\01\ff"))
-        self.assertEqual(len(packages), 2)
+        # No start code
+        packages = list(H264Encoder._split_bitstream(b"\x00\x00\x00\x00"))
+        self.assertEqual(packages, [])
 
-        packages = list(H264Encoder._split_bitstream(b"\00\00\00\01\ff"))
-        self.assertEqual(len(packages), 1)
-
+        # 3-byte start code
         packages = list(
-            H264Encoder._split_bitstream(b"\00\00\00\00\00\00\01\ff\00\00\00\00\00")
+            H264Encoder._split_bitstream(b"\x00\x00\x01\xFF\x00\x00\x01\xFB")
         )
-        self.assertEqual(len(packages), 1)
+        self.assertEqual(packages, [b"\xFF", b"\xFB"])
+
+        # 4-byte start code
+        packages = list(
+            H264Encoder._split_bitstream(b"\x00\x00\x00\x01\xFF\x00\x00\x00\x01\xFB")
+        )
+        self.assertEqual(packages, [b"\xFF", b"\xFB"])
+
+        # Multiple bytes in a packet
+        packages = list(
+            H264Encoder._split_bitstream(
+                b"\x00\x00\x00\x01\xFF\xAB\xCD\x00\x00\x00\x01\xFB"
+            )
+        )
+        self.assertEqual(packages, [b"\xFF\xAB\xCD", b"\xFB"])
+
+        # Skip leading 0s
+        packages = list(H264Encoder._split_bitstream(b"\x00\x00\x00\x01\xFF"))
+        self.assertEqual(packages, [b"\xFF"])
+
+        # Both leading and trailing 0s
+        packages = list(
+            H264Encoder._split_bitstream(
+                b"\x00\x00\x00\x00\x00\x00\x01\xFF\x00\x00\x00\x00\x00"
+            )
+        )
+        self.assertEqual(packages, [b"\xFF\x00\x00\x00\x00\x00"])
 
     def test_packetize_one_small(self):
         packages = [bytes([0xFF, 0xFF])]

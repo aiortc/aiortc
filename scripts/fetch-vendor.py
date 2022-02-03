@@ -1,30 +1,37 @@
-#!/usr/bin/env python
-
 import argparse
 import logging
 import json
 import os
+import platform
 import shutil
 import struct
 import subprocess
-import sys
 
 
 def get_platform():
-    if sys.platform == "linux":
-        return "manylinux_%s" % os.uname().machine
-    elif sys.platform == "darwin":
-        return "macosx_%s" % os.uname().machine
-    elif sys.platform == "win32":
-        return "win%s" % (struct.calcsize("P") * 8)
+    system = platform.system()
+    machine = platform.machine()
+    if system == "Linux":
+        return f"manylinux_{machine}"
+    elif system == "Darwin":
+        # cibuildwheel sets ARCHFLAGS:
+        # https://github.com/pypa/cibuildwheel/blob/5255155bc57eb6224354356df648dc42e31a0028/cibuildwheel/macos.py#L207-L220
+        if "ARCHFLAGS" in os.environ:
+            machine = os.environ["ARCHFLAGS"].split()[1]
+        return f"macosx_{machine}"
+    elif system == "Windows":
+        if struct.calcsize("P") * 8 == 64:
+            return "win_amd64"
+        else:
+            return "win32"
     else:
-        raise Exception("Unsupported platfom %s" % sys.platform)
+        raise Exception(f"Unsupported system {system}")
 
 
 parser = argparse.ArgumentParser(description="Fetch and extract tarballs")
 parser.add_argument("destination_dir")
 parser.add_argument("--cache-dir", default="tarballs")
-parser.add_argument("--config-file", default=__file__ + ".json")
+parser.add_argument("--config-file", default=os.path.splitext(__file__)[0] + ".json")
 args = parser.parse_args()
 logging.basicConfig(level=logging.INFO)
 

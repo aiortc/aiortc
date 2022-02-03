@@ -5,7 +5,7 @@ import uuid
 from collections import OrderedDict
 from typing import Dict, List, Optional, Set, Union
 
-from pyee import AsyncIOEventEmitter
+from pyee.asyncio import AsyncIOEventEmitter
 
 from . import clock, rtp, sdp
 from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx

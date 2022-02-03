@@ -1,11 +1,4 @@
-import sys
-
 from cffi import FFI
-
-if sys.platform == "win32":
-    libraries = ["vpxmt"]
-else:
-    libraries = ["vpx"]
 
 ffibuilder = FFI()
 
@@ -36,7 +29,7 @@ vpx_codec_err_t vpx_codec_enc_init(vpx_codec_ctx_t *ctx,
     return vpx_codec_enc_init_ver(ctx, iface, cfg, flags, VPX_ENCODER_ABI_VERSION);
 }
     """,
-    libraries=libraries,
+    libraries=["vpx"],
 )
 
 ffibuilder.cdef(

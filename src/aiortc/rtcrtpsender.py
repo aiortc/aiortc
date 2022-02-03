@@ -6,6 +6,8 @@ import traceback
 import uuid
 from typing import Dict, List, Optional, Union
 
+from av import AudioFrame
+
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
@@ -42,6 +44,13 @@ RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
 
 
+class RTCEncodedFrame:
+    def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
+        self.payloads = payloads
+        self.timestamp = timestamp
+        self.audio_level = audio_level
+
+
 class RTCRtpSender:
     """
     The :class:`RTCRtpSender` interface provides the ability to control and
@@ -74,9 +83,11 @@ class RTCRtpSender:
         self.__mid: Optional[str] = None
         self.__rtp_exited = asyncio.Event()
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
+        self.__rtp_started = asyncio.Event()
         self.__rtp_task: Optional[asyncio.Future[None]] = None
         self.__rtp_history: Dict[int, RtpPacket] = {}
         self.__rtcp_exited = asyncio.Event()
+        self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random16()
@@ -192,6 +203,9 @@ class RTCRtpSender:
         """
         if self.__started:
             self.__transport._unregister_rtp_sender(self)
+
+            # shutdown RTP and RTCP tasks
+            await asyncio.gather(self.__rtp_started.wait(), self.__rtcp_started.wait())
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
@@ -243,15 +257,20 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get frame
         frame = await self.__track.recv()
+        audio_level = None
+        if isinstance(frame, AudioFrame):
+            audio_level = rtp.compute_audio_level_dbov(frame)
 
         # encode frame
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
         force_keyframe = self.__force_keyframe
         self.__force_keyframe = False
-        return await self.__loop.run_in_executor(
+        payloads, timestamp = await self.__loop.run_in_executor(
             None, self.__encoder.encode, frame, force_keyframe
         )
+
+        return RTCEncodedFrame(payloads, timestamp, audio_level)
 
     async def _retransmit(self, sequence_number: int) -> None:
         """
@@ -278,6 +297,7 @@ class RTCRtpSender:
         self.__force_keyframe = True
 
     async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
+        self.__rtp_started.set()
 
         sequence_number = random16()
         timestamp_origin = random32()
@@ -287,10 +307,10 @@ class RTCRtpSender:
                     await asyncio.sleep(0.02)
                     continue
 
-                payloads, timestamp = await self._next_encoded_frame(codec)
-                timestamp = uint32_add(timestamp_origin, timestamp)
+                enc_frame = await self._next_encoded_frame(codec)
+                timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
 
-                for i, payload in enumerate(payloads):
+                for i, payload in enumerate(enc_frame.payloads):
                     packet = RtpPacket(
                         payload_type=codec.payloadType,
                         sequence_number=sequence_number,
@@ -298,13 +318,15 @@ class RTCRtpSender:
                     )
                     packet.ssrc = self._ssrc
                     packet.payload = payload
-                    packet.marker = (i == len(payloads) - 1) and 1 or 0
+                    packet.marker = (i == len(enc_frame.payloads) - 1) and 1 or 0
 
                     # set header extensions
                     packet.extensions.abs_send_time = (
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
+                    if enc_frame.audio_level is not None:
+                        packet.extensions.audio_level = (False, -enc_frame.audio_level)
 
                     # send packet
                     self.__rtp_history[
@@ -333,6 +355,8 @@ class RTCRtpSender:
         self.__rtp_exited.set()
 
     async def _run_rtcp(self) -> None:
+        self.__rtcp_started.set()
+
         try:
             while True:
                 # The interval between RTCP packets is varied randomly over the
