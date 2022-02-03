@@ -495,7 +495,6 @@ class RTCRtpReceiver:
             self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self) -> None:
-        self.__log_debug("- RTCP started")
         self.__rtcp_started.set()
 
         try:
