@@ -277,6 +277,9 @@ class H264Encoder(Encoder):
             self.buffer_pts = None
             self.codec = None
 
+        # reset the picture type, otherwise no B-frames are produced
+        frame.pict_type = av.video.frame.PictureType.NONE
+
         if self.codec is None:
             try:
                 self.codec, self.codec_buffering = create_encoder_context(
