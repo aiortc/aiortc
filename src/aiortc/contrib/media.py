@@ -91,14 +91,14 @@ def player_worker(
     throttle_playback,
     loop_playback,
 ):
-    audio_fifo = av.AudioFifo()
-    audio_format_name = "s16"
-    audio_layout_name = "stereo"
     audio_sample_rate = 48000
     audio_samples = 0
-    audio_samples_per_frame = int(audio_sample_rate * AUDIO_PTIME)
+    audio_time_base = fractions.Fraction(1, audio_sample_rate)
     audio_resampler = av.AudioResampler(
-        format=audio_format_name, layout=audio_layout_name, rate=audio_sample_rate
+        format="s16",
+        layout="stereo",
+        rate=audio_sample_rate,
+        frame_size=int(audio_sample_rate * AUDIO_PTIME),
     )
 
     video_first_pts = None
@@ -129,29 +129,14 @@ def player_worker(
                 time.sleep(0.1)
 
         if isinstance(frame, AudioFrame) and audio_track:
-            if (
-                frame.format.name != audio_format_name
-                or frame.layout.name != audio_layout_name
-                or frame.sample_rate != audio_sample_rate
-            ):
-                frame.pts = None
-                frame = audio_resampler.resample(frame)
+            for frame in audio_resampler.resample(frame):
+                # fix timestamps
+                frame.pts = audio_samples
+                frame.time_base = audio_time_base
+                audio_samples += frame.samples
 
-            # fix timestamps
-            frame.pts = audio_samples
-            frame.time_base = fractions.Fraction(1, audio_sample_rate)
-            audio_samples += frame.samples
-
-            audio_fifo.write(frame)
-            while True:
-                frame = audio_fifo.read(audio_samples_per_frame)
-                if frame:
-                    frame_time = frame.time
-                    asyncio.run_coroutine_threadsafe(
-                        audio_track._queue.put(frame), loop
-                    )
-                else:
-                    break
+                frame_time = frame.time
+                asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
         elif isinstance(frame, VideoFrame) and video_track:
             if frame.pts is None:  # pragma: no cover
                 logger.warning(
