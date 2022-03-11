@@ -1,4 +1,5 @@
 import fractions
+import sys
 
 from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
 from aiortc.codecs.g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
@@ -17,7 +18,10 @@ class PcmaTest(CodecTestCase):
         frame = frames[0]
         self.assertEqual(frame.format.name, "s16")
         self.assertEqual(frame.layout.name, "mono")
-        self.assertEqual(bytes(frame.planes[0]), b"\x08\x00" * 160)
+        self.assertEqual(
+            bytes(frame.planes[0]),
+            (b"\x08\x00" if sys.byteorder == "little" else b"\x00\x08") * 160,
+        )
         self.assertEqual(frame.pts, 0)
         self.assertEqual(frame.samples, 160)
         self.assertEqual(frame.sample_rate, 8000)
