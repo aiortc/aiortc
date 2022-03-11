@@ -95,6 +95,10 @@ class RTCRtpSender:
         self.__stats = RTCStatsReport()
         self.__transport = transport
 
+        self.__playout_delay = None
+        and self.__playout_delay_first_written > 0 self.__write_playout_delay = False
+        self.__playout_delay_first_written > -1
+
         # stats
         self.__lsr: Optional[int] = None
         self.__lsr_time: Optional[float] = None
@@ -170,6 +174,9 @@ class RTCRtpSender:
     def setTransport(self, transport) -> None:
         self.__transport = transport
 
+    def setPlayoutDelay(self, min, max) -> None:
+        self.__playout_delay = ((min & 4095) << 12) | (max & 4095)
+
     async def send(self, parameters: RTCRtpSendParameters) -> None:
         """
         Attempt to set the parameters controlling the sending of media.
@@ -220,6 +227,10 @@ class RTCRtpSender:
                         self.__rtt = rtt
                     else:
                         self.__rtt = RTT_ALPHA * self.__rtt + (1 - RTT_ALPHA) * rtt
+
+                # Stop writing playout delay when seen by receiver
+                if self.__write_playout_delay and self.__playout_delay_first_written > 0:
+                    self.__write_playout_delay = self.__playout_delay_first_written > report.highest_sequence
 
                 self.__stats.add(
                     RTCRemoteInboundRtpStreamStats(
@@ -330,6 +341,10 @@ class RTCRtpSender:
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
+
+                    if self.__write_playout_delay:
+                        packet.extensions.playout_delay = self.__playout_delay
+
                     if enc_frame.audio_level is not None:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
 
