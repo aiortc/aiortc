@@ -96,8 +96,8 @@ class RTCRtpSender:
         self.__transport = transport
 
         self.__playout_delay = None
-        and self.__playout_delay_first_written > 0 self.__write_playout_delay = False
-        self.__playout_delay_first_written > -1
+        self.__playout_delay_first_written = -1
+        self.__playout_delay_write = False
 
         # stats
         self.__lsr: Optional[int] = None
@@ -229,8 +229,10 @@ class RTCRtpSender:
                         self.__rtt = RTT_ALPHA * self.__rtt + (1 - RTT_ALPHA) * rtt
 
                 # Stop writing playout delay when seen by receiver
-                if self.__write_playout_delay and self.__playout_delay_first_written > 0:
-                    self.__write_playout_delay = self.__playout_delay_first_written > report.highest_sequence
+                if self.__playout_delay_write and self.__playout_delay_first_written > 0:
+                    self.__playout_delay_write = self.__playout_delay_first_written > report.highest_sequence
+                    if not self.__playout_delay_write:
+                        self.__playout_delay_first_written = -1
 
                 self.__stats.add(
                     RTCRemoteInboundRtpStreamStats(
@@ -342,8 +344,10 @@ class RTCRtpSender:
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
 
-                    if self.__write_playout_delay:
+                    if self.__playout_delay_write:
                         packet.extensions.playout_delay = self.__playout_delay
+                        if self.__playout_delay_first_written == -1:
+                            self.__playout_delay_first_written = sequence_number
 
                     if enc_frame.audio_level is not None:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
