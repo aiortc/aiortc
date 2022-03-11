@@ -3,6 +3,13 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.3.1
+-----
+
+ * Build wheels for aarch64 on Linux.
+ * Adapt :class:`aiortc.contrib.media.MediaPlayer` for PyAV 9.x.
+ * Ensure H.264 produces B-frames by resetting picture type.
+
 1.3.0
 -----
 
