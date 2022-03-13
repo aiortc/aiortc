@@ -4,7 +4,7 @@ import random
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from av import AudioFrame
 
@@ -103,6 +103,13 @@ class RTCRtpSender:
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt = None
+
+        # logging
+        self.__log_debug: Callable[..., None] = lambda *args: None
+        if logger.isEnabledFor(logging.DEBUG):
+            self.__log_debug = lambda msg, *args: logger.debug(
+                f"RTCRtpSender(%s) {msg}", self.__kind, *args
+            )
 
     @property
     def kind(self):
@@ -420,9 +427,6 @@ class RTCRtpSender:
             await self.transport._send_rtp(payload)
         except ConnectionError:
             pass
-
-    def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(f"RTCRtpSender(%s) {msg}", self.__kind, *args)
 
     def __log_warning(self, msg: str, *args) -> None:
         logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)

@@ -313,6 +313,14 @@ class RTCRtpReceiverTest(CodecTestCase):
             # give RTCP time to send a report
             await asyncio.sleep(2)
 
+    @patch("aiortc.rtcrtpreceiver.logger.isEnabledFor")
+    @asynctest
+    async def test_log_debug(self, mock_is_enabled_for):
+        mock_is_enabled_for.return_value = True
+
+        async with create_receiver("audio"):
+            pass
+
     @asynctest
     async def test_rtp_and_rtcp(self):
         async with create_receiver("audio") as receiver:
