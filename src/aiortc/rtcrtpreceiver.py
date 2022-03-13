@@ -6,7 +6,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set
 
 from av.frame import Frame
 
@@ -272,6 +272,13 @@ class RTCRtpReceiver:
         self.__lsr_time: Dict[int, float] = {}
         self.__remote_streams: Dict[int, StreamStatistics] = {}
         self.__rtcp_ssrc: Optional[int] = None
+
+        # logging
+        self.__log_debug: Callable[..., None] = lambda *args: None
+        if logger.isEnabledFor(logging.DEBUG):
+            self.__log_debug = lambda msg, *args: logger.debug(
+                f"RTCRtpReceiver(%s) {msg}", self.__kind, *args
+            )
 
     @property
     def track(self) -> MediaStreamTrack:
@@ -585,6 +592,3 @@ class RTCRtpReceiver:
             self.__decoder_queue.put(None)
             self.__decoder_thread.join()
             self.__decoder_thread = None
-
-    def __log_debug(self, msg: str, *args) -> None:
-        logger.debug(f"RTCRtpReceiver(%s) {msg}", self.__kind, *args)
