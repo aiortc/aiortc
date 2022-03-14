@@ -268,8 +268,8 @@ class RTCRtpReceiverTest(CodecTestCase):
                     clockRate=90000,
                     parameters=OrderedDict(
                         [
-                            ("packetization-mode", "1"),
                             ("level-asymmetry-allowed", "1"),
+                            ("packetization-mode", "1"),
                             ("profile-level-id", "42001f"),
                         ]
                     ),
@@ -279,8 +279,8 @@ class RTCRtpReceiverTest(CodecTestCase):
                     clockRate=90000,
                     parameters=OrderedDict(
                         [
-                            ("packetization-mode", "1"),
                             ("level-asymmetry-allowed", "1"),
+                            ("packetization-mode", "1"),
                             ("profile-level-id", "42e01f"),
                         ]
                     ),

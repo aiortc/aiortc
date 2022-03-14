@@ -83,26 +83,17 @@ def init_codecs() -> None:
         dynamic_pt += 2
 
     add_video_codec("video/VP8")
-    add_video_codec(
-        "video/H264",
-        OrderedDict(
-            (
-                ("packetization-mode", "1"),
-                ("level-asymmetry-allowed", "1"),
-                ("profile-level-id", "42001f"),
-            )
-        ),
-    )
-    add_video_codec(
-        "video/H264",
-        OrderedDict(
-            (
-                ("packetization-mode", "1"),
-                ("level-asymmetry-allowed", "1"),
-                ("profile-level-id", "42e01f"),
-            )
-        ),
-    )
+    for profile_level_id in ("42001f", "42e01f"):
+        add_video_codec(
+            "video/H264",
+            OrderedDict(
+                (
+                    ("level-asymmetry-allowed", "1"),
+                    ("packetization-mode", "1"),
+                    ("profile-level-id", profile_level_id),
+                )
+            ),
+        )
 
 
 def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:
