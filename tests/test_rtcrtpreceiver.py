@@ -110,6 +110,17 @@ class NackGeneratorTest(TestCase):
         self.assertEqual(missed, False)
         self.assertEqual(generator.missing, set())
 
+    def test_with_loss_truncate(self):
+        generator = NackGenerator()
+        packets = create_rtp_packets(259, 0)
+
+        generator.add(packets[0])
+        generator.add(packets[129])
+        self.assertEqual(generator.missing, set(range(1, 129)))
+
+        generator.add(packets[258])
+        self.assertEqual(generator.missing, set(range(130, 258)))
+
 
 class StreamStatisticsTest(TestCase):
     def create_counter(self):
@@ -404,9 +415,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packets[128], arrival_time_ms=0)
 
             # check NACK was triggered
-            lost_packets = []
-            for i in range(127):
-                lost_packets.append(i + 1)
+            lost_packets = list(range(1, 128))
             self.assertEqual(nacks[0], (1234, lost_packets))
 
             # check PLI was triggered

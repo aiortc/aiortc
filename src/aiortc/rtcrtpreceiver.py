@@ -26,6 +26,7 @@ from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    RTP_HISTORY_SIZE,
     AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
@@ -78,6 +79,9 @@ class NackGenerator:
         self.missing: Set[int] = set()
 
     def add(self, packet: RtpPacket) -> bool:
+        """
+        Mark a new packet as received, and deduce missing packets.
+        """
         missed = False
 
         if self.max_seq is None:
@@ -95,7 +99,22 @@ class NackGenerator:
         else:
             self.missing.discard(packet.sequence_number)
 
+        # limit number of tracked packets
+        self.truncate()
+
         return missed
+
+    def truncate(self) -> None:
+        """
+        Limit the number of missing packets we track.
+
+        Otherwise, the size of RTCP FB messages grows indefinitely.
+        """
+        if self.max_seq is not None:
+            min_seq = uint16_add(self.max_seq, -RTP_HISTORY_SIZE)
+            for seq in list(self.missing):
+                if uint16_gt(min_seq, seq):
+                    self.missing.discard(seq)
 
 
 class StreamStatistics:
@@ -560,7 +579,7 @@ class RTCRtpReceiver:
         except ConnectionError:
             pass
 
-    async def _send_rtcp_nack(self, media_ssrc: int, lost) -> None:
+    async def _send_rtcp_nack(self, media_ssrc: int, lost: List[int]) -> None:
         """
         Send an RTCP packet to report missing RTP packets.
         """
