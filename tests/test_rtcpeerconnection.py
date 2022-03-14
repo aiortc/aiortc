@@ -19,7 +19,11 @@ from aiortc.exceptions import (
     OperationError,
 )
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
-from aiortc.rtcpeerconnection import filter_preferred_codecs, find_common_codecs
+from aiortc.rtcpeerconnection import (
+    filter_preferred_codecs,
+    find_common_codecs,
+    is_codec_compatible,
+)
 from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
     RTCRtpCodecCapability,
@@ -34,6 +38,33 @@ from .utils import asynctest, lf2crlf
 
 LONG_DATA = b"\xff" * 2000
 STRIP_CANDIDATES_RE = re.compile("^a=(candidate:.*|end-of-candidates)\r\n", re.M)
+
+H264_SDP = lf2crlf(
+    """a=rtpmap:99 H264/90000
+a=rtcp-fb:99 nack
+a=rtcp-fb:99 nack pli
+a=rtcp-fb:99 goog-remb
+a=fmtp:99 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f
+a=rtpmap:100 rtx/90000
+a=fmtp:100 apt=99
+a=rtpmap:101 H264/90000
+a=rtcp-fb:101 nack
+a=rtcp-fb:101 nack pli
+a=rtcp-fb:101 goog-remb
+a=fmtp:101 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
+a=rtpmap:102 rtx/90000
+a=fmtp:102 apt=101
+"""
+)
+VP8_SDP = lf2crlf(
+    """a=rtpmap:97 VP8/90000
+a=rtcp-fb:97 nack
+a=rtcp-fb:97 nack pli
+a=rtcp-fb:97 goog-remb
+a=rtpmap:98 rtx/90000
+a=fmtp:98 apt=97
+"""
+)
 
 
 class BogusStreamTrack(AudioStreamTrack):
@@ -91,7 +122,7 @@ def track_remote_tracks(pc):
 
 
 class RTCRtpCodecParametersTest(TestCase):
-    def test_common_static(self):
+    def test_find_common_codecs_static(self):
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -124,7 +155,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def test_common_dynamic(self):
+    def find_common_codecs_dynamic(self):
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -157,7 +188,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def test_common_feedback(self):
+    def find_common_codecs_feedback(self):
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8",
@@ -187,7 +218,7 @@ class RTCRtpCodecParametersTest(TestCase):
         self.assertEqual(common[0].payloadType, 120)
         self.assertEqual(common[0].rtcpFeedback, [RTCRtcpFeedback(type="nack")])
 
-    def test_common_rtx(self):
+    def test_find_common_codecs_rtx(self):
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8", clockRate=90000, payloadType=100
@@ -235,7 +266,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def test_filter_preferred(self):
+    def test_filter_preferred_codecs(self):
         codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8", clockRate=90000, payloadType=100
@@ -341,6 +372,131 @@ class RTCRtpCodecParametersTest(TestCase):
                     mimeType="video/H264", clockRate=90000, payloadType=102
                 ),
             ],
+        )
+
+    def test_is_codec_compatible(self):
+        # compatible: identical
+        self.assertTrue(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=90000, payloadType=102
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=90000, payloadType=102
+                ),
+            )
+        )
+        self.assertTrue(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "packetization-mode": "0",
+                        "profile-level-id": "42E01F",
+                    },
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                ),
+            )
+        )
+
+        # incompatible: different clockRate
+        self.assertFalse(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=90000, payloadType=102
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=12345, payloadType=102
+                ),
+            )
+        )
+
+        # incompatible: different mimeType
+        self.assertFalse(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=90000, payloadType=102
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8", clockRate=90000, payloadType=102
+                ),
+            )
+        )
+
+        # incompatible: different H.264 profile
+        self.assertFalse(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "packetization-mode": "1",
+                        "profile-level-id": "42001f",
+                    },
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "packetization-mode": "1",
+                        "profile-level-id": "42e01f",
+                    },
+                ),
+            )
+        )
+
+        # incompatible: different H.264 packetization mode
+        self.assertFalse(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "packetization-mode": "0",
+                        "profile-level-id": "42001f",
+                    },
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "packetization-mode": "1",
+                        "profile-level-id": "42001f",
+                    },
+                ),
+            )
+        )
+
+        # incompatible: cannot parse H.264 profile
+        self.assertFalse(
+            is_codec_compatible(
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "profile-level-id": "42001f",
+                    },
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264",
+                    clockRate=90000,
+                    payloadType=102,
+                    parameters={
+                        "profile-level-id": "blah",
+                    },
+                ),
+            )
         )
 
 
@@ -2447,6 +2603,8 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_connect_video_bidirectional(self):
+        VIDEO_SDP = VP8_SDP + H264_SDP
+
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2476,32 +2634,7 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(pc1.iceGatheringState, "complete")
         self.assertEqual(mids(pc1), ["0"])
         self.assertTrue("m=video " in pc1.localDescription.sdp)
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:97 VP8/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=rtpmap:98 rtx/90000
-a=fmtp:98 apt=97
-a=rtpmap:99 H264/90000
-a=rtcp-fb:99 nack
-a=rtcp-fb:99 nack pli
-a=rtcp-fb:99 goog-remb
-a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:100 rtx/90000
-a=fmtp:100 apt=99
-a=rtpmap:101 H264/90000
-a=rtcp-fb:101 nack
-a=rtcp-fb:101 nack pli
-a=rtcp-fb:101 goog-remb
-a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:102 rtx/90000
-a=fmtp:102 apt=101
-"""
-            )
-            in pc1.localDescription.sdp
-        )
+        self.assertTrue(VIDEO_SDP in pc1.localDescription.sdp)
         self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
@@ -2525,32 +2658,7 @@ a=fmtp:102 apt=101
         await pc2.setLocalDescription(answer)
         await self.assertIceChecking(pc2)
         self.assertTrue("m=video " in pc2.localDescription.sdp)
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:97 VP8/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=rtpmap:98 rtx/90000
-a=fmtp:98 apt=97
-a=rtpmap:99 H264/90000
-a=rtcp-fb:99 nack
-a=rtcp-fb:99 nack pli
-a=rtcp-fb:99 goog-remb
-a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:100 rtx/90000
-a=fmtp:100 apt=99
-a=rtpmap:101 H264/90000
-a=rtcp-fb:101 nack
-a=rtcp-fb:101 nack pli
-a=rtcp-fb:101 goog-remb
-a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:102 rtx/90000
-a=fmtp:102 apt=101
-"""
-            )
-            in pc2.localDescription.sdp
-        )
+        self.assertTrue(VIDEO_SDP in pc2.localDescription.sdp)
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
@@ -2830,6 +2938,8 @@ a=fmtp:102 apt=101
 
     @asynctest
     async def test_connect_video_codec_preferences_offerer(self):
+        VIDEO_SDP = H264_SDP + VP8_SDP
+
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2870,32 +2980,7 @@ a=fmtp:102 apt=101
         self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:99 H264/90000
-a=rtcp-fb:99 nack
-a=rtcp-fb:99 nack pli
-a=rtcp-fb:99 goog-remb
-a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:100 rtx/90000
-a=fmtp:100 apt=99
-a=rtpmap:101 H264/90000
-a=rtcp-fb:101 nack
-a=rtcp-fb:101 nack pli
-a=rtcp-fb:101 goog-remb
-a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:102 rtx/90000
-a=fmtp:102 apt=101
-a=rtpmap:97 VP8/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=rtpmap:98 rtx/90000
-a=fmtp:98 apt=97
-"""
-            )
-            in pc1.localDescription.sdp
-        )
+        self.assertTrue(VIDEO_SDP in pc1.localDescription.sdp)
 
         # handle offer
         await pc2.setRemoteDescription(pc1.localDescription)
@@ -2919,32 +3004,7 @@ a=fmtp:98 apt=97
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:99 H264/90000
-a=rtcp-fb:99 nack
-a=rtcp-fb:99 nack pli
-a=rtcp-fb:99 goog-remb
-a=fmtp:99 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42001f
-a=rtpmap:100 rtx/90000
-a=fmtp:100 apt=99
-a=rtpmap:101 H264/90000
-a=rtcp-fb:101 nack
-a=rtcp-fb:101 nack pli
-a=rtcp-fb:101 goog-remb
-a=fmtp:101 packetization-mode=1;level-asymmetry-allowed=1;profile-level-id=42e01f
-a=rtpmap:102 rtx/90000
-a=fmtp:102 apt=101
-a=rtpmap:97 VP8/90000
-a=rtcp-fb:97 nack
-a=rtcp-fb:97 nack pli
-a=rtcp-fb:97 goog-remb
-a=rtpmap:98 rtx/90000
-a=fmtp:98 apt=97
-"""
-            )
-            in pc2.localDescription.sdp
-        )
+        self.assertTrue(VIDEO_SDP in pc2.localDescription.sdp)
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)

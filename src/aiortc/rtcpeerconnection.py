@@ -97,19 +97,7 @@ def find_common_codecs(
 
         # handle other codecs
         for codec in local_codecs:
-            if (
-                codec.mimeType.lower() == c.mimeType.lower()
-                and codec.clockRate == c.clockRate
-            ):
-                if codec.mimeType.lower() == "video/h264":
-                    # FIXME: check according to RFC 6184
-                    parameters_compatible = True
-                    for param in ["packetization-mode", "profile-level-id"]:
-                        if c.parameters.get(param) != codec.parameters.get(param):
-                            parameters_compatible = False
-                    if not parameters_compatible:
-                        continue
-
+            if is_codec_compatible(codec, c):
                 codec = copy.deepcopy(codec)
                 if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
                     codec.payloadType = c.payloadType
@@ -132,6 +120,31 @@ def find_common_header_extensions(
             if lx.uri == rx.uri:
                 common.append(rx)
     return common
+
+
+def is_codec_compatible(a: RTCRtpCodecParameters, b: RTCRtpCodecParameters) -> bool:
+    if a.mimeType.lower() != b.mimeType.lower() or a.clockRate != b.clockRate:
+        return False
+
+    if a.mimeType.lower() == "video/h264":
+
+        def packetization(c: RTCRtpCodecParameters):
+            return c.parameters.get("packetization-mode", "0")
+
+        def profile(c: RTCRtpCodecParameters):
+            # for backwards compatibility with older versions of WebRTC,
+            # consider the absence of a profile-level-id parameter to mean
+            # "constrained baseline level 3.1"
+            return sdp.parse_h264_profile_level_id(
+                c.parameters.get("profile-level-id", "42E01F")
+            )[0]
+
+        try:
+            return packetization(a) == packetization(b) and profile(a) == profile(b)
+        except ValueError:
+            return False
+
+    return True
 
 
 def add_transport_description(
