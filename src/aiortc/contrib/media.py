@@ -638,7 +638,16 @@ class MediaRecorder:
                     self.__log_debug("Received source video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                     source_frame_array = frame.to_rgb().to_ndarray()
-                    asyncio.run_coroutine_threadsafe(self.__video_queue.put((source_frame_array, video_frame_index)), loop)
+                    
+                    time_before_keypoints = time.time()
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        source_keypoints = await loop.run_in_executor(pool, 
+                                            model.extract_keypoints, source_frame_array)
+                    time_after_keypoints = time.time()
+                    self.__log_debug("Source keypoints extraction time in receiver: %s",
+                                    str(time_after_keypoints - time_before_keypoints))
+
+                    asyncio.run_coroutine_threadsafe(self.__video_queue.put((source_frame_array, source_keypoints, video_frame_index)), loop)
 
                 else:
                     # regular video stream
@@ -683,16 +692,7 @@ class MediaRecorder:
                         frame_index = received_keypoints['index']
 
                         if frame_index % self.__reference_update_freq == 0:
-                            source_frame_array, video_frame_index = await self.__video_queue.get()
-
-                            time_before_keypoints = time.time()
-                            with concurrent.futures.ThreadPoolExecutor() as pool:
-                                source_keypoints = await loop.run_in_executor(pool, 
-                                                    model.extract_keypoints, source_frame_array)
-                            time_after_keypoints = time.time()
-                            self.__log_debug("Source keypoints extraction time in receiver: %s",
-                                            str(time_after_keypoints - time_before_keypoints))
-                            self.__log_debug("Video queue size: %s", self.__video_queue.qsize())
+                            source_frame_array, source_keypoints, video_frame_index = await self.__video_queue.get()
                             
                             time_before_update = time.time()
                             model.update_source(source_frame_array, source_keypoints)
