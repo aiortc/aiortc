@@ -329,21 +329,21 @@ class PlayerStreamTrack(MediaStreamTrack):
                 time_before_keypoints = time.time()
                 loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as pool:
-                    keypoints = await loop.run_in_executor(pool, model.extract_keypoints, frame_array)
+                    keypoints, source_frame_index = await loop.run_in_executor(pool, model.extract_keypoints, frame_array)
                 time_after_keypoints = time.time()
                 logger.warning(
                     "Keypoints extraction time for frame index %s in sender: %s",
                     str(frame_index), str(time_after_keypoints - time_before_keypoints)
                 )
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts, frame_index) 
+                keypoints_frame = KeypointsFrame(keypoints, frame.pts, frame_index, source_frame_index) 
                 
                 if frame_index % self._player._reference_update_freq == 0:
                     time_before_update = time.time()
-                    model.update_source(frame_array, keypoints)
+                    model.update_source(frame_index, frame_array, keypoints)
                     time_after_update = time.time()
                     logger.warning(
                         "Time to update source frame with index %s in sender: %s",
-                        str(frame.index), str(time_after_update - time_before_update)
+                        str(frame_index), str(time_after_update - time_before_update)
                     )
             except:
                 keypoints_frame = None
@@ -675,7 +675,7 @@ class MediaRecorder:
                 # keypoint stream
                 received_keypoints = frame.data
                 asyncio.run_coroutine_threadsafe(self.__keypoints_queue.put(received_keypoints), loop)
-                frame_index = received_keypoints['index']
+                frame_index = received_keypoints['frame_index']
                 self.__log_debug("Keypoints for frame %s received at time %s",
                                 str(frame_index), time.time())
 
@@ -689,13 +689,13 @@ class MediaRecorder:
                     self.__setsize(track)
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
-                        frame_index = received_keypoints['index']
+                        frame_index = received_keypoints['frame_index']
 
                         if frame_index % self.__reference_update_freq == 0:
                             source_frame_array, source_keypoints, video_frame_index = await self.__video_queue.get()
                             
                             time_before_update = time.time()
-                            model.update_source(source_frame_array, source_keypoints)
+                            model.update_source(video_frame_index, source_frame_array, source_keypoints)
                             time_after_update = time.time()
                             self.__log_debug("Time to update source frame %s in receiver" \
                                     " when receiving keypoint %s: %s",
@@ -706,12 +706,14 @@ class MediaRecorder:
 
                         before_predict_time = time.time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:
+                            self.__log_debug("Calling predict for frame %s with source frame %s",
+                                        frame_index, received_keypoints['source_index'])
                             predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
                         after_predict_time = time.time()
 
-                        self.__log_debug("Prediction time for received keypoints %s: %s at time %s",
+                        self.__log_debug("Prediction time for received keypoints %s: %s at time %s using source %s",
                                 frame_index, str(after_predict_time - before_predict_time), 
-                                after_predict_time)
+                                after_predict_time, received_keypoints['source_index'])
                         
                         if self.__recv_times_file is not None:
                             self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
@@ -731,7 +733,7 @@ class MediaRecorder:
 
                     except:
                         self.__log_debug("Couldn't predict based on received keypoints frame %s",
-                                        received_keypoints['index'])
+                                        received_keypoints['frame_index'])
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaRecorder(%s) {msg}", self.__container.name, *args)

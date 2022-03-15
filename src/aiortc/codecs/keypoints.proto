@@ -18,5 +18,6 @@ message KeypointInfo {
     repeated Keypoint keypoints = 1;
     repeated Jacobian jacobians = 2;
     required float pts = 3;
-    required int32 index = 4;
+    required int32 frame_index = 4;
+    required int32 source_index = 5;
 }
