@@ -36,7 +36,7 @@ from .stats import (
     RTCRemoteInboundRtpStreamStats,
     RTCStatsReport,
 )
-from .utils import random16, random32, uint16_add, uint32_add
+from .utils import random16, random32, uint16_add, uint32_add, uint16_gt
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class RTCRtpSender:
         self.__transport = transport
 
         self.__playout_delay = 0
-        self.__playout_delay_first_written = -1
+        self.__playout_delay_first_written = 0
         self.__playout_delay_write = False
 
         # stats
@@ -177,7 +177,7 @@ class RTCRtpSender:
     def setPlayoutDelay(self, min, max) -> None:
         mask = 0xFFF
         self.__playout_delay = ((min & mask) << 12) | (max & mask)
-        self.__playout_delay_first_written = float("inf")
+        self.__playout_delay_first_written = 0xFFFF
         self.__playout_delay_write = True
 
     async def send(self, parameters: RTCRtpSendParameters) -> None:
@@ -233,7 +233,7 @@ class RTCRtpSender:
 
                 # Stop writing playout delay when seen by receiver
                 if self.__playout_delay_write:
-                    self.__playout_delay_write = report.highest_sequence < self.__playout_delay_first_written
+                    self.__playout_delay_write = uint16_gt(self.__playout_delay_first_written, report.highest_sequence)
 
                 self.__stats.add(
                     RTCRemoteInboundRtpStreamStats(
@@ -347,7 +347,7 @@ class RTCRtpSender:
 
                     if self.__playout_delay_write:
                         packet.extensions.playout_delay = self.__playout_delay
-                        if sequence_number < self.__playout_delay_first_written:
+                        if uint16_gt(self.__playout_delay_first_written, sequence_number):
                             self.__playout_delay_first_written = sequence_number
 
                     if enc_frame.audio_level is not None:
