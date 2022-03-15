@@ -1,7 +1,6 @@
 import enum
 import ipaddress
 import re
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -9,6 +8,7 @@ from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
 from .rtcrtpparameters import (
+    ParametersDict,
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionParameters,
@@ -159,8 +159,8 @@ def ipaddress_to_sdp(addr: str) -> str:
     return f"IN IP{version} {addr}"
 
 
-def parameters_from_sdp(sdp: str) -> OrderedDict:
-    parameters: OrderedDict = OrderedDict()
+def parameters_from_sdp(sdp: str) -> ParametersDict:
+    parameters: ParametersDict = {}
     for param in sdp.split(";"):
         if "=" in param:
             k, v = param.split("=", 1)
@@ -173,7 +173,7 @@ def parameters_from_sdp(sdp: str) -> OrderedDict:
     return parameters
 
 
-def parameters_to_sdp(parameters: OrderedDict) -> str:
+def parameters_to_sdp(parameters: ParametersDict) -> str:
     params = []
     for param_k, param_v in parameters.items():
         if param_v is not None:
