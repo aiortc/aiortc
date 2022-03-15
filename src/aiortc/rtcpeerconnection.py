@@ -2,7 +2,6 @@ import asyncio
 import copy
 import logging
 import uuid
-from collections import OrderedDict
 from typing import Dict, List, Optional, Set, Union
 
 from pyee.asyncio import AsyncIOEventEmitter
@@ -1117,7 +1116,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
-            encodings: OrderedDict[int, RTCRtpDecodingParameters] = OrderedDict()
+            encodings: Dict[int, RTCRtpDecodingParameters] = {}
             for codec in transceiver._codecs:
                 if is_rtx(codec):
                     if codec.parameters["apt"] in encodings and len(media.ssrc) == 2:

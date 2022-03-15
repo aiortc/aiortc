@@ -1,5 +1,4 @@
 import asyncio
-from collections import OrderedDict
 from struct import pack
 from unittest import TestCase
 from unittest.mock import patch
@@ -86,24 +85,20 @@ class RTCRtpSenderTest(TestCase):
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("level-asymmetry-allowed", "1"),
-                            ("packetization-mode", "1"),
-                            ("profile-level-id", "42001f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42001f",
+                    },
                 ),
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("level-asymmetry-allowed", "1"),
-                            ("packetization-mode", "1"),
-                            ("profile-level-id", "42e01f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42e01f",
+                    },
                 ),
             ],
         )
