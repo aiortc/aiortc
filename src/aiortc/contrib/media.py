@@ -26,8 +26,9 @@ zero_array = np.zeros((256, 256, 3))
 """
 config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
-zero_kps = model.extract_keypoints(zero_array)
-model.update_source(zero_array, zero_kps)
+zero_kps, src_index = model.extract_keypoints(zero_array)
+model.update_source(src_index, zero_array, zero_kps)
+zero_kps['source_index'] = src_index
 model.predict(zero_kps)
 time_after_instantiation = time.time()
 print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
@@ -641,7 +642,7 @@ class MediaRecorder:
                     
                     time_before_keypoints = time.time()
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        source_keypoints = await loop.run_in_executor(pool, 
+                        source_keypoints, _  = await loop.run_in_executor(pool, 
                                             model.extract_keypoints, source_frame_array)
                     time_after_keypoints = time.time()
                     self.__log_debug("Source keypoints extraction time in receiver: %s",
