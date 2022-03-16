@@ -19,7 +19,7 @@ cffi_modules = [
 ]
 install_requires = [
     "aioice>=0.7.5,<0.8.0",
-    "av>=8.0.0,<9.0.0",
+    "av>=9.0.0,<10.0.0",
     "cffi>=1.0.0",
     "cryptography>=2.2",
     'dataclasses; python_version < "3.7"',

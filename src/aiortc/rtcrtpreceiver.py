@@ -6,7 +6,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set
 
 from av.frame import Frame
 
@@ -26,6 +26,7 @@ from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    RTP_HISTORY_SIZE,
     AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
@@ -78,6 +79,9 @@ class NackGenerator:
         self.missing: Set[int] = set()
 
     def add(self, packet: RtpPacket) -> bool:
+        """
+        Mark a new packet as received, and deduce missing packets.
+        """
         missed = False
 
         if self.max_seq is None:
@@ -95,7 +99,22 @@ class NackGenerator:
         else:
             self.missing.discard(packet.sequence_number)
 
+        # limit number of tracked packets
+        self.truncate()
+
         return missed
+
+    def truncate(self) -> None:
+        """
+        Limit the number of missing packets we track.
+
+        Otherwise, the size of RTCP FB messages grows indefinitely.
+        """
+        if self.max_seq is not None:
+            min_seq = uint16_add(self.max_seq, -RTP_HISTORY_SIZE)
+            for seq in list(self.missing):
+                if uint16_gt(min_seq, seq):
+                    self.missing.discard(seq)
 
 
 class StreamStatistics:
@@ -273,6 +292,13 @@ class RTCRtpReceiver:
         self.__remote_streams: Dict[int, StreamStatistics] = {}
         self.__rtcp_ssrc: Optional[int] = None
 
+        # logging
+        self.__log_debug: Callable[..., None] = lambda *args: None
+        if logger.isEnabledFor(logging.DEBUG):
+            self.__log_debug = lambda msg, *args: logger.debug(
+                f"RTCRtpReceiver(%s) {msg}", self.__kind, *args
+            )
+
     @property
     def track(self) -> MediaStreamTrack:
         """
@@ -389,6 +415,8 @@ class RTCRtpReceiver:
         self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
+        self.__log_debug("< %s", packet)
+
         if isinstance(packet, RtcpSrPacket):
             self.__stats.add(
                 RTCRemoteOutboundRtpStreamStats(
@@ -420,6 +448,8 @@ class RTCRtpReceiver:
         """
         Handle an incoming RTP packet.
         """
+        self.__log_debug("< %s", packet)
+
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
             if packet.extensions.abs_send_time is not None:
@@ -445,6 +475,9 @@ class RTCRtpReceiver:
         # check the codec is known
         codec = self.__codecs.get(packet.payload_type)
         if codec is None:
+            self.__log_debug(
+                "x RTP packet with unknown payload type %d", packet.payload_type
+            )
             return
 
         # feed RTCP statistics
@@ -456,6 +489,7 @@ class RTCRtpReceiver:
         if is_rtx(codec):
             original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
             if original_ssrc is None:
+                self.__log_debug("x RTX packet from unknown SSRC %d", packet.ssrc)
                 return
 
             if len(packet.payload) < 2:
@@ -479,6 +513,7 @@ class RTCRtpReceiver:
             else:
                 packet._data = b""  # type: ignore
         except ValueError as exc:
+            self.__log_debug("x RTP payload parsing failed: %s", exc)
             return
 
         # try to re-assemble encoded frame
@@ -495,6 +530,7 @@ class RTCRtpReceiver:
             self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self) -> None:
+        self.__log_debug("- RTCP started")
         self.__rtcp_started.set()
 
         try:
@@ -533,15 +569,17 @@ class RTCRtpReceiver:
         except asyncio.CancelledError:
             pass
 
+        self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packet) -> None:
+        self.__log_debug("> %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
             pass
 
-    async def _send_rtcp_nack(self, media_ssrc: int, lost) -> None:
+    async def _send_rtcp_nack(self, media_ssrc: int, lost: List[int]) -> None:
         """
         Send an RTCP packet to report missing RTP packets.
         """

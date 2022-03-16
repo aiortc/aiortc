@@ -1,7 +1,7 @@
-from collections import OrderedDict
 from typing import Dict, List, Optional, Union
 
 from ..rtcrtpparameters import (
+    ParametersDict,
     RTCRtcpFeedback,
     RTCRtpCapabilities,
     RTCRtpCodecCapability,
@@ -56,7 +56,7 @@ def init_codecs() -> None:
     dynamic_pt = 97
 
     def add_video_codec(
-        mimeType: str, parameters: Optional[OrderedDict] = None
+        mimeType: str, parameters: Optional[ParametersDict] = None
     ) -> None:
         nonlocal dynamic_pt
 
@@ -71,38 +71,27 @@ def init_codecs() -> None:
                     RTCRtcpFeedback(type="nack", parameter="pli"),
                     RTCRtcpFeedback(type="goog-remb"),
                 ],
-                parameters=parameters or OrderedDict(),
+                parameters=parameters or {},
             ),
             RTCRtpCodecParameters(
                 mimeType="video/rtx",
                 clockRate=clockRate,
                 payloadType=dynamic_pt + 1,
-                parameters=OrderedDict([("apt", dynamic_pt)]),
+                parameters={"apt": dynamic_pt},
             ),
         ]
         dynamic_pt += 2
 
     add_video_codec("video/VP8")
-    add_video_codec(
-        "video/H264",
-        OrderedDict(
-            (
-                ("packetization-mode", "1"),
-                ("level-asymmetry-allowed", "1"),
-                ("profile-level-id", "42001f"),
-            )
-        ),
-    )
-    add_video_codec(
-        "video/H264",
-        OrderedDict(
-            (
-                ("packetization-mode", "1"),
-                ("level-asymmetry-allowed", "1"),
-                ("profile-level-id", "42e01f"),
-            )
-        ),
-    )
+    for profile_level_id in ("42001f", "42e01f"):
+        add_video_codec(
+            "video/H264",
+            {
+                "level-asymmetry-allowed": "1",
+                "packetization-mode": "1",
+                "profile-level-id": profile_level_id,
+            },
+        )
 
 
 def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:

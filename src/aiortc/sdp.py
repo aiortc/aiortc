@@ -1,6 +1,6 @@
+import enum
 import ipaddress
 import re
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -8,6 +8,7 @@ from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
 from .rtcicetransport import RTCIceCandidate, RTCIceParameters
 from .rtcrtpparameters import (
+    ParametersDict,
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionParameters,
@@ -28,6 +29,69 @@ FMTP_INT_PARAMETERS = [
     "minptime",
     "stereo",
     "useinbandfec",
+]
+
+
+class BitPattern:
+    def __init__(self, v: str) -> None:
+        self._mask = ~self._bytemaskstring("x", v)
+        self._masked_value = self._bytemaskstring("1", v)
+
+    def matches(self, v: int) -> bool:
+        return (v & self._mask) == self._masked_value
+
+    def _bytemaskstring(self, c: str, s: str) -> int:
+        return (
+            (s[0] == c) << 7
+            | (s[1] == c) << 6
+            | (s[2] == c) << 5
+            | (s[3] == c) << 4
+            | (s[4] == c) << 3
+            | (s[5] == c) << 2
+            | (s[6] == c) << 1
+            | (s[7] == c) << 0
+        )
+
+
+class H264Profile(enum.Enum):
+    PROFILE_CONSTRAINED_BASELINE = 0
+    PROFILE_BASELINE = 1
+    PROFILE_MAIN = 2
+    PROFILE_CONSTRAINED_HIGH = 3
+    PROFILE_HIGH = 4
+    PROFILE_PREDICTIVE_HIGH_444 = 5
+
+
+class H264Level(enum.IntEnum):
+    LEVEL1_B = -1
+    LEVEL1 = 10
+    LEVEL1_1 = 11
+    LEVEL1_2 = 12
+    LEVEL1_3 = 13
+    LEVEL2 = 20
+    LEVEL2_1 = 21
+    LEVEL2_2 = 22
+    LEVEL3 = 30
+    LEVEL3_1 = 31
+    LEVEL3_2 = 32
+    LEVEL4 = 40
+    LEVEL4_1 = 41
+    LEVEL4_2 = 42
+    LEVEL5 = 50
+    LEVEL5_1 = 51
+    LEVEL5_2 = 52
+
+
+H264_PROFILE_PATTERNS = [
+    (0x42, BitPattern("x1xx0000"), H264Profile.PROFILE_CONSTRAINED_BASELINE),
+    (0x4D, BitPattern("1xxx0000"), H264Profile.PROFILE_CONSTRAINED_BASELINE),
+    (0x58, BitPattern("11xx0000"), H264Profile.PROFILE_CONSTRAINED_BASELINE),
+    (0x42, BitPattern("x0xx0000"), H264Profile.PROFILE_BASELINE),
+    (0x58, BitPattern("10xx0000"), H264Profile.PROFILE_BASELINE),
+    (0x4D, BitPattern("0x0x0000"), H264Profile.PROFILE_MAIN),
+    (0x64, BitPattern("00000000"), H264Profile.PROFILE_HIGH),
+    (0x64, BitPattern("00001100"), H264Profile.PROFILE_CONSTRAINED_HIGH),
+    (0xF4, BitPattern("00000000"), H264Profile.PROFILE_PREDICTIVE_HIGH_444),
 ]
 
 
@@ -95,8 +159,8 @@ def ipaddress_to_sdp(addr: str) -> str:
     return f"IN IP{version} {addr}"
 
 
-def parameters_from_sdp(sdp: str) -> OrderedDict:
-    parameters: OrderedDict = OrderedDict()
+def parameters_from_sdp(sdp: str) -> ParametersDict:
+    parameters: ParametersDict = {}
     for param in sdp.split(";"):
         if "=" in param:
             k, v = param.split("=", 1)
@@ -109,7 +173,7 @@ def parameters_from_sdp(sdp: str) -> OrderedDict:
     return parameters
 
 
-def parameters_to_sdp(parameters: OrderedDict) -> str:
+def parameters_to_sdp(parameters: ParametersDict) -> str:
     params = []
     for param_k, param_v in parameters.items():
         if param_v is not None:
@@ -125,6 +189,31 @@ def parse_attr(line: str) -> Tuple[str, Optional[str]]:
         return bits[0], bits[1]
     else:
         return line[2:], None
+
+
+def parse_h264_profile_level_id(profile_str: str) -> Tuple[H264Profile, H264Level]:
+    if not isinstance(profile_str, str) or not re.match(
+        "[0-9a-f]{6}", profile_str, re.I
+    ):
+        raise ValueError("Expected a 6 character hexadecimal string")
+
+    level_idc = int(profile_str[4:6], 16)
+    profile_iop = int(profile_str[2:4], 16)
+    profile_idc = int(profile_str[0:2], 16)
+
+    level: H264Level
+    if level_idc == H264Level.LEVEL1_1:
+        level = H264Level.LEVEL1_B if (profile_iop & 0x10) else H264Level.LEVEL1_1
+    else:
+        level = H264Level(level_idc)
+
+    for idc, pattern, profile in H264_PROFILE_PATTERNS:
+        if idc == profile_idc and pattern.matches(profile_iop):
+            return profile, level
+
+    raise ValueError(
+        f"Unrecognized profile_iop = {profile_iop}, profile_idc = {profile_idc}"
+    )
 
 
 @dataclass

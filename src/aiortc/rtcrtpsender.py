@@ -4,7 +4,7 @@ import random
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from av import AudioFrame
 
@@ -18,6 +18,7 @@ from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    RTP_HISTORY_SIZE,
     AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
@@ -40,7 +41,6 @@ from .utils import random16, random32, uint16_add, uint32_add
 
 logger = logging.getLogger(__name__)
 
-RTP_HISTORY_SIZE = 128
 RTT_ALPHA = 0.85
 
 
@@ -103,6 +103,13 @@ class RTCRtpSender:
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt = None
+
+        # logging
+        self.__log_debug: Callable[..., None] = lambda *args: None
+        if logger.isEnabledFor(logging.DEBUG):
+            self.__log_debug = lambda msg, *args: logger.debug(
+                f"RTCRtpSender(%s) {msg}", self.__kind, *args
+            )
 
     @property
     def kind(self):
@@ -249,6 +256,9 @@ class RTCRtpSender:
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
                 if self._ssrc in ssrcs:
+                    self.__log_debug(
+                        "- receiver estimated maximum bitrate %d bps", bitrate
+                    )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
                         self.__encoder.target_bitrate = bitrate
             except ValueError:
@@ -287,6 +297,7 @@ class RTCRtpSender:
                 )
                 self.__rtx_sequence_number = uint16_add(self.__rtx_sequence_number, 1)
 
+            self.__log_debug("> %s", packet)
             packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
             await self.transport._send_rtp(packet_bytes)
 
@@ -297,6 +308,7 @@ class RTCRtpSender:
         self.__force_keyframe = True
 
     async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
+        self.__log_debug("- RTP started")
         self.__rtp_started.set()
 
         sequence_number = random16()
@@ -329,6 +341,7 @@ class RTCRtpSender:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
 
                     # send packet
+                    self.__log_debug("> %s", packet)
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
                     ] = packet
@@ -352,9 +365,11 @@ class RTCRtpSender:
             self.__track.stop()
             self.__track = None
 
+        self.__log_debug("- RTP finished")
         self.__rtp_exited.set()
 
     async def _run_rtcp(self) -> None:
+        self.__log_debug("- RTCP started")
         self.__rtcp_started.set()
 
         try:
@@ -399,11 +414,13 @@ class RTCRtpSender:
         packet = RtcpByePacket(sources=[self._ssrc])
         await self._send_rtcp([packet])
 
+        self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
+            self.__log_debug("> %s", packet)
             payload += bytes(packet)
 
         try:
