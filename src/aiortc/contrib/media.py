@@ -21,7 +21,7 @@ from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
 time_before_instantiation = time.process_time()
-zero_array = np.zeros((256, 256, 3))
+zero_array = np.zeros((1024, 1024, 3))
 config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
 zero_kps, src_index = model.extract_keypoints(zero_array)
@@ -231,7 +231,7 @@ def player_worker(
                 if frame:
                     frame_time = frame.time
                     asyncio.run_coroutine_threadsafe(
-                        audio_track._queue.put((frame, frame_time, frame.index)), loop
+                        audio_track._queue.put((frame, frame_time, frame.index, frame.pts)), loop
                     )
                 else:
                     break
@@ -254,14 +254,15 @@ def player_worker(
             )
             
             frame_time = frame.time
+            frame_array = frame.to_rgb().to_ndarray()
             if save_dir is not None:
-                frame_array = frame.to_rgb().to_ndarray()
                 np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index), 
                         frame_array)
 
             # Put in a separate track from which keypoints will be extracted
             if enable_prediction:
-                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame, frame_time, frame.index)), loop)
+                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame_time, \
+                        frame.index, frame.pts)), loop)
 
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
@@ -275,7 +276,8 @@ def player_worker(
                     "MediaPlayer(%s) Put video frame %s in the queue: %s",
                      container.name, str(frame_index), str(frame)
                 )
-                asyncio.run_coroutine_threadsafe(video_track._queue.put((frame, frame_time, frame_index)), loop)
+                asyncio.run_coroutine_threadsafe(video_track._queue.put((frame, frame_time, \
+                        frame_index, frame.pts)), loop)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -292,7 +294,7 @@ class PlayerStreamTrack(MediaStreamTrack):
             raise MediaStreamError
 
         self._player._start(self)
-        frame, frame_time, frame_index = await self._queue.get()
+        frame, frame_time, frame_index, frame_pts = await self._queue.get()
         if frame is None:
             self.__log_debug("Received frame from queue is None %s", self.kind)
             self.stop()
@@ -324,7 +326,7 @@ class PlayerStreamTrack(MediaStreamTrack):
         # extract keypoints before sending
         if self.kind == "keypoints": 
             try:
-                frame_array = frame.to_rgb().to_ndarray()
+                frame_array = frame 
                 time_before_keypoints = time.process_time()
                 loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -334,7 +336,7 @@ class PlayerStreamTrack(MediaStreamTrack):
                     "Keypoints extraction time for frame index %s in sender: %s",
                     str(frame_index), str(time_after_keypoints - time_before_keypoints)
                 )
-                keypoints_frame = KeypointsFrame(keypoints, frame.pts, frame_index, source_frame_index) 
+                keypoints_frame = KeypointsFrame(keypoints, frame_pts, frame_index, source_frame_index) 
                 
                 if frame_index % self._player._reference_update_freq == 0:
                     time_before_update = time.process_time()
@@ -347,7 +349,7 @@ class PlayerStreamTrack(MediaStreamTrack):
             except:
                 keypoints_frame = None
                 logger.warning(
-                    "MediaPlayer(%s) Could not extract the keypoints for frame index %s", str(frame.index)
+                    "MediaPlayer(%s) Could not extract the keypoints for frame index %s", str(frame_index)
                 )
 
             if keypoints_frame is not None:
