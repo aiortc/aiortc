@@ -22,7 +22,6 @@ from first_order_model.fom_wrapper import FirstOrderModel
 # instantiate and warm up the model
 time_before_instantiation = time.process_time()
 zero_array = np.zeros((256, 256, 3))
-"""
 config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
 zero_kps, src_index = model.extract_keypoints(zero_array)
