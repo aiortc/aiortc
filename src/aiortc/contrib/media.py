@@ -59,7 +59,7 @@ REAL_TIME_FORMATS = [
 ]
 
 NUM_ROWS = 2
-NUMBER_OF_BITS = 8
+NUMBER_OF_BITS = 16
 
 def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
     """ stamp frame with barcode for frame index before transmission
