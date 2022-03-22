@@ -5,7 +5,14 @@ from aiortc.rtcrtpparameters import (
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionParameters,
 )
-from aiortc.sdp import GroupDescription, SessionDescription, SsrcDescription
+from aiortc.sdp import (
+    GroupDescription,
+    H264Level,
+    H264Profile,
+    SessionDescription,
+    SsrcDescription,
+    parse_h264_profile_level_id,
+)
 
 from .utils import lf2crlf
 
@@ -1943,3 +1950,86 @@ a=sctpmap:5000 webrtc-datachannel 1024
         self.assertEqual(d.media[2].profile, "DTLS/SCTP")
         self.assertEqual(d.media[2].direction, None)
         self.assertEqual(d.media[2].msid, None)
+
+
+class H264SdpTest(TestCase):
+    def assertParseFails(self, v, msg):
+        with self.assertRaises(ValueError) as cm:
+            parse_h264_profile_level_id(v)
+        self.assertEqual(str(cm.exception), msg)
+
+    def test_parse_invalid(self):
+        # invalid hexadecimal
+        self.assertParseFails(None, "Expected a 6 character hexadecimal string")
+        self.assertParseFails("", "Expected a 6 character hexadecimal string")
+        self.assertParseFails("xyzxyz", "Expected a 6 character hexadecimal string")
+
+        # invalid level
+        self.assertParseFails("42E000", "0 is not a valid H264Level")
+        self.assertParseFails("42E00F", "15 is not a valid H264Level")
+        self.assertParseFails("42E0FF", "255 is not a valid H264Level")
+
+        # invalid profile
+        self.assertParseFails(
+            "42E11F", "Unrecognized profile_iop = 225, profile_idc = 66"
+        )
+        self.assertParseFails(
+            "58601F", "Unrecognized profile_iop = 96, profile_idc = 88"
+        )
+        self.assertParseFails(
+            "64E01F", "Unrecognized profile_iop = 224, profile_idc = 100"
+        )
+
+    def test_parse_constrained_baseline(self):
+        self.assertEqual(
+            parse_h264_profile_level_id("42E01F"),
+            (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL3_1),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("42E00B"),
+            (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL1_1),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("42F00B"),
+            (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL1_B),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("42C02A"),
+            (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL4_2),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("58F01F"),
+            (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL3_1),
+        )
+
+    def test_parse_baseline(self):
+        self.assertEqual(
+            parse_h264_profile_level_id("42001F"),
+            (H264Profile.PROFILE_BASELINE, H264Level.LEVEL3_1),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("42A01F"),
+            (H264Profile.PROFILE_BASELINE, H264Level.LEVEL3_1),
+        )
+        self.assertEqual(
+            parse_h264_profile_level_id("58A01F"),
+            (H264Profile.PROFILE_BASELINE, H264Level.LEVEL3_1),
+        )
+
+    def test_parse_main(self):
+        self.assertEqual(
+            parse_h264_profile_level_id("4D401F"),
+            (H264Profile.PROFILE_MAIN, H264Level.LEVEL3_1),
+        )
+
+    def test_parse_high(self):
+        self.assertEqual(
+            parse_h264_profile_level_id("64001F"),
+            (H264Profile.PROFILE_HIGH, H264Level.LEVEL3_1),
+        )
+
+    def test_parse_constrained_high(self):
+        self.assertEqual(
+            parse_h264_profile_level_id("640C1F"),
+            (H264Profile.PROFILE_CONSTRAINED_HIGH, H264Level.LEVEL3_1),
+        )

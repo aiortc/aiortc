@@ -1,7 +1,7 @@
 import asyncio
-from collections import OrderedDict
 from struct import pack
 from unittest import TestCase
+from unittest.mock import patch
 
 from aiortc import MediaStreamTrack
 from aiortc.codecs import PCMU_CODEC
@@ -85,24 +85,20 @@ class RTCRtpSenderTest(TestCase):
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("packetization-mode", "1"),
-                            ("level-asymmetry-allowed", "1"),
-                            ("profile-level-id", "42001f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42001f",
+                    },
                 ),
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("packetization-mode", "1"),
-                            ("level-asymmetry-allowed", "1"),
-                            ("profile-level-id", "42e01f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42e01f",
+                    },
                 ),
             ],
         )
@@ -240,6 +236,18 @@ class RTCRtpSenderTest(TestCase):
                 sorted([s.type for s in report.values()]),
                 ["outbound-rtp", "remote-inbound-rtp", "transport"],
             )
+
+            # clean shutdown
+            await sender.stop()
+
+    @patch("aiortc.rtcrtpsender.logger.isEnabledFor")
+    @asynctest
+    async def test_log_debug(self, mock_is_enabled_for):
+        mock_is_enabled_for.return_value = True
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            await sender.send(RTCRtpParameters(codecs=[VP8_CODEC]))
 
             # clean shutdown
             await sender.stop()

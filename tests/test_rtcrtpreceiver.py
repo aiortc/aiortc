@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import fractions
-from collections import OrderedDict
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -109,6 +108,17 @@ class NackGeneratorTest(TestCase):
         missed = generator.add(missing)
         self.assertEqual(missed, False)
         self.assertEqual(generator.missing, set())
+
+    def test_with_loss_truncate(self):
+        generator = NackGenerator()
+        packets = create_rtp_packets(259, 0)
+
+        generator.add(packets[0])
+        generator.add(packets[129])
+        self.assertEqual(generator.missing, set(range(1, 129)))
+
+        generator.add(packets[258])
+        self.assertEqual(generator.missing, set(range(130, 258)))
 
 
 class StreamStatisticsTest(TestCase):
@@ -255,24 +265,20 @@ class RTCRtpReceiverTest(CodecTestCase):
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("packetization-mode", "1"),
-                            ("level-asymmetry-allowed", "1"),
-                            ("profile-level-id", "42001f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42001f",
+                    },
                 ),
                 RTCRtpCodecCapability(
                     mimeType="video/H264",
                     clockRate=90000,
-                    parameters=OrderedDict(
-                        [
-                            ("packetization-mode", "1"),
-                            ("level-asymmetry-allowed", "1"),
-                            ("profile-level-id", "42e01f"),
-                        ]
-                    ),
+                    parameters={
+                        "level-asymmetry-allowed": "1",
+                        "packetization-mode": "1",
+                        "profile-level-id": "42e01f",
+                    },
                 ),
             ],
         )
@@ -312,6 +318,14 @@ class RTCRtpReceiverTest(CodecTestCase):
 
             # give RTCP time to send a report
             await asyncio.sleep(2)
+
+    @patch("aiortc.rtcrtpreceiver.logger.isEnabledFor")
+    @asynctest
+    async def test_log_debug(self, mock_is_enabled_for):
+        mock_is_enabled_for.return_value = True
+
+        async with create_receiver("audio"):
+            pass
 
     @asynctest
     async def test_rtp_and_rtcp(self):
@@ -396,9 +410,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packets[128], arrival_time_ms=0)
 
             # check NACK was triggered
-            lost_packets = []
-            for i in range(127):
-                lost_packets.append(i + 1)
+            lost_packets = list(range(1, 128))
             self.assertEqual(nacks[0], (1234, lost_packets))
 
             # check PLI was triggered
