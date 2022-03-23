@@ -20,16 +20,18 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
-time_before_instantiation = time.process_time()
-zero_array = np.zeros((1024, 1024, 3))
+time_before_instantiation = time.perf_counter()
 config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
-zero_kps, src_index = model.extract_keypoints(zero_array)
-model.update_source(src_index, zero_array, zero_kps)
-zero_kps['source_index'] = src_index
-model.predict(zero_kps)
-time_after_instantiation = time.process_time()
+for i in range(100):
+    zero_array = np.zeros((1024, 1024, 3))
+    zero_kps, src_index = model.extract_keypoints(zero_array)
+    model.update_source(src_index, zero_array, zero_kps)
+    zero_kps['source_index'] = src_index
+    model.predict(zero_kps)
+time_after_instantiation = time.perf_counter()
 print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+model.reset()
 
 save_keypoints_to_file = False
 logger = logging.getLogger(__name__)
@@ -250,7 +252,7 @@ def player_worker(
 
             logger.warning(
                 "MediaPlayer(%s) Video frame %s read from media: %s at time %s",
-                container.name, str(frame.index), str(frame), time.process_time()
+                container.name, str(frame.index), str(frame), time.perf_counter()
             )
             
             frame_time = frame.time
@@ -327,11 +329,11 @@ class PlayerStreamTrack(MediaStreamTrack):
         if self.kind == "keypoints": 
             try:
                 frame_array = frame 
-                time_before_keypoints = time.process_time()
+                time_before_keypoints = time.perf_counter()
                 loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     keypoints, source_frame_index = await loop.run_in_executor(pool, model.extract_keypoints, frame_array)
-                time_after_keypoints = time.process_time()
+                time_after_keypoints = time.perf_counter()
                 logger.warning(
                     "Keypoints extraction time for frame index %s in sender: %s",
                     str(frame_index), str(time_after_keypoints - time_before_keypoints)
@@ -339,9 +341,9 @@ class PlayerStreamTrack(MediaStreamTrack):
                 keypoints_frame = KeypointsFrame(keypoints, frame_pts, frame_index, source_frame_index) 
                 
                 if frame_index % self._player._reference_update_freq == 0:
-                    time_before_update = time.process_time()
+                    time_before_update = time.perf_counter()
                     model.update_source(frame_index, frame_array, keypoints)
-                    time_after_update = time.process_time()
+                    time_after_update = time.perf_counter()
                     logger.warning(
                         "Time to update source frame with index %s in sender: %s",
                         str(frame_index), str(time_after_update - time_before_update)
@@ -640,11 +642,11 @@ class MediaRecorder:
                                     frame, video_frame_index, datetime.datetime.now())
                     source_frame_array = frame.to_rgb().to_ndarray()
                     
-                    time_before_keypoints = time.process_time()
+                    time_before_keypoints = time.perf_counter()
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         source_keypoints, _  = await loop.run_in_executor(pool, 
                                             model.extract_keypoints, source_frame_array)
-                    time_after_keypoints = time.process_time()
+                    time_after_keypoints = time.perf_counter()
                     self.__log_debug("Source keypoints extraction time in receiver: %s",
                                     str(time_after_keypoints - time_before_keypoints))
 
@@ -678,7 +680,7 @@ class MediaRecorder:
                 asyncio.run_coroutine_threadsafe(self.__keypoints_queue.put(received_keypoints), loop)
                 frame_index = received_keypoints['frame_index']
                 self.__log_debug("Keypoints for frame %s received at time %s",
-                                str(frame_index), time.process_time())
+                                str(frame_index), time.perf_counter())
 
                 if save_keypoints_to_file:
                     keypoints_file = open(self.__keypoints_file_name, "a")
@@ -695,9 +697,9 @@ class MediaRecorder:
                         if frame_index % self.__reference_update_freq == 0:
                             source_frame_array, source_keypoints, video_frame_index = await self.__video_queue.get()
                             
-                            time_before_update = time.process_time()
+                            time_before_update = time.perf_counter()
                             model.update_source(video_frame_index, source_frame_array, source_keypoints)
-                            time_after_update = time.process_time()
+                            time_after_update = time.perf_counter()
                             self.__log_debug("Time to update source frame %s in receiver" \
                                     " when receiving keypoint %s: %s",
                                     video_frame_index, frame_index, str(time_after_update - time_before_update))
@@ -705,12 +707,12 @@ class MediaRecorder:
                                 np.save(os.path.join(self.__save_dir, 
                                     'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
 
-                        before_predict_time = time.process_time()
                         with concurrent.futures.ThreadPoolExecutor() as pool:
                             self.__log_debug("Calling predict for frame %s with source frame %s",
                                         frame_index, received_keypoints['source_index'])
+                            before_predict_time = time.perf_counter()
                             predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
-                        after_predict_time = time.process_time()
+                        after_predict_time = time.perf_counter()
 
                         self.__log_debug("Prediction time for received keypoints %s: %s at time %s using source %s",
                                 frame_index, str(after_predict_time - before_predict_time), 
