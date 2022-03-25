@@ -36,9 +36,9 @@ extras_require = {
     ]
 }
 
+# Do not build cffi modules on readthedocs as we lack the codec development files.
 if os.environ.get("READTHEDOCS") == "True":
     cffi_modules = []
-    install_requires = list(filter(lambda x: not x.startswith("av"), install_requires))
 
 setuptools.setup(
     name=about["__title__"],
