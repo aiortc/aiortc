@@ -4,6 +4,20 @@ on: [push, pull_request]
 
 jobs:
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.7
+      - name: Build documentation
+        env:
+          READTHEDOCS: 'True'
+        run: |
+          pip install . -r requirements/doc.txt
+          make -C docs html SPHINXOPTS=-W
+
   lint:
     runs-on: ubuntu-latest
     steps:
