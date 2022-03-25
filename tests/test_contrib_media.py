@@ -16,6 +16,18 @@ from .codecs import CodecTestCase
 from .utils import asynctest
 
 
+class VideoStreamTrackUhd(VideoStreamTrack):
+    async def recv(self):
+        pts, time_base = await self.next_timestamp()
+
+        frame = av.VideoFrame(width=3840, height=2160)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
+
+
 class MediaTestCase(CodecTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -628,3 +640,22 @@ class MediaRecorderTest(MediaTestCase):
         )
         self.assertEqual(container.streams[0].width, 640)
         self.assertEqual(container.streams[0].height, 480)
+
+    @asynctest
+    async def test_video_mp4_uhd(self):
+        path = self.temporary_path("test.mp4")
+        recorder = MediaRecorder(path)
+        recorder.addTrack(VideoStreamTrackUhd())
+        await recorder.start()
+        await asyncio.sleep(2)
+        await recorder.stop()
+
+        # check output media
+        container = av.open(path, "r")
+        self.assertEqual(len(container.streams), 1)
+        self.assertEqual(container.streams[0].codec.name, "h264")
+        self.assertGreater(
+            float(container.streams[0].duration * container.streams[0].time_base), 0
+        )
+        self.assertEqual(container.streams[0].width, 3840)
+        self.assertEqual(container.streams[0].height, 2160)

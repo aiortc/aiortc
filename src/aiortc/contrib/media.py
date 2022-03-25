@@ -312,6 +312,7 @@ class MediaPlayer:
 
 class MediaRecorderContext:
     def __init__(self, stream):
+        self.started = False
         self.stream = stream
         self.task = None
 
@@ -387,12 +388,20 @@ class MediaRecorder:
                 self.__container.close()
                 self.__container = None
 
-    async def __run_track(self, track, context):
+    async def __run_track(self, track: MediaStreamTrack, context: MediaRecorderContext):
         while True:
             try:
                 frame = await track.recv()
             except MediaStreamError:
                 return
+
+            if not context.started:
+                # adjust the output size to match the first frame
+                if isinstance(frame, VideoFrame):
+                    context.stream.width = frame.width
+                    context.stream.height = frame.height
+                context.started = True
+
             for packet in context.stream.encode(frame):
                 self.__container.mux(packet)
 
