@@ -95,7 +95,7 @@ extensions = [
 
 autodoc_member_order = 'bysource'
 intersphinx_mapping = {
-    'av': ('http://docs.mikeboers.com/pyav/0.5.3', None)
+    'av': ('https://pyav.org/docs/stable', None)
 }
 
 # Add any paths that contain templates here, relative to this directory.

@@ -1,7 +1,7 @@
 Helpers
 =============
 
-.. automodule:: aiortc
+.. currentmodule:: aiortc
 
 These classes are not part of the WebRTC or ORTC API, but provide higher-level
 helpers for tasks like manipulating media streams.
