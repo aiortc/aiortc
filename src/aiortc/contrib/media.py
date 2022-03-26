@@ -24,7 +24,7 @@ time_before_instantiation = time.perf_counter()
 config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
 model = FirstOrderModel(config_path)
 for i in range(100):
-    zero_array = np.zeros((1024, 1024, 3))
+    zero_array = np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint8)
     zero_kps, src_index = model.extract_keypoints(zero_array)
     model.update_source(src_index, zero_array, zero_kps)
     zero_kps['source_index'] = src_index
