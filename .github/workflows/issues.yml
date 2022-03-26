@@ -7,11 +7,10 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v4
+      - uses: actions/stale@v5
         with:
           stale-issue-label: stale
-          stale-issue-message: 'This issue is stale because it has been open 120 days with no activity. Remove stale label or comment or this will be closed in 14 days.'
-          close-issue-message: 'This issue was closed because it has been stalled for 14 days with no activity.'
+          stale-issue-message: 'This issue has been automatically marked as stale because it has not had recent activity. It will be closed if no further activity occurs. Thank you for your contributions.'
           days-before-stale: 120
           days-before-close: 14
           days-before-pr-stale: -1
