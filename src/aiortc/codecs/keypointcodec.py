@@ -13,7 +13,8 @@ from ..mediastreams import KeypointsFrame
 SCALE_FACTOR = 256//2
 NUM_KP = 10
 NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', -1))
-INDEX_BITS = 16
+FRAME_INDEX_BITS = 16
+SRC_INDEX_BITS = 4
 DUMMY_PTS = 5
 
 """ custom codec that uses the protobuf module 
@@ -42,7 +43,8 @@ def keypoint_dict_to_struct(keypoint_dict):
             jacobian.d22 = j[1][1]
 
     keypoint_info_struct.pts = keypoint_dict['pts']
-    keypoint_info_struct.index = keypoint_dict['index']
+    keypoint_info_struct.frame_index = keypoint_dict['frame_index']
+    keypoint_info_struct.source_index = keypoint_dict['source_index']
     
     return keypoint_info_struct
 
@@ -66,7 +68,8 @@ def keypoint_struct_to_dict(keypoint_info_struct):
         keypoint_dict['jacobians'] = np.array(jacobian_array)
 
     keypoint_dict['pts'] = keypoint_info_struct.pts
-    keypoint_dict['index'] = keypoint_info_struct.index
+    keypoint_dict['frame_index'] = keypoint_info_struct.frame_index
+    keypoint_dict['source_index'] = keypoint_info_struct.source_index
 
     return keypoint_dict
 
@@ -118,9 +121,15 @@ def custom_encode(keypoint_dict):
     num_bins = 2 ** (NUM_JACOBIAN_BITS - 1)
     bit_format = f'0{NUM_JACOBIAN_BITS - 1}b'
 
-    index = keypoint_dict['index']
-    index_bit_format = f'0{INDEX_BITS}b'
+    # frame index
+    index = keypoint_dict['frame_index']
+    index_bit_format = f'0{FRAME_INDEX_BITS}b'
     binary_str += f'{index:{index_bit_format}}'
+    
+    # source frame index
+    src_index = keypoint_dict['source_index']
+    index_bit_format = f'0{SRC_INDEX_BITS}b'
+    binary_str += f'{src_index:{index_bit_format}}'
         
     for k in keypoint_dict['keypoints']:
         x = round(k[0] * SCALE_FACTOR + SCALE_FACTOR)
@@ -151,9 +160,15 @@ def custom_decode(serialized_data):
     kp_locations = []
     jacobians = []
 
-    index = int(bitstring[:INDEX_BITS], 2)
-    keypoint_dict['index'] = index
-    bitstring = bitstring[INDEX_BITS:]
+    # frame index
+    index = int(bitstring[:FRAME_INDEX_BITS], 2)
+    keypoint_dict['frame_index'] = index
+    bitstring = bitstring[FRAME_INDEX_BITS:]
+    
+    # source frame index to reconstruct from
+    source_index = int(bitstring[:SRC_INDEX_BITS], 2)
+    keypoint_dict['source_index'] = source_index
+    bitstring = bitstring[SRC_INDEX_BITS:]
     
     while len(bitstring) > 0:
         num_bits = NUM_JACOBIAN_BITS if num_read_so_far >= 2*NUM_KP else 8
@@ -203,7 +218,8 @@ class KeypointsDecoder(Decoder):
             keypoint_dict = custom_decode(keypoint_str)
             keypoint_dict['pts'] = DUMMY_PTS
         
-        frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], keypoint_dict['index'])
+        frame = KeypointsFrame(keypoint_dict, keypoint_dict['pts'], \
+                keypoint_dict['frame_index'], keypoint_dict['source_index'])
         return [frame]
 
 
@@ -221,7 +237,8 @@ class KeypointsEncoder(Encoder):
         timestamp = frame.pts
         keypoint_dict = frame.data
         keypoint_dict['pts'] = frame.pts
-        keypoint_dict['index'] = frame.index
+        keypoint_dict['frame_index'] = frame.frame_index
+        keypoint_dict['source_index'] = frame.source_index
 
         if NUM_JACOBIAN_BITS == -1:
             keypoint_info_struct = keypoint_dict_to_struct(keypoint_dict)

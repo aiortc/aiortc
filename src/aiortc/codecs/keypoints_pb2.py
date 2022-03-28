@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto2',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0fkeypoints.proto\x12\x08keypoint\"&\n\x08Keypoint\x12\x0c\n\x04xloc\x18\x01 \x02(\x02\x12\x0c\n\x04yloc\x18\x02 \x02(\x02\">\n\x08Jacobian\x12\x0b\n\x03\x64\x31\x31\x18\x01 \x02(\x02\x12\x0b\n\x03\x64\x31\x32\x18\x02 \x02(\x02\x12\x0b\n\x03\x64\x32\x31\x18\x03 \x02(\x02\x12\x0b\n\x03\x64\x32\x32\x18\x04 \x02(\x02\"x\n\x0cKeypointInfo\x12%\n\tkeypoints\x18\x01 \x03(\x0b\x32\x12.keypoint.Keypoint\x12%\n\tjacobians\x18\x02 \x03(\x0b\x32\x12.keypoint.Jacobian\x12\x0b\n\x03pts\x18\x03 \x02(\x02\x12\r\n\x05index\x18\x04 \x02(\x05'
+  serialized_pb=b'\n\x0fkeypoints.proto\x12\x08keypoint\"&\n\x08Keypoint\x12\x0c\n\x04xloc\x18\x01 \x02(\x02\x12\x0c\n\x04yloc\x18\x02 \x02(\x02\">\n\x08Jacobian\x12\x0b\n\x03\x64\x31\x31\x18\x01 \x02(\x02\x12\x0b\n\x03\x64\x31\x32\x18\x02 \x02(\x02\x12\x0b\n\x03\x64\x32\x31\x18\x03 \x02(\x02\x12\x0b\n\x03\x64\x32\x32\x18\x04 \x02(\x02\"\x94\x01\n\x0cKeypointInfo\x12%\n\tkeypoints\x18\x01 \x03(\x0b\x32\x12.keypoint.Keypoint\x12%\n\tjacobians\x18\x02 \x03(\x0b\x32\x12.keypoint.Jacobian\x12\x0b\n\x03pts\x18\x03 \x02(\x02\x12\x13\n\x0b\x66rame_index\x18\x04 \x02(\x05\x12\x14\n\x0csource_index\x18\x05 \x02(\x05'
 )
 
 
@@ -147,8 +147,15 @@ _KEYPOINTINFO = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='index', full_name='keypoint.KeypointInfo.index', index=3,
+      name='frame_index', full_name='keypoint.KeypointInfo.frame_index', index=3,
       number=4, type=5, cpp_type=1, label=2,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='source_index', full_name='keypoint.KeypointInfo.source_index', index=4,
+      number=5, type=5, cpp_type=1, label=2,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -165,8 +172,8 @@ _KEYPOINTINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=133,
-  serialized_end=253,
+  serialized_start=134,
+  serialized_end=282,
 )
 
 _KEYPOINTINFO.fields_by_name['keypoints'].message_type = _KEYPOINT
