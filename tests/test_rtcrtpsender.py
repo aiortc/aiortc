@@ -207,7 +207,6 @@ class RTCRtpSenderTest(TestCase):
             # clean shutdown
             await sender.stop()
 
-
     @asynctest
     async def test_playout_delay(self):
 
@@ -233,14 +232,14 @@ class RTCRtpSenderTest(TestCase):
             min_delay = 4000
             max_delay = 4095
             sender.setPlayoutDelay(min_delay, max_delay)
-            
+
             await sender.send(RTCRtpParameters(codecs=[VP8_CODEC]))
 
             # wait for packet to be transmitted, expect playout delay
             packet = await queue.get()
             encoded_delay = (min_delay << 12) | max_delay
             self.assertEqual(packet.extensions.playout_delay, encoded_delay)
-            
+
             # receive RTCP RR
             packet = RtcpRrPacket(
                 ssrc=1234,
