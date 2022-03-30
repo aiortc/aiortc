@@ -181,9 +181,16 @@ class RTCRtpSender:
     def setTransport(self, transport) -> None:
         self.__transport = transport
 
-    def setPlayoutDelay(self, min, max) -> None:
+    def setPlayoutDelay(self, min_delay, max_delay) -> None:
         mask = 0xFFF
-        self.__playout_delay = ((min & mask) << 12) | (max & mask)
+        def check(value):
+            if value < 0 or value > mask:
+                raise ValueError("Playout delay values must be in the [0,4095] range")
+
+        check(min_delay)
+        check(max_delay)
+
+        self.__playout_delay = ((min_delay & mask) << 12) | (max_delay & mask)
         self.__playout_delay_first_written = 0xFFFF
         self.__playout_delay_write = True
 
