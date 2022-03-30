@@ -1944,6 +1944,40 @@ a=sctpmap:5000 webrtc-datachannel 1024
         self.assertEqual(d.media[1].msid, None)
         self.assertEqual(d.webrtc_track_id(d.media[0]), None)
 
+        self.assertEqual(
+            d.media[1].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:toffset"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=3,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                ),
+                RTCRtpHeaderExtensionParameters(id=4, uri="urn:3gpp:video-orientation"),
+                RTCRtpHeaderExtensionParameters(
+                    id=5,
+                    uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=6,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=7,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/video-content-type",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=8,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/video-timing",
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=10,
+                    uri="http://tools.ietf.org/html/draft-ietf-avtext-framemarking-07",
+                )
+            ],
+        )
+
         self.assertEqual(d.media[2].kind, "application")
         self.assertEqual(d.media[2].host, "1.2.3.4")
         self.assertEqual(d.media[2].port, 60277)
