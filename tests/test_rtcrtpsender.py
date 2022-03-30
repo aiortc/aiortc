@@ -12,6 +12,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionCapability,
+    RTCRtpHeaderExtensionParameters,
     RTCRtpParameters,
 )
 from aiortc.rtcrtpsender import RTCRtpSender
@@ -19,6 +20,7 @@ from aiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    HeaderExtensionsMap,
     RtcpPsfbPacket,
     RtcpReceiverInfo,
     RtcpRrPacket,
@@ -215,9 +217,22 @@ class RTCRtpSenderTest(TestCase):
         """
         queue = asyncio.Queue()
 
+        parameters = RTCRtpParameters(
+            codecs=[VP8_CODEC],
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=6,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+                )
+            ],
+        )
+
+        ext_map = HeaderExtensionsMap()
+        ext_map.configure(parameters)
+
         async def mock_send_rtp(data):
             if not is_rtcp(data):
-                await queue.put(RtpPacket.parse(data))
+                await queue.put(RtpPacket.parse(data, ext_map))
 
         async with dummy_dtls_transport_pair() as (local_transport, _):
             local_transport._send_rtp = mock_send_rtp
@@ -225,15 +240,14 @@ class RTCRtpSenderTest(TestCase):
             sender = RTCRtpSender(VideoStreamTrack(), local_transport)
             self.assertEqual(sender.kind, "video")
 
-            self.assertRaises(ValueError, sender.setPlayoutDelay(4096, 0))
-
-            self.assertRaises(ValueError, sender.setPlayoutDelay(0, 4096))
+            self.assertRaises(ValueError, lambda: sender.setPlayoutDelay(4096, 0))
+            self.assertRaises(ValueError, lambda: sender.setPlayoutDelay(0, 4096))
 
             min_delay = 4000
             max_delay = 4095
             sender.setPlayoutDelay(min_delay, max_delay)
 
-            await sender.send(RTCRtpParameters(codecs=[VP8_CODEC]))
+            await sender.send(parameters)
 
             # wait for packet to be transmitted, expect playout delay
             packet = await queue.get()

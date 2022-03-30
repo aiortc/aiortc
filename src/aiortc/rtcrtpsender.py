@@ -183,6 +183,7 @@ class RTCRtpSender:
 
     def setPlayoutDelay(self, min_delay, max_delay) -> None:
         mask = 0xFFF
+
         def check(value):
             if value < 0 or value > mask:
                 raise ValueError("Playout delay values must be in the [0,4095] range")
