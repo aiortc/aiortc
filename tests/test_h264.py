@@ -116,6 +116,14 @@ class H264Test(CodecTestCase):
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
+    def test_packer(self):
+        encoder = get_encoder(H264_CODEC)
+        self.assertTrue(isinstance(encoder, H264Encoder))
+
+        packet = self.create_video_packet(header=[0, 0, 1], pts=0)
+        packages, timestamp = encoder.pack(packet)
+        self.assertGreaterEqual(len(packages), 1)
+
     def test_encoder_buffering(self):
         create_encoder_context = h264.create_encoder_context
 

@@ -4,16 +4,17 @@ import fractions
 import logging
 import threading
 import time
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Union
 
 import av
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
+from av.packet import Packet
+from av.video.stream import VideoStream
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
 
 logger = logging.getLogger(__name__)
-
 
 REAL_TIME_FORMATS = [
     "alsa",
@@ -81,7 +82,7 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
-def player_worker(
+def player_worker_decode(
     loop,
     container,
     streams,
@@ -109,7 +110,7 @@ def player_worker(
     while not quit_event.is_set():
         try:
             frame = next(container.decode(*streams))
-        except (av.AVError, StopIteration) as exc:
+        except Exception as exc:
             if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
                 time.sleep(0.01)
                 continue
@@ -153,6 +154,47 @@ def player_worker(
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
 
 
+def player_worker_demux(
+    loop,
+    container,
+    streams,
+    audio_track,
+    video_track,
+    quit_event,
+    throttle_playback,
+    loop_playback,
+):
+    frame_time = None
+    start_time = time.time()
+
+    while not quit_event.is_set():
+        try:
+            packet = next(container.demux(*streams))
+            if not packet.size:
+                raise StopIteration
+        except Exception as exc:
+            if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
+                time.sleep(0.01)
+                continue
+            if isinstance(exc, StopIteration) and loop_playback:
+                container.seek(0)
+                continue
+            if video_track:
+                asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
+            break
+
+        # read up to 1 second ahead
+        if throttle_playback:
+            elapsed_time = time.time() - start_time
+            if frame_time and frame_time > elapsed_time + 1:
+                time.sleep(0.1)
+
+        if isinstance(packet.stream, VideoStream) and video_track:
+            if packet.pts is not None and packet.time_base is not None:
+                frame_time = int(packet.pts * packet.time_base)
+                asyncio.run_coroutine_threadsafe(video_track._queue.put(packet), loop)
+
+
 class PlayerStreamTrack(MediaStreamTrack):
     def __init__(self, player, kind):
         super().__init__()
@@ -161,30 +203,33 @@ class PlayerStreamTrack(MediaStreamTrack):
         self._queue = asyncio.Queue()
         self._start = None
 
-    async def recv(self):
+    async def recv(self) -> Union[Frame, Packet]:
         if self.readyState != "live":
             raise MediaStreamError
 
         self._player._start(self)
-        frame = await self._queue.get()
-        if frame is None:
+        data = await self._queue.get()
+        if data is None:
             self.stop()
             raise MediaStreamError
-        frame_time = frame.time
+        if isinstance(data, Frame):
+            data_time = data.time
+        elif isinstance(data, Packet):
+            data_time = float(data.pts * data.time_base)
 
         # control playback rate
         if (
             self._player is not None
             and self._player._throttle_playback
-            and frame_time is not None
+            and data_time is not None
         ):
             if self._start is None:
-                self._start = time.time() - frame_time
+                self._start = time.time() - data_time
             else:
-                wait = self._start + frame_time - time.time()
+                wait = self._start + data_time - time.time()
                 await asyncio.sleep(wait)
 
-        return frame
+        return data
 
     def stop(self):
         super().stop()
@@ -230,7 +275,7 @@ class MediaPlayer:
     :param loop: Whether to repeat playback indefinitely (requires a seekable file).
     """
 
-    def __init__(self, file, format=None, options={}, loop=False):
+    def __init__(self, file, format=None, options={}, loop=False, decode=True):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
@@ -238,15 +283,22 @@ class MediaPlayer:
         # examine streams
         self.__started: Set[PlayerStreamTrack] = set()
         self.__streams = []
+        self.__decode = decode
         self.__audio: Optional[PlayerStreamTrack] = None
         self.__video: Optional[PlayerStreamTrack] = None
         for stream in self.__container.streams:
             if stream.type == "audio" and not self.__audio:
-                self.__audio = PlayerStreamTrack(self, kind="audio")
-                self.__streams.append(stream)
+                if self.__decode:
+                    self.__audio = PlayerStreamTrack(self, kind="audio")
+                    self.__streams.append(stream)
             elif stream.type == "video" and not self.__video:
-                self.__video = PlayerStreamTrack(self, kind="video")
-                self.__streams.append(stream)
+                if not self.__decode:
+                    if stream.codec_context.name in ["h264", "mpeg4"]:
+                        self.__video = PlayerStreamTrack(self, kind="video")
+                        self.__streams.append(stream)
+                else:
+                    self.__video = PlayerStreamTrack(self, kind="video")
+                    self.__streams.append(stream)
 
         # check whether we need to throttle playback
         container_format = set(self.__container.format.name.split(","))
@@ -279,7 +331,7 @@ class MediaPlayer:
             self.__thread_quit = threading.Event()
             self.__thread = threading.Thread(
                 name="media-player",
-                target=player_worker,
+                target=player_worker_decode if self.__decode else player_worker_demux,
                 args=(
                     asyncio.get_event_loop(),
                     self.__container,

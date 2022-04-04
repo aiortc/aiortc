@@ -362,134 +362,205 @@ class BufferingInputContainer:
 
         return self.__real.decode(*args, **kwargs)
 
+    def demux(self, *args, **kwargs):
+        # fail with EAGAIN once
+        if not self.__failed:
+            self.__failed = True
+            raise av.AVError(errno.EAGAIN, "EAGAIN")
+
+        return self.__real.demux(*args, **kwargs)
+
     def __getattr__(self, name):
         return getattr(self.__real, name)
 
 
 class MediaPlayerTest(MediaTestCase):
+    def assertAudio(self, frame):
+        self.assertEqual(frame.format.name, "s16")
+        self.assertEqual(frame.layout.name, "stereo")
+        self.assertEqual(frame.samples, 960)
+        self.assertEqual(frame.sample_rate, 48000)
+
+    def assertVideo(self, frame):
+        self.assertEqual(frame.width, 640)
+        self.assertEqual(frame.height, 480)
+
+    def createMediaPlayer(self, path, **kwargs):
+        return MediaPlayer(path, **kwargs)
+
+    def endTime(self, frame):
+        return frame.time + frame.samples / frame.sample_rate
+
     @asynctest
     async def test_audio_file_8kHz(self):
         path = self.create_audio_file("test.wav")
-        player = MediaPlayer(path)
+        player = self.createMediaPlayer(path)
 
-        # check tracks
-        self.assertIsNotNone(player.audio)
-        self.assertIsNone(player.video)
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            self.assertIsNone(player.audio)
+            self.assertIsNone(player.video)
+        else:
+            # check tracks
+            self.assertIsNotNone(player.audio)
+            self.assertIsNone(player.video)
 
-        # read all frames
-        self.assertEqual(player.audio.readyState, "live")
-        for i in range(49):
-            frame = await player.audio.recv()
-            self.assertEqual(frame.format.name, "s16")
-            self.assertEqual(frame.layout.name, "stereo")
-            self.assertEqual(frame.samples, 960)
-            self.assertEqual(frame.sample_rate, 48000)
-        with self.assertRaises(MediaStreamError):
-            await player.audio.recv()
-        self.assertEqual(player.audio.readyState, "ended")
+            # read all frames
+            self.assertEqual(player.audio.readyState, "live")
+            while True:
+                frame = await player.audio.recv()
+                self.assertAudio(frame)
+                if self.endTime(frame) >= 0.98:
+                    break
+            with self.assertRaises(MediaStreamError):
+                await player.audio.recv()
+            self.assertEqual(player.audio.readyState, "ended")
 
-        # try reading again
-        with self.assertRaises(MediaStreamError):
-            await player.audio.recv()
+            # try reading again
+            with self.assertRaises(MediaStreamError):
+                await player.audio.recv()
 
     @asynctest
     async def test_audio_file_48kHz(self):
         path = self.create_audio_file("test.wav", sample_rate=48000)
-        player = MediaPlayer(path)
+        player = self.createMediaPlayer(path)
 
-        # check tracks
-        self.assertIsNotNone(player.audio)
-        self.assertIsNone(player.video)
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            self.assertIsNone(player.audio)
+            self.assertIsNone(player.video)
+        else:
+            # check tracks
+            self.assertIsNotNone(player.audio)
+            self.assertIsNone(player.video)
 
-        # read all frames
-        self.assertEqual(player.audio.readyState, "live")
-        for i in range(50):
-            frame = await player.audio.recv()
-            self.assertEqual(frame.format.name, "s16")
-            self.assertEqual(frame.layout.name, "stereo")
-            self.assertEqual(frame.samples, 960)
-            self.assertEqual(frame.sample_rate, 48000)
-        with self.assertRaises(MediaStreamError):
-            await player.audio.recv()
-        self.assertEqual(player.audio.readyState, "ended")
+            # read all frames
+            self.assertEqual(player.audio.readyState, "live")
+            while True:
+                frame = await player.audio.recv()
+                if self.endTime(frame) >= 1.0:
+                    break
+                self.assertAudio(frame)
+            with self.assertRaises(MediaStreamError):
+                await player.audio.recv()
+            self.assertEqual(player.audio.readyState, "ended")
 
     @asynctest
     async def test_audio_file_looping(self):
         path = self.create_audio_file("test.wav", sample_rate=48000)
-        player = MediaPlayer(path, loop=True)
+        player = self.createMediaPlayer(path, loop=True)
+
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            self.assertIsNone(player.audio)
+        else:
+            # read all frames, then loop and re-read all frames
+            self.assertEqual(player.audio.readyState, "live")
+            for i in range(100):
+                frame = await player.audio.recv()
+                self.assertAudio(frame)
+
+            # read one more time, forcing a second loop
+            await player.audio.recv()
+            self.assertEqual(player.audio.readyState, "live")
+
+            # stop the player
+            player.audio.stop()
+
+    @asynctest
+    async def test_video_file_looping(self):
+        path = self.create_video_file("test.mp4", duration=5)
+        player = self.createMediaPlayer(path, loop=True)
 
         # read all frames, then loop and re-read all frames
-        self.assertEqual(player.audio.readyState, "live")
+        self.assertEqual(player.video.readyState, "live")
         for i in range(100):
-            frame = await player.audio.recv()
-            self.assertEqual(frame.format.name, "s16")
-            self.assertEqual(frame.layout.name, "stereo")
-            self.assertEqual(frame.samples, 960)
-            self.assertEqual(frame.sample_rate, 48000)
+            frame = await player.video.recv()
+            self.assertVideo(frame)
 
         # read one more time, forcing a second loop
-        await player.audio.recv()
-        self.assertEqual(player.audio.readyState, "live")
+        await player.video.recv()
+        self.assertEqual(player.video.readyState, "live")
 
         # stop the player
-        player.audio.stop()
+        player.video.stop()
 
     @asynctest
     async def test_audio_and_video_file(self):
         path = self.create_audio_and_video_file(name="test.mp4", duration=5)
-        player = MediaPlayer(path)
+        player = self.createMediaPlayer(path)
 
-        # check tracks
-        self.assertIsNotNone(player.audio)
-        self.assertIsNotNone(player.video)
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            # check tracks
+            self.assertIsNone(player.audio)
+            self.assertIsNotNone(player.video)
 
-        # read some frames
-        self.assertEqual(player.audio.readyState, "live")
-        self.assertEqual(player.video.readyState, "live")
-        for i in range(10):
-            await asyncio.gather(player.audio.recv(), player.video.recv())
+            # read some frames
+            self.assertEqual(player.video.readyState, "live")
+            for i in range(10):
+                await asyncio.gather(player.video.recv())
 
-        # stop audio track
-        player.audio.stop()
+            # continue reading
+            for i in range(10):
+                await player.video.recv()
 
-        # continue reading
-        for i in range(10):
+            # stop video track
+            player.video.stop()
+
+            with self.assertRaises(MediaStreamError):
+                await player.video.recv()
+        else:
+            # check tracks
+            self.assertIsNotNone(player.audio)
+            self.assertIsNotNone(player.video)
+
+            # read some frames
+            self.assertEqual(player.audio.readyState, "live")
+            self.assertEqual(player.video.readyState, "live")
+            for i in range(10):
+                await asyncio.gather(player.audio.recv(), player.video.recv())
+
+            # stop audio track
+            player.audio.stop()
+
+            # continue reading
+            for i in range(10):
+                with self.assertRaises(MediaStreamError):
+                    await player.audio.recv()
+                await player.video.recv()
+
+            # stop video track
+            player.video.stop()
+
+            # continue reading
             with self.assertRaises(MediaStreamError):
                 await player.audio.recv()
-            await player.video.recv()
-
-        # stop video track
-        player.video.stop()
-
-        # continue reading
-        with self.assertRaises(MediaStreamError):
-            await player.audio.recv()
-        with self.assertRaises(MediaStreamError):
-            await player.video.recv()
+            with self.assertRaises(MediaStreamError):
+                await player.video.recv()
 
     @asynctest
     async def test_video_file_png(self):
         path = self.create_video_file("test-%3d.png", duration=3)
-        player = MediaPlayer(path)
+        player = self.createMediaPlayer(path)
 
-        # check tracks
-        self.assertIsNone(player.audio)
-        self.assertIsNotNone(player.video)
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            self.assertIsNone(player.audio)
+            self.assertIsNone(player.video)
+        else:
+            # check tracks
+            self.assertIsNone(player.audio)
+            self.assertIsNotNone(player.video)
 
-        # read all frames
-        self.assertEqual(player.video.readyState, "live")
-        for i in range(90):
-            frame = await player.video.recv()
-            self.assertEqual(frame.width, 640)
-            self.assertEqual(frame.height, 480)
-        with self.assertRaises(MediaStreamError):
-            await player.video.recv()
-        self.assertEqual(player.video.readyState, "ended")
+            # read all frames
+            self.assertEqual(player.video.readyState, "live")
+            for i in range(90):
+                frame = await player.video.recv()
+                self.assertVideo(frame)
+            with self.assertRaises(MediaStreamError):
+                await player.video.recv()
+            self.assertEqual(player.video.readyState, "ended")
 
     @asynctest
     async def test_video_file_mp4(self):
         path = self.create_video_file("test.mp4", duration=3)
-        player = MediaPlayer(path)
+        player = self.createMediaPlayer(path)
 
         # check tracks
         self.assertIsNone(player.audio)
@@ -499,8 +570,7 @@ class MediaPlayerTest(MediaTestCase):
         self.assertEqual(player.video.readyState, "live")
         for i in range(90):
             frame = await player.video.recv()
-            self.assertEqual(frame.width, 640)
-            self.assertEqual(frame.height, 480)
+            self.assertVideo(frame)
         with self.assertRaises(MediaStreamError):
             await player.video.recv()
         self.assertEqual(player.video.readyState, "ended")
@@ -512,7 +582,7 @@ class MediaPlayerTest(MediaTestCase):
 
         with patch("av.open") as mock_open:
             mock_open.return_value = container
-            player = MediaPlayer(path)
+            player = self.createMediaPlayer(path)
 
         # check tracks
         self.assertIsNone(player.audio)
@@ -522,11 +592,24 @@ class MediaPlayerTest(MediaTestCase):
         self.assertEqual(player.video.readyState, "live")
         for i in range(90):
             frame = await player.video.recv()
-            self.assertEqual(frame.width, 640)
-            self.assertEqual(frame.height, 480)
+            self.assertVideo(frame)
         with self.assertRaises(MediaStreamError):
             await player.video.recv()
         self.assertEqual(player.video.readyState, "ended")
+
+
+class MediaPlayerNoDecodeTest(MediaPlayerTest):
+    def assertAudio(self, packet):
+        self.assertIsInstance(packet, av.Packet)
+
+    def assertVideo(self, packet):
+        self.assertIsInstance(packet, av.Packet)
+
+    def createMediaPlayer(self, path, **kwargs):
+        return MediaPlayer(path, decode=False, **kwargs)
+
+    def endTime(self, packet):
+        return float((packet.pts + packet.duration) * packet.time_base)
 
 
 class MediaRecorderTest(MediaTestCase):

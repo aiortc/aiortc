@@ -72,6 +72,14 @@ class OpusTest(CodecTestCase):
         payloads, timestamp = encoder.encode(frames[1])
         self.assertEqual(timestamp, 960)
 
+    def test_packer(self):
+        encoder = get_encoder(OPUS_CODEC)
+        self.assertTrue(isinstance(encoder, OpusEncoder))
+
+        packet = self.create_video_packet(header=[0], pts=0)
+        packages, timestamp = encoder.pack(packet)
+        self.assertGreaterEqual(len(packages), 1)
+
     def test_roundtrip(self):
         self.roundtrip_audio(
             OPUS_CODEC, output_layout="stereo", output_sample_rate=48000

@@ -2,6 +2,7 @@ import fractions
 from unittest import TestCase
 
 from av import AudioFrame, VideoFrame
+from av.packet import Packet
 
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
@@ -46,6 +47,16 @@ class CodecTestCase(TestCase):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
+    def create_video_packet(self, header, pts):
+        """
+        Create a single blank video packet.
+        """
+        buffer = header + [0]
+        packet = Packet(len(buffer))
+        packet.update(bytes(buffer))
+        packet.pts = pts
+        return packet
 
     def create_video_frames(self, width, height, count, time_base=VIDEO_TIME_BASE):
         """

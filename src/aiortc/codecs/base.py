@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Tuple
 
 from av.frame import Frame
+from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
 
@@ -18,3 +19,6 @@ class Encoder(metaclass=ABCMeta):
         self, frame: Frame, force_keyframe: bool = False
     ) -> Tuple[List[bytes], int]:
         pass  # pragma: no cover
+
+    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+        return bytes(packet), int(packet.pts)

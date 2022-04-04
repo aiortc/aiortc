@@ -7,6 +7,7 @@ from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar
 
 import av
 from av.frame import Frame
+from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
@@ -318,6 +319,11 @@ class H264Encoder(Encoder):
         packages = self._encode_frame(frame, force_keyframe)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         return self._packetize(packages), timestamp
+
+    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+        assert isinstance(packet, av.Packet)
+        packages = self._split_bitstream(bytes(packet))
+        return self._packetize(packages), int(packet.pts)
 
     @property
     def target_bitrate(self) -> int:
