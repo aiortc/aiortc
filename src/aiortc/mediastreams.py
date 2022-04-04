@@ -3,10 +3,11 @@ import fractions
 import time
 import uuid
 from abc import ABCMeta, abstractmethod
-from typing import Tuple
+from typing import Tuple, Union
 
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
+from av.packet import Packet
 from pyee.asyncio import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
@@ -51,9 +52,10 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
         return "ended" if self.__ended else "live"
 
     @abstractmethod
-    async def recv(self) -> Frame:
+    async def recv(self) -> Union[Frame, Packet]:
         """
-        Receive the next :class:`~av.audio.frame.AudioFrame` or :class:`~av.video.frame.VideoFrame`.
+        Receive the next :class:`~av.audio.frame.AudioFrame`, :class:`~av.video.frame.VideoFrame`
+        or :class:`~av.packet.Packet`
         """
 
     def stop(self) -> None:

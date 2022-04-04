@@ -7,6 +7,7 @@ import uuid
 from typing import Callable, Dict, List, Optional, Union
 
 from av import AudioFrame
+from av.frame import Frame
 
 from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
@@ -265,20 +266,25 @@ class RTCRtpSender:
                 pass
 
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
-        # get frame
-        frame = await self.__track.recv()
+        # get [Frame|Packet]
+        data = await self.__track.recv()
         audio_level = None
-        if isinstance(frame, AudioFrame):
-            audio_level = rtp.compute_audio_level_dbov(frame)
 
-        # encode frame
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
-        force_keyframe = self.__force_keyframe
-        self.__force_keyframe = False
-        payloads, timestamp = await self.__loop.run_in_executor(
-            None, self.__encoder.encode, frame, force_keyframe
-        )
+
+        if isinstance(data, Frame):
+            # encode frame
+            if isinstance(data, AudioFrame):
+                audio_level = rtp.compute_audio_level_dbov(data)
+
+            force_keyframe = self.__force_keyframe
+            self.__force_keyframe = False
+            payloads, timestamp = await self.__loop.run_in_executor(
+                None, self.__encoder.encode, data, force_keyframe
+            )
+        else:
+            payloads, timestamp = self.__encoder.pack(data)
 
         return RTCEncodedFrame(payloads, timestamp, audio_level)
 

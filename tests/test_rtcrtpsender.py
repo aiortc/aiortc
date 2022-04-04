@@ -28,11 +28,16 @@ from aiortc.rtp import (
     pack_remb_fci,
 )
 from aiortc.stats import RTCStatsReport
+from tests.test_mediastreams import VideoPacketStreamTrack
 
 from .utils import ClosedDtlsTransport, asynctest, dummy_dtls_transport_pair
 
 VP8_CODEC = RTCRtpCodecParameters(
     mimeType="video/VP8", clockRate=90000, payloadType=100
+)
+
+H264_CODEC = RTCRtpCodecParameters(
+    mimeType="video/H264", clockRate=90000, payloadType=98
 )
 
 
@@ -276,6 +281,18 @@ class RTCRtpSenderTest(TestCase):
             sender._send_keyframe()
 
             # wait for packet to be transmitted, then shutdown
+            await asyncio.sleep(0.1)
+            await sender.stop()
+
+    @asynctest
+    async def test_handle_encoded_packet(self):
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            sender = RTCRtpSender(VideoPacketStreamTrack(), local_transport)
+            self.assertEqual(sender.kind, "video")
+
+            await sender.send(RTCRtpParameters(codecs=[H264_CODEC]))
+
+            # wait for cleanup
             await asyncio.sleep(0.1)
             await sender.stop()
 

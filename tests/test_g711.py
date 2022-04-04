@@ -60,6 +60,14 @@ class PcmaTest(CodecTestCase):
             self.assertEqual(payloads, [b"\xd5" * 160])
             self.assertEqual(timestamp, frame.pts // 6)
 
+    def test_packer(self):
+        encoder = get_encoder(PCMA_CODEC)
+        self.assertTrue(isinstance(encoder, PcmaEncoder))
+
+        packet = self.create_video_packet(header=[0], pts=0)
+        packages, timestamp = encoder.pack(packet)
+        self.assertGreaterEqual(len(packages), 1)
+
     def test_roundtrip(self):
         self.roundtrip_audio(PCMA_CODEC, output_layout="mono", output_sample_rate=8000)
 
