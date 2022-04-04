@@ -11,7 +11,7 @@ from .codecs import CodecTestCase
 class PcmaTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(PCMA_CODEC)
-        self.assertTrue(isinstance(decoder, PcmaDecoder))
+        self.assertIsInstance(decoder, PcmaDecoder)
 
         frames = decoder.decode(JitterFrame(data=b"\xd5" * 160, timestamp=0))
         self.assertEqual(len(frames), 1)
@@ -29,7 +29,7 @@ class PcmaTest(CodecTestCase):
 
     def test_encoder_mono_8hz(self):
         encoder = get_encoder(PCMA_CODEC)
-        self.assertTrue(isinstance(encoder, PcmaEncoder))
+        self.assertIsInstance(encoder, PcmaEncoder)
 
         for frame in self.create_audio_frames(
             layout="mono", sample_rate=8000, count=10
@@ -40,7 +40,7 @@ class PcmaTest(CodecTestCase):
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMA_CODEC)
-        self.assertTrue(isinstance(encoder, PcmaEncoder))
+        self.assertIsInstance(encoder, PcmaEncoder)
 
         for frame in self.create_audio_frames(
             layout="stereo", sample_rate=8000, count=10
@@ -51,7 +51,7 @@ class PcmaTest(CodecTestCase):
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMA_CODEC)
-        self.assertTrue(isinstance(encoder, PcmaEncoder))
+        self.assertIsInstance(encoder, PcmaEncoder)
 
         for frame in self.create_audio_frames(
             layout="stereo", sample_rate=48000, count=10
@@ -72,7 +72,7 @@ class PcmaTest(CodecTestCase):
 class PcmuTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(PCMU_CODEC)
-        self.assertTrue(isinstance(decoder, PcmuDecoder))
+        self.assertIsInstance(decoder, PcmuDecoder)
 
         frames = decoder.decode(JitterFrame(data=b"\xff" * 160, timestamp=0))
         self.assertEqual(len(frames), 1)
@@ -87,7 +87,7 @@ class PcmuTest(CodecTestCase):
 
     def test_encoder_mono_8hz(self):
         encoder = get_encoder(PCMU_CODEC)
-        self.assertTrue(isinstance(encoder, PcmuEncoder))
+        self.assertIsInstance(encoder, PcmuEncoder)
 
         for frame in self.create_audio_frames(
             layout="mono", sample_rate=8000, count=10
@@ -98,7 +98,7 @@ class PcmuTest(CodecTestCase):
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(PCMU_CODEC)
-        self.assertTrue(isinstance(encoder, PcmuEncoder))
+        self.assertIsInstance(encoder, PcmuEncoder)
 
         for frame in self.create_audio_frames(
             layout="stereo", sample_rate=8000, count=10
@@ -109,7 +109,7 @@ class PcmuTest(CodecTestCase):
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(PCMU_CODEC)
-        self.assertTrue(isinstance(encoder, PcmuEncoder))
+        self.assertIsInstance(encoder, PcmuEncoder)
 
         for frame in self.create_audio_frames(
             layout="stereo", sample_rate=48000, count=10

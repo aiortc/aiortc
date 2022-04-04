@@ -188,8 +188,8 @@ class MediaRelayTest(MediaTestCase):
             exc1, frame2 = await asyncio.gather(
                 proxy1.recv(), proxy2.recv(), return_exceptions=True
             )
-            self.assertTrue(isinstance(exc1, MediaStreamError))
-            self.assertTrue(isinstance(frame2, av.AudioFrame))
+            self.assertIsInstance(exc1, MediaStreamError)
+            self.assertIsInstance(frame2, av.AudioFrame)
 
         # stop source track
         source.stop()
@@ -224,8 +224,8 @@ class MediaRelayTest(MediaTestCase):
             exc1, frame2 = await asyncio.gather(
                 proxy1.recv(), proxy2.recv(), return_exceptions=True
             )
-            self.assertTrue(isinstance(exc1, MediaStreamError))
-            self.assertTrue(isinstance(frame2, av.AudioFrame))
+            self.assertIsInstance(exc1, MediaStreamError)
+            self.assertIsInstance(frame2, av.AudioFrame)
 
         # stop source track
         source.stop()
@@ -261,8 +261,8 @@ class MediaRelayTest(MediaTestCase):
             exc1, exc2 = await asyncio.gather(
                 proxy1.recv(), proxy2.recv(), return_exceptions=True
             )
-            self.assertTrue(isinstance(exc1, MediaStreamError))
-            self.assertTrue(isinstance(exc2, MediaStreamError))
+            self.assertIsInstance(exc1, MediaStreamError)
+            self.assertIsInstance(exc2, MediaStreamError)
 
     @asynctest
     async def test_audio_stop_source_unbuffered(self):
@@ -294,8 +294,8 @@ class MediaRelayTest(MediaTestCase):
             exc1, exc2 = await asyncio.gather(
                 proxy1.recv(), proxy2.recv(), return_exceptions=True
             )
-            self.assertTrue(isinstance(exc1, MediaStreamError))
-            self.assertTrue(isinstance(exc2, MediaStreamError))
+            self.assertIsInstance(exc1, MediaStreamError)
+            self.assertIsInstance(exc2, MediaStreamError)
 
     @asynctest
     async def test_audio_slow_consumer(self):
@@ -342,8 +342,8 @@ class MediaRelayTest(MediaTestCase):
             exc1, frame2 = await asyncio.gather(
                 proxy1.recv(), proxy2.recv(), return_exceptions=True
             )
-            self.assertTrue(isinstance(exc1, MediaStreamError))
-            self.assertTrue(isinstance(frame2, av.AudioFrame))
+            self.assertIsInstance(exc1, MediaStreamError)
+            self.assertIsInstance(frame2, av.AudioFrame)
 
         # stop source track
         source.stop()

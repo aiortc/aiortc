@@ -51,7 +51,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertIsInstance(packet, RtcpByePacket)
         self.assertEqual(packet.sources, [2924645187])
         self.assertEqual(bytes(packet), data)
 
@@ -70,7 +70,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertIsInstance(packet, RtcpByePacket)
         self.assertEqual(packet.sources, [])
         self.assertEqual(bytes(packet), data)
 
@@ -82,7 +82,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpByePacket))
+        self.assertIsInstance(packet, RtcpByePacket)
         self.assertEqual(packet.sources, [])
         self.assertEqual(bytes(packet), b"\x80\xcb\x00\x00")
 
@@ -110,7 +110,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpPsfbPacket))
+        self.assertIsInstance(packet, RtcpPsfbPacket)
         self.assertEqual(packet.fmt, 1)
         self.assertEqual(packet.ssrc, 1414554213)
         self.assertEqual(packet.media_ssrc, 587284409)
@@ -123,7 +123,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpRrPacket))
+        self.assertIsInstance(packet, RtcpRrPacket)
         self.assertEqual(packet.ssrc, 817267719)
         self.assertEqual(packet.reports[0].ssrc, 1200895919)
         self.assertEqual(packet.reports[0].fraction_lost, 0)
@@ -162,7 +162,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpSdesPacket))
+        self.assertIsInstance(packet, RtcpSdesPacket)
         self.assertEqual(packet.chunks[0].ssrc, 1831097322)
         self.assertEqual(
             packet.chunks[0].items, [(1, b"{63f459ea-41fe-4474-9d33-9707c9ee79d1}")]
@@ -189,7 +189,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpSrPacket))
+        self.assertIsInstance(packet, RtcpSrPacket)
         self.assertEqual(packet.ssrc, 1831097322)
         self.assertEqual(packet.sender_info.ntp_timestamp, 16016567581311369308)
         self.assertEqual(packet.sender_info.rtp_timestamp, 1722342718)
@@ -218,7 +218,7 @@ class RtcpPacketTest(TestCase):
         self.assertEqual(len(packets), 1)
 
         packet = packets[0]
-        self.assertTrue(isinstance(packet, RtcpRtpfbPacket))
+        self.assertIsInstance(packet, RtcpRtpfbPacket)
         self.assertEqual(packet.fmt, 1)
         self.assertEqual(packet.ssrc, 2336520123)
         self.assertEqual(packet.media_ssrc, 4145934052)
@@ -240,8 +240,8 @@ class RtcpPacketTest(TestCase):
 
         packets = RtcpPacket.parse(data)
         self.assertEqual(len(packets), 2)
-        self.assertTrue(isinstance(packets[0], RtcpSrPacket))
-        self.assertTrue(isinstance(packets[1], RtcpSdesPacket))
+        self.assertIsInstance(packets[0], RtcpSrPacket)
+        self.assertIsInstance(packets[1], RtcpSdesPacket)
 
     def test_bad_version(self):
         data = b"\xc0" + load("rtcp_rr.bin")[1:]

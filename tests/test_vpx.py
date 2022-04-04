@@ -165,11 +165,11 @@ class Vp8Test(CodecTestCase):
 
     def test_decoder(self):
         decoder = get_decoder(VP8_CODEC)
-        self.assertTrue(isinstance(decoder, Vp8Decoder))
+        self.assertIsInstance(decoder, Vp8Decoder)
 
     def test_encoder(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, Vp8Encoder))
+        self.assertIsInstance(encoder, Vp8Encoder)
 
         frame = self.create_video_frame(width=640, height=480, pts=0)
         payloads, timestamp = encoder.encode(frame)
@@ -186,7 +186,7 @@ class Vp8Test(CodecTestCase):
 
     def test_encoder_rgb(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, Vp8Encoder))
+        self.assertIsInstance(encoder, Vp8Encoder)
 
         frame = self.create_video_frame(width=640, height=480, pts=0, format="rgb24")
         payloads, timestamp = encoder.encode(frame)
@@ -196,7 +196,7 @@ class Vp8Test(CodecTestCase):
 
     def test_encoder_large(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, Vp8Encoder))
+        self.assertIsInstance(encoder, Vp8Encoder)
 
         # first keyframe
         frame = self.create_video_frame(width=2560, height=1920, pts=0)
@@ -221,7 +221,7 @@ class Vp8Test(CodecTestCase):
 
     def test_encoder_target_bitrate(self):
         encoder = get_encoder(VP8_CODEC)
-        self.assertTrue(isinstance(encoder, Vp8Encoder))
+        self.assertIsInstance(encoder, Vp8Encoder)
         self.assertEqual(encoder.target_bitrate, 500000)
 
         frame = self.create_video_frame(width=640, height=480, pts=0)
