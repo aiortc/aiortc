@@ -1,7 +1,8 @@
 import argparse
 import asyncio
 import os
-from unittest import TestCase
+import platform
+from unittest import TestCase, skipIf
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.signaling import (
@@ -37,6 +38,7 @@ class SignalingTest(TestCase):
         # restore print()
         __builtins__["print"] = self.original_print
 
+    @skipIf(platform.system() == "Windows", "Skipping UNIX pipe tests on Windows")
     @asynctest
     async def test_copy_and_paste(self):
         parser = argparse.ArgumentParser()
@@ -119,6 +121,7 @@ class SignalingTest(TestCase):
 
         await asyncio.gather(sig_server.close(), sig_client.close())
 
+    @skipIf(platform.system() == "Windows", "Skipping UNIX socket tests on Windows")
     @asynctest
     async def test_unix_socket(self):
         parser = argparse.ArgumentParser()
@@ -140,6 +143,7 @@ class SignalingTest(TestCase):
 
         await asyncio.gather(sig_server.close(), sig_client.close())
 
+    @skipIf(platform.system() == "Windows", "Skipping UNIX socket tests on Windows")
     @asynctest
     async def test_unix_socket_abrupt_disconnect(self):
         parser = argparse.ArgumentParser()
