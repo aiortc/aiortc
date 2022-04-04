@@ -106,7 +106,7 @@ class H264PayloadDescriptorTest(TestCase):
 class H264Test(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(H264_CODEC)
-        self.assertTrue(isinstance(decoder, H264Decoder))
+        self.assertIsInstance(decoder, H264Decoder)
 
         # decode junk
         with redirect_stderr(io.StringIO()):
@@ -115,7 +115,7 @@ class H264Test(CodecTestCase):
 
     def test_encoder(self):
         encoder = get_encoder(H264_CODEC)
-        self.assertTrue(isinstance(encoder, H264Encoder))
+        self.assertIsInstance(encoder, H264Encoder)
 
         frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
@@ -131,7 +131,7 @@ class H264Test(CodecTestCase):
         h264.create_encoder_context = mock_create_encoder_context
         try:
             encoder = get_encoder(H264_CODEC)
-            self.assertTrue(isinstance(encoder, H264Encoder))
+            self.assertIsInstance(encoder, H264Encoder)
 
             frame = self.create_video_frame(width=640, height=480, pts=0)
             packages, timestamp = encoder.encode(frame)
@@ -145,7 +145,7 @@ class H264Test(CodecTestCase):
 
     def test_encoder_target_bitrate(self):
         encoder = get_encoder(H264_CODEC)
-        self.assertTrue(isinstance(encoder, H264Encoder))
+        self.assertIsInstance(encoder, H264Encoder)
         self.assertEqual(encoder.target_bitrate, 1000000)
 
         frame = self.create_video_frame(width=640, height=480, pts=0)

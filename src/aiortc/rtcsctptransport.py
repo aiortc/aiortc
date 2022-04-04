@@ -676,7 +676,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
     @property
     def maxChannels(self) -> Optional[int]:
         """
-        The maximum number of :class:`RTCDataChannel`s that can be used simultaneously.
+        The maximum number of :class:`RTCDataChannel` that can be used simultaneously.
         """
         if self._inbound_streams_count:
             return min(self._inbound_streams_count, self._outbound_streams_count)

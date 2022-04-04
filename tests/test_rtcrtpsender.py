@@ -49,7 +49,7 @@ class RTCRtpSenderTest(TestCase):
     def test_capabilities(self):
         # audio
         capabilities = RTCRtpSender.getCapabilities("audio")
-        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertIsInstance(capabilities, RTCRtpCapabilities)
         self.assertEqual(
             capabilities.codecs,
             [
@@ -78,7 +78,7 @@ class RTCRtpSenderTest(TestCase):
 
         # video
         capabilities = RTCRtpSender.getCapabilities("video")
-        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertIsInstance(capabilities, RTCRtpCapabilities)
         self.assertEqual(
             capabilities.codecs,
             [
@@ -303,7 +303,7 @@ class RTCRtpSenderTest(TestCase):
 
             # check stats
             report = await sender.getStats()
-            self.assertTrue(isinstance(report, RTCStatsReport))
+            self.assertIsInstance(report, RTCStatsReport)
             self.assertEqual(
                 sorted([s.type for s in report.values()]),
                 ["outbound-rtp", "remote-inbound-rtp", "transport"],

@@ -888,7 +888,7 @@ a=rtpmap:8 PCMA/8000
 
         # check stats
         report = await pc1.getStats()
-        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertIsInstance(report, RTCStatsReport)
         self.assertEqual(
             sorted([s.type for s in report.values()]),
             [
@@ -1235,7 +1235,7 @@ a=rtpmap:0 PCMU/8000
 
         # check stats
         report = await pc1.getStats()
-        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertIsInstance(report, RTCStatsReport)
         self.assertEqual(
             sorted([s.type for s in report.values()]),
             [
@@ -2675,7 +2675,7 @@ a=rtpmap:0 PCMU/8000
 
         # check stats
         report = await pc1.getStats()
-        self.assertTrue(isinstance(report, RTCStatsReport))
+        self.assertIsInstance(report, RTCStatsReport)
         self.assertEqual(
             sorted([s.type for s in report.values()]),
             [
