@@ -113,6 +113,9 @@ jobs:
       - name: Install QEMU
         if: matrix.os == 'ubuntu-latest'
         uses: docker/setup-qemu-action@v1
+      - name: Disable firewall
+        if: matrix.os == 'macos-latest'
+        run: sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off
       - name: Build wheels
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
