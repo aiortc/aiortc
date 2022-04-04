@@ -227,7 +227,7 @@ class RTCRtpReceiverTest(CodecTestCase):
     def test_capabilities(self):
         # audio
         capabilities = RTCRtpReceiver.getCapabilities("audio")
-        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertIsInstance(capabilities, RTCRtpCapabilities)
         self.assertEqual(
             capabilities.codecs,
             [
@@ -256,7 +256,7 @@ class RTCRtpReceiverTest(CodecTestCase):
 
         # video
         capabilities = RTCRtpReceiver.getCapabilities("video")
-        self.assertTrue(isinstance(capabilities, RTCRtpCapabilities))
+        self.assertIsInstance(capabilities, RTCRtpCapabilities)
         self.assertEqual(
             capabilities.codecs,
             [
@@ -348,7 +348,7 @@ class RTCRtpReceiverTest(CodecTestCase):
 
             # check stats
             report = await receiver.getStats()
-            self.assertTrue(isinstance(report, RTCStatsReport))
+            self.assertIsInstance(report, RTCStatsReport)
             self.assertEqual(
                 sorted([s.type for s in report.values()]),
                 ["inbound-rtp", "remote-outbound-rtp", "transport"],
@@ -357,7 +357,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             # check sources
             sources = receiver.getSynchronizationSources()
             self.assertEqual(len(sources), 1)
-            self.assertTrue(isinstance(sources[0], RTCRtpSynchronizationSource))
+            self.assertIsInstance(sources[0], RTCRtpSynchronizationSource)
             self.assertEqual(sources[0].source, 4028317929)
 
             # check remote track

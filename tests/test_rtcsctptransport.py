@@ -111,7 +111,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_init.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, InitChunk))
+        self.assertIsInstance(chunk, InitChunk)
         self.assertEqual(chunk.type, 1)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(len(chunk.body), 82)
@@ -134,7 +134,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_cookie_echo.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, CookieEchoChunk))
+        self.assertIsInstance(chunk, CookieEchoChunk)
         self.assertEqual(chunk.type, 10)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(len(chunk.body), 8)
@@ -143,7 +143,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_abort.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, AbortChunk))
+        self.assertIsInstance(chunk, AbortChunk)
         self.assertEqual(chunk.type, 6)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(
@@ -154,7 +154,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_data.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, DataChunk))
+        self.assertIsInstance(chunk, DataChunk)
         self.assertEqual(chunk.type, 0)
         self.assertEqual(chunk.flags, 3)
         self.assertEqual(chunk.tsn, 2584679421)
@@ -170,7 +170,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_data_padding.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, DataChunk))
+        self.assertIsInstance(chunk, DataChunk)
         self.assertEqual(chunk.type, 0)
         self.assertEqual(chunk.flags, 3)
         self.assertEqual(chunk.tsn, 2584679421)
@@ -186,7 +186,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_error.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ErrorChunk))
+        self.assertIsInstance(chunk, ErrorChunk)
         self.assertEqual(chunk.type, 9)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.params, [(1, b"\x30\x39\x00\x00")])
@@ -195,7 +195,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_forward_tsn.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ForwardTsnChunk))
+        self.assertIsInstance(chunk, ForwardTsnChunk)
         self.assertEqual(chunk.type, 192)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.cumulative_tsn, 1234)
@@ -208,7 +208,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_heartbeat.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, HeartbeatChunk))
+        self.assertIsInstance(chunk, HeartbeatChunk)
         self.assertEqual(chunk.type, 4)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(
@@ -226,7 +226,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_reconfig_reset_out.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertIsInstance(chunk, ReconfigChunk)
         self.assertEqual(chunk.type, 130)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(
@@ -246,7 +246,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_reconfig_add_out.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertIsInstance(chunk, ReconfigChunk)
         self.assertEqual(chunk.type, 130)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.params, [(17, b"\xca\x02\xf60\x00\x10\x00\x00")])
@@ -262,7 +262,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_reconfig_response.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ReconfigChunk))
+        self.assertIsInstance(chunk, ReconfigChunk)
         self.assertEqual(chunk.type, 130)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.params, [(16, b"\x91S\x1fT\x00\x00\x00\x01")])
@@ -278,7 +278,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_sack.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, SackChunk))
+        self.assertIsInstance(chunk, SackChunk)
         self.assertEqual(chunk.type, 3)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.cumulative_tsn, 2222939037)
@@ -294,7 +294,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_shutdown.bin")
         chunk = self.roundtrip_packet(data)
 
-        self.assertTrue(isinstance(chunk, ShutdownChunk))
+        self.assertIsInstance(chunk, ShutdownChunk)
         self.assertEqual(
             repr(chunk), "ShutdownChunk(flags=0, cumulative_tsn=2696426712)"
         )
@@ -1589,7 +1589,7 @@ class RTCSctpTransportTest(TestCase):
             await client._receive_chunk(chunk)
 
             # check response
-            self.assertTrue(isinstance(ack, HeartbeatAckChunk))
+            self.assertIsInstance(ack, HeartbeatAckChunk)
             self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
 
     @asynctest

@@ -75,7 +75,7 @@ class RTCCertificateTest(TestCase):
 
         expires = certificate.expires
         self.assertIsNotNone(expires)
-        self.assertTrue(isinstance(expires, datetime.datetime))
+        self.assertIsInstance(expires, datetime.datetime)
 
         fingerprints = certificate.getFingerprints()
         self.assertEqual(len(fingerprints), 1)

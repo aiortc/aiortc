@@ -15,7 +15,7 @@ OPUS_CODEC = RTCRtpCodecParameters(
 class OpusTest(CodecTestCase):
     def test_decoder(self):
         decoder = get_decoder(OPUS_CODEC)
-        self.assertTrue(isinstance(decoder, OpusDecoder))
+        self.assertIsInstance(decoder, OpusDecoder)
 
         frames = decoder.decode(JitterFrame(data=b"\xfc\xff\xfe", timestamp=0))
         self.assertEqual(len(frames), 1)
@@ -29,7 +29,7 @@ class OpusTest(CodecTestCase):
 
     def test_encoder_mono_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
-        self.assertTrue(isinstance(encoder, OpusEncoder))
+        self.assertIsInstance(encoder, OpusEncoder)
 
         frames = self.create_audio_frames(layout="mono", sample_rate=8000, count=2)
 
@@ -44,7 +44,7 @@ class OpusTest(CodecTestCase):
 
     def test_encoder_stereo_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
-        self.assertTrue(isinstance(encoder, OpusEncoder))
+        self.assertIsInstance(encoder, OpusEncoder)
 
         frames = self.create_audio_frames(layout="stereo", sample_rate=8000, count=2)
 
@@ -59,7 +59,7 @@ class OpusTest(CodecTestCase):
 
     def test_encoder_stereo_48khz(self):
         encoder = get_encoder(OPUS_CODEC)
-        self.assertTrue(isinstance(encoder, OpusEncoder))
+        self.assertIsInstance(encoder, OpusEncoder)
 
         frames = self.create_audio_frames(layout="stereo", sample_rate=48000, count=2)
 
