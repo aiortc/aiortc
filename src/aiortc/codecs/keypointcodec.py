@@ -7,14 +7,17 @@ from typing import List, Optional, Tuple
 from ..jitterbuffer import JitterFrame
 from .base import Decoder, Encoder
 from .keypoints_pb2 import KeypointInfo
+import bitstring
+import math
 
 from ..mediastreams import KeypointsFrame
 
-SCALE_FACTOR = 256//2
 NUM_KP = 10
-NUM_JACOBIAN_BITS = int(os.environ.get('JACOBIAN_BITS', -1))
+FRAME_SIZE = int(os.environ.get('FRAME_SIZE', 1024))
+NUM_JACOBIAN_BITS = 16
+SCALE_FACTOR = FRAME_SIZE//2
 FRAME_INDEX_BITS = 16
-SRC_INDEX_BITS = 4
+SRC_INDEX_BITS = 16
 DUMMY_PTS = 5
 
 """ custom codec that uses the protobuf module 
@@ -47,6 +50,28 @@ def keypoint_dict_to_struct(keypoint_dict):
     keypoint_info_struct.source_index = keypoint_dict['source_index']
     
     return keypoint_info_struct
+
+
+def jacobian_to_float16(jacobian_val):
+    """ convert jacobian to a 16 bit float value """
+    bit_array = bitstring.BitArray(float=jacobian_val, length=32)
+    bit_32 = bit_array.bin
+    sign = bit_32[0]
+    exponent = int(bit_32[1:9], 2) - 127 + 15
+    mantissa = bit_32[9:][:10]
+
+    binary_str = f'{sign}{exponent:05b}{mantissa}'
+    return binary_str
+
+
+def float16_to_jacobian(float16_bit_str):
+    """ convert a float 16 value to jacobian """
+    sign = float16_bit_str[0]
+    exponent = int(float16_bit_str[1:6], 2) - 15 + 127
+    mantissa = float16_bit_str[6:] + '0000000000000'
+    float32_bitstring = f'0b{sign}{exponent:08b}{mantissa}'
+    bit_array =  bitstring.BitArray(float32_bitstring)
+    return bit_array.float
 
 
 def keypoint_struct_to_dict(keypoint_info_struct):
@@ -125,23 +150,23 @@ def custom_encode(keypoint_dict):
     index = keypoint_dict['frame_index']
     index_bit_format = f'0{FRAME_INDEX_BITS}b'
     binary_str += f'{index:{index_bit_format}}'
-    
+
     # source frame index
     src_index = keypoint_dict['source_index']
     index_bit_format = f'0{SRC_INDEX_BITS}b'
     binary_str += f'{src_index:{index_bit_format}}'
         
-    for k in keypoint_dict['keypoints']:
-        x = round(k[0] * SCALE_FACTOR + SCALE_FACTOR)
-        y = round(k[1] * SCALE_FACTOR + SCALE_FACTOR)
-        binary_str += f'{x:08b}'
-        binary_str += f'{y:08b}'
+    kp_bits = int(math.log(FRAME_SIZE, 2))
+    for i, k in enumerate(keypoint_dict['keypoints']):
+        x = min(round(k[0] * SCALE_FACTOR + SCALE_FACTOR), FRAME_SIZE - 1)
+        y = min(round(k[1] * SCALE_FACTOR + SCALE_FACTOR), FRAME_SIZE - 1)
+        binary_str += f'{x:0{kp_bits}b}'
+        binary_str += f'{y:0{kp_bits}b}'
 
     for j in keypoint_dict['jacobians']:
         flattened_jacobians = j.flatten()
         for element in flattened_jacobians:
-            sign, binary = jacobian_to_bin(element, num_bins)
-            binary_str += f'{sign}{binary:{bit_format}}'
+            binary_str += jacobian_to_float16(element)
 
     return int(binary_str, 2).to_bytes(len(binary_str) // 8, byteorder='big')
 
@@ -170,12 +195,11 @@ def custom_decode(serialized_data):
     keypoint_dict['source_index'] = source_index
     bitstring = bitstring[SRC_INDEX_BITS:]
     
+    kp_bits = int(math.log(FRAME_SIZE, 2))
     while len(bitstring) > 0:
-        num_bits = NUM_JACOBIAN_BITS if num_read_so_far >= 2*NUM_KP else 8
+        num_bits = 16 if num_read_so_far >= 2*NUM_KP else kp_bits
         word = bitstring[:num_bits]
         bitstring = bitstring[num_bits:]
-        sign = -1 if word[0] == '0' else 1
-        bin_number = int(word[1:num_bits], 2)
         num_read_so_far += 1
 
         if num_read_so_far <= 2 * NUM_KP:
@@ -187,7 +211,7 @@ def custom_decode(serialized_data):
             else:
                 kp_locations.append(value)
         else:
-            value = sign * bin_to_jacobian(bin_number, num_bins)
+            value = float16_to_jacobian(word)
             if num_read_so_far % 4 == 0:
                 jacobians.append(value)
                 jacobians = np.array(jacobians).reshape((2, 2))

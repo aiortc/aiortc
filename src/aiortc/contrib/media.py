@@ -21,10 +21,11 @@ from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
 time_before_instantiation = time.perf_counter()
-config_path = '/home/ubuntu/aiortc/nets_implementation/first_order_model/config/api_sample.yaml'
-model = FirstOrderModel(config_path)
+config_path = '/data3/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
+checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
+model = FirstOrderModel(config_path, checkpoint)
 for i in range(100):
-    zero_array = np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint8)
+    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
     zero_kps, src_index = model.extract_keypoints(zero_array)
     model.update_source(src_index, zero_array, zero_kps)
     zero_kps['source_index'] = src_index
@@ -263,6 +264,10 @@ def player_worker(
 
             # Put in a separate track from which keypoints will be extracted
             if enable_prediction:
+                logger.warning(
+                    "MediaPlayer(%s) Put frame %s in keypoints queue: %s",
+                     container.name, str(frame.index), str(frame)
+                )
                 asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame_time, \
                         frame.index, frame.pts)), loop)
 
