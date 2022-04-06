@@ -295,7 +295,7 @@ class H264Encoder(Encoder):
 
         data_to_send = b""
         for package in self.codec.encode(frame):
-            package_bytes = package.to_bytes()
+            package_bytes = bytes(package)
             if self.codec_buffering:
                 # delay sending to ensure we accumulate all packages
                 # for a given PTS

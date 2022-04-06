@@ -3,6 +3,8 @@ import io
 from contextlib import redirect_stderr
 from unittest import TestCase
 
+from av import Packet
+
 from aiortc.codecs import get_decoder, get_encoder, h264
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.jitterbuffer import JitterFrame
@@ -16,22 +18,15 @@ H264_CODEC = RTCRtpCodecParameters(
 )
 
 
-class DummyPacket:
-    def __init__(self, dts, pts):
-        self.dts = dts
-        self.pts = pts
-
-    def to_bytes(self):
-        return b""
-
-
 class FragmentedCodecContext:
     def __init__(self, orig):
         self.__orig = orig
 
     def encode(self, frame):
         packages = self.__orig.encode(frame)
-        packages.append(DummyPacket(packages[0].dts, packages[0].pts))
+        dummy = Packet()
+        dummy.pts = packages[0].pts
+        packages.append(dummy)
         return packages
 
     def __getattr__(self, name):
