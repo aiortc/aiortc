@@ -247,7 +247,7 @@ class Vp8Encoder(Encoder):
             lib.vpx_codec_destroy(self.codec)
 
     def encode(
-        self, frame: Frame, force_keyframe: bool = False
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32
     ) -> Tuple[List[bytes], int]:
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
@@ -271,8 +271,8 @@ class Vp8Encoder(Encoder):
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = 2
-            self.cfg.rc_max_quantizer = 56
+            self.cfg.rc_min_quantizer = quantizer
+            self.cfg.rc_max_quantizer = quantizer
             self.cfg.rc_undershoot_pct = 100
             self.cfg.rc_overshoot_pct = 15
             self.cfg.rc_buf_initial_sz = 500

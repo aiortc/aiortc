@@ -54,7 +54,7 @@ class RTCRtpSender:
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, trackOrKind: Union[MediaStreamTrack, str], transport) -> None:
+    def __init__(self, trackOrKind: Union[MediaStreamTrack, str], transport, quantizer) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
@@ -71,6 +71,7 @@ class RTCRtpSender:
         self._stream_id = str(uuid.uuid4())
         self.__encoder: Optional[Encoder] = None
         self.__force_keyframe = False
+        self.__quantizer = quantizer
         self.__loop = asyncio.get_event_loop()
         self.__mid: Optional[str] = None
         self.__rtp_exited = asyncio.Event()
@@ -255,11 +256,12 @@ class RTCRtpSender:
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
         force_keyframe = self.__force_keyframe
+        quantizer = self.__quantizer
         self.__force_keyframe = False
         self.__log_debug("encoding frame with force keyframe %s at time %s", 
                         force_keyframe, datetime.datetime.now())
         return await self.__loop.run_in_executor(
-            None, self.__encoder.encode, frame, force_keyframe
+            None, self.__encoder.encode, frame, force_keyframe, quantizer
         )
 
     async def _retransmit(self, sequence_number: int) -> None:

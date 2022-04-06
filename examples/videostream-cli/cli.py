@@ -78,13 +78,13 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return data_bgr
 
 
-async def run(pc, player, recorder, signaling, role):
+async def run(pc, player, recorder, signaling, role, quantizer=32):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
 
         if player and player.video:
-            pc.addTrack(player.video)
+            pc.addTrack(player.video, quantizer)
         else:
             pc.addTrack(FlagVideoStreamTrack())
 
@@ -137,6 +137,8 @@ if __name__ == "__main__":
     parser.add_argument('--enable-prediction', action='store_true')
     parser.add_argument("--output-fps", type=int, default=30,
                         help="fps you want to save the video with")
+    parser.add_argument("--quantizer", type=int, default=32,
+                        help="quantizer to compress video stream with")
     parser.add_argument("--reference-update-freq", type=int, default=30,
                         help="the frequency that the reference frame is updated")
 
@@ -179,6 +181,7 @@ if __name__ == "__main__":
                 recorder=recorder,
                 signaling=signaling,
                 role=args.role,
+                quantizer=args.quantizer,
             )
         )
     except KeyboardInterrupt:
