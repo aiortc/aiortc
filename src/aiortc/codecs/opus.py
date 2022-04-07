@@ -61,7 +61,7 @@ class OpusEncoder(Encoder):
         lib.opus_encoder_destroy(self.encoder)
 
     def encode(
-        self, frame: Frame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32
     ) -> Tuple[List[bytes], int]:
         assert isinstance(frame, AudioFrame)
         assert frame.format.name == "s16"

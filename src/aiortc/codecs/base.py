@@ -15,6 +15,6 @@ class Decoder(metaclass=ABCMeta):
 class Encoder(metaclass=ABCMeta):
     @abstractmethod
     def encode(
-        self, frame: Frame, force_keyframe: bool = False
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int=32
     ) -> Tuple[List[bytes], int]:
         pass  # pragma: no cover

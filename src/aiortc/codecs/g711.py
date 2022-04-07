@@ -40,7 +40,7 @@ class PcmEncoder(ABC, Encoder):
         self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
 
     def encode(
-        self, frame: Frame, force_keyframe: bool = False
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int=32
     ) -> Tuple[List[bytes], int]:
         assert isinstance(frame, AudioFrame)
         assert frame.format.name == "s16"

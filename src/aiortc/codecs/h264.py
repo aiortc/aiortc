@@ -315,7 +315,7 @@ class H264Encoder(Encoder):
             yield from self._split_bitstream(data_to_send)
 
     def encode(
-        self, frame: Frame, force_keyframe: bool = False
+        self, frame: Frame, force_keyframe: bool = False, quantizer: int=32
     ) -> Tuple[List[bytes], int]:
         assert isinstance(frame, av.VideoFrame)
         packages = self._encode_frame(frame, force_keyframe)

@@ -256,7 +256,7 @@ class KeypointsEncoder(Encoder):
         pass
     
     def encode(
-        self, frame, force_keyframe: bool = False
+            self, frame, force_keyframe: bool = False, quantizer: int=32
     ) -> Tuple[List[bytes], int]:
         timestamp = frame.pts
         keypoint_dict = frame.data
