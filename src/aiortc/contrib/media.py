@@ -21,7 +21,7 @@ from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
 time_before_instantiation = time.perf_counter()
-config_path = '/data3/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
+config_path = os.environ.get('CONFIG_PATH')
 checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
 model = FirstOrderModel(config_path, checkpoint)
 for i in range(100):
