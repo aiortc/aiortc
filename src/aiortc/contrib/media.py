@@ -21,7 +21,7 @@ from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
 time_before_instantiation = time.perf_counter()
-config_path = '/data3/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
+config_path = '/data1/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
 checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
 model = FirstOrderModel(config_path, checkpoint)
 for i in range(100):
@@ -60,7 +60,7 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
-NUM_ROWS = 2
+NUM_ROWS = 10
 NUMBER_OF_BITS = 16
 
 def stamp_frame(frame, frame_index, frame_pts, frame_time_base):

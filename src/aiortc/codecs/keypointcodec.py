@@ -58,6 +58,7 @@ def jacobian_to_float16(jacobian_val):
     bit_32 = bit_array.bin
     sign = bit_32[0]
     exponent = int(bit_32[1:9], 2) - 127 + 15
+    exponent = max(min(exponent, 30), 1)
     mantissa = bit_32[9:][:10]
 
     binary_str = f'{sign}{exponent:05b}{mantissa}'
