@@ -3,6 +3,15 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.3.2
+-----
+
+* Limit size of NACK reports to avoid excessive packet size.
+* Improve H.264 codec matching.
+* Determine video size from first frame received by :class:`aiortc.contrib.media.MediaRecorder`.
+* Fix a deprecation warning when using `av` >= 9.1.0.
+* Tolerate STUN URLs containing a `protocol` querystring argument.
+
 1.3.1
 -----
 
