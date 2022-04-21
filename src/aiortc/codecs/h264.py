@@ -12,6 +12,8 @@ from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 from .base import Decoder, Encoder
 
+import os
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BITRATE = 1000000  # 1 Mbps
@@ -122,21 +124,38 @@ class H264Decoder(Decoder):
 
 def create_encoder_context(
     codec_name: str, width: int, height: int, bitrate: int
-) -> Tuple[av.CodecContext, bool]:
+) -> av.CodecContext:
     codec = av.CodecContext.create(codec_name, "w")
     codec.width = width
     codec.height = height
     codec.bit_rate = bitrate
-    codec.pix_fmt = "yuv420p"
+    codec.pix_fmt = "nv12"
     codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
     codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
     codec.options = {
-        "profile": "baseline",
+        "profile": "main",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
+        'preset': 'fast',
     }
+
+    if codec_name == 'libx264':
+        codec.options.update({
+            "tune": 'zerolatency'
+        })
+
+    # if codec_name == 'h264_qsv':
+    #     codec.options.update({
+    #         "tune": 'zerolatency'
+    #     })
+
+    if codec_name == 'h264_nvenc':
+        codec.options.update({
+            "tune": 'll'
+        })
+
+
     codec.open()
-    return codec, codec_name == "h264_omx"
+    return codec
 
 
 class H264Encoder(Encoder):
@@ -281,17 +300,20 @@ class H264Encoder(Encoder):
         frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
+            encoder = os.environ.get('AIORTC_ENCODER_OVERRIDE', "h264_omx")
             try:
-                self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                self.codec = create_encoder_context(
+                    encoder, frame.width, frame.height, bitrate=self.target_bitrate
                 )
+                self.codec_buffering = True  # not sure what this is doing
             except Exception:
-                self.codec, self.codec_buffering = create_encoder_context(
+                self.codec = create_encoder_context(
                     "libx264",
                     frame.width,
                     frame.height,
                     bitrate=self.target_bitrate,
                 )
+                self.codec_buffering = False
 
         data_to_send = b""
         for package in self.codec.encode(frame):
