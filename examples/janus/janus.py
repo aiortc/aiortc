@@ -222,6 +222,14 @@ if __name__ == "__main__":
     ),
     parser.add_argument("--play-from", help="Read the media from a file and sent it."),
     parser.add_argument("--record-to", help="Write received media to a file."),
+    parser.add_argument(
+        "--play-without-decoding",
+        help=(
+            "Read the media without decoding it (experimental). "
+            "For now it only works with an MPEGTS container with only H.264 video."
+        ),
+        action="store_true",
+    )
     parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
@@ -233,7 +241,7 @@ if __name__ == "__main__":
 
     # create media source
     if args.play_from:
-        player = MediaPlayer(args.play_from)
+        player = MediaPlayer(args.play_from, decode=not args.play_without_decoding)
     else:
         player = None
 
