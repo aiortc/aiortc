@@ -737,6 +737,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         :param sessionDescription: An :class:`RTCSessionDescription` generated
                                     by :meth:`createOffer` or :meth:`createAnswer()`.
         """
+        self.__log_debug(
+            "setLocalDescription(%s)\n%s",
+            sessionDescription.type,
+            sessionDescription.sdp,
+        )
+
         # parse and validate description
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
         description.type = sessionDescription.type
@@ -807,6 +813,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         :param sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
+        self.__log_debug(
+            "setRemoteDescription(%s)\n%s",
+            sessionDescription.type,
+            sessionDescription.sdp,
+        )
+
         # parse and validate description
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
         description.type = sessionDescription.type
