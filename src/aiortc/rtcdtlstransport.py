@@ -67,7 +67,7 @@ def certificate_digest(x509) -> str:
     result_length[0] = len(result_buffer)
 
     digest_result = lib.X509_digest(x509, digest, result_buffer, result_length)
-    assert digest_result == 1
+    _openssl_assert(digest_result == 1)
 
     return b":".join(
         [
