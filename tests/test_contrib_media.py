@@ -58,7 +58,7 @@ class MediaTestCase(CodecTestCase):
 
         container = av.open(path, "w")
         audio_stream = container.add_stream("aac", rate=audio_rate)
-        video_stream = container.add_stream("mpeg4", rate=video_rate)
+        video_stream = container.add_stream("h264", rate=video_rate)
         for video_frame in self.create_video_frames(
             width=width, height=height, count=duration * video_rate
         ):
@@ -87,7 +87,10 @@ class MediaTestCase(CodecTestCase):
         if name.endswith(".png"):
             stream = container.add_stream("png", rate=rate)
             stream.pix_fmt = "rgb24"
+        elif name.endswith(".ts"):
+            stream = container.add_stream("h264", rate=rate)
         else:
+            assert name.endswith(".mp4")
             stream = container.add_stream("mpeg4", rate=rate)
         for frame in self.create_video_frames(
             width=width, height=height, count=duration * rate
@@ -465,24 +468,6 @@ class MediaPlayerTest(MediaTestCase):
             player.audio.stop()
 
     @asynctest
-    async def test_video_file_looping(self):
-        path = self.create_video_file("test.mp4", duration=5)
-        player = self.createMediaPlayer(path, loop=True)
-
-        # read all frames, then loop and re-read all frames
-        self.assertEqual(player.video.readyState, "live")
-        for i in range(100):
-            frame = await player.video.recv()
-            self.assertVideo(frame)
-
-        # read one more time, forcing a second loop
-        await player.video.recv()
-        self.assertEqual(player.video.readyState, "live")
-
-        # stop the player
-        player.video.stop()
-
-    @asynctest
     async def test_audio_and_video_file(self):
         path = self.create_audio_and_video_file(name="test.mp4", duration=5)
         player = self.createMediaPlayer(path)
@@ -536,8 +521,8 @@ class MediaPlayerTest(MediaTestCase):
                 await player.video.recv()
 
     @asynctest
-    async def test_video_file_png(self):
-        path = self.create_video_file("test-%3d.png", duration=3)
+    async def test_video_file_mp4(self):
+        path = self.create_video_file("test.mp4", duration=3)
         player = self.createMediaPlayer(path)
 
         if isinstance(self, MediaPlayerNoDecodeTest):
@@ -558,26 +543,8 @@ class MediaPlayerTest(MediaTestCase):
             self.assertEqual(player.video.readyState, "ended")
 
     @asynctest
-    async def test_video_file_mp4(self):
-        path = self.create_video_file("test.mp4", duration=3)
-        player = self.createMediaPlayer(path)
-
-        # check tracks
-        self.assertIsNone(player.audio)
-        self.assertIsNotNone(player.video)
-
-        # read all frames
-        self.assertEqual(player.video.readyState, "live")
-        for i in range(90):
-            frame = await player.video.recv()
-            self.assertVideo(frame)
-        with self.assertRaises(MediaStreamError):
-            await player.video.recv()
-        self.assertEqual(player.video.readyState, "ended")
-
-    @asynctest
-    async def test_video_file_mp4_eagain(self):
-        path = self.create_video_file("test.mp4", duration=3)
+    async def test_video_file_mpegts_eagain(self):
+        path = self.create_video_file("test.ts", duration=3)
         container = BufferingInputContainer(av.open(path, "r"))
 
         with patch("av.open") as mock_open:
@@ -590,12 +557,59 @@ class MediaPlayerTest(MediaTestCase):
 
         # read all frames
         self.assertEqual(player.video.readyState, "live")
-        for i in range(90):
+        error_count = 0
+        received_count = 0
+        for i in range(100):
+            try:
+                frame = await player.video.recv()
+                self.assertVideo(frame)
+                received_count += 1
+            except MediaStreamError:
+                error_count += 1
+                break
+        self.assertEqual(error_count, 1)
+        self.assertGreaterEqual(received_count, 89)
+        self.assertEqual(player.video.readyState, "ended")
+
+    @asynctest
+    async def test_video_file_mpegts_looping(self):
+        path = self.create_video_file("test.ts", duration=5)
+        player = self.createMediaPlayer(path, loop=True)
+
+        # read all frames, then loop and re-read all frames
+        self.assertEqual(player.video.readyState, "live")
+        for i in range(100):
             frame = await player.video.recv()
             self.assertVideo(frame)
-        with self.assertRaises(MediaStreamError):
-            await player.video.recv()
-        self.assertEqual(player.video.readyState, "ended")
+
+        # read one more time, forcing a second loop
+        await player.video.recv()
+        self.assertEqual(player.video.readyState, "live")
+
+        # stop the player
+        player.video.stop()
+
+    @asynctest
+    async def test_video_file_png(self):
+        path = self.create_video_file("test-%3d.png", duration=3)
+        player = self.createMediaPlayer(path)
+
+        if isinstance(self, MediaPlayerNoDecodeTest):
+            self.assertIsNone(player.audio)
+            self.assertIsNone(player.video)
+        else:
+            # check tracks
+            self.assertIsNone(player.audio)
+            self.assertIsNotNone(player.video)
+
+            # read all frames
+            self.assertEqual(player.video.readyState, "live")
+            for i in range(90):
+                frame = await player.video.recv()
+                self.assertVideo(frame)
+            with self.assertRaises(MediaStreamError):
+                await player.video.recv()
+            self.assertEqual(player.video.readyState, "ended")
 
 
 class MediaPlayerNoDecodeTest(MediaPlayerTest):

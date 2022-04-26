@@ -194,13 +194,15 @@ class Vp8Test(CodecTestCase):
         self.assertTrue(len(payloads[0]) < 1300)
         self.assertEqual(timestamp, 0)
 
-    def test_packer(self):
+    def test_encoder_pack(self):
         encoder = get_encoder(VP8_CODEC)
         self.assertTrue(isinstance(encoder, Vp8Encoder))
+        encoder.picture_id = 0
 
-        packet = self.create_video_packet(header=[0], pts=0)
-        packages, timestamp = encoder.pack(packet)
-        self.assertGreaterEqual(len(packages), 1)
+        packet = self.create_packet(payload=b"\x00", pts=1)
+        payloads, timestamp = encoder.pack(packet)
+        self.assertEqual(payloads, [b"\x90\x80\x00\x00"])
+        self.assertEqual(timestamp, 90)
 
     def test_encoder_large(self):
         encoder = get_encoder(VP8_CODEC)
