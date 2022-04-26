@@ -5,8 +5,10 @@ from typing import List, Optional, Tuple
 
 from av import AudioFrame
 from av.frame import Frame
+from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
+from ..mediastreams import convert_timebase
 from .base import Decoder, Encoder
 
 SAMPLE_RATE = 8000
@@ -68,6 +70,10 @@ class PcmEncoder(ABC, Encoder):
 
         data = self._convert(data, SAMPLE_WIDTH)
         return [data], timestamp
+
+    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+        timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
+        return [bytes(packet)], timestamp
 
 
 class PcmaDecoder(PcmDecoder):

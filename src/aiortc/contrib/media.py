@@ -8,6 +8,7 @@ from typing import Dict, Optional, Set, Union
 
 import av
 from av import AudioFrame, VideoFrame
+from av.audio import AudioStream
 from av.frame import Frame
 from av.packet import Packet
 from av.video.stream import VideoStream
@@ -189,10 +190,19 @@ def player_worker_demux(
             if frame_time and frame_time > elapsed_time + 1:
                 time.sleep(0.1)
 
-        if isinstance(packet.stream, VideoStream) and video_track:
-            if packet.pts is not None and packet.time_base is not None:
-                frame_time = int(packet.pts * packet.time_base)
-                asyncio.run_coroutine_threadsafe(video_track._queue.put(packet), loop)
+        track = None
+        if isinstance(packet.stream, AudioStream) and audio_track:
+            track = audio_track
+        elif isinstance(packet.stream, VideoStream) and video_track:
+            track = video_track
+
+        if (
+            track is not None
+            and packet.pts is not None
+            and packet.time_base is not None
+        ):
+            frame_time = int(packet.pts * packet.time_base)
+            asyncio.run_coroutine_threadsafe(track._queue.put(packet), loop)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -289,6 +299,9 @@ class MediaPlayer:
         for stream in self.__container.streams:
             if stream.type == "audio" and not self.__audio:
                 if self.__decode:
+                    self.__audio = PlayerStreamTrack(self, kind="audio")
+                    self.__streams.append(stream)
+                elif stream.codec_context.name in ["opus", "pcm_alaw", "pcm_mulaw"]:
                     self.__audio = PlayerStreamTrack(self, kind="audio")
                     self.__streams.append(stream)
             elif stream.type == "video" and not self.__video:

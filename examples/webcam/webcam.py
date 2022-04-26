@@ -42,6 +42,15 @@ def create_local_tracks(play_from, decode):
         return None, relay.subscribe(webcam.video)
 
 
+def force_codec(pc, sender, forced_codec):
+    kind = forced_codec.split("/")[0]
+    codecs = RTCRtpSender.getCapabilities(kind).codecs
+    transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
+    transceiver.setCodecPreferences(
+        [codec for codec in codecs if codec.mimeType == forced_codec]
+    )
+
+
 async def index(request):
     content = open(os.path.join(ROOT, "index.html"), "r").read()
     return web.Response(content_type="text/html", text=content)
@@ -72,18 +81,19 @@ async def offer(request):
     )
 
     if audio:
-        pc.addTrack(audio)
+        audio_sender = pc.addTrack(audio)
+        if args.audio_codec:
+            force_codec(pc, audio_sender, args.audio_codec)
+        elif args.play_without_decoding:
+            raise Exception("You must specify the audio codec using --audio-codec")
+
     if video:
         video_sender = pc.addTrack(video)
         if args.video_codec:
-            # only allow the specified video codec
-            video_codecs = RTCRtpSender.getCapabilities("video").codecs
-            video_transceiver = next(
-                t for t in pc.getTransceivers() if t.sender == video_sender
-            )
-            video_transceiver.setCodecPreferences(
-                [codec for codec in video_codecs if codec.mimeType == args.video_codec]
-            )
+            force_codec(pc, video_sender, args.video_codec)
+        elif args.play_without_decoding:
+            raise Exception("You must specify the video codec using --video-codec")
+
     await pc.setRemoteDescription(offer)
 
     answer = await pc.createAnswer()
@@ -128,13 +138,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("--verbose", "-v", action="count")
     parser.add_argument(
+        "--audio-codec", help="Force a specific audio codec (e.g. audio/opus)"
+    )
+    parser.add_argument(
         "--video-codec", help="Force a specific video codec (e.g. video/H264)"
     )
 
     args = parser.parse_args()
-
-    if args.play_without_decoding and not args.video_codec:
-        raise Exception("The --play-without-decoding option requires --video-codec")
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
