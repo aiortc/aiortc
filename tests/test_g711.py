@@ -68,10 +68,10 @@ class PcmaTest(CodecTestCase):
         encoder = get_encoder(PCMA_CODEC)
         self.assertTrue(isinstance(encoder, PcmaEncoder))
 
-        packet = self.create_packet(payload=PCMA_PAYLOAD, pts=0)
+        packet = self.create_packet(payload=PCMA_PAYLOAD, pts=1)
         payloads, timestamp = encoder.pack(packet)
         self.assertEqual(payloads, [PCMA_PAYLOAD])
-        self.assertEqual(timestamp, 0)
+        self.assertEqual(timestamp, 8)
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMA_CODEC, output_layout="mono", output_sample_rate=8000)

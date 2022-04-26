@@ -77,10 +77,10 @@ class OpusTest(CodecTestCase):
         encoder = get_encoder(OPUS_CODEC)
         self.assertTrue(isinstance(encoder, OpusEncoder))
 
-        packet = self.create_packet(payload=OPUS_PAYLOAD, pts=0)
+        packet = self.create_packet(payload=OPUS_PAYLOAD, pts=1)
         payloads, timestamp = encoder.pack(packet)
         self.assertEqual(payloads, [OPUS_PAYLOAD])
-        self.assertEqual(timestamp, 0)
+        self.assertEqual(timestamp, 48)
 
     def test_roundtrip(self):
         self.roundtrip_audio(
