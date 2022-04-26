@@ -323,7 +323,8 @@ class H264Encoder(Encoder):
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         assert isinstance(packet, av.Packet)
         packages = self._split_bitstream(bytes(packet))
-        return self._packetize(packages), int(packet.pts)
+        timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
+        return self._packetize(packages), timestamp
 
     @property
     def target_bitrate(self) -> int:

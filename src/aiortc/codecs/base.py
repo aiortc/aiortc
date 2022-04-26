@@ -21,4 +21,4 @@ class Encoder(metaclass=ABCMeta):
         pass  # pragma: no cover
 
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
-        return bytes(packet), int(packet.pts)
+        return [bytes(packet)], int(packet.pts)

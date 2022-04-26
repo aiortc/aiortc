@@ -292,11 +292,10 @@ class MediaPlayer:
                     self.__audio = PlayerStreamTrack(self, kind="audio")
                     self.__streams.append(stream)
             elif stream.type == "video" and not self.__video:
-                if not self.__decode:
-                    if stream.codec_context.name in ["h264", "mpeg4"]:
-                        self.__video = PlayerStreamTrack(self, kind="video")
-                        self.__streams.append(stream)
-                else:
+                if self.__decode:
+                    self.__video = PlayerStreamTrack(self, kind="video")
+                    self.__streams.append(stream)
+                elif stream.codec_context.name in ["h264", "vp8"]:
                     self.__video = PlayerStreamTrack(self, kind="video")
                     self.__streams.append(stream)
 

@@ -35,6 +35,16 @@ class CodecTestCase(TestCase):
             timestamp += samples_per_frame
         return frames
 
+    def create_packet(self, payload: bytes, pts: int) -> Packet:
+        """
+        Create a packet.
+        """
+        packet = Packet(len(payload))
+        packet.update(payload)
+        packet.pts = pts
+        packet.time_base = fractions.Fraction(1, 1000)
+        return packet
+
     def create_video_frame(
         self, width, height, pts, format="yuv420p", time_base=VIDEO_TIME_BASE
     ):
@@ -47,16 +57,6 @@ class CodecTestCase(TestCase):
         frame.pts = pts
         frame.time_base = time_base
         return frame
-
-    def create_video_packet(self, header, pts):
-        """
-        Create a single blank video packet.
-        """
-        buffer = header + [0]
-        packet = Packet(len(buffer))
-        packet.update(bytes(buffer))
-        packet.pts = pts
-        return packet
 
     def create_video_frames(self, width, height, count, time_base=VIDEO_TIME_BASE):
         """
