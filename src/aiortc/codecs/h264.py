@@ -16,9 +16,9 @@ import os
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BITRATE = 1000000  # 1 Mbps
-MIN_BITRATE = 500000  # 500 kbps
-MAX_BITRATE = 3000000  # 3 Mbps
+DEFAULT_BITRATE = os.environ.get('AIORTC_DEFAULT_BITRATE_OVERRIDE', 1000000)  # 1 Mbps
+MIN_BITRATE = os.environ.get('AIORTC_MIN_BITRATE_OVERRIDE', 500000)  # 500 kbps
+MAX_BITRATE = os.environ.get('AIORTC_MAX_BITRATE_OVERRIDE', 3000000)  # 3 Mbps
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
