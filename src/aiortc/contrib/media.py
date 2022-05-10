@@ -165,6 +165,7 @@ def player_worker_demux(
     throttle_playback,
     loop_playback,
 ):
+    video_first_pts = None
     frame_time = None
     start_time = time.time()
 
@@ -194,7 +195,17 @@ def player_worker_demux(
         if isinstance(packet.stream, AudioStream) and audio_track:
             track = audio_track
         elif isinstance(packet.stream, VideoStream) and video_track:
+            if packet.pts is None:  # pragma: no cover
+                logger.warning(
+                    "MediaPlayer(%s) Skipping video packet with no pts", container.name
+                )
+                continue
             track = video_track
+
+            # video from a webcam doesn't start at pts 0, cancel out offset
+            if video_first_pts is None:
+                video_first_pts = packet.pts
+            packet.pts -= video_first_pts
 
         if (
             track is not None
