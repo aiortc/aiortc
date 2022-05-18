@@ -568,7 +568,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         for packet in packets:
             # route RTCP packet
             for recipient in self._rtp_router.route_rtcp(packet):
-                await recipient._handle_rtcp_packet(packet)
+                await recipient._handle_rtcp_packet(packet, clock.current_ms())
 
     async def _handle_rtp_data(self, data: bytes, arrival_time_ms: int) -> None:
         try:
