@@ -201,6 +201,7 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
     async def _handle_rtcp_packet(self, packet):
+        self.__log_debug("< RTCP %s", packet)
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
@@ -323,7 +324,7 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
 
                     # send packet
-                    self.__log_debug("> %s (encoded frame ts: %s) %s", packet, old_timestamp, 
+                    self.__log_debug(" > RTP %s (encoded frame ts: %s) %s", packet, old_timestamp, 
                                     datetime.datetime.now())
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
@@ -402,7 +403,7 @@ class RTCRtpSender:
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
-            self.__log_debug("> %s", packet)
+            self.__log_debug("> RTCP %s", packet)
             payload += bytes(packet)
 
         try:

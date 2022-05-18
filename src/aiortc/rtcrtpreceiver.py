@@ -577,7 +577,7 @@ class RTCRtpReceiver:
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packet) -> None:
-        self.__log_debug("> %s", packet)
+        self.__log_debug("> RTCP %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:
