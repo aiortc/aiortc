@@ -17,22 +17,22 @@ from av.frame import Frame
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 
-from first_order_model.fom_wrapper import FirstOrderModel
+#from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
-time_before_instantiation = time.perf_counter()
-config_path = '/data3/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
-checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
-model = FirstOrderModel(config_path, checkpoint)
-for i in range(100):
-    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-    zero_kps, src_index = model.extract_keypoints(zero_array)
-    model.update_source(src_index, zero_array, zero_kps)
-    zero_kps['source_index'] = src_index
-    model.predict(zero_kps)
-time_after_instantiation = time.perf_counter()
-print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-model.reset()
+#time_before_instantiation = time.perf_counter()
+#config_path = '/data3/vibhaa/aiortc/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
+#checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
+#model = FirstOrderModel(config_path, checkpoint)
+#for i in range(100):
+#    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+#    zero_kps, src_index = model.extract_keypoints(zero_array)
+#    model.update_source(src_index, zero_array, zero_kps)
+#    zero_kps['source_index'] = src_index
+#    model.predict(zero_kps)
+#time_after_instantiation = time.perf_counter()
+#print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+#model.reset()
 
 save_keypoints_to_file = False
 logger = logging.getLogger(__name__)
