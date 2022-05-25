@@ -60,7 +60,7 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
-NUM_ROWS = 2
+NUM_ROWS = 10
 NUMBER_OF_BITS = 16
 
 def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
