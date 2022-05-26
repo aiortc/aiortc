@@ -37,7 +37,7 @@ If you want to play an MPEGTS file containing H.264 video without decoding the f
 
 .. code-block:: console
 
-   $ python webcam.py --play-from video.ts --play-without-decoding
+   $ python janus.py --play-from <video.ts> --play-without-decoding
 
 You can generate an example of such a file using:
 
