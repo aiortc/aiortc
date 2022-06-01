@@ -20,4 +20,5 @@ python3 cli.py answer \
 --signaling unix-socket \
 --verbose 2>${record_name}/receiver.log
 
+kill $(pgrep -f 'python3')
 echo "Done"
