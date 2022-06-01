@@ -336,6 +336,7 @@ class RTCRtpSender:
         timestamp_origin = 0 #random32()
         try:
             counter = 0
+            compression_sizes = []
             while True:
                 if not self.__track:
                     await asyncio.sleep(0.02)
@@ -344,37 +345,45 @@ class RTCRtpSender:
                 frame = await self.__track.recv()
                 #print(frame)
                 #import pdb; pdb.set_trace()
-                delta = 2
+                delta = 0
                 counter += 1
-                if counter >= 100 and counter <= 200 - delta:
+                revive_frame_num = 1800
+#                if counter >= 100 and counter <= revive_frame_num - delta:
 #                    #print("skipping encoding", counter)
-                    continue
-                elif counter > 200 - delta and counter <= 203:
-                    frame_array = frame.to_ndarray()
+#                    continue
+#                elif counter == revive_frame_num + 1:
+#                    self._send_keyframe()
+#                    frame_array = frame.to_ndarray()
 #                    print(frame_array.shape)
-                    if frame_array.shape[1] == 1024:
+#                    if frame_array.shape[1] == 1024:
 #                        #self._send_keyframe()
-                        print("Prediction is happening")
-                        original_pts = frame.pts
-                        original_time_base = frame.time_base
-                        loop = asyncio.get_running_loop()
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            frame = await loop.run_in_executor(pool, self.ml_predict, frame, counter)
-                        frame.pts = original_pts
-                        frame.time_base = original_time_base
-                        print("Prediction was successful! changed pts and time_base")
-                    else:
-                        continue
+#                        print("Prediction is happening")
+#                        original_pts = frame.pts
+#                        original_time_base = frame.time_base
+#                        loop = asyncio.get_running_loop()
+#                        with concurrent.futures.ThreadPoolExecutor() as pool:
+#                            frame = await loop.run_in_executor(pool, self.ml_predict, frame, counter)
+#                        frame.pts = original_pts
+#                        frame.time_base = original_time_base
+#                        print("Prediction was successful! changed pts and time_base")
+#                    else:
+#                        continue
                 payloads, timestamp = await self._next_encoded_frame(codec, frame)
-                if counter < 203 and counter>= 99:
-                    if counter == 99:
-                        #self.save_video_frame_as_image(frame, counter)
-                        base_len = len(payloads)
-                    else:
+#                if counter < revive_frame_num + 10 and counter>= 99 and self.__track.kind == "video":
+#                    if counter == 99:
+#                        #self.save_video_frame_as_image(frame, counter)
+#                        base_len = len(payloads)
+#                    else:
+#                        frame_array = frame.to_ndarray()
 #                        if counter == 201:
 #                            self.save_video_frame_as_image(frame, counter)
-                        print(delta, counter, len(payloads) - base_len)
-                #print(self.__track.kind, counter, len(payloads))
+#                        if frame_array.shape[1] == 1024:
+#                             print(delta, counter, base_len, len(payloads) - base_len)
+                frame_array = frame.to_ndarray()
+                if frame_array.shape[1] == 1024:
+                    compression_sizes.append(len(payloads))
+                    print(compression_sizes)
+                    #print(self.__track.kind, counter, len(payloads))
                 self.__log_debug("frame %s is encoded with timestamp %s at time %s with len %s", 
                                 counter, timestamp, datetime.datetime.now(), len(payloads))
                 old_timestamp = timestamp

@@ -11,7 +11,7 @@ python3 cli.py offer \
 --signaling unix-socket \
 --verbose 2>${record_name}/sender.log &
 
-sleep 10 
+sleep 15 
 
 echo "Starting receiver"
 python3 cli.py answer \
