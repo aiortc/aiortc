@@ -1,5 +1,6 @@
 import asyncio
 import re
+from ipaddress import IPv6Address, ip_address, IPv4Address
 from unittest import TestCase
 
 import aioice.ice
@@ -571,6 +572,17 @@ class RTCPeerConnectionTest(TestCase):
         aioice.ice.CONSENT_INTERVAL = self.consent_interval
         aioice.stun.RETRY_MAX = self.retry_max
         aioice.stun.RETRY_RTO = self.retry_rto
+
+    @asynctest
+    async def test_can_construct_with_ipv6_disabled(self):
+        pc = RTCPeerConnection(use_ipv6=False)
+        pc.createDataChannel("hello")
+        offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        candidates = pc.sctp.transport.transport.iceGatherer.getLocalCandidates()
+        self.assertTrue(len(candidates) > 0)
+        for candidate in candidates:
+            self.assertTrue(type(ip_address(candidate.ip)) is IPv4Address, msg=f"{candidate.ip} is not ipv4")
 
     @asynctest
     async def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):

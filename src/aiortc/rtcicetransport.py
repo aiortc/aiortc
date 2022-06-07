@@ -174,12 +174,15 @@ class RTCIceGatherer(AsyncIOEventEmitter):
     exchanged in signaling.
     """
 
-    def __init__(self, iceServers: Optional[List[RTCIceServer]] = None) -> None:
+    def __init__(self, iceServers: Optional[List[RTCIceServer]] = None, **ice_kwargs) -> None:
         super().__init__()
 
         if iceServers is None:
             iceServers = self.getDefaultIceServers()
-        ice_kwargs = connection_kwargs(iceServers)
+        if ice_kwargs is None:
+            ice_kwargs = dict()
+        ice_kwargs_ = connection_kwargs(iceServers)
+        ice_kwargs.update(ice_kwargs_)
 
         self._connection = Connection(ice_controlling=False, **ice_kwargs)
         self._remote_candidates_end = False

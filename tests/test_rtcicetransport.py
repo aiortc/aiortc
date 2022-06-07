@@ -1,4 +1,5 @@
 import asyncio
+from ipaddress import ip_address, IPv6Address, IPv4Address
 from unittest import TestCase
 
 import aioice.stun
@@ -299,6 +300,18 @@ class RTCIceTransportTest(TestCase):
         # end-of-candidates
         await connection.addRemoteCandidate(None)
         self.assertEqual(connection.getRemoteCandidates(), [candidate])
+
+    @asynctest
+    async def test_noipv6(self):
+        g1 = RTCIceGatherer(use_ipv4=False)
+        await g1.gather()
+        for candidate in g1.getLocalCandidates():
+            self.assertTrue(type(ip_address(candidate.ip)) is IPv6Address, msg=f"{candidate.ip} is not ipv6")
+
+        g2 = RTCIceGatherer(use_ipv6=False)
+        await g2.gather()
+        for candidate in g2.getLocalCandidates():
+            self.assertTrue(type(ip_address(candidate.ip)) is IPv4Address, msg=f"{candidate.ip} is not ipv4")
 
     @asynctest
     async def test_connect(self):
