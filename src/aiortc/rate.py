@@ -62,6 +62,7 @@ class AimdRateControl:
         estimated_throughput: Optional[int],
         now_ms: int,
     ) -> Optional[int]:
+        print("estimated throughput", estimated_throughput)
         if not self.current_bitrate_initialized and estimated_throughput is not None:
             if self.first_estimated_throughput_time is None:
                 self.first_estimated_throughput_time = now_ms
@@ -522,6 +523,7 @@ class RemoteBitrateEstimator:
     def add(
         self, arrival_time_ms: int, abs_send_time: int, payload_size: int, ssrc: int
     ) -> Optional[Tuple[int, List[int]]]:
+        print("RemoteBitrateEstimator is being used")
         timestamp = abs_send_time << 8
         update_estimate = False
 

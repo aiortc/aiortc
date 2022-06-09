@@ -2,6 +2,7 @@
 video_name=$1
 record_name=$2
 
+kill $(pgrep -f 'python3')
 mkdir -p ${record_name}
 
 echo "Starting sender"
@@ -20,5 +21,4 @@ python3 cli.py answer \
 --signaling unix-socket \
 --verbose 2>${record_name}/receiver.log
 
-kill $(pgrep -f 'python3')
 echo "Done"

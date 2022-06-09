@@ -459,6 +459,9 @@ class RTCRtpReceiver:
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
+                self.__log_debug(f"send_time %s, arrival_time %s, size %s, remb %s", \
+                                packet.extensions.abs_send_time, arrival_time_ms, \
+                                len(packet.payload) + packet.padding_size, remb)
                 if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
                     rtcp_packet = RtcpPsfbPacket(
