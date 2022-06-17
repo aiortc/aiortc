@@ -181,6 +181,8 @@ def player_worker_demux(
             if isinstance(exc, StopIteration) and loop_playback:
                 container.seek(0)
                 continue
+            if audio_track:
+                asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
             if video_track:
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
             break
