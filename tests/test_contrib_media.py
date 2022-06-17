@@ -523,8 +523,8 @@ class MediaPlayerTest(MediaTestCase):
             self.assertEqual(player.video.readyState, "ended")
 
     @asynctest
-    async def test_video_file_mpegts_eagain(self):
-        path = self.create_video_file("test.ts", duration=3)
+    async def test_audio_and_video_file_mpegts_eagain(self):
+        path = self.create_audio_and_video_file("test.ts", duration=3)
         container = BufferingInputContainer(av.open(path, "r"))
 
         with patch("av.open") as mock_open:
@@ -532,7 +532,7 @@ class MediaPlayerTest(MediaTestCase):
             player = self.createMediaPlayer(path)
 
         # check tracks
-        self.assertIsNone(player.audio)
+        self.assertIsNotNone(player.audio)
         self.assertIsNotNone(player.video)
 
         # read all frames
