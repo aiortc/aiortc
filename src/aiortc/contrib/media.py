@@ -295,11 +295,16 @@ class MediaPlayer:
     :param file: The path to a file, or a file-like object.
     :param format: The format to use, defaults to autodect.
     :param options: Additional options to pass to FFmpeg.
+    :param timeout: Open/read timeout to pass to FFmpeg.
     :param loop: Whether to repeat playback indefinitely (requires a seekable file).
     """
 
-    def __init__(self, file, format=None, options={}, loop=False, decode=True):
-        self.__container = av.open(file=file, format=format, mode="r", options=options)
+    def __init__(
+        self, file, format=None, options={}, timeout=None, loop=False, decode=True
+    ):
+        self.__container = av.open(
+            file=file, format=format, mode="r", options=options, timeout=timeout
+        )
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
 
