@@ -115,6 +115,10 @@ class RTCRtpSender:
         self.__packet_count = 0
         self.__rtt = None
 
+        self.__lsr_time_list = []
+        self.__lsr_list = []
+        self.__rtt_list = []
+
     @property
     def kind(self):
         return self.__kind
@@ -221,14 +225,19 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
     async def _handle_rtcp_packet(self, packet, arrival_time_ms):
-        self.__log_debug("< RTCP %s arrival time:%d %s",
-                packet, arrival_time_ms, datetime.datetime.now())
+        self.__log_debug("< RTCP %s arrival time:%d",
+                packet, clock.current_ntp_time())
         
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
-                if self.__lsr == report.lsr and report.dlsr:
-                    rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
+                #if self.__lsr == report.lsr and report.dlsr:
+                if report.lsr in self.__lsr_list and report.dlsr:
+                    rtt = time.time() - self.__lsr_time_list[self.__lsr_list.index(report.lsr)] - (report.dlsr / 65536)
+                    #print("estimated rtt is", rtt)
+                    self.__log_debug("estimated rtt is %s, fraction_lost %d", rtt, report.fraction_lost)
+                    #self.__rtt_list.append((rtt, report.packets_lost, report.fraction_lost))
+                    #print(self.__rtt_list)
                     if self.__rtt is None:
                         self.__rtt = rtt
                     else:
@@ -264,7 +273,7 @@ class RTCRtpSender:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
                 if self._ssrc in ssrcs:
                     self.__log_debug(
-                        "- receiver estimated maximum bitrate %d bps", bitrate
+                        "- receiver estimated maximum bitrate %d bps at time %s", bitrate, datetime.datetime.now()
                     )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
                         self.__encoder.target_bitrate = bitrate
@@ -382,7 +391,7 @@ class RTCRtpSender:
                 frame_array = frame.to_ndarray()
                 if frame_array.shape[1] == 1024:
                     compression_sizes.append(len(payloads))
-                    print(compression_sizes)
+                    #print(compression_sizes)
                     #print(self.__track.kind, counter, len(payloads))
                 self.__log_debug("frame %s is encoded with timestamp %s at time %s with len %s", 
                                 counter, timestamp, datetime.datetime.now(), len(payloads))
@@ -406,7 +415,7 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
 
                     # send packet
-                    self.__log_debug(" > RTP %s (encoded frame ts: %s) %s", packet, old_timestamp, 
+                    self.__log_debug("> RTP %s (encoded frame ts: %s) %s", packet, old_timestamp, 
                                     datetime.datetime.now())
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
@@ -457,7 +466,9 @@ class RTCRtpSender:
                 ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
-
+                self.__lsr_list.append(self.__lsr)
+                self.__lsr_time_list.append(self.__lsr_time)
+                
                 # RTCP SDES
                 if self.__cname is not None:
                     packets.append(
@@ -485,7 +496,7 @@ class RTCRtpSender:
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
-            self.__log_debug("> RTCP %s", packet)
+            self.__log_debug("> RTCP %s ", packet)
             payload += bytes(packet)
 
         try:
