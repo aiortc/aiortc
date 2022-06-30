@@ -16,7 +16,7 @@ sleep 15
 
 echo "Starting receiver"
 python3 cli.py answer \
---record-to ${record_name}.mp4 \
+--record-to ${record_name}/${record_name}.mp4 \
 --signaling-path test.sock \
 --signaling unix-socket \
 --verbose 2>${record_name}/receiver.log

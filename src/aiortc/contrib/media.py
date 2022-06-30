@@ -17,7 +17,7 @@ from av.frame import Frame
 
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 
-#from first_order_model.fom_wrapper import FirstOrderModel
+from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
 time_before_instantiation = time.perf_counter()

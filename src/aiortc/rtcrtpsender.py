@@ -44,19 +44,19 @@ import cv2
 import av
 from PIL import Image
 # instantiate and warm up the model
-time_before_instantiation = time.perf_counter()
-config_path = '/data/pantea/aiortc/nets_implementation/first_order_model/config/paper_configs/resolution1024_without_hr_skip_connections.yaml'#os.environ.get('CONFIG_PATH')
-checkpoint = '/video-conf/scratch/pantea_experiments_tardy/resolution1024_without_hr_skip_connections/needle_drop_resolution1024_without_hr_skip_connections 09_04_22_20.18.58/00000069-checkpoint.pth.tar'#os.environ.get('CHECKPOINT_PATH', 'None')
-model = FirstOrderModel(config_path, checkpoint)
-for i in range(1):
-    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-    zero_kps, src_index = model.extract_keypoints(zero_array)
-    model.update_source(src_index, zero_array, zero_kps)
-    zero_kps['source_index'] = src_index
-    model.predict(zero_kps)
-time_after_instantiation = time.perf_counter()
-print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-model.reset()
+#time_before_instantiation = time.perf_counter()
+#config_path = '/data/pantea/aiortc/nets_implementation/first_order_model/config/paper_configs/resolution1024_without_hr_skip_connections.yaml'#os.environ.get('CONFIG_PATH')
+#checkpoint = '/video-conf/scratch/pantea_experiments_tardy/resolution1024_without_hr_skip_connections/needle_drop_resolution1024_without_hr_skip_connections 09_04_22_20.18.58/00000069-checkpoint.pth.tar'#os.environ.get('CHECKPOINT_PATH', 'None')
+#model = FirstOrderModel(config_path, checkpoint)
+#for i in range(1):
+#    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+#    zero_kps, src_index = model.extract_keypoints(zero_array)
+#    model.update_source(src_index, zero_array, zero_kps)
+#    zero_kps['source_index'] = src_index
+#    model.predict(zero_kps)
+#time_after_instantiation = time.perf_counter()
+#print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+#model.reset()
 logger = logging.getLogger(__name__)
 
 RTP_HISTORY_SIZE = 128
@@ -224,7 +224,7 @@ class RTCRtpSender:
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
-    async def _handle_rtcp_packet(self, packet, arrival_time_ms):
+    async def _handle_rtcp_packet(self, packet):
         self.__log_debug("< RTCP %s arrival time:%d",
                 packet, clock.current_ntp_time())
         
@@ -280,9 +280,9 @@ class RTCRtpSender:
             except ValueError:
                 pass
 
-    async def _next_encoded_frame(self, codec: RTCRtpCodecParameters, frame):
+    async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get frame
-        #frame = await self.__track.recv()
+        frame = await self.__track.recv()
 
         # encode frame
         if self.__encoder is None:
@@ -350,13 +350,12 @@ class RTCRtpSender:
                 if not self.__track:
                     await asyncio.sleep(0.02)
                     continue
-		
-                frame = await self.__track.recv()
-                #print(frame)
-                #import pdb; pdb.set_trace()
-                delta = 0
-                counter += 1
-                revive_frame_num = 1800
+#		# used if trying the compression experiments
+#                frame = await self.__track.recv()
+#                #print(frame)
+#                delta = 0
+#                counter += 1
+#                revive_frame_num = 1800
 #                if counter >= 100 and counter <= revive_frame_num - delta:
 #                    #print("skipping encoding", counter)
 #                    continue
@@ -377,7 +376,7 @@ class RTCRtpSender:
 #                        print("Prediction was successful! changed pts and time_base")
 #                    else:
 #                        continue
-                payloads, timestamp = await self._next_encoded_frame(codec, frame)
+                payloads, timestamp = await self._next_encoded_frame(codec)
 #                if counter < revive_frame_num + 10 and counter>= 99 and self.__track.kind == "video":
 #                    if counter == 99:
 #                        #self.save_video_frame_as_image(frame, counter)
@@ -388,13 +387,13 @@ class RTCRtpSender:
 #                            self.save_video_frame_as_image(frame, counter)
 #                        if frame_array.shape[1] == 1024:
 #                             print(delta, counter, base_len, len(payloads) - base_len)
-                frame_array = frame.to_ndarray()
-                if frame_array.shape[1] == 1024:
-                    compression_sizes.append(len(payloads))
-                    #print(compression_sizes)
-                    #print(self.__track.kind, counter, len(payloads))
-                self.__log_debug("frame %s is encoded with timestamp %s at time %s with len %s", 
-                                counter, timestamp, datetime.datetime.now(), len(payloads))
+#                frame_array = frame.to_ndarray()
+#                if frame_array.shape[1] == 1024:
+#                    compression_sizes.append(len(payloads))
+#                    #print(compression_sizes)
+#                    #print(self.__track.kind, counter, len(payloads))
+#                self.__log_debug("frame %s is encoded with timestamp %s at time %s with len %s", 
+#                                counter, timestamp, datetime.datetime.now(), len(payloads))
                 old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 

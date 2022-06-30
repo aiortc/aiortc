@@ -401,7 +401,7 @@ class RTCRtpReceiver:
     def _handle_disconnect(self) -> None:
         self.__stop_decoder()
 
-    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket, arrival_time_ms: int) -> None:
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
         self.__log_debug("< RTCP %s arrival time:%d", 
                 packet, clock.current_ntp_time())
 
@@ -459,9 +459,9 @@ class RTCRtpReceiver:
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
-                self.__log_debug(f"send_time %s, arrival_time %s, size %s, remb %s", \
-                                packet.extensions.abs_send_time, arrival_time_ms, \
-                                len(packet.payload) + packet.padding_size, remb)
+                #self.__log_debug(f"send_time %s, arrival_time %s, size %s, remb %s", \
+                #                packet.extensions.abs_send_time, arrival_time_ms, \
+                #                len(packet.payload) + packet.padding_size, remb)
                 if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
                     rtcp_packet = RtcpPsfbPacket(
