@@ -226,7 +226,7 @@ class RTCRtpSender:
 
     async def _handle_rtcp_packet(self, packet):
         self.__log_debug("< RTCP %s arrival time:%d",
-                packet, clock.current_ntp_time())
+                packet, time.time())
         
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
@@ -234,8 +234,8 @@ class RTCRtpSender:
                 #if self.__lsr == report.lsr and report.dlsr:
                 if report.lsr in self.__lsr_list and report.dlsr:
                     rtt = time.time() - self.__lsr_time_list[self.__lsr_list.index(report.lsr)] - (report.dlsr / 65536)
-                    #print("estimated rtt is", rtt)
-                    self.__log_debug("estimated rtt is %s, fraction_lost %d", rtt, report.fraction_lost)
+                    self.__log_debug("estimated rtt is %s, fraction_lost %d, lsr %s, at time %d", \
+                            rtt, report.fraction_lost, report.lsr, time.time())
                     #self.__rtt_list.append((rtt, report.packets_lost, report.fraction_lost))
                     #print(self.__rtt_list)
                     if self.__rtt is None:
@@ -495,7 +495,7 @@ class RTCRtpSender:
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
-            self.__log_debug("> RTCP %s ", packet)
+            self.__log_debug("> RTCP %s at time %d", packet, time.time())
             payload += bytes(packet)
 
         try:
