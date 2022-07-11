@@ -283,6 +283,7 @@ class RTCRtpReceiver:
         # RTCP
         self.__lsr: Dict[int, int] = {}
         self.__lsr_time: Dict[int, float] = {}
+        self.__lsr_and_time: Dict[int, tuple] = {}
         self.__remote_streams: Dict[int, StreamStatistics] = {}
         self.__rtcp_ssrc: Optional[int] = None
 
@@ -429,6 +430,7 @@ class RTCRtpReceiver:
                 (packet.sender_info.ntp_timestamp) >> 16
             ) & 0xFFFFFFFF
             self.__lsr_time[packet.ssrc] = time.time()
+            self.__lsr_and_time[packet.ssrc] = (self.__lsr[packet.ssrc], self.__lsr_time[packet.ssrc])
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
 
@@ -553,8 +555,8 @@ class RTCRtpReceiver:
                     lsr = 0
                     dlsr = 0
                     if ssrc in self.__lsr:
-                        lsr = self.__lsr[ssrc]
-                        delay = time.time() - self.__lsr_time[ssrc]
+                        lsr, lsr_time = self.__lsr_and_time[ssrc]
+                        delay = time.time() - lsr_time
                         if delay > 0 and delay < 65536:
                             dlsr = int(delay * 65536)
 
