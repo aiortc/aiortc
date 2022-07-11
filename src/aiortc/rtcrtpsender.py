@@ -118,6 +118,7 @@ class RTCRtpSender:
         self.__lsr_time_list = []
         self.__lsr_list = []
         self.__rtt_list = []
+        self.count = 0 
 
     @property
     def kind(self):
@@ -269,6 +270,7 @@ class RTCRtpSender:
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
             self._send_keyframe()
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
+            self.count += 1
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
                 if self._ssrc in ssrcs:
@@ -276,7 +278,11 @@ class RTCRtpSender:
                         "- receiver estimated maximum bitrate %d bps at time %s", bitrate, datetime.datetime.now()
                     )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
-                        self.__encoder.target_bitrate = bitrate
+                        #print(self.count)
+                        #if self.count > 500:
+                        self.__encoder.target_bitrate = bitrate #bitrate, 200000
+                        #else:
+                        #    self.__encoder.target_bitrate = 8000000 #bitrate
             except ValueError:
                 pass
 

@@ -20,19 +20,19 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
-time_before_instantiation = time.perf_counter()
-config_path = os.environ.get('CONFIG_PATH')
-checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
-model = FirstOrderModel(config_path, checkpoint)
-for i in range(10):
-    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-    zero_kps, src_index = model.extract_keypoints(zero_array)
-    model.update_source(src_index, zero_array, zero_kps)
-    zero_kps['source_index'] = src_index
-    model.predict(zero_kps)
-time_after_instantiation = time.perf_counter()
-print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-model.reset()
+#time_before_instantiation = time.perf_counter()
+#config_path = os.environ.get('CONFIG_PATH')
+#checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
+#model = FirstOrderModel(config_path, checkpoint)
+#for i in range(10):
+#    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+#    zero_kps, src_index = model.extract_keypoints(zero_array)
+#    model.update_source(src_index, zero_array, zero_kps)
+#    zero_kps['source_index'] = src_index
+#    model.predict(zero_kps)
+#time_after_instantiation = time.perf_counter()
+#print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+#model.reset()
 
 save_keypoints_to_file = False
 logger = logging.getLogger(__name__)
@@ -259,8 +259,9 @@ def player_worker(
             frame_time = frame.time
             frame_array = frame.to_rgb().to_ndarray()
             if save_dir is not None:
-                np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index), 
-                        frame_array)
+                pass
+                #np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index), 
+                #        frame_array)
 
             # Put in a separate track from which keypoints will be extracted
             if enable_prediction:
@@ -668,9 +669,10 @@ class MediaRecorder:
                         self.__recv_times_file.flush()
 
                     if self.__save_dir is not None:
-                        frame_array = frame.to_rgb().to_ndarray()
-                        np.save(os.path.join(self.__save_dir, 
-                            'receiver_frame_%05d.npy' % video_frame_index), frame_array)
+                        pass
+                        #frame_array = frame.to_rgb().to_ndarray()
+                        #np.save(os.path.join(self.__save_dir, 
+                        #    'receiver_frame_%05d.npy' % video_frame_index), frame_array)
 
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
@@ -709,8 +711,9 @@ class MediaRecorder:
                                     " when receiving keypoint %s: %s",
                                     video_frame_index, frame_index, str(time_after_update - time_before_update))
                             if self.__save_dir is not None:
-                                np.save(os.path.join(self.__save_dir, 
-                                    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
+                                pass
+                                #np.save(os.path.join(self.__save_dir, 
+                                #    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
 
                         with concurrent.futures.ThreadPoolExecutor() as pool:
                             self.__log_debug("Calling predict for frame %s with source frame %s",
@@ -732,9 +735,10 @@ class MediaRecorder:
                         #predicted_frame.pts = received_keypoints['pts']
 
                         if self.__save_dir is not None:
-                            predicted_array = np.array(predicted_target)
-                            np.save(os.path.join(self.__save_dir, 
-                                'receiver_frame_%05d.npy' % frame_index), predicted_array)
+                            pass
+                            #predicted_array = np.array(predicted_target)
+                            #np.save(os.path.join(self.__save_dir, 
+                            #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
                         
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
