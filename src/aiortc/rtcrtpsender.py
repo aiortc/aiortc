@@ -354,7 +354,7 @@ class RTCRtpSender:
 #                frame = await self.__track.recv()
 #                #print(frame)
 #                delta = 0
-#                counter += 1
+                counter += 1
 #                revive_frame_num = 1800
 #                if counter >= 100 and counter <= revive_frame_num - delta:
 #                    #print("skipping encoding", counter)
@@ -392,8 +392,8 @@ class RTCRtpSender:
 #                    compression_sizes.append(len(payloads))
 #                    #print(compression_sizes)
 #                    #print(self.__track.kind, counter, len(payloads))
-#                self.__log_debug("frame %s is encoded with timestamp %s at time %s with len %s", 
-#                                counter, timestamp, datetime.datetime.now(), len(payloads))
+                self.__log_debug("Frame %s is encoded with timestamp %s with len %s at time %s", 
+                                counter, timestamp, len(payloads), datetime.datetime.now())
                 old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
