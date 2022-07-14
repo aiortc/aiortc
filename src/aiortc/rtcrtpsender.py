@@ -226,8 +226,8 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
     async def _handle_rtcp_packet(self, packet):
-        self.__log_debug("< RTCP %s arrival time:%d",
-                packet, time.time())
+        self.__log_debug("< RTCP %s arrival time: %s",
+                packet, datetime.datetime.now())
         
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
@@ -268,6 +268,7 @@ class RTCRtpSender:
                 self.__log_debug("dispatching retransmit %s", seq)
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
+            print("Received PLI")
             self._send_keyframe()
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             self.count += 1
@@ -399,7 +400,7 @@ class RTCRtpSender:
 #                    #print(compression_sizes)
 #                    #print(self.__track.kind, counter, len(payloads))
                 self.__log_debug("Frame %s is encoded with timestamp %s with len %s at time %s", 
-                                counter, timestamp, len(payloads), datetime.datetime.now())
+                                counter, timestamp, sum([len(i) for i in payloads]), datetime.datetime.now())
                 old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
