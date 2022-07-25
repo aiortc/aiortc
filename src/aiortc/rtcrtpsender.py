@@ -281,7 +281,7 @@ class RTCRtpSender:
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
                         #print(self.count)
                         #if self.count > 500:
-                        self.__encoder.target_bitrate = bitrate #bitrate, 200000
+                        self.__encoder.target_bitrate = int((bitrate * 1000 / 173 + 184971)) #bitrate
                         #else:
                         #    self.__encoder.target_bitrate = 8000000 #bitrate
             except ValueError:
