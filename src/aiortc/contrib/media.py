@@ -20,19 +20,19 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 from first_order_model.fom_wrapper import FirstOrderModel
 
 # instantiate and warm up the model
-#time_before_instantiation = time.perf_counter()
-#config_path = os.environ.get('CONFIG_PATH')
-#checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
-#model = FirstOrderModel(config_path, checkpoint)
-#for i in range(10):
-#    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-#    zero_kps, src_index = model.extract_keypoints(zero_array)
-#    model.update_source(src_index, zero_array, zero_kps)
-#    zero_kps['source_index'] = src_index
-#    model.predict(zero_kps)
-#time_after_instantiation = time.perf_counter()
-#print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-#model.reset()
+time_before_instantiation = time.perf_counter()
+config_path = os.environ.get('CONFIG_PATH', '/data4/pantea/aiortc/nets_implementation/first_order_model/config/paper_configs/resolution512_with_hr_skip_connections.yaml')
+checkpoint = os.environ.get('CHECKPOINT_PATH', '/video-conf/scratch/pantea_experiments_tardy/resolution512_with_hr_skip_connections/kayleigh_resolution512_with_hr_skip_connections 05_04_22_18.23.53/00000069-checkpoint.pth.tar')
+model = FirstOrderModel(config_path, checkpoint)
+for i in range(10):
+    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+    zero_kps, src_index = model.extract_keypoints(zero_array)
+    model.update_source(src_index, zero_array, zero_kps)
+    zero_kps['source_index'] = src_index
+    model.predict(zero_kps)
+time_after_instantiation = time.perf_counter()
+print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+model.reset()
 
 save_keypoints_to_file = False
 logger = logging.getLogger(__name__)
@@ -555,6 +555,13 @@ class MediaRecorder:
         self.__enable_prediction = enable_prediction
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
+        self.__set_video_size = True
+        self.__network_state = 'critical'
+        '''
+        __network_state could be:
+            1. 'good': vpx only
+            2. 'critical': keypoint or low-res video
+        '''
         
         if self.__save_dir is not None:
             self.__recv_times_file = open(os.path.join(save_dir, "recv_times.txt"), "w")
@@ -581,9 +588,13 @@ class MediaRecorder:
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=self.__output_fps)
                 stream.pix_fmt = "rgb24"
+                stream.height = 512
+                stream.width = 512
             else:
                 stream = self.__container.add_stream("libx264", rate=self.__output_fps)
                 stream.pix_fmt = "yuv420p"
+                stream.height = 512
+                stream.width = 512
         else:
             stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
@@ -592,6 +603,8 @@ class MediaRecorder:
         """
         Set video height and width.
         """
+        print("Setting video size")
+        self.__set_video_size = False
         if self.__frame_width is not None and self.__frame_height is not None:
             if self.__tracks[track].stream.height != self.__frame_height or \
             self.__tracks[track].stream.width != self.__frame_width:
@@ -641,29 +654,34 @@ class MediaRecorder:
                 frame, video_frame_index = destamp_frame(frame)
                 self.__frame_height = frame.height
                 self.__frame_width = frame.width
-
+                #if self.__set_video_size:
+                #    self.__setsize(track)
+                print(f"video {video_frame_index} received.")
+                self.__log_debug("Received original video frame %s with index %s at time %s",
+                                    frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
                     # update model related info with most recent frame
-                    self.__log_debug("Received source video frame %s with index %s at time %s",
-                                    frame, video_frame_index, datetime.datetime.now())
-                    source_frame_array = frame.to_rgb().to_ndarray()
-                    
-                    time_before_keypoints = time.perf_counter()
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        source_keypoints, _  = await loop.run_in_executor(pool, 
-                                            model.extract_keypoints, source_frame_array)
-                    time_after_keypoints = time.perf_counter()
-                    self.__log_debug("Source keypoints extraction time in receiver: %s",
-                                    str(time_after_keypoints - time_before_keypoints))
+                    if self.__network_state == 'critical':
+                        source_frame_array = frame.to_rgb().to_ndarray()
+                        
+                        time_before_keypoints = time.perf_counter()
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            source_keypoints, _  = await loop.run_in_executor(pool, 
+                                                model.extract_keypoints, source_frame_array)
+                        time_after_keypoints = time.perf_counter()
+                        self.__log_debug("Source keypoints extraction time in receiver: %s",
+                                        str(time_after_keypoints - time_before_keypoints))
 
-                    asyncio.run_coroutine_threadsafe(self.__video_queue.put((source_frame_array, source_keypoints, video_frame_index)), loop)
+                        asyncio.run_coroutine_threadsafe(self.__video_queue.put(
+                            (source_frame_array, source_keypoints, video_frame_index)), loop)
+                    
+                    elif self.__network_state == 'good':
+                        # directly display the video frames
+                        for packet in context.stream.encode(frame):
+                            self.__container.mux(packet)
 
                 else:
                     # regular video stream
-                    self.__log_debug("Received original video frame %s with index %s at time %s",
-                                    frame, video_frame_index, datetime.datetime.now())
-                    self.__setsize(track)
-                        
                     if self.__recv_times_file is not None:
                         self.__recv_times_file.write(f'Received {video_frame_index} at {datetime.datetime.now()}\n')
                         self.__recv_times_file.flush()
@@ -686,6 +704,7 @@ class MediaRecorder:
                 received_keypoints = frame.data
                 asyncio.run_coroutine_threadsafe(self.__keypoints_queue.put(received_keypoints), loop)
                 frame_index = received_keypoints['frame_index']
+                print(f"keypoint {frame_index} received.")
                 self.__log_debug("Keypoints for frame %s received at time %s",
                                 str(frame_index), time.perf_counter())
 
@@ -695,8 +714,7 @@ class MediaRecorder:
                     keypoints_file.write("\n")
                     keypoints_file.close()
 
-                if self.__enable_prediction:
-                    self.__setsize(track)
+                if self.__enable_prediction and self.__network_state == 'critical':
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
                         frame_index = received_keypoints['frame_index']
@@ -739,12 +757,12 @@ class MediaRecorder:
                             #predicted_array = np.array(predicted_target)
                             #np.save(os.path.join(self.__save_dir, 
                             #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
-                        
                         for packet in context.stream.encode(predicted_frame):
                             self.__container.mux(packet)
 
-                    except:
-                        self.__log_debug("Couldn't predict based on received keypoints frame %s",
+                    except Exception as e:
+                        print(e)
+                        self.__log_debug("error: Couldn't predict based on received keypoints frame %s",
                                         received_keypoints['frame_index'])
 
     def __log_debug(self, msg: str, *args) -> None:
