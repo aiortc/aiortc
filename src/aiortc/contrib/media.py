@@ -551,6 +551,8 @@ class MediaRecorder:
         self.__frame_width = None
         self.__keypoints_queue = asyncio.Queue()
         self.__source_queue = asyncio.Queue()
+        self.__real_video_queue = asyncio.Queue()
+        self.__synthatic_video_queue = asyncio.Queue()
         self.__display_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
@@ -658,12 +660,13 @@ class MediaRecorder:
 
                 #if self.__set_video_size:
                 #    self.__setsize(track)
+
                 print(f"video {video_frame_index} received.")
                 self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
-                    # update model related info with most recent frame
                     if self.__display_option == 'synthatic':
+                        # update model related info with most recent source frame
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
                         time_before_keypoints = time.perf_counter()
@@ -678,12 +681,12 @@ class MediaRecorder:
                             (source_frame_array, source_keypoints, video_frame_index)), loop)
                     
                     elif self.__display_option == 'real':
-                        # directly display the video frames
-                        asyncio.run_coroutine_threadsafe(self.__display_queue.put(frame), loop)
-
-
+                        # directly display the received real video frames
+                        asyncio.run_coroutine_threadsafe(self.__real_video_queue.put(
+                                                        (frame, video_frame_index))
+                                                        , loop)
                 else:
-                    # regular video stream
+                    # Original aiortc video stream, no prediction
                     if self.__recv_times_file is not None:
                         self.__recv_times_file.write(f'Received {video_frame_index} at {datetime.datetime.now()}\n')
                         self.__recv_times_file.flush()
@@ -752,7 +755,9 @@ class MediaRecorder:
 
                             predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                             predicted_frame = predicted_frame.reformat(format='yuv420p')
-                            asyncio.run_coroutine_threadsafe(self.__display_queue.put(predicted_frame), loop)
+                            asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
+                                                            (predicted_frame, frame_index)),
+                                                            loop)
                             #predicted_frame.pts = received_keypoints['pts']
 
                             if self.__save_dir is not None:
@@ -760,7 +765,17 @@ class MediaRecorder:
                                 #predicted_array = np.array(predicted_target)
                                 #np.save(os.path.join(self.__save_dir, 
                                 #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
+
+
+                        #read from the proper real/syn queue, write in display queue
+                        if self.__display_option == 'real':
+                            display_frame, frame_index = await self.__real_video_queue.get()
+                        else:
+                            display_frame, frame_index = await self.__synthatic_video_queue.get()
                         
+                        asyncio.run_coroutine_threadsafe(self.__display_queue.put(
+                                                        display_frame),
+                                                        loop)
                         #read from the display queue, and write in the file
                         display_frame = await self.__display_queue.get() 
                         for packet in context.stream.encode(display_frame):
