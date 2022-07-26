@@ -550,17 +550,18 @@ class MediaRecorder:
         self.__frame_height = None
         self.__frame_width = None
         self.__keypoints_queue = asyncio.Queue()
-        self.__video_queue = asyncio.Queue()
+        self.__source_queue = asyncio.Queue()
+        self.__display_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
         self.__set_video_size = True
-        self.__network_state = 'critical'
+        self.__display_option = 'synthatic'
         '''
-        __network_state could be:
-            1. 'good': vpx only
-            2. 'critical': keypoint or low-res video
+        __display_option could be:
+            1. 'real': vpx only
+            2. 'synthatic': keypoint or low-res video
         '''
         
         if self.__save_dir is not None:
@@ -654,6 +655,7 @@ class MediaRecorder:
                 frame, video_frame_index = destamp_frame(frame)
                 self.__frame_height = frame.height
                 self.__frame_width = frame.width
+
                 #if self.__set_video_size:
                 #    self.__setsize(track)
                 print(f"video {video_frame_index} received.")
@@ -661,7 +663,7 @@ class MediaRecorder:
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
                     # update model related info with most recent frame
-                    if self.__network_state == 'critical':
+                    if self.__display_option == 'synthatic':
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
                         time_before_keypoints = time.perf_counter()
@@ -672,13 +674,13 @@ class MediaRecorder:
                         self.__log_debug("Source keypoints extraction time in receiver: %s",
                                         str(time_after_keypoints - time_before_keypoints))
 
-                        asyncio.run_coroutine_threadsafe(self.__video_queue.put(
+                        asyncio.run_coroutine_threadsafe(self.__source_queue.put(
                             (source_frame_array, source_keypoints, video_frame_index)), loop)
                     
-                    elif self.__network_state == 'good':
+                    elif self.__display_option == 'real':
                         # directly display the video frames
-                        for packet in context.stream.encode(frame):
-                            self.__container.mux(packet)
+                        asyncio.run_coroutine_threadsafe(self.__display_queue.put(frame), loop)
+
 
                 else:
                     # regular video stream
@@ -699,7 +701,7 @@ class MediaRecorder:
                 for packet in context.stream.encode(frame):
                     self.__container.mux(packet)
 
-            else:
+            elif track.kind == "keypoints":
                 # keypoint stream
                 received_keypoints = frame.data
                 asyncio.run_coroutine_threadsafe(self.__keypoints_queue.put(received_keypoints), loop)
@@ -714,50 +716,54 @@ class MediaRecorder:
                     keypoints_file.write("\n")
                     keypoints_file.close()
 
-                if self.__enable_prediction and self.__network_state == 'critical':
+                if self.__enable_prediction:
                     try:
                         received_keypoints = await self.__keypoints_queue.get()
                         frame_index = received_keypoints['frame_index']
+                        if self.__display_option == 'synthatic':
+                            if frame_index % self.__reference_update_freq == 0:
+                                source_frame_array, source_keypoints, video_frame_index = await self.__source_queue.get()
+                                
+                                time_before_update = time.perf_counter()
+                                model.update_source(video_frame_index, source_frame_array, source_keypoints)
+                                time_after_update = time.perf_counter()
+                                self.__log_debug("Time to update source frame %s in receiver" \
+                                        " when receiving keypoint %s: %s",
+                                        video_frame_index, frame_index, str(time_after_update - time_before_update))
+                                if self.__save_dir is not None:
+                                    pass
+                                    #np.save(os.path.join(self.__save_dir, 
+                                    #    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
 
-                        if frame_index % self.__reference_update_freq == 0:
-                            source_frame_array, source_keypoints, video_frame_index = await self.__video_queue.get()
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                self.__log_debug("Calling predict for frame %s with source frame %s",
+                                            frame_index, received_keypoints['source_index'])
+                                before_predict_time = time.perf_counter()
+                                predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
+                            after_predict_time = time.perf_counter()
+
+                            self.__log_debug("Prediction time for received keypoints %s: %s at time %s using source %s",
+                                    frame_index, str(after_predict_time - before_predict_time), 
+                                    after_predict_time, received_keypoints['source_index'])
                             
-                            time_before_update = time.perf_counter()
-                            model.update_source(video_frame_index, source_frame_array, source_keypoints)
-                            time_after_update = time.perf_counter()
-                            self.__log_debug("Time to update source frame %s in receiver" \
-                                    " when receiving keypoint %s: %s",
-                                    video_frame_index, frame_index, str(time_after_update - time_before_update))
+                            if self.__recv_times_file is not None:
+                                self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
+                                self.__recv_times_file.flush()
+
+                            predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
+                            predicted_frame = predicted_frame.reformat(format='yuv420p')
+                            asyncio.run_coroutine_threadsafe(self.__display_queue.put(predicted_frame), loop)
+                            #predicted_frame.pts = received_keypoints['pts']
+
                             if self.__save_dir is not None:
                                 pass
+                                #predicted_array = np.array(predicted_target)
                                 #np.save(os.path.join(self.__save_dir, 
-                                #    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
-
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            self.__log_debug("Calling predict for frame %s with source frame %s",
-                                        frame_index, received_keypoints['source_index'])
-                            before_predict_time = time.perf_counter()
-                            predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
-                        after_predict_time = time.perf_counter()
-
-                        self.__log_debug("Prediction time for received keypoints %s: %s at time %s using source %s",
-                                frame_index, str(after_predict_time - before_predict_time), 
-                                after_predict_time, received_keypoints['source_index'])
+                                #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
                         
-                        if self.__recv_times_file is not None:
-                            self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
-                            self.__recv_times_file.flush()
-
-                        predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
-                        predicted_frame = predicted_frame.reformat(format='yuv420p')
-                        #predicted_frame.pts = received_keypoints['pts']
-
-                        if self.__save_dir is not None:
-                            pass
-                            #predicted_array = np.array(predicted_target)
-                            #np.save(os.path.join(self.__save_dir, 
-                            #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
-                        for packet in context.stream.encode(predicted_frame):
+                        #read from the display queue, and write in the file
+                        display_frame = await self.__display_queue.get() 
+                        for packet in context.stream.encode(display_frame):
                             self.__container.mux(packet)
 
                     except Exception as e:
