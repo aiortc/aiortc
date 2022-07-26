@@ -177,6 +177,7 @@ def player_worker(
     video_first_pts = None
 
     frame_time = None
+    display_option = 'synthatic'
     start_time = time.time()
 
     while not quit_event.is_set():
@@ -275,7 +276,7 @@ def player_worker(
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
             if (enable_prediction and frame.index % reference_update_freq == 0) or \
-                    not enable_prediction:
+                    display_option == 'real' or not enable_prediction:
                 frame_time = frame.time
                 frame_index = frame.index
                 frame = stamp_frame(frame, frame.index, frame.pts, frame.time_base)
