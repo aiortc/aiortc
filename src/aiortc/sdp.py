@@ -339,7 +339,7 @@ class SessionDescription:
             kind = m.group(1)
             fmt = m.group(4).split()
             fmt_int: Optional[List[int]] = None
-            if kind in ["keypoints", "audio", "video"]:
+            if kind in ["keypoints", "audio", "video", "lr_video"]:
                 fmt_int = [int(x) for x in fmt]
                 for pt in fmt_int:
                     assert pt >= 0 and pt < 256
@@ -415,8 +415,12 @@ class SessionDescription:
                                 channels = 1
                         else:
                             channels = None
+                        if current_media.kind == "lr_video":
+                            codec_kind = "video"
+                        else:
+                            codec_kind = current_media.kind
                         codec = RTCRtpCodecParameters(
-                            mimeType=current_media.kind + "/" + bits[0],
+                            mimeType=codec_kind + "/" + bits[0],
                             channels=channels,
                             clockRate=int(bits[1]),
                             payloadType=int(format_id),

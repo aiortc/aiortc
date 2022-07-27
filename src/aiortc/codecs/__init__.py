@@ -41,6 +41,7 @@ CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
     "keypoints": [
         KEYPOINTS_CODEC
     ],
+    "lr_video": [],
 }
 HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
@@ -56,6 +57,14 @@ HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     ],
     "keypoints": [
         RTCRtpHeaderExtensionParameters(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid")
+    ],
+    "lr_video": [
+        RTCRtpHeaderExtensionParameters(
+            id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
+        ),
+        RTCRtpHeaderExtensionParameters(
+            id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+        ),
     ],
 }
 
@@ -111,6 +120,8 @@ def init_codecs() -> None:
             )
         ),
     )
+
+    CODECS["lr_video"] = CODECS["video"]
 
 
 def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:

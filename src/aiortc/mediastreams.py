@@ -164,3 +164,21 @@ class KeypointsStreamTrack(VideoStreamTrack):
         frame = KeypointFrame()
         frame.pts = pts
         return frame
+
+class LR_VideoStreamTrack(VideoStreamTrack):
+    """
+    A dummy low-resolution video track which reads constant video.
+    """
+    kind = "lr_video"
+
+    async def recv(self) -> Frame:
+        pts, time_base = await self.next_timestamp()
+
+        frame = VideoFrame(width=64, height=64)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
+
+

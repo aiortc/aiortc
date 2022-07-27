@@ -246,7 +246,7 @@ class RTCRtpReceiver:
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
     of data for a :class:`MediaStreamTrack`.
 
-    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'`).
+    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'` or `'lr_video'`).
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
@@ -267,7 +267,12 @@ class RTCRtpReceiver:
             self.__jitter_buffer = JitterBuffer(capacity=128)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = None
+        elif kind == "lr_video":
+            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
+            self.__nack_generator = NackGenerator()
+            self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         else:
+            # for "video"
             self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
