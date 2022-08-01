@@ -27,23 +27,30 @@ default_config = os.getcwd() + '/nets_implementation/first_order_model/config/ov
 config_path = os.environ.get('CONFIG_PATH', default_config)
 checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
 model = FirstOrderModel(config_path, checkpoint)
-for i in range(100):
-    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-    zero_kps, src_index = model.extract_keypoints(zero_array)
-    model.update_source(src_index, zero_array, zero_kps)
-    zero_kps['source_index'] = src_index
-    model.predict(zero_kps)
-time_after_instantiation = time.perf_counter()
-print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-model.reset()
 
-# get the frame size from config
 try:
     with open(config_path) as f:
         config = yaml.safe_load(f)
     frame_shape = config['dataset_params']['frame_shape']
+    use_lr_video = config['model_params']['generator_params']['use_lr_video']
+    lr_size = config['model_params']['generator_params']['lr_size']
 except:
     frame_shape = [1024, 1024, 3]
+    use_lr_video = False
+
+for i in range(10):
+    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+    zero_kps, src_index = model.extract_keypoints(zero_array)
+    model.update_source(src_index, zero_array, zero_kps)
+    zero_kps['source_index'] = src_index
+    if use_lr_video:
+        model.predict_with_lr_video(np.random.randint(0, 255, (lr_size, lr_size, 3), dtype=np.uint8))
+    else:
+        model.predict(zero_kps)
+time_after_instantiation = time.perf_counter()
+print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
+model.reset()
+
 
 save_keypoints_to_file = False
 logger = logging.getLogger(__name__)
@@ -314,7 +321,7 @@ def player_worker(
                     "MediaPlayer(%s) Put frame %s in keypoints queue: %s",
                      container.name, str(frame.index), str(frame)
                 )
-                
+ 
                 if prediction_type == "use_low_res_video":
                     #lr_frame_array = skimage.transform.resize(frame_array, \
                     #        (64, 64), anti_aliasing=True, preserve_range=True)
@@ -612,6 +619,7 @@ class MediaRecorder:
         self.__source_queue = asyncio.Queue()
         self.__real_video_queue = asyncio.Queue()
         self.__synthatic_video_queue = asyncio.Queue()
+        self.__lr_video_queue = asyncio.Queue()
         self.__display_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
@@ -828,11 +836,51 @@ class MediaRecorder:
                                     received_keypoints['frame_index'])
             
             elif track.kind == "lr_video":
-                frame, video_frame_index = destamp_frame(frame)
-                asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
-                                                    (frame, video_frame_index))
-                                                    , loop)
+                lr_frame, lr_video_frame_index = destamp_frame(frame)
+                lr_frame_array = lr_frame.to_rgb().to_ndarray()
+                asyncio.run_coroutine_threadsafe(self.__lr_video_queue.put((lr_frame_array, lr_video_frame_index)), loop)
+                self.__log_debug("lr_video for frame %s received at time %s",
+                                str(lr_video_frame_index), time.perf_counter())
 
+                if self.__enable_prediction:
+                    try:
+                        lr_frame, frame_index = await self.__lr_video_queue.get()
+                        if self.__display_option == "synthatic":
+                            if frame_index % self.__reference_update_freq == 0:
+                                source_frame_array, source_keypoints, video_frame_index = await self.__source_queue.get()
+ 
+                                time_before_update = time.perf_counter()
+                                model.update_source(video_frame_index, source_frame_array, source_keypoints)
+                                time_after_update = time.perf_counter()
+                                self.__log_debug("Time to update source frame %s in receiver" \
+                                        " when receiving keypoint %s: %s",
+                                        video_frame_index, frame_index, str(time_after_update - time_before_update))
+
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                self.__log_debug("Calling predict for frame %s with source frame",
+                                            lr_video_frame_index)
+                                before_predict_time = time.perf_counter()
+                                predicted_target = await loop.run_in_executor(pool, model.predict_with_lr_video, lr_frame_array)
+                            after_predict_time = time.perf_counter()
+
+                            self.__log_debug("Prediction time for received lr_video %s: %s at time %s",
+                                    lr_video_frame_index, str(after_predict_time - before_predict_time), 
+                                    after_predict_time)
+                            
+                            if self.__recv_times_file is not None:
+                                self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
+                                self.__recv_times_file.flush()
+
+                            predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
+                            predicted_frame = predicted_frame.reformat(format='yuv420p')
+                            asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
+                                                            (predicted_frame, frame_index)),
+                                                            loop)
+                    except Exception as e:
+                        print(e)
+                        self.__log_debug("error: Couldn't predict based on received lr_video frame %s",
+                                    lr_video_frame_index)
+     
             #display options
             if track.kind == "keypoints" or track.kind == "lr_video":
                 #read from the proper real/syn queue, write in display queue
@@ -840,11 +888,12 @@ class MediaRecorder:
                     display_frame, frame_index = await self.__real_video_queue.get()
                 else:
                     display_frame, frame_index = await self.__synthatic_video_queue.get()
+
                 asyncio.run_coroutine_threadsafe(self.__display_queue.put(
                                                 display_frame),
                                                 loop)
                 #read from the display queue, and write in the file
-                display_frame = await self.__display_queue.get() 
+                display_frame = await self.__display_queue.get()
                 for packet in context.stream.encode(display_frame):
                     self.__container.mux(packet)
 
