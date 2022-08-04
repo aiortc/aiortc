@@ -280,6 +280,12 @@ class Vp8Encoder(Encoder):
             self.cfg.rc_buf_sz = 1000
             self.cfg.kf_mode = lib.VPX_KF_AUTO
             self.cfg.kf_max_dist = 3000
+            logger.info(f"encoder's config: min_quantizer {str(self.cfg.rc_min_quantizer)}, "\
+                        f"max_quantizer {str(self.cfg.rc_max_quantizer)}, "\
+                        f"kf_max_dist {str(self.cfg.kf_max_dist)}, "\
+                        f"DEFAULT_BITRATE {DEFAULT_BITRATE}, MIN_BITRATE {MIN_BITRATE}, MAX_BITRATE {MAX_BITRATE}, "\
+                        f"buf_optimal_sz {str(self.cfg.rc_buf_optimal_sz)}, buf_sz {str(self.cfg.rc_buf_sz)}, "\
+                        f"buf_initial_sz {str(self.cfg.rc_buf_initial_sz)}, ")
             self.__update_config()
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
