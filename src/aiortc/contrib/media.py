@@ -327,15 +327,15 @@ def player_worker(
                 )
  
                 if prediction_type == "use_low_res_video":
-                    '''
                     driving = frame_to_tensor(img_as_float32(frame_array), device)
                     driving_lr = F.interpolate(driving, lr_size).data.cpu().numpy()
                     driving_lr = np.transpose(driving_lr, [0, 2, 3, 1])[0]
                     driving_lr *= 255
                     driving_lr = driving_lr.astype(np.uint8)
+
                     low_res_frame = av.VideoFrame.from_ndarray(driving_lr)
-                    '''
-                    low_res_frame = frame.reformat(width=64, height=64)
+                    low_res_frame.pts = frame.pts
+                    low_res_frame.time_base = frame.time_base
                     place_frame_in_video_queue(low_res_frame, loop, lr_video_track, container)
                 else:
                     asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame_time, \
