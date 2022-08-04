@@ -18,7 +18,10 @@ from av.frame import Frame
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 
 from first_order_model.fom_wrapper import FirstOrderModel
-import skimage.transform
+from first_order_model.reconstruction import frame_to_tensor
+from skimage import img_as_float32
+import torch
+import torch.nn.functional as F
 import yaml 
 
 # instantiate and warm up the model
@@ -230,6 +233,7 @@ def player_worker(
     start_time = time.time()
 
     while not quit_event.is_set():
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         try:
             frame = next(container.decode(*streams))
             if isinstance(frame, VideoFrame) and video_track:
@@ -323,9 +327,14 @@ def player_worker(
                 )
  
                 if prediction_type == "use_low_res_video":
-                    #lr_frame_array = skimage.transform.resize(frame_array, \
-                    #        (64, 64), anti_aliasing=True, preserve_range=True)
-                    #low_res_frame = av.VideoFrame.from_ndarray(np.array(lr_frame_array).astype(np.uint8))
+                    '''
+                    driving = frame_to_tensor(img_as_float32(frame_array), device)
+                    driving_lr = F.interpolate(driving, lr_size).data.cpu().numpy()
+                    driving_lr = np.transpose(driving_lr, [0, 2, 3, 1])[0]
+                    driving_lr *= 255
+                    driving_lr = driving_lr.astype(np.uint8)
+                    low_res_frame = av.VideoFrame.from_ndarray(driving_lr)
+                    '''
                     low_res_frame = frame.reformat(width=64, height=64)
                     place_frame_in_video_queue(low_res_frame, loop, lr_video_track, container)
                 else:
