@@ -56,6 +56,7 @@ model.reset()
 
 
 save_keypoints_to_file = False
+save_lr_video_npy = True
 logger = logging.getLogger(__name__)
 
 
@@ -211,11 +212,19 @@ def requires_updated_reference(keypoints, frame_index, original_frame, lr_frame_
     #return False
 
 
+def resize_frame(frame_array, size, device):
+    driving = frame_to_tensor(img_as_float32(frame_array), device)
+    driving_resized = F.interpolate(driving, size, mode='bicubic').data.cpu().numpy()
+    driving_resized = np.transpose(driving_resized, [0, 2, 3, 1])[0]
+    driving_resized *= 255
+    driving_resized = driving_resized.astype(np.uint8)
+    return driving_resized
+
+
 def player_worker(
-    loop, container, streams, audio_track, video_track, keypoints_track, lr_video_track,
+    loop, container, lr_container, streams, audio_track, video_track, keypoints_track, lr_video_track,
     quit_event, throttle_playback, save_dir, enable_prediction, prediction_type, 
-    reference_update_freq
-):
+    reference_update_freq):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
     audio_layout_name = "stereo"
@@ -231,6 +240,13 @@ def player_worker(
     frame_time = None
     display_option = 'synthatic'
     start_time = time.time()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if lr_container is not None:
+        print("setting stream")
+        stream = lr_container.add_stream("mpeg4", rate=30)
+        stream.width = lr_size
+        stream.height = lr_size
+        stream.pix_fmt = "yuv420p"
 
     while not quit_event.is_set():
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -316,9 +332,9 @@ def player_worker(
             frame_index = frame.index
             frame_pts = frame.pts
             if save_dir is not None:
-                pass
-                #np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index), 
-                #        frame_array)
+                #pass
+                np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index),
+                        frame_array)
 
             if enable_prediction:
                 logger.warning(
@@ -326,17 +342,32 @@ def player_worker(
                      container.name, str(frame.index), str(frame)
                 )
  
-                if prediction_type == "use_low_res_video":
+                if prediction_type != "keypoints":
+                    #TODO: using the interpolate function will result in stall of receiver in the pipeline
+                    '''
                     driving = frame_to_tensor(img_as_float32(frame_array), device)
                     driving_lr = F.interpolate(driving, lr_size).data.cpu().numpy()
                     driving_lr = np.transpose(driving_lr, [0, 2, 3, 1])[0]
                     driving_lr *= 255
                     driving_lr = driving_lr.astype(np.uint8)
 
-                    low_res_frame = av.VideoFrame.from_ndarray(driving_lr)
-                    low_res_frame.pts = frame.pts
-                    low_res_frame.time_base = frame.time_base
-                    place_frame_in_video_queue(low_res_frame, loop, lr_video_track, container)
+                    lr_frame = av.VideoFrame.from_ndarray(driving_lr)
+                    lr_frame.pts = frame.pts
+                    lr_frame.time_base = frame.time_base
+                    '''
+                    lr_frame = frame.reformat(width=64, height=64)
+                    place_frame_in_video_queue(lr_frame, loop, lr_video_track, container)
+                    if lr_container is not None:
+                        for packet in stream.encode(lr_frame):
+                            print("muxing lr stream")
+                            lr_container.mux(packet)
+
+                    if save_lr_video_npy and save_dir is not None:
+                        lr_frame_array = lr_frame.to_rgb().to_ndarray()
+                        np.save(os.path.join(save_dir,
+                                'sender_lr_frame_%05d.npy' % lr_frame.index),
+                                lr_frame_array)
+
                 else:
                     asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame_time, \
                             frame.index, frame.pts)), loop)
@@ -346,6 +377,14 @@ def player_worker(
             if (enable_prediction and frame.index % reference_update_freq == 0) or \
                     display_option == 'real' or not enable_prediction:
                 place_frame_in_video_queue(frame, loop, video_track, container)
+
+    # flush lr_container
+    if lr_container is not None and quit_event.is_set():
+        print("Closing lr container")
+        for packet in stream.encode():
+            lr_container.mux(packet)
+        lr_container.close()
+        lr_container = None
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -435,6 +474,7 @@ class PlayerStreamTrack(MediaStreamTrack):
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"PlayerStreamTrack(%s) {msg}", self.__container.name, *args)
 
+
 class MediaPlayer:
     """
     A media source that reads audio and/or video from a file.
@@ -474,6 +514,12 @@ class MediaPlayer:
     def __init__(self, file, enable_prediction=False, prediction_type="keypoints",
                 reference_update_freq=30, fps=None, save_dir=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
+        if enable_prediction and prediction_type == "use_low_res_video":
+            #self.__lr_container = av.open(file=f'{save_dir}/lr_video_sent.mp4', \
+            #        format=format, mode="w", options=options)
+            self.__lr_container = None
+        else:
+            self.__lr_container = None
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
         self.__save_dir = save_dir
@@ -555,6 +601,7 @@ class MediaPlayer:
                 args=(
                     asyncio.get_event_loop(),
                     self.__container,
+                    self.__lr_container,
                     self.__streams,
                     self.__audio,
                     self.__video,
@@ -579,6 +626,9 @@ class MediaPlayer:
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
+            if self.__lr_container is not None:
+                self.__lr_container.close()
+                self.__lr_container = None
 
         if not self.__started and self.__container is not None:
             self.__container.close()
@@ -632,6 +682,7 @@ class MediaRecorder:
         self.__display_queue = asyncio.Queue()
         self.__save_dir = save_dir
         self.__enable_prediction = enable_prediction
+        self.__prediction_type = prediction_type
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
         self.__set_video_size = True
@@ -722,6 +773,7 @@ class MediaRecorder:
 
     async def __run_track(self, track, context):
         loop = asyncio.get_running_loop()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         while True:
             try:
                 frame = await track.recv()
@@ -793,6 +845,10 @@ class MediaRecorder:
                     lr_frame, frame_index = destamp_frame(frame)
                     lr_frame_array = lr_frame.to_rgb().to_ndarray()
                     asyncio.run_coroutine_threadsafe(self.__lr_video_queue.put((lr_frame_array, frame_index)), loop)
+                    if save_lr_video_npy and self.__save_dir is not None:
+                        np.save(os.path.join(self.__save_dir,
+                                'receiver_lr_frame_%05d.npy' % frame_index),
+                                lr_frame_array)
  
                 self.__log_debug("%s for frame %s received at time %s",
                                 track.kind, str(frame_index), datetime.datetime.now())
@@ -826,30 +882,37 @@ class MediaRecorder:
                                 if track.kind == "keypoints":
                                     predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
                                 elif track.kind == "lr_video":
-                                    predicted_target = await loop.run_in_executor(pool, model.predict_with_lr_video, lr_frame_array)
+                                    if self.__prediction_type == "bicubic":
+                                        predicted_target = await loop.run_in_executor(pool, resize_frame, lr_frame_array, frame_shape[0], device)
+                                    else:
+                                        predicted_target = await loop.run_in_executor(pool, model.predict_with_lr_video, lr_frame_array)
                             after_predict_time = time.perf_counter()
 
                             self.__log_debug("Prediction time for received %s %s: %s at time %s using source %s",
                                     track.kind, frame_index, str(after_predict_time - before_predict_time), 
                                     after_predict_time, source_frame_index)
-                            
+
                             if self.__recv_times_file is not None:
                                 self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
                                 self.__recv_times_file.flush()
 
+                            #predicted_target = lr_frame_array #added_line
                             predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
+                            #predicted_frame = predicted_frame.reformat(width=1024, height=1024, interpolation='BICUBIC') #added_line
                             predicted_frame = predicted_frame.reformat(format='yuv420p')
                             asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
                                                             (predicted_frame, frame_index)),
                                                             loop)
                             #predicted_frame.pts = received_keypoints['pts']
-
+                            print("Predicted!", frame_index)
+                            #predicted_target = predicted_frame.to_rgb().to_ndarray() #must be removed
                             if self.__save_dir is not None:
-                                pass
-                                #predicted_array = np.array(predicted_target)
-                                #np.save(os.path.join(self.__save_dir, 
-                                #    'receiver_frame_%05d.npy' % frame_index), predicted_array)
+                                #pass
+                                predicted_array = np.array(predicted_target)
+                                np.save(os.path.join(self.__save_dir,
+                                    'receiver_frame_%05d.npy' % frame_index), predicted_array)
                     except Exception as e:
+                        print(e)
                         self.__log_debug("Couldn't predict based on received %s frame %s with error %s",
                                     track.kind, frame_index, e)
 
