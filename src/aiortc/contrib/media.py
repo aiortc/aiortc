@@ -222,7 +222,7 @@ def resize_frame(frame_array, size, device):
 
 
 def player_worker(
-    loop, container, lr_container, streams, audio_track, video_track, keypoints_track, lr_video_track,
+    loop, container, streams, audio_track, video_track, keypoints_track, lr_video_track,
     quit_event, throttle_playback, save_dir, enable_prediction, prediction_type, 
     reference_update_freq):
     audio_fifo = av.AudioFifo()
@@ -241,12 +241,6 @@ def player_worker(
     display_option = 'synthatic'
     start_time = time.time()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if lr_container is not None:
-        print("setting stream")
-        stream = lr_container.add_stream("mpeg4", rate=30)
-        stream.width = lr_size
-        stream.height = lr_size
-        stream.pix_fmt = "yuv420p"
 
     while not quit_event.is_set():
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -357,11 +351,6 @@ def player_worker(
                     '''
                     lr_frame = frame.reformat(width=64, height=64)
                     place_frame_in_video_queue(lr_frame, loop, lr_video_track, container)
-                    if lr_container is not None:
-                        for packet in stream.encode(lr_frame):
-                            print("muxing lr stream")
-                            lr_container.mux(packet)
-
                     if save_lr_video_npy and save_dir is not None:
                         lr_frame_array = lr_frame.to_rgb().to_ndarray()
                         np.save(os.path.join(save_dir,
@@ -377,14 +366,6 @@ def player_worker(
             if (enable_prediction and frame.index % reference_update_freq == 0) or \
                     display_option == 'real' or not enable_prediction:
                 place_frame_in_video_queue(frame, loop, video_track, container)
-
-    # flush lr_container
-    if lr_container is not None and quit_event.is_set():
-        print("Closing lr container")
-        for packet in stream.encode():
-            lr_container.mux(packet)
-        lr_container.close()
-        lr_container = None
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -514,12 +495,6 @@ class MediaPlayer:
     def __init__(self, file, enable_prediction=False, prediction_type="keypoints",
                 reference_update_freq=30, fps=None, save_dir=None, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
-        if enable_prediction and prediction_type == "use_low_res_video":
-            #self.__lr_container = av.open(file=f'{save_dir}/lr_video_sent.mp4', \
-            #        format=format, mode="w", options=options)
-            self.__lr_container = None
-        else:
-            self.__lr_container = None
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
         self.__save_dir = save_dir
@@ -601,7 +576,6 @@ class MediaPlayer:
                 args=(
                     asyncio.get_event_loop(),
                     self.__container,
-                    self.__lr_container,
                     self.__streams,
                     self.__audio,
                     self.__video,
@@ -626,9 +600,6 @@ class MediaPlayer:
             self.__thread_quit.set()
             self.__thread.join()
             self.__thread = None
-            if self.__lr_container is not None:
-                self.__lr_container.close()
-                self.__lr_container = None
 
         if not self.__started and self.__container is not None:
             self.__container.close()
