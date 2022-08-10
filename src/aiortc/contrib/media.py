@@ -854,7 +854,10 @@ class MediaRecorder:
                                     predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
                                 elif track.kind == "lr_video":
                                     if self.__prediction_type == "bicubic":
-                                        predicted_target = await loop.run_in_executor(pool, resize_frame, lr_frame_array, frame_shape[0], device)
+                                        #predicted_target = await loop.run_in_executor(pool, resize_frame, lr_frame_array, frame_shape[0], device)
+                                        predicted_target = lr_frame.reformat(width=frame_shape[0], height=frame_shape[0],\
+                                                            interpolation='BICUBIC').to_rgb().to_ndarray()
+
                                     else:
                                         predicted_target = await loop.run_in_executor(pool, model.predict_with_lr_video, lr_frame_array)
                             after_predict_time = time.perf_counter()
@@ -867,16 +870,14 @@ class MediaRecorder:
                                 self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
                                 self.__recv_times_file.flush()
 
-                            #predicted_target = lr_frame_array #added_line
                             predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
-                            #predicted_frame = predicted_frame.reformat(width=1024, height=1024, interpolation='BICUBIC') #added_line
                             predicted_frame = predicted_frame.reformat(format='yuv420p')
                             asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
                                                             (predicted_frame, frame_index)),
                                                             loop)
                             #predicted_frame.pts = received_keypoints['pts']
-                            print("Predicted!", frame_index)
-                            #predicted_target = predicted_frame.to_rgb().to_ndarray() #must be removed
+                            if frame_index % 100 == 0:
+                                print("Predicted!", frame_index)
                             if self.__save_dir is not None:
                                 #pass
                                 predicted_array = np.array(predicted_target)
