@@ -24,36 +24,39 @@ import torch
 import torch.nn.functional as F
 import yaml 
 
-# instantiate and warm up the model
-time_before_instantiation = time.perf_counter()
-default_config = os.getcwd() + '/nets_implementation/first_order_model/config/overview_exps_for_512_resolution.yaml'
-config_path = os.environ.get('CONFIG_PATH', default_config)
+config_path = os.environ.get('CONFIG_PATH', 'None')
 checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
-model = FirstOrderModel(config_path, checkpoint)
 
 try:
     with open(config_path) as f:
         config = yaml.safe_load(f)
     frame_shape = config['dataset_params']['frame_shape']
-    use_lr_video = config['model_params']['generator_params']['use_lr_video']
-    lr_size = config['model_params']['generator_params']['lr_size']
-except:
+    generator_params = config['model_params']['generator_params']
+    use_lr_video = generator_params.get('use_lr_video', False)
+    lr_size = generator_params.get('lr_size', 64)
+    generator_type = generator_params.get('generator_type', 'occlusion_aware')
+except Exception as e:
     frame_shape = [1024, 1024, 3]
     use_lr_video = False
+    generator_type = 'vpx'
 
-for i in range(10):
-    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-    zero_kps, src_index = model.extract_keypoints(zero_array)
-    model.update_source(src_index, zero_array, zero_kps)
-    zero_kps['source_index'] = src_index
-    if use_lr_video:
-        model.predict_with_lr_video(np.random.randint(0, 255, (lr_size, lr_size, 3), dtype=np.uint8))
-    else:
-        model.predict(zero_kps)
-time_after_instantiation = time.perf_counter()
-print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-model.reset()
-
+# instantiate and warm up the model
+if generator_type not in ['vpx', 'bicubic']:
+    time_before_instantiation = time.perf_counter()
+    model = FirstOrderModel(config_path, checkpoint)
+    for i in range(1):
+        zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+        zero_kps, src_index = model.extract_keypoints(zero_array)
+        model.update_source(src_index, zero_array, zero_kps)
+        zero_kps['source_index'] = src_index
+        if use_lr_video:
+            model.predict_with_lr_video(np.random.randint(0, 255, (lr_size, lr_size, 3), dtype=np.uint8))
+        else:
+            model.predict(zero_kps)
+    time_after_instantiation = time.perf_counter()
+    print("Time to instantiate at time %s: %s" % (datetime.datetime.now(),
+        str(time_after_instantiation - time_before_instantiation)))
+    model.reset()
 
 save_keypoints_to_file = False
 save_lr_video_npy = True
@@ -349,7 +352,7 @@ def player_worker(
                     lr_frame.pts = frame.pts
                     lr_frame.time_base = frame.time_base
                     '''
-                    lr_frame = frame.reformat(width=64, height=64)
+                    lr_frame = frame.reformat(width=lr_size, height=lr_size)
                     place_frame_in_video_queue(lr_frame, loop, lr_video_track, container)
                     if save_lr_video_npy and save_dir is not None:
                         lr_frame_array = lr_frame.to_rgb().to_ndarray()
@@ -418,7 +421,8 @@ class PlayerStreamTrack(MediaStreamTrack):
                 time_before_keypoints = time.perf_counter()
                 loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as pool:
-                    keypoints, source_frame_index = await loop.run_in_executor(pool, model.extract_keypoints, frame_array)
+                    keypoints, source_frame_index = await loop.run_in_executor(pool, model.extract_keypoints, \
+                                                                                frame_array)
                 time_after_keypoints = time.perf_counter()
                 logger.warning(
                     "Keypoints extraction time for frame index %s in sender: %s",
@@ -709,7 +713,8 @@ class MediaRecorder:
         if self.__frame_width is not None and self.__frame_height is not None:
             if self.__tracks[track].stream.height != self.__frame_height or \
             self.__tracks[track].stream.width != self.__frame_width:
-                self.__log_debug("Setting video width to %s and video height to %s.", str(self.__frame_width), str(self.__frame_height))
+                self.__log_debug("Setting video width to %s and video height to %s.", \
+                        str(self.__frame_width), str(self.__frame_height))
                 self.__tracks[track].stream.height = self.__frame_height
                 self.__tracks[track].stream.width = self.__frame_width
 
@@ -760,7 +765,7 @@ class MediaRecorder:
                 self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
-                    if self.__display_option == 'synthatic':
+                    if self.__display_option == 'synthatic' and generator_type not in ['vpx', 'bicubic']:
                         # update model related info with most recent source frame
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
@@ -832,7 +837,8 @@ class MediaRecorder:
                         elif track.kind == "lr_video":
                             lr_frame_array, frame_index = await self.__lr_video_queue.get()
                         if self.__display_option == "synthatic":
-                            if frame_index % self.__reference_update_freq == 0:
+                            if frame_index % self.__reference_update_freq == 0 and \
+                                    generator_type not in ['vpx', 'bicubic']:
                                 source_frame_array, source_keypoints, source_frame_index = await self.__source_queue.get()
                                 
                                 time_before_update = time.perf_counter()
@@ -840,18 +846,21 @@ class MediaRecorder:
                                 time_after_update = time.perf_counter()
                                 self.__log_debug("Time to update source frame %s in receiver" \
                                         " when receiving %s %s: %s",
-                                        source_frame_index, track.kind, frame_index, str(time_after_update - time_before_update))
+                                        source_frame_index, track.kind, frame_index, \
+                                        str(time_after_update - time_before_update))
                                 if self.__save_dir is not None:
                                     pass
                                     #np.save(os.path.join(self.__save_dir, 
                                     #    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
 
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                self.__log_debug("Calling predict for frame %s with source frame %s",
-                                            frame_index, source_frame_index)
+                                if generator_type not in ['vpx', 'bicubic']:
+                                    self.__log_debug("Calling predict for frame %s with source frame %s",
+                                                frame_index, source_frame_index)
                                 before_predict_time = time.perf_counter()
                                 if track.kind == "keypoints":
-                                    predicted_target = await loop.run_in_executor(pool, model.predict, received_keypoints)
+                                    predicted_target = await loop.run_in_executor(pool, \
+                                            model.predict, received_keypoints)
                                 elif track.kind == "lr_video":
                                     if self.__prediction_type == "bicubic":
                                         #predicted_target = await loop.run_in_executor(pool, resize_frame, lr_frame_array, frame_shape[0], device)
@@ -859,12 +868,14 @@ class MediaRecorder:
                                                             interpolation='BICUBIC').to_rgb().to_ndarray()
 
                                     else:
-                                        predicted_target = await loop.run_in_executor(pool, model.predict_with_lr_video, lr_frame_array)
-                            after_predict_time = time.perf_counter()
+                                        predicted_target = await loop.run_in_executor(pool, \
+                                                model.predict_with_lr_video, lr_frame_array)
 
-                            self.__log_debug("Prediction time for received %s %s: %s at time %s using source %s",
-                                    track.kind, frame_index, str(after_predict_time - before_predict_time), 
-                                    after_predict_time, source_frame_index)
+                            after_predict_time = time.perf_counter()
+                            if generator_type not in ['vpx', 'bicubic']:
+                                self.__log_debug("Prediction time for received %s %s: %s at time %s using source %s",
+                                        track.kind, frame_index, str(after_predict_time - before_predict_time),
+                                        after_predict_time, source_frame_index)
 
                             if self.__recv_times_file is not None:
                                 self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
