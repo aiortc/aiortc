@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+from abc import ABC, abstractmethod
 from typing import Optional, Union
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
@@ -52,7 +53,21 @@ def object_to_string(obj: _SignalingObject) -> str:
     return json.dumps(message, sort_keys=True)
 
 
-class CopyAndPasteSignaling:
+class BaseSignaling(ABC):
+    @abstractmethod
+    async def connect(self) -> None: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+    @abstractmethod
+    async def send(self, descr: _SignalingObject) -> None: ...
+
+    @abstractmethod
+    async def receive(self) -> Optional[_SignalingObject]: ...
+
+
+class CopyAndPasteSignaling(BaseSignaling):
     def __init__(self) -> None:
         self._read_pipe = sys.stdin
         self._read_transport: Optional[asyncio.ReadTransport] = None
@@ -85,7 +100,7 @@ class CopyAndPasteSignaling:
         print()
 
 
-class TcpSocketSignaling:
+class TcpSocketSignaling(BaseSignaling):
     def __init__(self, host: str, port: int) -> None:
         self._host = host
         self._port = port
@@ -143,7 +158,7 @@ class TcpSocketSignaling:
         self._writer.write(data + b"\n")
 
 
-class UnixSocketSignaling:
+class UnixSocketSignaling(BaseSignaling):
     def __init__(self, path: str) -> None:
         self._path = path
         self._server: Optional[asyncio.Server] = None
@@ -224,9 +239,7 @@ def add_signaling_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def create_signaling(
-    args: argparse.Namespace,
-) -> Union[CopyAndPasteSignaling, TcpSocketSignaling, UnixSocketSignaling]:
+def create_signaling(args: argparse.Namespace) -> BaseSignaling:
     """
     Create a signaling method based on command-line arguments.
     """
