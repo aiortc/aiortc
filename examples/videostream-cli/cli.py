@@ -78,7 +78,7 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return data_bgr
 
 
-async def run(pc, player, recorder, signaling, role, quantizer=32):
+async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=32):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
@@ -92,7 +92,7 @@ async def run(pc, player, recorder, signaling, role, quantizer=32):
             pc.addTrack(player.keypoints)
 
         if player and player.lr_video:
-            pc.addTrack(player.lr_video)
+            pc.addTrack(player.lr_video, lr_quantizer)
 
     @pc.on("track")
     def on_track(track):
@@ -143,6 +143,8 @@ if __name__ == "__main__":
                         help="fps you want to save the video with")
     parser.add_argument("--quantizer", type=int, default=32,
                         help="quantizer to compress video stream with")
+    parser.add_argument("--lr-quantizer", type=int, default=32,
+                        help="quantizer to compress low-res video stream with")
     parser.add_argument("--reference-update-freq", type=int, default=30,
                         help="the frequency that the reference frame is updated")
 
