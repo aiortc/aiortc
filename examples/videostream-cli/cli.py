@@ -190,6 +190,7 @@ if __name__ == "__main__":
                 signaling=signaling,
                 role=args.role,
                 quantizer=args.quantizer,
+                lr_quantizer=args.lr_quantizer
             )
         )
     except KeyboardInterrupt:
