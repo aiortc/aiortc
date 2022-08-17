@@ -45,7 +45,7 @@ from .stats import RTCStatsReport
 
 DISCARD_HOST = "0.0.0.0"
 DISCARD_PORT = 9
-MEDIA_KINDS = ["audio", "video", "keypoints", "lr_video"] # TODO
+MEDIA_KINDS = ["audio", "video", "keypoints", "lr_video"]
 
 logger = logging.getLogger(__name__)
 

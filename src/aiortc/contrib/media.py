@@ -534,7 +534,6 @@ class MediaPlayer:
                     if self._prediction_type == "keypoints":
                         self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
                     else:
-                        # TODO: should it be video?
                         self.__lr_video = PlayerStreamTrack(self, kind="lr_video", fps_factor=fps_factor)
 
         # check whether we need to throttle playback
