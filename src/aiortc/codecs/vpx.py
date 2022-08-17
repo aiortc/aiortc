@@ -14,7 +14,7 @@ from .base import Decoder, Encoder
 
 DEFAULT_BITRATE = 500000  # 500 kbps
 MIN_BITRATE = 250000  # 250 kbps
-MAX_BITRATE = 1500000  # 1.5 Mbps
+MAX_BITRATE = 15000000  # 15 Mbps
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
@@ -271,8 +271,8 @@ class Vp8Encoder(Encoder):
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = 0 #quantizer
-            self.cfg.rc_max_quantizer = 63 #quantizer
+            self.cfg.rc_min_quantizer = quantizer
+            self.cfg.rc_max_quantizer = quantizer
             self.cfg.rc_undershoot_pct = 100
             self.cfg.rc_overshoot_pct = 15
             self.cfg.rc_buf_initial_sz = 500
