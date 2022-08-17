@@ -241,7 +241,7 @@ def player_worker(
     video_first_pts = None
 
     frame_time = None
-    display_option = 'synthatic'
+    display_option = 'synthetic'
     start_time = time.time()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -652,7 +652,7 @@ class MediaRecorder:
         self.__keypoints_queue = asyncio.Queue()
         self.__source_queue = asyncio.Queue()
         self.__real_video_queue = asyncio.Queue()
-        self.__synthatic_video_queue = asyncio.Queue()
+        self.__synthetic_video_queue = asyncio.Queue()
         self.__lr_video_queue = asyncio.Queue()
         self.__display_queue = asyncio.Queue()
         self.__save_dir = save_dir
@@ -661,11 +661,11 @@ class MediaRecorder:
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
         self.__set_video_size = True
-        self.__display_option = "synthatic" #"real" #"synthatic"
+        self.__display_option = "synthetic" #"real" #"synthetic"
         '''
         __display_option could be:
             1. "real": vpx only
-            2. "synthatic": keypoint or low-res video
+            2. "synthetic": keypoint or low-res video
         '''
         
         if self.__save_dir is not None:
@@ -765,7 +765,7 @@ class MediaRecorder:
                 self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
-                    if self.__display_option == 'synthatic' and generator_type not in ['vpx', 'bicubic']:
+                    if self.__display_option == 'synthetic' and generator_type not in ['vpx', 'bicubic']:
                         # update model related info with most recent source frame
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
@@ -836,7 +836,7 @@ class MediaRecorder:
                             frame_index = received_keypoints['frame_index']
                         elif track.kind == "lr_video":
                             lr_frame_array, frame_index = await self.__lr_video_queue.get()
-                        if self.__display_option == "synthatic":
+                        if self.__display_option == "synthetic":
                             if frame_index % self.__reference_update_freq == 0 and \
                                     generator_type not in ['vpx', 'bicubic']:
                                 source_frame_array, source_keypoints, source_frame_index = await self.__source_queue.get()
@@ -883,7 +883,7 @@ class MediaRecorder:
 
                             predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_target))
                             predicted_frame = predicted_frame.reformat(format='yuv420p')
-                            asyncio.run_coroutine_threadsafe(self.__synthatic_video_queue.put(
+                            asyncio.run_coroutine_threadsafe(self.__synthetic_video_queue.put(
                                                             (predicted_frame, frame_index)),
                                                             loop)
                             #predicted_frame.pts = received_keypoints['pts']
@@ -903,7 +903,7 @@ class MediaRecorder:
                 if self.__display_option == "real":
                     display_frame, frame_index = await self.__real_video_queue.get()
                 else:
-                    display_frame, frame_index = await self.__synthatic_video_queue.get()
+                    display_frame, frame_index = await self.__synthetic_video_queue.get()
 
                 asyncio.run_coroutine_threadsafe(self.__display_queue.put(
                                                 display_frame),
