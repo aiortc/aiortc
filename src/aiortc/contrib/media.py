@@ -60,6 +60,7 @@ if generator_type not in ['vpx', 'bicubic']:
 
 save_keypoints_to_file = False
 save_lr_video_npy = True
+save_predicted_frames = True
 logger = logging.getLogger(__name__)
 
 
@@ -329,7 +330,6 @@ def player_worker(
             frame_index = frame.index
             frame_pts = frame.pts
             if save_dir is not None:
-                #pass
                 np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index),
                         frame_array)
 
@@ -661,11 +661,11 @@ class MediaRecorder:
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
         self.__set_video_size = True
-        self.__display_option = "synthetic" #"real" #"synthetic"
+        self.__display_option = "synthetic"
         '''
         __display_option could be:
-            1. "real": vpx only
-            2. "synthetic": keypoint or low-res video
+            1. "real": original target-res video
+            2. "synthetic": predicted target using keypoint or low-res video
         '''
         
         if self.__save_dir is not None:
@@ -792,10 +792,9 @@ class MediaRecorder:
                         self.__recv_times_file.flush()
 
                     if self.__save_dir is not None:
-                        pass
-                        #frame_array = frame.to_rgb().to_ndarray()
-                        #np.save(os.path.join(self.__save_dir, 
-                        #    'receiver_frame_%05d.npy' % video_frame_index), frame_array)
+                        frame_array = frame.to_rgb().to_ndarray()
+                        np.save(os.path.join(self.__save_dir,
+                            'receiver_frame_%05d.npy' % video_frame_index), frame_array)
 
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
@@ -849,9 +848,8 @@ class MediaRecorder:
                                         source_frame_index, track.kind, frame_index, \
                                         str(time_after_update - time_before_update))
                                 if self.__save_dir is not None:
-                                    pass
-                                    #np.save(os.path.join(self.__save_dir, 
-                                    #    'reference_frame_%05d.npy' % video_frame_index), source_frame_array)
+                                    np.save(os.path.join(self.__save_dir,
+                                        'reference_frame_%05d.npy' % source_frame_index), source_frame_array)
 
                             with concurrent.futures.ThreadPoolExecutor() as pool:
                                 if generator_type not in ['vpx', 'bicubic']:
@@ -889,11 +887,11 @@ class MediaRecorder:
                             #predicted_frame.pts = received_keypoints['pts']
                             if frame_index % 100 == 0:
                                 print("Predicted!", frame_index)
-                            if self.__save_dir is not None:
-                                #pass
+
+                            if self.__save_dir is not None and save_predicted_frames:
                                 predicted_array = np.array(predicted_target)
                                 np.save(os.path.join(self.__save_dir,
-                                    'receiver_frame_%05d.npy' % frame_index), predicted_array)
+                                    'predicted_frame_%05d.npy' % frame_index), predicted_array)
                     except Exception as e:
                         print(e)
                         self.__log_debug("Couldn't predict based on received %s frame %s with error %s",
@@ -912,6 +910,11 @@ class MediaRecorder:
                 display_frame = await self.__display_queue.get()
                 for packet in context.stream.encode(display_frame):
                     self.__container.mux(packet)
+
+                if self.__save_dir is not None:
+                    display_array = display_frame.to_rgb().to_ndarray()
+                    np.save(os.path.join(self.__save_dir,
+                            'receiver_frame_%05d.npy' % frame_index), display_array)
 
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaRecorder(%s) {msg}", self.__container.name, *args)
