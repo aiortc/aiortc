@@ -247,7 +247,6 @@ def player_worker(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     while not quit_event.is_set():
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         try:
             frame = next(container.decode(*streams))
             if isinstance(frame, VideoFrame) and video_track:
