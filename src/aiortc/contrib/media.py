@@ -18,7 +18,7 @@ from av.frame import Frame
 from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, KeypointsFrame
 
 from first_order_model.fom_wrapper import FirstOrderModel
-from first_order_model.reconstruction import frame_to_tensor
+from first_order_model.reconstruction import frame_to_tensor, resize_tensor_to_array
 from skimage import img_as_float32
 import torch
 import torch.nn.functional as F
@@ -186,12 +186,11 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
-def place_frame_in_video_queue(frame, loop, video_track, container):
+def place_frame_in_video_queue(frame, frame_index, loop, video_track, container):
     """ place the attached frame in the video track queue after stamping it 
     """
     frame_time = frame.time
-    frame_index = frame.index
-    frame = stamp_frame(frame, frame.index, frame.pts, frame.time_base)
+    frame = stamp_frame(frame, frame_index, frame.pts, frame.time_base)
     
     logger.warning(
         "MediaPlayer(%s) Put video frame %s in the queue: %s",
@@ -339,24 +338,17 @@ def player_worker(
                 )
  
                 if prediction_type != "keypoints":
-                    #TODO: using the interpolate function will result in stall of receiver in the pipeline
-                    '''
-                    driving = frame_to_tensor(img_as_float32(frame_array), device)
-                    driving_lr = F.interpolate(driving, lr_size).data.cpu().numpy()
-                    driving_lr = np.transpose(driving_lr, [0, 2, 3, 1])[0]
-                    driving_lr *= 255
-                    driving_lr = driving_lr.astype(np.uint8)
+                    frame_tensor = frame_to_tensor(img_as_float32(frame_array), device)
+                    lr_frame_array = resize_tensor_to_array(frame_tensor, lr_size, device)
 
-                    lr_frame = av.VideoFrame.from_ndarray(driving_lr)
+                    lr_frame = av.VideoFrame.from_ndarray(lr_frame_array)
                     lr_frame.pts = frame.pts
                     lr_frame.time_base = frame.time_base
-                    '''
-                    lr_frame = frame.reformat(width=lr_size, height=lr_size)
-                    place_frame_in_video_queue(lr_frame, loop, lr_video_track, container)
+
+                    place_frame_in_video_queue(lr_frame, frame.index, loop, lr_video_track, container)
                     if save_lr_video_npy and save_dir is not None:
-                        lr_frame_array = lr_frame.to_rgb().to_ndarray()
                         np.save(os.path.join(save_dir,
-                                'sender_lr_frame_%05d.npy' % lr_frame.index),
+                                'sender_lr_frame_%05d.npy' % frame.index),
                                 lr_frame_array)
 
                 else:
@@ -367,7 +359,7 @@ def player_worker(
             # frame or if prediction is disabled
             if (enable_prediction and frame.index % reference_update_freq == 0) or \
                     display_option == 'real' or not enable_prediction:
-                place_frame_in_video_queue(frame, loop, video_track, container)
+                place_frame_in_video_queue(frame, frame.index, loop, video_track, container)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
