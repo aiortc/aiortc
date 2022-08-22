@@ -14,7 +14,7 @@ from aiortc import (
     RTCSessionDescription,
     VideoStreamTrack,
 )
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, generator_type
 from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 
@@ -85,7 +85,10 @@ async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=
 
         if player and player.video:
             pc.addTrack(player.video, quantizer)
-        else:
+        elif generator_type != 'bicubic':
+            """do not use a high-res video stream,
+                use only a low-res stream
+            """
             pc.addTrack(FlagVideoStreamTrack())
 
         if player and player.keypoints:

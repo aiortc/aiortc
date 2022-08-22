@@ -296,7 +296,7 @@ def player_worker(
                     )
                 else:
                     break
-        elif isinstance(frame, VideoFrame) and video_track:
+        elif isinstance(frame, VideoFrame):
             if frame.pts is None:  # pragma: no cover
                 logger.warning(
                     "MediaPlayer(%s) Skipping video frame with no pts",
@@ -314,10 +314,8 @@ def player_worker(
                 container.name, str(frame.index), str(frame), time.perf_counter()
             )
             
-            frame_time = frame.time
             frame_array = frame.to_rgb().to_ndarray()
-            frame_index = frame.index
-            frame_pts = frame.pts
+
             if save_dir is not None:
                 np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index),
                         frame_array)
@@ -343,14 +341,15 @@ def player_worker(
                                 lr_frame_array)
 
                 else:
-                    asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame_time, \
+                    asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((frame_array, frame.time, \
                             frame.index, frame.pts)), loop)
 
             # Only add video frame is this is meant to be used as a source \
             # frame or if prediction is disabled
-            if (enable_prediction and frame.index % reference_update_freq == 0) or \
-                    display_option == 'real' or not enable_prediction:
-                place_frame_in_video_queue(frame, frame.index, loop, video_track, container)
+            if video_track is not None:
+                if (enable_prediction and frame.index % reference_update_freq == 0) or \
+                        display_option == 'real' or not enable_prediction:
+                    place_frame_in_video_queue(frame, frame.index, loop, video_track, container)
 
 
 class PlayerStreamTrack(MediaStreamTrack):
@@ -510,8 +509,9 @@ class MediaPlayer:
                     fps_factor = round(float(stream.base_rate) / fps)
                 else:
                     fps_factor = 1
-                self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
-                self.__streams.append(stream)
+                if generator_type != 'bicubic':
+                    self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
+                    self.__streams.append(stream)
                 if self._enable_prediction:
                     if self._prediction_type == "keypoints":
                         self.__keypoints = PlayerStreamTrack(self, kind="keypoints")
