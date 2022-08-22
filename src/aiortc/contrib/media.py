@@ -386,7 +386,7 @@ class PlayerStreamTrack(MediaStreamTrack):
 
         # record send time just before sending it on wire
         if self._player._send_times_file is not None:
-            if self._player._enable_prediction and self.kind == "keypoints":
+            if self._player._enable_prediction and (self.kind == "keypoints" or self.kind == "lr_video"):
                 self._player._send_times_file.write(f'Sent {frame_index} at {datetime.datetime.now()}\n')
             elif self._player._enable_prediction and self.kind == "video":
                 self._player._send_times_file.write(
