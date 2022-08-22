@@ -215,15 +215,6 @@ def requires_updated_reference(keypoints, frame_index, original_frame, lr_frame_
     #return False
 
 
-def resize_frame(frame_array, size, device):
-    driving = frame_to_tensor(img_as_float32(frame_array), device)
-    driving_resized = F.interpolate(driving, size, mode='bicubic').data.cpu().numpy()
-    driving_resized = np.transpose(driving_resized, [0, 2, 3, 1])[0]
-    driving_resized *= 255
-    driving_resized = driving_resized.astype(np.uint8)
-    return driving_resized
-
-
 def player_worker(
     loop, container, streams, audio_track, video_track, keypoints_track, lr_video_track,
     quit_event, throttle_playback, save_dir, enable_prediction, prediction_type, 
@@ -650,7 +641,6 @@ class MediaRecorder:
         self.__prediction_type = prediction_type
         self.__reference_update_freq = reference_update_freq
         self.__output_fps = output_fps
-        self.__set_video_size = True
         self.__display_option = "synthetic"
         '''
         __display_option could be:
@@ -693,20 +683,6 @@ class MediaRecorder:
         else:
             stream = None
         self.__tracks[track] = MediaRecorderContext(stream)
-
-    def __setsize(self, track):
-        """
-        Set video height and width.
-        """
-        print("Setting video size")
-        self.__set_video_size = False
-        if self.__frame_width is not None and self.__frame_height is not None:
-            if self.__tracks[track].stream.height != self.__frame_height or \
-            self.__tracks[track].stream.width != self.__frame_width:
-                self.__log_debug("Setting video width to %s and video height to %s.", \
-                        str(self.__frame_width), str(self.__frame_height))
-                self.__tracks[track].stream.height = self.__frame_height
-                self.__tracks[track].stream.width = self.__frame_width
 
     async def start(self):
         """
@@ -851,7 +827,6 @@ class MediaRecorder:
                                             model.predict, received_keypoints)
                                 elif track.kind == "lr_video":
                                     if self.__prediction_type == "bicubic":
-                                        #predicted_target = await loop.run_in_executor(pool, resize_frame, lr_frame_array, frame_shape[0], device)
                                         predicted_target = lr_frame.reformat(width=frame_shape[0], height=frame_shape[0],\
                                                             interpolation='BICUBIC').to_rgb().to_ndarray()
 
