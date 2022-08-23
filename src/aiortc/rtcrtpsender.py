@@ -37,26 +37,6 @@ from .stats import (
 )
 from .utils import random16, random32, uint16_add, uint32_add
 
-from first_order_model.fom_wrapper import FirstOrderModel
-import numpy as np
-import concurrent
-import cv2
-import av
-from PIL import Image
-# instantiate and warm up the model
-#time_before_instantiation = time.perf_counter()
-#config_path = '/data/pantea/aiortc/nets_implementation/first_order_model/config/paper_configs/resolution1024_without_hr_skip_connections.yaml'#os.environ.get('CONFIG_PATH')
-#checkpoint = '/video-conf/scratch/pantea_experiments_tardy/resolution1024_without_hr_skip_connections/needle_drop_resolution1024_without_hr_skip_connections 09_04_22_20.18.58/00000069-checkpoint.pth.tar'#os.environ.get('CHECKPOINT_PATH', 'None')
-#model = FirstOrderModel(config_path, checkpoint)
-#for i in range(1):
-#    zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-#    zero_kps, src_index = model.extract_keypoints(zero_array)
-#    model.update_source(src_index, zero_array, zero_kps)
-#    zero_kps['source_index'] = src_index
-#    model.predict(zero_kps)
-#time_after_instantiation = time.perf_counter()
-#print("Time to instantiate at time %s: %s",  datetime.datetime.now(), str(time_after_instantiation - time_before_instantiation))
-#model.reset()
 logger = logging.getLogger(__name__)
 
 RTP_HISTORY_SIZE = 128
@@ -114,9 +94,6 @@ class RTCRtpSender:
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt = None
-
-        self.__rtt_list = []
-        self.count = 0 
 
     @property
     def kind(self):
@@ -271,7 +248,6 @@ class RTCRtpSender:
             self.__log_debug("Received PLI")
             self._send_keyframe()
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
-            self.count += 1
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
                 if self._ssrc in ssrcs:
@@ -279,11 +255,7 @@ class RTCRtpSender:
                         "- receiver estimated maximum bitrate %d bps at time %s", bitrate, datetime.datetime.now()
                     )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
-                        #print(self.count)
-                        #if self.count > 500:
                         self.__encoder.target_bitrate = int((bitrate * 1000 / 173 + 184971)) #bitrate
-                        #else:
-                        #    self.__encoder.target_bitrate = 8000000 #bitrate
             except ValueError:
                 pass
 
@@ -327,24 +299,7 @@ class RTCRtpSender:
         Request the next frame to be a keyframe.
         """
         self.__force_keyframe = True
-    
-    def ml_predict(self, frame, counter):
-        frame_array = frame.to_ndarray()
-        frame_array = np.resize(frame_array, (1024, 1024, 3))
-        kps, src_index = model.extract_keypoints(frame_array)
-        model.update_source(src_index, frame_array, kps)
-        kps['source_index'] = src_index
-        predicted_frame = model.predict(kps)
-        #print(predicted_frame, predicted_frame.shape)
-        predicted_frame = av.VideoFrame.from_ndarray(np.array(predicted_frame))
-        self.save_video_frame_as_image(predicted_frame, counter)
-        return predicted_frame
-    
-    def save_video_frame_as_image(self, frame, counter):
-        frame_array = frame.to_ndarray()
-        im = Image.fromarray(frame_array)
-        im.save(f"predicted_{counter}.jpeg")
- 
+
     async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
         self.__log_debug("- RTP started")
 
@@ -352,53 +307,13 @@ class RTCRtpSender:
         timestamp_origin = 0 #random32()
         try:
             counter = 0
-            compression_sizes = []
             while True:
                 if not self.__track:
                     await asyncio.sleep(0.02)
                     continue
-#		# used if trying the compression experiments
-#                frame = await self.__track.recv()
-#                #print(frame)
-#                delta = 0
+
                 counter += 1
-#                revive_frame_num = 1800
-#                if counter >= 100 and counter <= revive_frame_num - delta:
-#                    #print("skipping encoding", counter)
-#                    continue
-#                elif counter == revive_frame_num + 1:
-#                    self._send_keyframe()
-#                    frame_array = frame.to_ndarray()
-#                    print(frame_array.shape)
-#                    if frame_array.shape[1] == 1024:
-#                        #self._send_keyframe()
-#                        print("Prediction is happening")
-#                        original_pts = frame.pts
-#                        original_time_base = frame.time_base
-#                        loop = asyncio.get_running_loop()
-#                        with concurrent.futures.ThreadPoolExecutor() as pool:
-#                            frame = await loop.run_in_executor(pool, self.ml_predict, frame, counter)
-#                        frame.pts = original_pts
-#                        frame.time_base = original_time_base
-#                        print("Prediction was successful! changed pts and time_base")
-#                    else:
-#                        continue
                 payloads, timestamp = await self._next_encoded_frame(codec)
-#                if counter < revive_frame_num + 10 and counter>= 99 and self.__track.kind == "video":
-#                    if counter == 99:
-#                        #self.save_video_frame_as_image(frame, counter)
-#                        base_len = len(payloads)
-#                    else:
-#                        frame_array = frame.to_ndarray()
-#                        if counter == 201:
-#                            self.save_video_frame_as_image(frame, counter)
-#                        if frame_array.shape[1] == 1024:
-#                             print(delta, counter, base_len, len(payloads) - base_len)
-#                frame_array = frame.to_ndarray()
-#                if frame_array.shape[1] == 1024:
-#                    compression_sizes.append(len(payloads))
-#                    #print(compression_sizes)
-#                    #print(self.__track.kind, counter, len(payloads))
                 self.__log_debug("Frame %s is encoded with timestamp %s with len %s at time %s", 
                                 counter, timestamp, sum([len(i) for i in payloads]), datetime.datetime.now())
                 old_timestamp = timestamp
