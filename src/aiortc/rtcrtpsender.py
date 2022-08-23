@@ -115,8 +115,6 @@ class RTCRtpSender:
         self.__packet_count = 0
         self.__rtt = None
 
-        self.__lsr_time_list = []
-        self.__lsr_list = []
         self.__rtt_list = []
         self.count = 0 
 
@@ -232,13 +230,15 @@ class RTCRtpSender:
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
-                #if self.__lsr == report.lsr and report.dlsr:
-                if report.lsr in self.__lsr_list and report.dlsr:
-                    rtt = time.time() - self.__lsr_time_list[self.__lsr_list.index(report.lsr)] - (report.dlsr / 65536)
+                if self.__lsr == report.lsr and report.dlsr:
+                    self.__log_debug("self.__lsr %s, self.__lsr_time %s", self.__lsr, self.__lsr_time)
+                    rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
+                    if rtt < 0:
+                        print("rtt at sender", self.__kind, rtt, time.time(), \
+                                self.__lsr_time, (report.dlsr / 65536))
+
                     self.__log_debug("estimated rtt is %s, fraction_lost %d, lsr %s, at time %d", \
                             rtt, report.fraction_lost, report.lsr, time.time())
-                    #self.__rtt_list.append((rtt, report.packets_lost, report.fraction_lost))
-                    #print(self.__rtt_list)
                     if self.__rtt is None:
                         self.__rtt = rtt
                     else:
@@ -268,7 +268,7 @@ class RTCRtpSender:
                 self.__log_debug("dispatching retransmit %s", seq)
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
-            print("Received PLI")
+            self.__log_debug("Received PLI")
             self._send_keyframe()
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             self.count += 1
@@ -472,9 +472,7 @@ class RTCRtpSender:
                 ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
-                self.__lsr_list.append(self.__lsr)
-                self.__lsr_time_list.append(self.__lsr_time)
-                
+
                 # RTCP SDES
                 if self.__cname is not None:
                     packets.append(
