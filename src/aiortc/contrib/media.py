@@ -19,6 +19,7 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 
 from first_order_model.fom_wrapper import FirstOrderModel
 from first_order_model.reconstruction import frame_to_tensor, resize_tensor_to_array
+from first_order_model.utils import get_main_config_params
 from skimage import img_as_float32
 import torch
 import torch.nn.functional as F
@@ -27,32 +28,26 @@ import yaml
 config_path = os.environ.get('CONFIG_PATH', 'None')
 checkpoint = os.environ.get('CHECKPOINT_PATH', 'None')
 
-try:
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    frame_shape = config['dataset_params']['frame_shape']
-    generator_params = config['model_params']['generator_params']
-    use_lr_video = generator_params.get('use_lr_video', False)
-    lr_size = generator_params.get('lr_size', 64)
-    generator_type = generator_params.get('generator_type', 'occlusion_aware')
-except Exception as e:
-    frame_shape = [1024, 1024, 3]
-    use_lr_video = False
-    generator_type = 'vpx'
+main_configs = get_main_config_params(config_path)
+frame_shape = main_configs['frame_shape']
+generator_type = main_configs['generator_type']
+use_lr_video = main_configs['use_lr_video']
+lr_size = main_configs['lr_size']
+print(main_configs)
 
 # instantiate and warm up the model
 if generator_type not in ['vpx', 'bicubic']:
     time_before_instantiation = time.perf_counter()
     model = FirstOrderModel(config_path, checkpoint)
     for i in range(1):
-        zero_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-        zero_kps, src_index = model.extract_keypoints(zero_array)
-        model.update_source(src_index, zero_array, zero_kps)
-        zero_kps['source_index'] = src_index
+        random_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
+        random_kps, src_index = model.extract_keypoints(random_array)
+        model.update_source(src_index, random_array, random_kps)
+        random_kps['source_index'] = src_index
         if use_lr_video:
             model.predict_with_lr_video(np.random.randint(0, 255, (lr_size, lr_size, 3), dtype=np.uint8))
         else:
-            model.predict(zero_kps)
+            model.predict(random_kps)
     time_after_instantiation = time.perf_counter()
     print("Time to instantiate at time %s: %s" % (datetime.datetime.now(),
         str(time_after_instantiation - time_before_instantiation)))
@@ -212,7 +207,7 @@ def requires_updated_reference(keypoints, frame_index, original_frame, lr_frame_
     if method == "fixed_interval":
         if frame_index % reference_update_freq == 0:
             return True
-    #return False
+    return False
 
 
 def player_worker(
@@ -402,8 +397,8 @@ class PlayerStreamTrack(MediaStreamTrack):
                 time_before_keypoints = time.perf_counter()
                 loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as pool:
-                    keypoints, source_frame_index = await loop.run_in_executor(pool, model.extract_keypoints, \
-                                                                                frame_array)
+                    keypoints, source_frame_index = await loop.run_in_executor(pool,
+                                                            model.extract_keypoints, frame_array)
                 time_after_keypoints = time.perf_counter()
                 logger.warning(
                     "Keypoints extraction time for frame index %s in sender: %s",
@@ -631,7 +626,7 @@ class MediaRecorder:
         self.__frame_height = None
         self.__frame_width = None
         self.__keypoints_queue = asyncio.Queue()
-        self.__source_queue = asyncio.Queue()
+        self.__reference_frames_queue = asyncio.Queue()
         self.__real_video_queue = asyncio.Queue()
         self.__synthetic_video_queue = asyncio.Queue()
         self.__lr_video_queue = asyncio.Queue()
@@ -743,7 +738,7 @@ class MediaRecorder:
                         self.__log_debug("Source keypoints extraction time in receiver: %s",
                                         str(time_after_keypoints - time_before_keypoints))
 
-                        asyncio.run_coroutine_threadsafe(self.__source_queue.put(
+                        asyncio.run_coroutine_threadsafe(self.__reference_frames_queue.put(
                             (source_frame_array, source_keypoints, video_frame_index)), loop)
                     
                     elif self.__display_option == "real":
@@ -804,8 +799,8 @@ class MediaRecorder:
                         if self.__display_option == "synthetic":
                             if frame_index % self.__reference_update_freq == 0 and \
                                     generator_type not in ['vpx', 'bicubic']:
-                                source_frame_array, source_keypoints, source_frame_index = await self.__source_queue.get()
-                                
+                                source_frame_array, source_keypoints, source_frame_index = await self.__reference_frames_queue.get()
+
                                 time_before_update = time.perf_counter()
                                 model.update_source(source_frame_index, source_frame_array, source_keypoints)
                                 time_after_update = time.perf_counter()
