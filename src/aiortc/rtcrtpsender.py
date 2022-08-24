@@ -209,12 +209,7 @@ class RTCRtpSender:
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
                 if self.__lsr == report.lsr and report.dlsr:
-                    self.__log_debug("self.__lsr %s, self.__lsr_time %s", self.__lsr, self.__lsr_time)
                     rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
-                    if rtt < 0:
-                        print("rtt at sender", self.__kind, rtt, time.time(), \
-                                self.__lsr_time, (report.dlsr / 65536))
-
                     self.__log_debug("estimated rtt is %s, fraction_lost %d, lsr %s, at time %d", \
                             rtt, report.fraction_lost, report.lsr, time.time())
                     if self.__rtt is None:

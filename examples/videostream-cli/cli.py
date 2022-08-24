@@ -141,7 +141,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-dir", type=str, help="folder to save frames + latency data in")
     parser.add_argument('--enable-prediction', action='store_true')
     parser.add_argument('--prediction-type', type=str, default="keypoints",
-                        help="indicate to use_low_res_video or keypoints")
+                        help="indicate to use_low_res_video or keypoints or bicubic")
     parser.add_argument("--output-fps", type=int, default=30,
                         help="fps you want to save the video with")
     parser.add_argument("--quantizer", type=int, default=32,
