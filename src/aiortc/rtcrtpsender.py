@@ -90,6 +90,7 @@ class RTCRtpSender:
         self.__lsr: Optional[int] = None
         self.__lsr_time: Optional[float] = None
         self.__ntp_timestamp = 0
+        self.__prev_ntp_timestamp = -1
         self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
@@ -373,6 +374,16 @@ class RTCRtpSender:
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
 
+                if self.__prev_ntp_timestamp == self.__ntp_timestamp:
+                    """
+                    Safety mechanism: After the video has been fully sent,
+                    self.__ntp_timestamp is no longer updated in run_rtp which
+                    casuses a lot of sender's RTCP packets to have the same lsr.
+                    Having the same lsr produces error in identifying which received
+                    RTCP packet matches which sent RTCP packet (producing negative rtt).
+                    """
+                    self.__ntp_timestamp = clock.current_ntp_time()
+
                 # RTCP SR
                 packets: List[AnyRtcpPacket] = [
                     RtcpSrPacket(
@@ -387,6 +398,7 @@ class RTCRtpSender:
                 ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
+                self.__prev_ntp_timestamp = self.__ntp_timestamp
 
                 # RTCP SDES
                 if self.__cname is not None:
