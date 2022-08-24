@@ -257,8 +257,11 @@ def player_worker(
                     container.name
                 )
                 asyncio.run_coroutine_threadsafe(video_track._queue.put((None, None)), loop)
-                asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((None, None)), loop)
-                asyncio.run_coroutine_threadsafe(lr_video_track._queue.put((None, None)), loop)
+                if enable_prediction:
+                    if prediction_type == 'keypoints':
+                        asyncio.run_coroutine_threadsafe(keypoints_track._queue.put((None, None)), loop)
+                    else:
+                        asyncio.run_coroutine_threadsafe(lr_video_track._queue.put((None, None)), loop)
             break
 
         # read up to 1 second ahead
@@ -726,7 +729,7 @@ class MediaRecorder:
                 self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
-                    if self.__display_option == 'synthetic' and generator_type not in ['vpx', 'bicubic']:
+                    if self.__display_option == 'synthetic' and generator_type != 'bicubic':
                         # update model related info with most recent source frame
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
@@ -798,7 +801,7 @@ class MediaRecorder:
                             lr_frame_array, frame_index = await self.__lr_video_queue.get()
                         if self.__display_option == "synthetic":
                             if frame_index % self.__reference_update_freq == 0 and \
-                                    generator_type not in ['vpx', 'bicubic']:
+                                    generator_type != 'bicubic':
                                 source_frame_array, source_keypoints, source_frame_index = await self.__reference_frames_queue.get()
 
                                 time_before_update = time.perf_counter()
@@ -813,7 +816,7 @@ class MediaRecorder:
                                         'reference_frame_%05d.npy' % source_frame_index), source_frame_array)
 
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                if generator_type not in ['vpx', 'bicubic']:
+                                if generator_type != 'bicubic':
                                     self.__log_debug("Calling predict for frame %s with source frame %s",
                                                 frame_index, source_frame_index)
                                 before_predict_time = time.perf_counter()
@@ -830,10 +833,9 @@ class MediaRecorder:
                                                 model.predict_with_lr_video, lr_frame_array)
 
                             after_predict_time = time.perf_counter()
-                            if generator_type not in ['vpx', 'bicubic']:
-                                self.__log_debug("Prediction time for received %s %s: %s at time %s using source %s",
-                                        track.kind, frame_index, str(after_predict_time - before_predict_time),
-                                        after_predict_time, source_frame_index)
+                            self.__log_debug("Prediction time for received %s %s: %s at time %s",
+                                    track.kind, frame_index, str(after_predict_time - before_predict_time),
+                                    after_predict_time)
 
                             if self.__recv_times_file is not None:
                                 self.__recv_times_file.write(f'Received {frame_index} at {datetime.datetime.now()}\n')
