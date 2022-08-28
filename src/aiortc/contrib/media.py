@@ -20,6 +20,7 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Keyp
 from first_order_model.fom_wrapper import FirstOrderModel
 from first_order_model.reconstruction import frame_to_tensor, resize_tensor_to_array
 from first_order_model.utils import get_main_config_params
+from lte_wrapper import SuperResolutionModel
 from skimage import img_as_float32
 import torch
 import torch.nn.functional as F
@@ -38,12 +39,18 @@ print(main_configs)
 # instantiate and warm up the model
 if generator_type not in ['vpx', 'bicubic']:
     time_before_instantiation = time.perf_counter()
-    model = FirstOrderModel(config_path, checkpoint)
+    if generator_type == 'swinir-lte':
+        model = SuperResolutionModel(config_path, checkpoint)
+    else:
+        model = FirstOrderModel(config_path, checkpoint)
+
     for i in range(1):
         random_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
-        random_kps, src_index = model.extract_keypoints(random_array)
-        model.update_source(src_index, random_array, random_kps)
-        random_kps['source_index'] = src_index
+        if generator_type != 'swinir-lte':
+            random_kps, src_index = model.extract_keypoints(random_array)
+            model.update_source(src_index, random_array, random_kps)
+            random_kps['source_index'] = src_index
+
         if use_lr_video:
             model.predict_with_lr_video(np.random.randint(0, 255, (lr_size, lr_size, 3), dtype=np.uint8))
         else:
@@ -55,7 +62,8 @@ if generator_type not in ['vpx', 'bicubic']:
 
 save_keypoints_to_file = False
 save_lr_video_npy = True
-save_predicted_frames = True
+save_predicted_frames = False
+save_received_frames = True
 logger = logging.getLogger(__name__)
 
 
@@ -507,7 +515,7 @@ class MediaPlayer:
                     fps_factor = round(float(stream.base_rate) / fps)
                 else:
                     fps_factor = 1
-                if generator_type != 'bicubic':
+                if generator_type not in ['bicubic', 'swinir-lte']:
                     self.__video = PlayerStreamTrack(self, kind="video", fps_factor=fps_factor)
                     self.__streams.append(stream)
                 if self._enable_prediction:
@@ -729,7 +737,8 @@ class MediaRecorder:
                 self.__log_debug("Received original video frame %s with index %s at time %s",
                                     frame, video_frame_index, datetime.datetime.now())
                 if self.__enable_prediction:
-                    if self.__display_option == 'synthetic' and generator_type != 'bicubic':
+                    if self.__display_option == 'synthetic' and \
+                            generator_type not in ['bicubic', 'swinir-lte']:
                         # update model related info with most recent source frame
                         source_frame_array = frame.to_rgb().to_ndarray()
                         
@@ -801,7 +810,7 @@ class MediaRecorder:
                             lr_frame_array, frame_index = await self.__lr_video_queue.get()
                         if self.__display_option == "synthetic":
                             if frame_index % self.__reference_update_freq == 0 and \
-                                    generator_type != 'bicubic':
+                                    generator_type not in ['bicubic', 'swinir-lte']:
                                 source_frame_array, source_keypoints, source_frame_index = await self.__reference_frames_queue.get()
 
                                 time_before_update = time.perf_counter()
@@ -816,7 +825,7 @@ class MediaRecorder:
                                         'reference_frame_%05d.npy' % source_frame_index), source_frame_array)
 
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                if generator_type != 'bicubic':
+                                if generator_type not in ['bicubic', 'swinir-lte']:
                                     self.__log_debug("Calling predict for frame %s with source frame %s",
                                                 frame_index, source_frame_index)
                                 before_predict_time = time.perf_counter()
@@ -873,7 +882,7 @@ class MediaRecorder:
                 for packet in context.stream.encode(display_frame):
                     self.__container.mux(packet)
 
-                if self.__save_dir is not None:
+                if self.__save_dir is not None and save_received_frames:
                     display_array = display_frame.to_rgb().to_ndarray()
                     np.save(os.path.join(self.__save_dir,
                             'receiver_frame_%05d.npy' % frame_index), display_array)

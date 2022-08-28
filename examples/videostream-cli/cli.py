@@ -85,7 +85,7 @@ async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=
 
         if player and player.video:
             pc.addTrack(player.video, quantizer)
-        elif generator_type != 'bicubic':
+        elif generator_type not in ['bicubic', 'swinir-lte']:
             """do not use a high-res video stream,
                 use only a low-res stream
             """
