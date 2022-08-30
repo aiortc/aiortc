@@ -340,7 +340,7 @@ def player_worker(
                     lr_frame.pts = frame.pts
                     lr_frame.time_base = frame.time_base
                     """
-                    We can not re-write the index of an av.VideoFrame and it defaluts to 0.
+                    We can not re-write the index of an av.VideoFrame and it defaults to 0.
                     We should use frame.index as lr_frame.index.
                     """
 
