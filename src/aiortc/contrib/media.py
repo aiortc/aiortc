@@ -833,7 +833,7 @@ class MediaRecorder:
                                     predicted_target = await loop.run_in_executor(pool, \
                                             model.predict, received_keypoints)
                                 elif track.kind == "lr_video":
-                                    if self.__prediction_type == "bicubic":
+                                    if generator_type == "bicubic":
                                         predicted_target = lr_frame.reformat(width=frame_shape[0], height=frame_shape[0],\
                                                             interpolation='BICUBIC').to_rgb().to_ndarray()
 
