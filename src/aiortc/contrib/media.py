@@ -63,6 +63,7 @@ if generator_type not in ['vpx', 'bicubic']:
 save_keypoints_to_file = False
 save_lr_video_npy = True
 save_predicted_frames = False
+save_sent_frames = True
 save_received_frames = True
 logger = logging.getLogger(__name__)
 
@@ -322,7 +323,7 @@ def player_worker(
             
             frame_array = frame.to_rgb().to_ndarray()
 
-            if save_dir is not None:
+            if save_sent_frames and save_dir is not None:
                 np.save(os.path.join(save_dir, 'sender_frame_%05d.npy' % frame.index),
                         frame_array)
 
@@ -768,7 +769,7 @@ class MediaRecorder:
                         self.__recv_times_file.write(f'Received {video_frame_index} at {datetime.datetime.now()}\n')
                         self.__recv_times_file.flush()
 
-                    if self.__save_dir is not None:
+                    if save_received_frames and self.__save_dir is not None:
                         frame_array = frame.to_rgb().to_ndarray()
                         np.save(os.path.join(self.__save_dir,
                             'receiver_frame_%05d.npy' % video_frame_index), frame_array)
@@ -825,7 +826,7 @@ class MediaRecorder:
                                         " when receiving %s %s: %s",
                                         source_frame_index, track.kind, frame_index, \
                                         str(time_after_update - time_before_update))
-                                if self.__save_dir is not None:
+                                if save_sent_frames and self.__save_dir is not None:
                                     np.save(os.path.join(self.__save_dir,
                                         'reference_frame_%05d.npy' % source_frame_index), source_frame_array)
 
@@ -864,7 +865,7 @@ class MediaRecorder:
                             if frame_index % 100 == 0:
                                 print("Predicted!", frame_index)
 
-                            if self.__save_dir is not None and save_predicted_frames:
+                            if save_predicted_frames and self.__save_dir is not None:
                                 predicted_array = np.array(predicted_target)
                                 np.save(os.path.join(self.__save_dir,
                                     'predicted_frame_%05d.npy' % frame_index), predicted_array)
