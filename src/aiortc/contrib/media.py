@@ -773,6 +773,7 @@ class MediaRecorder:
                         np.save(os.path.join(self.__save_dir,
                             'receiver_frame_%05d.npy' % video_frame_index), frame_array)
 
+                    self.__log_debug("Frame displayed at receiver %s", video_frame_index)
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
 
@@ -879,10 +880,11 @@ class MediaRecorder:
                     display_frame, frame_index = await self.__synthetic_video_queue.get()
 
                 asyncio.run_coroutine_threadsafe(self.__display_queue.put(
-                                                display_frame),
+                                                (display_frame, frame_index)),
                                                 loop)
                 #read from the display queue, and write in the file
-                display_frame = await self.__display_queue.get()
+                display_frame, frame_index = await self.__display_queue.get()
+                self.__log_debug("Frame displayed at receiver %s", frame_index)
                 for packet in context.stream.encode(display_frame):
                     self.__container.mux(packet)
 
