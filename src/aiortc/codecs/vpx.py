@@ -243,14 +243,31 @@ class Vp8Encoder(Encoder):
         self.timestamp_increment = VIDEO_CLOCK_RATE // MAX_FRAME_RATE
         self.__target_bitrate = DEFAULT_BITRATE
         self.__update_config_needed = False
+        self.enable_gcc = False
+        """ This implementation of the codec seems to need a transformsation
+            from target bitrate to the supplied bitrate to vpx (values in bps)
+        """
+        self.vpx_bitrate_conversion_dict = {(0, 30000): 100000,
+                                            (30000, 60000): 200000,
+                                            (60000, 90000): 400000,
+                                            (90000, 120000): 500000,
+                                            (120000, 240000): 1000000,
+                                            (240000, 360000): 1500000,
+                                            (360000, 480000): 2500000,
+                                            (480000, 600000): 3000000}
+
+    def get_vpx_bitrate(self, target_bitaret):
+        for low, high in self.vpx_bitrate_conversion_dict.keys():
+            if low <= target_bitaret < high:
+                return  self.vpx_bitrate_conversion_dict[(low, high)]
+            return None
 
     def __del__(self) -> None:
         if self.codec:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(
-            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32
-    ) -> Tuple[List[bytes], int]:
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = False) -> Tuple[List[bytes], int]:
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
@@ -260,6 +277,7 @@ class Vp8Encoder(Encoder):
             lib.vpx_codec_destroy(self.codec)
             self.codec = None
 
+        self.enable_gcc = enable_gcc
         if not self.codec:
             # create codec
             self.codec = ffi.new("vpx_codec_ctx_t *")
@@ -273,7 +291,7 @@ class Vp8Encoder(Encoder):
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
-            # quantizer = -1 is the full range quantizer in range 0 and 63
+            """ quantizer = -1 is the full range quantizer in range 0 and 63 """
             self.cfg.rc_min_quantizer = quantizer if quantizer > 0 else 0
             self.cfg.rc_max_quantizer = quantizer if quantizer > 0 else 63
             self.cfg.rc_undershoot_pct = 100
@@ -283,10 +301,21 @@ class Vp8Encoder(Encoder):
             self.cfg.rc_buf_sz = 1000
             self.cfg.kf_mode = lib.VPX_KF_AUTO
             self.cfg.kf_max_dist = 3000
+            self.vpx_min_bitrate = MIN_BITRATE
+            self.vpx_max_bitrate = MAX_BITRATE
+            if quantizer < 0 and not enable_gcc:
+                """ Setting the bitrate in quantizer when full range """
+                vpx_bitrate = self.get_vpx_bitrate(target_bitaret)
+                if vpx_bitrate is not None:
+                    self.vpx_min_bitrate = vpx_bitrate
+                    self.vpx_max_bitrate = vpx_bitrate
+                    self.__target_bitrate = vpx_bitrate
+
             logger.info(f"encoder's config: min_quantizer {str(self.cfg.rc_min_quantizer)}, "\
                         f"max_quantizer {str(self.cfg.rc_max_quantizer)}, "\
                         f"kf_max_dist {str(self.cfg.kf_max_dist)}, "\
-                        f"DEFAULT_BITRATE {DEFAULT_BITRATE}, MIN_BITRATE {MIN_BITRATE}, MAX_BITRATE {MAX_BITRATE}, "\
+                        f"DEFAULT_BITRATE {self.__target_bitrate}, MIN_BITRATE {self.vpx_min_bitrate}, "\
+                        f"MAX_BITRATE {self.vpx_max_bitrate}, "\
                         f"buf_optimal_sz {str(self.cfg.rc_buf_optimal_sz)}, buf_sz {str(self.cfg.rc_buf_sz)}, "\
                         f"buf_initial_sz {str(self.cfg.rc_buf_initial_sz)}, ")
             self.__update_config()
@@ -387,7 +416,14 @@ class Vp8Encoder(Encoder):
 
     @target_bitrate.setter
     def target_bitrate(self, bitrate: int) -> None:
-        bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
+        if self.enable_gcc:
+            vpx_bitarte = self.get_vpx_bitrate(bitrate)
+            if vpx_bitrate is not None:
+                bitrate = vpx_bitrate
+            else:
+                bitrate = int((bitrate * 1000 / 173 + 184971))
+
+        bitrate = max(self.vpx_min_bitrate, min(bitrate, self.vpx_max_bitrate))
         if bitrate != self.__target_bitrate:
             self.__target_bitrate = bitrate
             self.__update_config_needed = True
