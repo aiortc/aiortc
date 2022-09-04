@@ -256,22 +256,21 @@ class Vp8Encoder(Encoder):
                                             (360000, 480000): 2500000,
                                             (480000, 600000): 3000000}
 
-    def get_vpx_bitrate(self, target_bitaret):
+    def get_vpx_bitrate(self, target_bitrate):
         for low, high in self.vpx_bitrate_conversion_dict.keys():
-            if low <= target_bitaret < high:
+            if low <= target_bitrate and target_bitrate < high:
                 return  self.vpx_bitrate_conversion_dict[(low, high)]
-            return None
+        return None
 
     def __del__(self) -> None:
         if self.codec:
             lib.vpx_codec_destroy(self.codec)
 
     def encode(
-            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = False) -> Tuple[List[bytes], int]:
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = True) -> Tuple[List[bytes], int]:
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
-        
 
         if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
             lib.vpx_codec_destroy(self.codec)
@@ -305,7 +304,7 @@ class Vp8Encoder(Encoder):
             self.vpx_max_bitrate = MAX_BITRATE
             if quantizer < 0 and not enable_gcc:
                 """ Setting the bitrate in quantizer when full range """
-                vpx_bitrate = self.get_vpx_bitrate(target_bitaret)
+                vpx_bitrate = self.get_vpx_bitrate(target_bitrate)
                 if vpx_bitrate is not None:
                     self.vpx_min_bitrate = vpx_bitrate
                     self.vpx_max_bitrate = vpx_bitrate
