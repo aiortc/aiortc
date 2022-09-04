@@ -45,7 +45,7 @@ from .stats import RTCStatsReport
 
 DISCARD_HOST = "0.0.0.0"
 DISCARD_PORT = 9
-MEDIA_KINDS = ["audio", "video", "keypoints"] # TODO
+MEDIA_KINDS = ["audio", "video", "keypoints", "lr_video"]
 
 logger = logging.getLogger(__name__)
 
@@ -410,7 +410,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         # check state is valid
         self.__assertNotClosed()
-        if track.kind not in ["audio", "video", "keypoints"]:
+        if track.kind not in ["audio", "video", "keypoints", "lr_video"]:
             raise InternalError(f'Invalid track kind "{track.kind}"')
 
         # don't add track twice
@@ -445,7 +445,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         else:
             kind = trackOrKind
             track = None
-        if kind not in ["audio", "video", "keypoints"]:
+        if kind not in ["audio", "video", "keypoints", "lr_video"]:
             raise InternalError(f'Invalid track kind "{kind}"')
 
         # check direction
@@ -516,7 +516,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         description.type = "answer"
 
         for remote_m in self.__remoteDescription().media:
-            if remote_m.kind in ["audio", "video", "keypoints"]:
+            if remote_m.kind in ["audio", "video", "keypoints", "lr_video"]:
                 transceiver = self.__getTransceiverByMid(remote_m.rtp.muxId)
                 media = create_media_description_for_transceiver(
                     transceiver,
@@ -631,7 +631,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             remote_m = get_media_section(remote_media, i)
             media_kind = local_m.kind if local_m else remote_m.kind
             mid = local_m.rtp.muxId if local_m else remote_m.rtp.muxId
-            if media_kind in ["audio", "video", "keypoints"]:
+            if media_kind in ["audio", "video", "keypoints", "lr_video"]:
                 transceiver = self.__getTransceiverByMid(mid)
                 transceiver._set_mline_index(i)
                 description.media.append(
@@ -740,7 +740,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for i, media in enumerate(description.media):
             mid = media.rtp.muxId
             self.__seenMids.add(mid)
-            if media.kind in ["audio", "video", "keypoints"]:
+            if media.kind in ["audio", "video", "keypoints", "lr_video"]:
                 transceiver = self.__getTransceiverByMLineIndex(i)
                 transceiver._set_mid(mid)
             elif media.kind == "application":
@@ -756,7 +756,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # set DTLS role
         if description.type == "answer":
             for i, media in enumerate(description.media):
-                if media.kind in ["audio", "video", "keypoints"]:
+                if media.kind in ["audio", "video", "keypoints", "lr_video"]:
                     transceiver = self.__getTransceiverByMLineIndex(i)
                     transceiver._transport._set_role(media.dtls.role)
                 elif media.kind == "application":
@@ -770,7 +770,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # gather candidates
         await self.__gather()
         for i, media in enumerate(description.media):
-            if media.kind in ["audio", "video", "keypoints"]:
+            if media.kind in ["audio", "video", "keypoints", "lr_video"]:
                 transceiver = self.__getTransceiverByMLineIndex(i)
                 add_transport_description(media, transceiver._transport)
             elif media.kind == "application":
@@ -806,7 +806,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for i, media in enumerate(description.media):
             dtlsTransport: Optional[RTCDtlsTransport] = None
             self.__seenMids.add(media.rtp.muxId)
-            if media.kind in ["audio", "video", "keypoints"]:
+            if media.kind in ["audio", "video", "keypoints", "lr_video"]:
                 # find transceiver
                 transceiver = None
                 for t in self.__transceivers:
@@ -1242,7 +1242,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 )
 
             # check RTCP mux is used
-            if media.kind in ["audio", "video", "keypoints"] and not media.rtcp_mux:
+            if media.kind in ["audio", "video", "keypoints", "lr_video"] and not media.rtcp_mux:
                 raise ValueError("RTCP mux is not enabled")
 
         # check the number of media section matches

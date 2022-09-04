@@ -246,7 +246,7 @@ class RTCRtpReceiver:
     The :class:`RTCRtpReceiver` interface manages the reception and decoding
     of data for a :class:`MediaStreamTrack`.
 
-    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'`).
+    :param kind: The kind of media (`'audio'` or `'video'` or `'keypoints'` or `'lr_video'`).
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
@@ -267,7 +267,12 @@ class RTCRtpReceiver:
             self.__jitter_buffer = JitterBuffer(capacity=128)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = None
+        elif kind == "lr_video":
+            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
+            self.__nack_generator = NackGenerator()
+            self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         else:
+            # for "video"
             self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
@@ -402,7 +407,8 @@ class RTCRtpReceiver:
         self.__stop_decoder()
 
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
-        self.__log_debug("< RTCP %s", packet)
+        self.__log_debug("< RTCP %s arrival time:%d", 
+                packet, clock.current_ntp_time())
 
         if isinstance(packet, RtcpSrPacket):
             self.__stats.add(
@@ -458,6 +464,7 @@ class RTCRtpReceiver:
                     payload_size=len(packet.payload) + packet.padding_size,
                     ssrc=packet.ssrc,
                 )
+
                 if self.__rtcp_ssrc is not None and remb is not None:
                     # send Receiver Estimated Maximum Bitrate feedback
                     rtcp_packet = RtcpPsfbPacket(
@@ -577,7 +584,7 @@ class RTCRtpReceiver:
         self.__rtcp_exited.set()
 
     async def _send_rtcp(self, packet) -> None:
-        self.__log_debug("> %s", packet)
+        self.__log_debug("> RTCP %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))
         except ConnectionError:

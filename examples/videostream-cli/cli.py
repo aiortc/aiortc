@@ -14,7 +14,7 @@ from aiortc import (
     RTCSessionDescription,
     VideoStreamTrack,
 )
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, generator_type
 from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 
@@ -78,19 +78,24 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return data_bgr
 
 
-async def run(pc, player, recorder, signaling, role, quantizer=32):
+async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=32):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
 
         if player and player.video:
             pc.addTrack(player.video, quantizer)
-        else:
+        elif generator_type not in ['bicubic', 'swinir-lte']:
+            """do not use a high-res video stream,
+                use only a low-res stream
+            """
             pc.addTrack(FlagVideoStreamTrack())
 
         if player and player.keypoints:
             pc.addTrack(player.keypoints)
 
+        if player and player.lr_video:
+            pc.addTrack(player.lr_video, lr_quantizer)
 
     @pc.on("track")
     def on_track(track):
@@ -135,10 +140,14 @@ if __name__ == "__main__":
     parser.add_argument("--fps", type=int, help="fps you want to sample at")
     parser.add_argument("--save-dir", type=str, help="folder to save frames + latency data in")
     parser.add_argument('--enable-prediction', action='store_true')
+    parser.add_argument('--prediction-type', type=str, default="keypoints",
+                        help="indicate to use_low_res_video or keypoints or bicubic")
     parser.add_argument("--output-fps", type=int, default=30,
                         help="fps you want to save the video with")
     parser.add_argument("--quantizer", type=int, default=32,
                         help="quantizer to compress video stream with")
+    parser.add_argument("--lr-quantizer", type=int, default=32,
+                        help="quantizer to compress low-res video stream with")
     parser.add_argument("--reference-update-freq", type=int, default=30,
                         help="the frequency that the reference frame is updated")
 
@@ -159,13 +168,15 @@ if __name__ == "__main__":
 
     # create media source
     if args.play_from:
-        player = MediaPlayer(args.play_from, args.enable_prediction, args.reference_update_freq, args.fps, args.save_dir)
+        player = MediaPlayer(args.play_from, args.enable_prediction, args.prediction_type,
+                             args.reference_update_freq, args.fps, args.save_dir)
     else:
         player = None
 
     # create media sink
     if args.record_to:
         recorder = MediaRecorder(args.record_to, enable_prediction=args.enable_prediction, \
+                                prediction_type=args.prediction_type, \
                                 reference_update_freq=args.reference_update_freq, \
                                 output_fps=args.output_fps, save_dir=args.save_dir)
     else:
@@ -182,6 +193,7 @@ if __name__ == "__main__":
                 signaling=signaling,
                 role=args.role,
                 quantizer=args.quantizer,
+                lr_quantizer=args.lr_quantizer
             )
         )
     except KeyboardInterrupt:

@@ -12,9 +12,11 @@ from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
 from ._vpx import ffi, lib
 from .base import Decoder, Encoder
 
-DEFAULT_BITRATE = 500000  # 500 kbps
-MIN_BITRATE = 250000  # 250 kbps
-MAX_BITRATE = 1500000  # 1.5 Mbps
+import os
+
+DEFAULT_BITRATE = int(os.environ.get('VPX_DEFAULT_BITRATE', 500000)) # 500 kbps
+MIN_BITRATE = int(os.environ.get('VPX_MIN_BITRATE', 50000)) # 50 kbps
+MAX_BITRATE = int(os.environ.get('VPX_MAX_BITRATE', 1500000)) # 15 mbps
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
@@ -271,8 +273,9 @@ class Vp8Encoder(Encoder):
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
             self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = quantizer
-            self.cfg.rc_max_quantizer = quantizer
+            # quantizer = -1 is the full range quantizer in range 0 and 63
+            self.cfg.rc_min_quantizer = quantizer if quantizer > 0 else 0
+            self.cfg.rc_max_quantizer = quantizer if quantizer > 0 else 63
             self.cfg.rc_undershoot_pct = 100
             self.cfg.rc_overshoot_pct = 15
             self.cfg.rc_buf_initial_sz = 500
@@ -280,6 +283,12 @@ class Vp8Encoder(Encoder):
             self.cfg.rc_buf_sz = 1000
             self.cfg.kf_mode = lib.VPX_KF_AUTO
             self.cfg.kf_max_dist = 3000
+            logger.info(f"encoder's config: min_quantizer {str(self.cfg.rc_min_quantizer)}, "\
+                        f"max_quantizer {str(self.cfg.rc_max_quantizer)}, "\
+                        f"kf_max_dist {str(self.cfg.kf_max_dist)}, "\
+                        f"DEFAULT_BITRATE {DEFAULT_BITRATE}, MIN_BITRATE {MIN_BITRATE}, MAX_BITRATE {MAX_BITRATE}, "\
+                        f"buf_optimal_sz {str(self.cfg.rc_buf_optimal_sz)}, buf_sz {str(self.cfg.rc_buf_sz)}, "\
+                        f"buf_initial_sz {str(self.cfg.rc_buf_initial_sz)}, ")
             self.__update_config()
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 

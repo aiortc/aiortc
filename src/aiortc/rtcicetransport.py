@@ -323,6 +323,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
             await self._connection.connect()
         except ConnectionError:
             self.__setState("failed")
+            self.__log_debug("ConnectionError, state = failed")
         else:
             self.__setState("completed")
         self.__start.set()
@@ -334,6 +335,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         if self.state != "closed":
             self.__setState("closed")
             await self._connection.close()
+            self.__log_debug("Irreversibly stop the RTCIceTransport, state = closed")
             if self.__monitor_task is not None:
                 await self.__monitor_task
                 self.__monitor_task = None

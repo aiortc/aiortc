@@ -90,6 +90,7 @@ class RTCRtpSender:
         self.__lsr: Optional[int] = None
         self.__lsr_time: Optional[float] = None
         self.__ntp_timestamp = 0
+        self.__prev_ntp_timestamp = -1
         self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
@@ -201,11 +202,16 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
     async def _handle_rtcp_packet(self, packet):
+        self.__log_debug("< RTCP %s arrival time: %s",
+                packet, datetime.datetime.now())
+        
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
                 if self.__lsr == report.lsr and report.dlsr:
                     rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
+                    self.__log_debug("estimated rtt is %s, fraction_lost %d, lsr %s, at time %d", \
+                            rtt, report.fraction_lost, report.lsr, time.time())
                     if self.__rtt is None:
                         self.__rtt = rtt
                     else:
@@ -235,16 +241,17 @@ class RTCRtpSender:
                 self.__log_debug("dispatching retransmit %s", seq)
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
+            self.__log_debug("Received PLI")
             self._send_keyframe()
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
                 if self._ssrc in ssrcs:
                     self.__log_debug(
-                        "- receiver estimated maximum bitrate %d bps", bitrate
+                        "- receiver estimated maximum bitrate %d bps at time %s", bitrate, datetime.datetime.now()
                     )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
-                        self.__encoder.target_bitrate = bitrate
+                        self.__encoder.target_bitrate = int((bitrate * 1000 / 173 + 184971)) #bitrate
             except ValueError:
                 pass
 
@@ -295,14 +302,16 @@ class RTCRtpSender:
         sequence_number = 0 #random16()
         timestamp_origin = 0 #random32()
         try:
+            counter = 0
             while True:
                 if not self.__track:
                     await asyncio.sleep(0.02)
                     continue
 
+                counter += 1
                 payloads, timestamp = await self._next_encoded_frame(codec)
-                self.__log_debug("encoded frame with timestamp %s at time %s", 
-                                timestamp, datetime.datetime.now())
+                self.__log_debug("Frame %s is encoded with timestamp %s with len %s at time %s", 
+                                counter, timestamp, sum([len(i) for i in payloads]), datetime.datetime.now())
                 old_timestamp = timestamp
                 timestamp = uint32_add(timestamp_origin, timestamp)
 
@@ -323,7 +332,7 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
 
                     # send packet
-                    self.__log_debug("> %s (encoded frame ts: %s) %s", packet, old_timestamp, 
+                    self.__log_debug("> RTP %s (encoded frame ts: %s) %s", packet, old_timestamp, 
                                     datetime.datetime.now())
                     self.__rtp_history[
                         packet.sequence_number % RTP_HISTORY_SIZE
@@ -360,6 +369,16 @@ class RTCRtpSender:
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
 
+                if self.__prev_ntp_timestamp == self.__ntp_timestamp:
+                    """
+                    Safety mechanism: After the video has been fully sent,
+                    self.__ntp_timestamp is no longer updated in run_rtp which
+                    casuses a lot of sender's RTCP packets to have the same lsr.
+                    Having the same lsr produces error in identifying which received
+                    RTCP packet matches which sent RTCP packet (producing negative rtt).
+                    """
+                    self.__ntp_timestamp = clock.current_ntp_time()
+
                 # RTCP SR
                 packets: List[AnyRtcpPacket] = [
                     RtcpSrPacket(
@@ -374,6 +393,7 @@ class RTCRtpSender:
                 ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
                 self.__lsr_time = time.time()
+                self.__prev_ntp_timestamp = self.__ntp_timestamp
 
                 # RTCP SDES
                 if self.__cname is not None:
@@ -402,7 +422,7 @@ class RTCRtpSender:
     async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
-            self.__log_debug("> %s", packet)
+            self.__log_debug("> RTCP %s at time %d", packet, time.time())
             payload += bytes(packet)
 
         try:
