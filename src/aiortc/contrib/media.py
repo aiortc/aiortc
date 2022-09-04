@@ -44,7 +44,7 @@ if generator_type not in ['vpx', 'bicubic']:
     else:
         model = FirstOrderModel(config_path, checkpoint)
 
-    for i in range(1):
+    for i in range(10):
         random_array = np.random.randint(0, 255, model.get_shape(), dtype=np.uint8)
         if generator_type != 'swinir-lte':
             random_kps, src_index = model.extract_keypoints(random_array)
@@ -90,7 +90,7 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
-NUM_ROWS = 2
+NUM_ROWS = 10
 NUMBER_OF_BITS = 16
 
 def stamp_frame(frame, frame_index, frame_pts, frame_time_base):
