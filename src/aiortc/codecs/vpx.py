@@ -416,9 +416,9 @@ class Vp8Encoder(Encoder):
     @target_bitrate.setter
     def target_bitrate(self, bitrate: int) -> None:
         if self.enable_gcc:
-            vpx_bitarte = self.get_vpx_bitrate(bitrate)
-            if vpx_bitarte is not None:
-                bitrate = vpx_bitarte
+            vpx_bitrate = self.get_vpx_bitrate(bitrate)
+            if vpx_bitrate is not None:
+                bitrate = vpx_bitrate
             else:
                 bitrate = int((bitrate * 1000 / 173 + 184971))
 
