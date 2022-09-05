@@ -267,7 +267,7 @@ class Vp8Encoder(Encoder):
             lib.vpx_codec_destroy(self.codec)
 
     def encode(
-            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = True) -> Tuple[List[bytes], int]:
+            self, frame: Frame, force_keyframe: bool = False, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = False) -> Tuple[List[bytes], int]:
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
@@ -422,10 +422,10 @@ class Vp8Encoder(Encoder):
             else:
                 bitrate = int((bitrate * 1000 / 173 + 184971))
 
-        bitrate = max(self.vpx_min_bitrate, min(bitrate, self.vpx_max_bitrate))
-        if bitrate != self.__target_bitrate:
-            self.__target_bitrate = bitrate
-            self.__update_config_needed = True
+            bitrate = max(self.vpx_min_bitrate, min(bitrate, self.vpx_max_bitrate))
+            if bitrate != self.__target_bitrate:
+                self.__target_bitrate = bitrate
+                self.__update_config_needed = True
 
     def __update_config(self) -> None:
         self.cfg.rc_target_bitrate = self.__target_bitrate // 1000
