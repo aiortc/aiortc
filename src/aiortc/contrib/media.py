@@ -61,7 +61,7 @@ if generator_type not in ['vpx', 'bicubic']:
     model.reset()
 
 save_keypoints_to_file = False
-save_lr_video_npy = True
+save_lr_video_npy = False
 save_predicted_frames = False
 save_sent_frames = True
 save_received_frames = True
@@ -777,6 +777,8 @@ class MediaRecorder:
                     self.__log_debug("Frame displayed at receiver %s", video_frame_index)
                     for packet in context.stream.encode(frame):
                         self.__container.mux(packet)
+                    if video_frame_index % 1000 == 0:
+                        print("Displayed ", video_frame_index)
 
             elif track.kind == "audio":
                 for packet in context.stream.encode(frame):
@@ -862,7 +864,7 @@ class MediaRecorder:
                                                             (predicted_frame, frame_index)),
                                                             loop)
                             #predicted_frame.pts = received_keypoints['pts']
-                            if frame_index % 100 == 0:
+                            if frame_index % 1000 == 0:
                                 print("Predicted!", frame_index)
 
                             if save_predicted_frames and self.__save_dir is not None:
