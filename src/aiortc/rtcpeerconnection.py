@@ -403,7 +403,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             iceTransport = self.__sctp.transport.transport
             await iceTransport.addRemoteCandidate(candidate)
 
-    def addTrack(self, track: MediaStreamTrack, quantizer: int = 32) -> RTCRtpSender:
+    def addTrack(self, track: MediaStreamTrack, quantizer: int = 32, target_bitrate: int = 100000, enable_gcc: bool = False) -> RTCRtpSender:
+        print("addTrack in here with", quantizer, target_bitrate, enable_gcc)
         """
         Add a :class:`MediaStreamTrack` to the set of media tracks which
         will be transmitted to the remote peer.
@@ -426,7 +427,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     return transceiver.sender
 
         transceiver = self.__createTransceiver(
-            direction="sendrecv", kind=track.kind, sender_track=track, quantizer=quantizer
+            direction="sendrecv", kind=track.kind, sender_track=track, quantizer=quantizer, target_bitrate=target_bitrate, enable_gcc=enable_gcc
         )
         return transceiver.sender
 
@@ -1050,13 +1051,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.emit("datachannel", channel)
 
     def __createTransceiver(
-        self, direction: str, kind: str, sender_track=None, quantizer=32,
+        self, direction: str, kind: str, sender_track=None, quantizer=32, 
+        target_bitrate=100000, enable_gcc=False
     ) -> RTCRtpTransceiver:
         dtlsTransport = self.__createDtlsTransport()
         transceiver = RTCRtpTransceiver(
             direction=direction,
             kind=kind,
-            sender=RTCRtpSender(sender_track or kind, dtlsTransport, quantizer),
+            sender=RTCRtpSender(sender_track or kind, dtlsTransport, quantizer, target_bitrate, enable_gcc),
             receiver=RTCRtpReceiver(kind, dtlsTransport),
         )
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)

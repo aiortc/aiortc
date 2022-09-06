@@ -78,7 +78,7 @@ class FlagVideoStreamTrack(VideoStreamTrack):
         return data_bgr
 
 
-async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=32):
+async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=32, lr_target_bitrate=100000, lr_enable_gcc=False):
     def add_tracks():
         if player and player.audio:
             pc.addTrack(player.audio)
@@ -95,7 +95,7 @@ async def run(pc, player, recorder, signaling, role, quantizer=32, lr_quantizer=
             pc.addTrack(player.keypoints)
 
         if player and player.lr_video:
-            pc.addTrack(player.lr_video, lr_quantizer)
+            pc.addTrack(player.lr_video, lr_quantizer, lr_target_bitrate, lr_enable_gcc)
 
     @pc.on("track")
     def on_track(track):
@@ -148,6 +148,10 @@ if __name__ == "__main__":
                         help="quantizer to compress video stream with")
     parser.add_argument("--lr-quantizer", type=int, default=32,
                         help="quantizer to compress low-res video stream with")
+    parser.add_argument("--lr-target-bitrate", type=int, default=100000,
+                        help="target bitrate for low-res video stream (bps)")
+    parser.add_argument("--lr-enable-gcc", action='store_true',
+                        help="enable gcc to control low-res video stream's bitrate")
     parser.add_argument("--reference-update-freq", type=int, default=30,
                         help="the frequency that the reference frame is updated")
 
@@ -193,7 +197,9 @@ if __name__ == "__main__":
                 signaling=signaling,
                 role=args.role,
                 quantizer=args.quantizer,
-                lr_quantizer=args.lr_quantizer
+                lr_quantizer=args.lr_quantizer,
+                lr_target_bitrate=args.lr_target_bitrate,
+                lr_enable_gcc=args.lr_enable_gcc
             )
         )
     except KeyboardInterrupt:
