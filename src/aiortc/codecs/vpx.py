@@ -302,8 +302,10 @@ class Vp8Encoder(Encoder):
             self.cfg.kf_max_dist = 3000
             self.vpx_min_bitrate = MIN_BITRATE
             self.vpx_max_bitrate = MAX_BITRATE
-            if quantizer < 0 and not enable_gcc:
-                """ Setting the bitrate in quantizer when full range """
+            if quantizer < 0 and not enable_gcc and MIN_BITRATE != MAX_BITRATE:
+                """ Setting the bitrate to target_bitrate in quantizer when full range
+                    if MIN_BITRATE != MAX_BITRATE
+                """
                 vpx_bitrate = self.get_vpx_bitrate(target_bitrate)
                 if vpx_bitrate is not None:
                     self.vpx_min_bitrate = vpx_bitrate
