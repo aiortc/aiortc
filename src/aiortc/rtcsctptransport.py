@@ -1648,7 +1648,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if self._association_state != self.State.ESTABLISHED:
             return
 
-        while self._data_channel_queue and not self._outbound_queue:
+        while self._data_channel_queue:
             channel, protocol, user_data = self._data_channel_queue.popleft()
 
             # register channel if necessary
