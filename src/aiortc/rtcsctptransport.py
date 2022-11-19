@@ -1324,8 +1324,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._outbound_stream_seq[stream_id] = uint16_add(stream_seq, 1)
 
         # transmit outbound data
-        if not self._t3_handle:
-            await self._transmit()
+        await self._transmit()
 
     async def _send_chunk(self, chunk: Chunk) -> None:
         """
