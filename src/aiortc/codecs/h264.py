@@ -278,8 +278,12 @@ class H264Encoder(Encoder):
             self.buffer_pts = None
             self.codec = None
 
-        # reset the picture type, otherwise no B-frames are produced
-        frame.pict_type = av.video.frame.PictureType.NONE
+        if force_keyframe:
+            # force a complete image
+            frame.pict_type = av.video.frame.PictureType.I
+        else:
+            # reset the picture type, otherwise no B-frames are produced
+            frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
             try:
