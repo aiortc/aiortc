@@ -116,6 +116,28 @@ class H264Test(CodecTestCase):
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
 
+    def test_encoder_large(self):
+        encoder = get_encoder(H264_CODEC)
+        self.assertIsInstance(encoder, H264Encoder)
+
+        # first keyframe
+        frame = self.create_video_frame(width=1280, height=720, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertGreaterEqual(len(payloads), 3)
+        self.assertEqual(timestamp, 0)
+
+        # delta frame
+        frame = self.create_video_frame(width=1280, height=720, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(timestamp, 3000)
+
+        # force keyframe
+        frame = self.create_video_frame(width=1280, height=720, pts=6000)
+        payloads, timestamp = encoder.encode(frame, force_keyframe=True)
+        self.assertGreaterEqual(len(payloads), 3)
+        self.assertEqual(timestamp, 6000)
+
     def test_encoder_pack(self):
         encoder = get_encoder(H264_CODEC)
         self.assertTrue(isinstance(encoder, H264Encoder))
