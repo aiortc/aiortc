@@ -872,13 +872,25 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     transceiver._offerDirection = direction
 
                 # create remote stream track
-                if (
-                    direction in ["recvonly", "sendrecv"]
-                    and not transceiver.receiver.track
-                ):
-                    transceiver.receiver._track = RemoteStreamTrack(
-                        kind=media.kind, id=description.webrtc_track_id(media)
-                    )
+                if not transceiver.receiver.track:
+                    if (
+                        direction in ["recvonly", "sendrecv"]
+                    ):
+                        transceiver.receiver._track = RemoteStreamTrack(
+                            kind=media.kind, id=description.webrtc_track_id(media)
+                        )
+                        # write msid even if no msid-semantic is present (livekit glitch compat)
+                        transceiver.receiver._track.msid = media.msid
+                        trackEvents.append(
+                            RTCTrackEvent(
+                                receiver=transceiver.receiver,
+                                track=transceiver.receiver.track,
+                                transceiver=transceiver,
+                            )
+                        )
+                elif media.msid and transceiver.receiver._track.msid != media.msid:
+                    transceiver.receiver._track.old_msid = transceiver.receiver._track.msid
+                    transceiver.receiver._track.msid = media.msid
                     trackEvents.append(
                         RTCTrackEvent(
                             receiver=transceiver.receiver,
