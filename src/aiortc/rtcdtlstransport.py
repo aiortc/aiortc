@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from pyee.asyncio import AsyncIOEventEmitter
 from pylibsrtp import Policy, Session
+from OpenSSL.crypto import X509
 
 from . import clock, rtp
 from .rtcicetransport import RTCIceTransport
@@ -167,6 +168,7 @@ class RTCCertificate:
     def __init__(self, key: ec.EllipticCurvePrivateKey, cert: x509.Certificate) -> None:
         self._key = key
         self._cert = cert
+        self._openssl_cert = X509.from_cryptography(cert)
 
     @property
     def expires(self) -> datetime.datetime:
@@ -183,7 +185,7 @@ class RTCCertificate:
         return [
             RTCDtlsFingerprint(
                 algorithm="sha-256",
-                value=certificate_digest(self._cert._x509),  # type: ignore
+                value=certificate_digest(self._openssl_cert._x509),  # type: ignore
             )
         ]
 
@@ -208,7 +210,7 @@ class RTCCertificate:
             verify_callback,
         )
 
-        _openssl_assert(lib.SSL_CTX_use_certificate(ctx, self._cert._x509) == 1)  # type: ignore
+        _openssl_assert(lib.SSL_CTX_use_certificate(ctx, self._openssl_cert._x509) == 1)  # type: ignore
         _openssl_assert(lib.SSL_CTX_use_PrivateKey(ctx, self._key._evp_pkey) == 1)  # type: ignore
         _openssl_assert(lib.SSL_CTX_set_cipher_list(ctx, b"HIGH:!CAMELLIA:!aNULL") == 1)
         _openssl_assert(
