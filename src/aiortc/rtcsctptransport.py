@@ -22,7 +22,11 @@ from typing import (
     no_type_check,
 )
 
-from google_crc32c import value as crc32c
+import platform
+if platform.machine().lower().startswith('armv7'):
+    from binascii import crc32 as crc32c
+else:
+    from google_crc32c import value as crc32c
 from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
