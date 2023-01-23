@@ -55,7 +55,7 @@ def DTLSv1_handle_timeout(self):
 
 
 def certificate_digest(x509: crypto.X509) -> str:
-    return x509.digest("SHA-256").decode("ascii")
+    return x509.digest("SHA256").decode("ascii")
 
 
 def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
