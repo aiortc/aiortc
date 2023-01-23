@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.4.0
+-----
+
+* Build wheels for Python 3.11.
+* Allow :class:`aiortc.contrib.media.MediaPlayer` to send media without transcoding.
+* Allow :class:`aiortc.contrib.media.MediaPlayer` to specify a timeout when opening media.
+* Make :class:`aiortc.RTCSctpTransport` transmit packets sooner to reduce datachannel latency.
+* Refactor :class:`aiortc.RTCDtlsTransport` to use PyOpenSSL.
+* Make :class:`aiortc.RTCPeerConnection` log sent and received SDP when using verbose logging.
+
 1.3.2
 -----
 
