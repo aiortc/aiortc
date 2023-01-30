@@ -18,7 +18,7 @@ cffi_modules = [
     "src/_cffi_src/build_vpx.py:ffibuilder",
 ]
 install_requires = [
-    "aioice>=0.7.5,<0.8.0",
+    "aioice>=0.8.0,<0.9.0",
     "av>=9.0.0,<11.0.0",
     "cffi>=1.0.0",
     "cryptography>=2.2",
