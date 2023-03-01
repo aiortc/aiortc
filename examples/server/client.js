@@ -183,6 +183,7 @@ function start() {
 
 function stop() {
     document.getElementById('stop').style.display = 'none';
+    document.getElementById('start').style.display = '';
 
     // close data channel
     if (dc) {
