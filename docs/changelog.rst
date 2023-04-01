@@ -3,24 +3,31 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.5.0
+-----
+
+ * Make H.264 send a full picture when picture loss occurs.
+ * Fix TURN over TCP by updating `aioice` to 0.9.0.
+ * Make use of the `ifaddr` package instead of the unmaintained `netifaces` package.
+
 1.4.0
 -----
 
-* Build wheels for Python 3.11.
-* Allow :class:`aiortc.contrib.media.MediaPlayer` to send media without transcoding.
-* Allow :class:`aiortc.contrib.media.MediaPlayer` to specify a timeout when opening media.
-* Make :class:`aiortc.RTCSctpTransport` transmit packets sooner to reduce datachannel latency.
-* Refactor :class:`aiortc.RTCDtlsTransport` to use PyOpenSSL.
-* Make :class:`aiortc.RTCPeerConnection` log sent and received SDP when using verbose logging.
+ * Build wheels for Python 3.11.
+ * Allow :class:`aiortc.contrib.media.MediaPlayer` to send media without transcoding.
+ * Allow :class:`aiortc.contrib.media.MediaPlayer` to specify a timeout when opening media.
+ * Make :class:`aiortc.RTCSctpTransport` transmit packets sooner to reduce datachannel latency.
+ * Refactor :class:`aiortc.RTCDtlsTransport` to use PyOpenSSL.
+ * Make :class:`aiortc.RTCPeerConnection` log sent and received SDP when using verbose logging.
 
 1.3.2
 -----
 
-* Limit size of NACK reports to avoid excessive packet size.
-* Improve H.264 codec matching.
-* Determine video size from first frame received by :class:`aiortc.contrib.media.MediaRecorder`.
-* Fix a deprecation warning when using `av` >= 9.1.0.
-* Tolerate STUN URLs containing a `protocol` querystring argument.
+ * Limit size of NACK reports to avoid excessive packet size.
+ * Improve H.264 codec matching.
+ * Determine video size from first frame received by :class:`aiortc.contrib.media.MediaRecorder`.
+ * Fix a deprecation warning when using `av` >= 9.1.0.
+ * Tolerate STUN URLs containing a `protocol` querystring argument.
 
 1.3.1
 -----

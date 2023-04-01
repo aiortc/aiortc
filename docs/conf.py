@@ -71,7 +71,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'aiortc'
-copyright = u'2018-2019, Jeremy Lainé'
+copyright = u'2018-2023, Jeremy Lainé'
 author = u'Jeremy Lainé'
 
 # The version info for the project you're documenting, acts as replacement for
