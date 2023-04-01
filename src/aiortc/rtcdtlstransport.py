@@ -41,19 +41,6 @@ CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 logger = logging.getLogger(__name__)
 
 
-def DTLSv1_get_timeout(self):
-    ptv_sec = SSL._ffi.new("time_t *")
-    ptv_usec = SSL._ffi.new("long *")
-    if SSL._lib.Cryptography_DTLSv1_get_timeout(self._ssl, ptv_sec, ptv_usec):
-        return ptv_sec[0] + (ptv_usec[0] / 1000000)
-    else:
-        return None
-
-
-def DTLSv1_handle_timeout(self):
-    SSL._lib.DTLSv1_handle_timeout(self._ssl)
-
-
 def certificate_digest(x509: crypto.X509) -> str:
     return x509.digest("SHA256").decode("ascii")
 
@@ -515,7 +502,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         # get timeout
         timeout = None
         if not self.encrypted:
-            timeout = DTLSv1_get_timeout(self.ssl)
+            timeout = self.ssl.DTLSv1_get_timeout()
 
         # receive next datagram
         if timeout is not None:
@@ -523,7 +510,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
             except asyncio.TimeoutError:
                 self.__log_debug("x DTLS handling timeout")
-                DTLSv1_handle_timeout(self.ssl)
+                self.ssl.DTLSv1_handle_timeout()
                 await self._write_ssl()
                 return
         else:
