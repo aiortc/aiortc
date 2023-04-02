@@ -78,7 +78,9 @@ jobs:
         with:
           python-version: 3.7
       - name: Build source package
-        run: python setup.py sdist
+        run: |
+          pip install -U build
+          python -m build --sdist
       - name: Upload source package
         uses: actions/upload-artifact@v3
         with:
