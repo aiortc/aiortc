@@ -489,7 +489,7 @@ class MediaRecorder:
 
 
 class RelayStreamTrack(MediaStreamTrack):
-    def __init__(self, relay, source: MediaStreamTrack, buffered) -> None:
+    def __init__(self, relay, source: MediaStreamTrack, buffered: bool) -> None:
         super().__init__()
         self.kind = source.kind
         self._relay = relay
@@ -548,8 +548,9 @@ class MediaRelay:
         """
         Create a proxy around the given `track` for a new consumer.
 
-        :param track: Source :class:`MediaStreamTrack` which is relayed
-        :param buffered: Whether there need a buffer between the source track and relayed track
+        :param track: Source :class:`MediaStreamTrack` which is relayed.
+        :param buffered: Whether there need a buffer between the source track and
+            relayed track.
 
         :rtype: :class: MediaStreamTrack
         """

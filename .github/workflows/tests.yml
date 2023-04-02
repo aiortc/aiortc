@@ -26,11 +26,10 @@ jobs:
         with:
           python-version: 3.7
       - name: Install packages
-        run: pip install black flake8 isort mypy
+        run: pip install black mypy ruff
       - name: Run linters
         run: |
-          flake8 examples src tests
-          isort --check-only --diff examples src tests
+          ruff examples src tests
           black --check --diff examples src tests
 
   test:

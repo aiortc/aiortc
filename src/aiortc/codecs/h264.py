@@ -226,9 +226,10 @@ class H264Encoder(Encoder):
         # Translated from: https://github.com/aizvorski/h264bitstream/blob/master/h264_nal.c#L134
         i = 0
         while True:
-            # Find the start of the NAL unit
-            # NAL Units start with a 3-byte or 4 byte start code of 0x000001 or 0x00000001
-            # while buf[i:i+3] != b'\x00\x00\x01':
+            # Find the start of the NAL unit.
+            #
+            # NAL Units start with the 3-byte start code 0x000001 or
+            # the 4-byte start code 0x00000001.
             i = buf.find(b"\x00\x00\x01", i)
             if i == -1:
                 return

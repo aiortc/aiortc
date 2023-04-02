@@ -50,5 +50,13 @@ homepage = "https://github.com/aiortc/aiortc"
 changelog = "https://aiortc.readthedocs.io/en/stable/changelog.html"
 documentation = "https://aiortc.readthedocs.io/"
 
+[tool.ruff]
+select = [
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "W",  # pycodestyle
+    "I",  # isort
+]
+
 [tool.setuptools.dynamic]
 version = {attr = "aiortc.__version__"}

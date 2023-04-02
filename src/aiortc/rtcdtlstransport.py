@@ -102,7 +102,8 @@ class RTCCertificate:
     The :class:`RTCCertificate` interface enables the certificates used by an
     :class:`RTCDtlsTransport`.
 
-    To generate a certificate and the corresponding private key use :func:`generateCertificate`.
+    To generate a certificate and the corresponding private key use
+    :func:`generateCertificate`.
     """
 
     def __init__(self, key: crypto.PKey, cert: crypto.X509) -> None:
@@ -275,7 +276,8 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
     Datagram Transport Layer Security (DTLS) transport.
 
     :param transport: An :class:`RTCIceTransport`.
-    :param certificates: A list of :class:`RTCCertificate` (only one is allowed currently).
+    :param certificates: A list of :class:`RTCCertificate` (only one is allowed
+        currently).
     """
 
     def __init__(

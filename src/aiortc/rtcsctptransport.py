@@ -236,7 +236,10 @@ class ForwardTsnChunk(Chunk):
         return body
 
     def __repr__(self) -> str:
-        return f"ForwardTsnChunk(cumulative_tsn={self.cumulative_tsn}, streams={self.streams})"
+        return (
+            f"ForwardTsnChunk(cumulative_tsn={self.cumulative_tsn}, "
+            f"streams={self.streams})"
+        )
 
 
 class HeartbeatChunk(BaseParamsChunk):
