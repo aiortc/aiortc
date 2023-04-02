@@ -75,3 +75,7 @@ select = [
 
 [tool.setuptools.dynamic]
 version = {attr = "aiortc.__version__"}
+
+[tool.setuptools.packages.find]
+exclude = ["_cffi_src"]
+where = ["src"]
