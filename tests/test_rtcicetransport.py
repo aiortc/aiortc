@@ -3,7 +3,6 @@ from unittest import TestCase
 
 import aioice.stun
 from aioice import ConnectionClosed
-
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcconfiguration import RTCIceServer
 from aiortc.rtcicetransport import (

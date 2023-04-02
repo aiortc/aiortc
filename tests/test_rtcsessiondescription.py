@@ -9,7 +9,8 @@ class RTCSessionDescriptionTest(TestCase):
             RTCSessionDescription(sdp="v=0\r\n", type="bogus")
         self.assertEqual(
             str(cm.exception),
-            "'type' must be in ['offer', 'pranswer', 'answer', 'rollback'] (got 'bogus')",
+            "'type' must be in ['offer', 'pranswer', 'answer', 'rollback'] "
+            "(got 'bogus')",
         )
 
     def test_good_type(self):

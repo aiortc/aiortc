@@ -4,7 +4,6 @@ from unittest import TestCase
 
 import aioice.ice
 import aioice.stun
-
 from aiortc import (
     RTCConfiguration,
     RTCIceCandidate,

@@ -1,4 +1,4 @@
-# flake8: noqa
+# ruff: noqa: F401
 import logging
 
 import av.logging

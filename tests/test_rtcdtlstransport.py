@@ -3,8 +3,6 @@ import datetime
 from unittest import TestCase
 from unittest.mock import patch
 
-from OpenSSL import SSL
-
 from aiortc.rtcdtlstransport import (
     RTCCertificate,
     RTCDtlsFingerprint,
@@ -31,6 +29,7 @@ from aiortc.rtp import (
     RtpPacket,
     pack_remb_fci,
 )
+from OpenSSL import SSL
 
 from .utils import asynctest, dummy_ice_transport_pair, load
 

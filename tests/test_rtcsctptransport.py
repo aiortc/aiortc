@@ -59,7 +59,7 @@ async def client_and_server():
 
 @contextlib.asynccontextmanager
 async def client_standalone():
-    async with dummy_dtls_transport_pair() as (client_transport, server_transport):
+    async with dummy_dtls_transport_pair() as (client_transport, _):
         client = RTCSctpTransport(client_transport)
         assert client.is_server is False
 
@@ -901,7 +901,7 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server_channels[1].label, "chat")
 
     @asynctest
-    async def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(
+    async def test_connect_then_client_creates_data_channel_with_custom_id_and_then_normal(  # noqa: E501
         self,
     ):
         async with client_and_server() as (client, server):
@@ -952,7 +952,7 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server_channels[1].label, "chat")
 
     @asynctest
-    async def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(
+    async def test_connect_then_client_creates_second_data_channel_with_custom_already_used_id(  # noqa: E501
         self,
     ):
         async with client_and_server() as (client, server):
@@ -1133,7 +1133,7 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(len(server_channels), 0)
 
     @asynctest
-    async def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(
+    async def test_connect_then_client_and_server_creates_negotiated_data_channel_before_transport(  # noqa: E501
         self,
     ):
         async with client_and_server() as (client, server):
@@ -1291,7 +1291,7 @@ class RTCSctpTransportTest(TestCase):
 
     @asynctest
     async def test_garbage(self):
-        async with client_and_server() as (client, server):
+        async with client_and_server() as (_, server):
             await server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
             await server._handle_data(b"garbage")
 
@@ -1304,7 +1304,7 @@ class RTCSctpTransportTest(TestCase):
         # verification tag is 12345 instead of 0
         data = load("sctp_init_bad_verification.bin")
 
-        async with client_and_server() as (client, server):
+        async with client_and_server() as (_, server):
             await server.start(RTCSctpCapabilities(maxMessageSize=65536), 5000)
             await server._handle_data(data)
 

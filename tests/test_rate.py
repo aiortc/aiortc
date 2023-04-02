@@ -1,7 +1,5 @@
 from unittest import TestCase
 
-from numpy import random
-
 from aiortc.rate import (
     AimdRateControl,
     BandwidthUsage,
@@ -13,6 +11,7 @@ from aiortc.rate import (
     RateCounter,
     RemoteBitrateEstimator,
 )
+from numpy import random
 
 TIMESTAMP_GROUP_LENGTH_US = 5000
 MIN_STEP_US = 20

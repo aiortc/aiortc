@@ -4,8 +4,6 @@ import time
 from typing import Tuple
 from unittest import TestCase
 
-from av.packet import Packet
-
 from aiortc.mediastreams import (
     VIDEO_CLOCK_RATE,
     VIDEO_PTIME,
@@ -14,6 +12,7 @@ from aiortc.mediastreams import (
     MediaStreamTrack,
     VideoStreamTrack,
 )
+from av.packet import Packet
 
 
 class VideoPacketStreamTrack(MediaStreamTrack):
