@@ -41,7 +41,7 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = [
     "aiohttp>=3.7.0",
-    "coverage>=5.0",
+    "coverage[toml]>=7.2.2",
     "numpy>=1.19.0",
 ]
 
@@ -49,6 +49,21 @@ dev = [
 homepage = "https://github.com/aiortc/aiortc"
 changelog = "https://aiortc.readthedocs.io/en/stable/changelog.html"
 documentation = "https://aiortc.readthedocs.io/"
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover"]
+
+[tool.coverage.run]
+source = ["aiortc"]
+
+[tool.mypy]
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+ignore_missing_imports = true
+mypy_path = "stubs"
+strict_optional = false
+warn_redundant_casts = true
+warn_unused_ignores = true
 
 [tool.ruff]
 select = [
