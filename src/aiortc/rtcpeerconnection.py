@@ -404,14 +404,20 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             raise ValueError("Candidate must have either sdpMid or sdpMLineIndex")
 
         for transceiver in self.__transceivers:
-            if candidate.sdpMid == transceiver.mid and not transceiver._bundled:
+            if (
+                candidate.sdpMid == transceiver.mid
+                or candidate.sdpMLineIndex == transceiver._get_mline_index()
+            ) and not transceiver._bundled:
                 iceTransport = transceiver._transport.transport
                 await iceTransport.addRemoteCandidate(candidate)
                 return
 
         if (
             self.__sctp
-            and candidate.sdpMid == self.__sctp.mid
+            and (
+                candidate.sdpMid == self.__sctp.mid
+                or candidate.sdpMLineIndex == self.__sctp_mline_index
+            )
             and not self.__sctp._bundled
         ):
             iceTransport = self.__sctp.transport.transport
