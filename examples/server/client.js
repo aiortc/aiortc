@@ -166,14 +166,23 @@ function start() {
         if (constraints.video) {
             document.getElementById('media').style.display = 'block';
         }
-        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-            stream.getTracks().forEach(function(track) {
-                pc.addTrack(track, stream);
+
+        var deviceId = document.getElementById('camera-selection').value;
+        constraints.video = {
+            deviceId: { exact: deviceId }
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
+            .then(function(stream) {
+                // add the stream to the peer connection
+                stream.getTracks().forEach(function(track) {
+                    pc.addTrack(track, stream);
+                });
+                return negotiate();
+            })
+            .catch(function(error) {
+                console.error('Error accessing media devices.', error);
             });
-            return negotiate();
-        }, function(err) {
-            alert('Could not acquire media: ' + err);
-        });
     } else {
         negotiate();
     }
@@ -214,7 +223,7 @@ function sdpFilterCodec(kind, codec, realSdp) {
     var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
     var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
     var videoRegex = new RegExp('(m=' + kind + ' .*?)( ([0-9]+))*\\s*$')
-    
+
     var lines = realSdp.split('\n');
 
     var isKind = false;
@@ -269,3 +278,27 @@ function sdpFilterCodec(kind, codec, realSdp) {
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
+
+function populateCameraOptions() {
+    navigator.mediaDevices.enumerateDevices()
+        .then(function(devices) {
+            var videoDevices = devices.filter(function(device) {
+                return device.kind === 'videoinput';
+            });
+
+            var select = document.getElementById('camera-selection');
+            videoDevices.forEach(function(device) {
+                var option = document.createElement('option');
+                option.value = device.deviceId;
+                option.text = device.label || 'Camera ' + (select.length + 1);
+                select.appendChild(option);
+            });
+        })
+        .catch(function(error) {
+            console.error('Error accessing media devices.', error);
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    populateCameraOptions();
+});
