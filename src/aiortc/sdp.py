@@ -561,11 +561,14 @@ class SessionDescription:
         assert media in self.media
         if media.msid is not None and " " in media.msid:
             bits = media.msid.split()
-            for group in self.msid_semantic:
-                if group.semantic == "WMS" and (
-                    bits[0] in group.items or "*" in group.items
-                ):
-                    return bits[1]
+            if len(self.msid_semantic):
+                for group in self.msid_semantic:
+                    if group.semantic == "WMS" and (
+                        bits[0] in group.items or "*" in group.items
+                    ):
+                        return bits[1]
+            else:
+                return bits[1]
         return None
 
     def __str__(self) -> str:
