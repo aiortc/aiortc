@@ -4,8 +4,10 @@ from typing import List, Optional, Tuple
 
 from av import AudioFrame
 from av.frame import Frame
+from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
+from ..mediastreams import convert_timebase
 from ._opus import ffi, lib
 from .base import Decoder, Encoder
 
@@ -97,3 +99,7 @@ class OpusEncoder(Encoder):
         assert length > 0
 
         return [self.buffer[0:length]], timestamp
+
+    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+        timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
+        return [bytes(packet)], timestamp

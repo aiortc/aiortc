@@ -5,6 +5,7 @@ from typing import List, Tuple, Type, TypeVar, cast
 
 from av import VideoFrame
 from av.frame import Frame
+from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
@@ -348,20 +349,15 @@ class Vp8Encoder(Encoder):
                 length += pkt.data.frame.sz
 
         # packetize
-        payloads = []
-        descr = VpxPayloadDescriptor(
-            partition_start=1, partition_id=0, picture_id=self.picture_id
-        )
-        pos = 0
-        while pos < length:
-            descr_bytes = bytes(descr)
-            size = min(length - pos, PACKET_MAX - len(descr_bytes))
-            payloads.append(descr_bytes + self.buffer[pos : pos + size])
-            descr.partition_start = 0
-            pos += size
-        self.picture_id = (self.picture_id + 1) % (1 << 15)
-
+        payloads = self._packetize(self.buffer[:length], self.picture_id)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
+        self.picture_id = (self.picture_id + 1) % (1 << 15)
+        return payloads, timestamp
+
+    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+        payloads = self._packetize(bytes(packet), self.picture_id)
+        timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
+        self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads, timestamp
 
     @property
@@ -377,6 +373,22 @@ class Vp8Encoder(Encoder):
         if bitrate != self.__target_bitrate:
             self.__target_bitrate = bitrate
             self.__update_config_needed = True
+
+    @classmethod
+    def _packetize(cls, buffer: bytes, picture_id: int) -> List[bytes]:
+        payloads = []
+        descr = VpxPayloadDescriptor(
+            partition_start=1, partition_id=0, picture_id=picture_id
+        )
+        length = len(buffer)
+        pos = 0
+        while pos < length:
+            descr_bytes = bytes(descr)
+            size = min(length - pos, PACKET_MAX - len(descr_bytes))
+            payloads.append(descr_bytes + buffer[pos : pos + size])
+            descr.partition_start = 0
+            pos += size
+        return payloads
 
     def __update_config(self) -> None:
         self.cfg.rc_target_bitrate = self.__target_bitrate // 1000

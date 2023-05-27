@@ -384,7 +384,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         The current signaling state.
 
-        Possible values: `"closed"`, `"have-local-offer"`, `"have-remote-offer`", `"stable"`.
+        Possible values: `"closed"`, `"have-local-offer"`, `"have-remote-offer`",
+        `"stable"`.
 
         When the state changes, the `"signalingstatechange"` event is fired.
         """
@@ -394,7 +395,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
 
-        The specified candidate must have a value for either `sdpMid` or `sdpMLineIndex`.
+        The specified candidate must have a value for either `sdpMid` or
+        `sdpMLineIndex`.
 
         :param candidate: The new remote candidate.
         """
@@ -737,6 +739,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         :param sessionDescription: An :class:`RTCSessionDescription` generated
                                     by :meth:`createOffer` or :meth:`createAnswer()`.
         """
+        self.__log_debug(
+            "setLocalDescription(%s)\n%s",
+            sessionDescription.type,
+            sessionDescription.sdp,
+        )
+
         # parse and validate description
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
         description.type = sessionDescription.type
@@ -807,6 +815,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         :param sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
+        self.__log_debug(
+            "setRemoteDescription(%s)\n%s",
+            sessionDescription.type,
+            sessionDescription.sdp,
+        )
+
         # parse and validate description
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
         description.type = sessionDescription.type
@@ -1212,7 +1226,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if description.type == "offer":
                 if self.signalingState not in ["stable", "have-local-offer"]:
                     raise InvalidStateError(
-                        f'Cannot handle offer in signaling state "{self.signalingState}"'
+                        "Cannot handle offer in signaling state "
+                        f'"{self.signalingState}"'
                     )
             elif description.type == "answer":
                 if self.signalingState not in [
@@ -1220,13 +1235,15 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     "have-local-pranswer",
                 ]:
                     raise InvalidStateError(
-                        f'Cannot handle answer in signaling state "{self.signalingState}"'
+                        "Cannot handle answer in signaling state "
+                        f'"{self.signalingState}"'
                     )
         else:
             if description.type == "offer":
                 if self.signalingState not in ["stable", "have-remote-offer"]:
                     raise InvalidStateError(
-                        f'Cannot handle offer in signaling state "{self.signalingState}"'
+                        "Cannot handle offer in signaling state "
+                        f'"{self.signalingState}"'
                     )
             elif description.type == "answer":
                 if self.signalingState not in [
@@ -1234,7 +1251,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     "have-remote-pranswer",
                 ]:
                     raise InvalidStateError(
-                        f'Cannot handle answer in signaling state "{self.signalingState}"'
+                        "Cannot handle answer in signaling state "
+                        f'"{self.signalingState}"'
                     )
 
         for media in description.media:

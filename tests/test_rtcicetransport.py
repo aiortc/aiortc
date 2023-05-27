@@ -3,7 +3,6 @@ from unittest import TestCase
 
 import aioice.stun
 from aioice import ConnectionClosed
-
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcconfiguration import RTCIceServer
 from aiortc.rtcicetransport import (
@@ -35,6 +34,14 @@ class ConnectionKwargsTest(TestCase):
         self.assertEqual(
             connection_kwargs([RTCIceServer("stun:stun.l.google.com:19302")]),
             {"stun_server": ("stun.l.google.com", 19302)},
+        )
+
+    def test_stun_with_suffix(self):
+        self.assertEqual(
+            connection_kwargs(
+                [RTCIceServer("stun:global.stun.twilio.com:3478?transport=udp")]
+            ),
+            {"stun_server": ("global.stun.twilio.com", 3478)},
         )
 
     def test_stun_multiple_servers(self):

@@ -71,7 +71,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'aiortc'
-copyright = u'2018-2019, Jeremy Lainé'
+copyright = u'2018-2023, Jeremy Lainé'
 author = u'Jeremy Lainé'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -88,7 +88,7 @@ release = ''
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.

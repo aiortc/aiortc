@@ -5,8 +5,6 @@ import math
 
 import cv2
 import numpy
-from av import VideoFrame
-
 from aiortc import (
     RTCIceCandidate,
     RTCPeerConnection,
@@ -15,6 +13,7 @@ from aiortc import (
 )
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
+from av import VideoFrame
 
 
 class FlagVideoStreamTrack(VideoStreamTrack):

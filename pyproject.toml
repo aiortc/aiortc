@@ -1,2 +1,81 @@
 [build-system]
-requires = ["cffi>=1.0.0", "setuptools", "wheel"]
+requires = ["cffi>=1.0.0", "setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiortc"
+description = "An implementation of WebRTC and ORTC"
+readme = "README.rst"
+requires-python = ">=3.7"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Jeremy Lainé", email = "jeremy.laine@m4x.org" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "aioice>=0.9.0,<1.0.0",
+    "av>=9.0.0,<11.0.0",
+    "cffi>=1.0.0",
+    "cryptography>=2.2",
+    'dataclasses; python_version < "3.7"',
+    "google-crc32c>=1.1",
+    "pyee>=9.0.0",
+    "pylibsrtp>=0.5.6",
+    "pyopenssl>=23.1.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "aiohttp>=3.7.0",
+    "coverage[toml]>=7.2.2",
+    "numpy>=1.19.0",
+]
+
+[project.urls]
+homepage = "https://github.com/aiortc/aiortc"
+changelog = "https://aiortc.readthedocs.io/en/stable/changelog.html"
+documentation = "https://aiortc.readthedocs.io/"
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover"]
+
+[tool.coverage.run]
+source = ["aiortc"]
+
+[tool.mypy]
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+ignore_missing_imports = true
+mypy_path = "stubs"
+strict_optional = false
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.ruff]
+select = [
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "W",  # pycodestyle
+    "I",  # isort
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "aiortc.__version__"}
+
+[tool.setuptools.packages.find]
+exclude = ["_cffi_src"]
+where = ["src"]

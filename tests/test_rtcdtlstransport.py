@@ -4,7 +4,6 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from aiortc.rtcdtlstransport import (
-    DtlsError,
     RTCCertificate,
     RTCDtlsFingerprint,
     RTCDtlsParameters,
@@ -30,6 +29,7 @@ from aiortc.rtp import (
     RtpPacket,
     pack_remb_fci,
 )
+from OpenSSL import SSL
 
 from .utils import asynctest, dummy_ice_transport_pair, load
 
@@ -100,17 +100,6 @@ class RTCDtlsTransportTest(TestCase):
 
         self.assertEqual(stats_a.bytesSent, stats_b.bytesReceived)
         self.assertEqual(stats_b.bytesSent, stats_a.bytesReceived)
-
-    @patch("aiortc.rtcdtlstransport.lib.SSL_CTX_use_certificate")
-    @asynctest
-    async def test_broken_ssl(self, mock_use_certificate):
-        mock_use_certificate.return_value = 0
-
-        transport1, transport2 = dummy_ice_transport_pair()
-
-        certificate = RTCCertificate.generateCertificate()
-        with self.assertRaises(DtlsError):
-            RTCDtlsTransport(transport1, [certificate])
 
     @asynctest
     async def test_data(self):
@@ -395,16 +384,12 @@ class RTCDtlsTransportTest(TestCase):
         await session1.stop()
         await session2.stop()
 
-    @patch("aiortc.rtcdtlstransport.lib.SSL_do_handshake")
-    @patch("aiortc.rtcdtlstransport.lib.SSL_get_error")
-    @patch("aiortc.rtcdtlstransport.lib.ERR_get_error")
+    @patch("aiortc.rtcdtlstransport.SSL.Connection.do_handshake")
     @asynctest
-    async def test_handshake_error(
-        self, mock_err_get_error, mock_ssl_get_error, mock_do_handshake
-    ):
-        mock_err_get_error.side_effect = [0x2006D080, 0, 0]
-        mock_ssl_get_error.return_value = 1
-        mock_do_handshake.return_value = -1
+    async def test_handshake_error(self, mock_do_handshake):
+        mock_do_handshake.side_effect = SSL.Error(
+            [("SSL routines", "", "decryption failed or bad record mac")]
+        )
 
         transport1, transport2 = dummy_ice_transport_pair()
 

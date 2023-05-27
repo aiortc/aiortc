@@ -60,7 +60,8 @@ class RTCRtpTransceiver:
     def direction(self) -> str:
         """
         The preferred direction of the transceiver, which will be used in
-        :meth:`RTCPeerConnection.createOffer` and :meth:`RTCPeerConnection.createAnswer`.
+        :meth:`RTCPeerConnection.createOffer` and
+        :meth:`RTCPeerConnection.createAnswer`.
 
         One of `'sendrecv'`, `'sendonly'`, `'recvonly'` or `'inactive'`.
         """
@@ -103,8 +104,8 @@ class RTCRtpTransceiver:
         """
         Override the default codec preferences.
 
-        See :meth:`RTCRtpSender.getCapabilities` and :meth:`RTCRtpReceiver.getCapabilities`
-        for the supported codecs.
+        See :meth:`RTCRtpSender.getCapabilities` and
+        :meth:`RTCRtpReceiver.getCapabilities` for the supported codecs.
 
         :param codecs: A list of :class:`RTCRtpCodecCapability`, in decreasing order
                         of preference. If empty, restores the default preferences.

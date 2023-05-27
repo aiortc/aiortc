@@ -236,7 +236,10 @@ class ForwardTsnChunk(Chunk):
         return body
 
     def __repr__(self) -> str:
-        return f"ForwardTsnChunk(cumulative_tsn={self.cumulative_tsn}, streams={self.streams})"
+        return (
+            f"ForwardTsnChunk(cumulative_tsn={self.cumulative_tsn}, "
+            f"streams={self.streams})"
+        )
 
 
 class HeartbeatChunk(BaseParamsChunk):
@@ -1324,8 +1327,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._outbound_stream_seq[stream_id] = uint16_add(stream_seq, 1)
 
         # transmit outbound data
-        if not self._t3_handle:
-            await self._transmit()
+        await self._transmit()
 
     async def _send_chunk(self, chunk: Chunk) -> None:
         """

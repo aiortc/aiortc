@@ -105,8 +105,8 @@ class JitterBuffer:
 
     def smart_remove(self, count: int) -> bool:
         """
-        smart_remove makes sure that all packages belonging to the same frame are removed
-        it prevents sending corrupted frames to decoder
+        Makes sure that all packages belonging to the same frame are removed
+        to prevent sending corrupted frames to the decoder.
         """
         timestamp = None
         for i in range(self._capacity):

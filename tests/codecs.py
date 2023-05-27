@@ -1,11 +1,11 @@
 import fractions
 from unittest import TestCase
 
-from av import AudioFrame, VideoFrame
-
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
 from aiortc.mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE
+from av import AudioFrame, VideoFrame
+from av.packet import Packet
 
 
 class CodecTestCase(TestCase):
@@ -33,6 +33,16 @@ class CodecTestCase(TestCase):
             )
             timestamp += samples_per_frame
         return frames
+
+    def create_packet(self, payload: bytes, pts: int) -> Packet:
+        """
+        Create a packet.
+        """
+        packet = Packet(len(payload))
+        packet.update(payload)
+        packet.pts = pts
+        packet.time_base = fractions.Fraction(1, 1000)
+        return packet
 
     def create_video_frame(
         self, width, height, pts, format="yuv420p", time_base=VIDEO_TIME_BASE

@@ -7,6 +7,7 @@ from aiortc.codecs import get_decoder, get_encoder, h264
 from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from aiortc.jitterbuffer import JitterFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from av import Packet
 
 from .codecs import CodecTestCase
 from .utils import load
@@ -16,22 +17,15 @@ H264_CODEC = RTCRtpCodecParameters(
 )
 
 
-class DummyPacket:
-    def __init__(self, dts, pts):
-        self.dts = dts
-        self.pts = pts
-
-    def to_bytes(self):
-        return b""
-
-
 class FragmentedCodecContext:
     def __init__(self, orig):
         self.__orig = orig
 
     def encode(self, frame):
         packages = self.__orig.encode(frame)
-        packages.append(DummyPacket(packages[0].dts, packages[0].pts))
+        dummy = Packet()
+        dummy.pts = packages[0].pts
+        packages.append(dummy)
         return packages
 
     def __getattr__(self, name):
@@ -120,6 +114,37 @@ class H264Test(CodecTestCase):
         frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
+
+    def test_encoder_large(self):
+        encoder = get_encoder(H264_CODEC)
+        self.assertIsInstance(encoder, H264Encoder)
+
+        # first keyframe
+        frame = self.create_video_frame(width=1280, height=720, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertGreaterEqual(len(payloads), 3)
+        self.assertEqual(timestamp, 0)
+
+        # delta frame
+        frame = self.create_video_frame(width=1280, height=720, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(timestamp, 3000)
+
+        # force keyframe
+        frame = self.create_video_frame(width=1280, height=720, pts=6000)
+        payloads, timestamp = encoder.encode(frame, force_keyframe=True)
+        self.assertGreaterEqual(len(payloads), 3)
+        self.assertEqual(timestamp, 6000)
+
+    def test_encoder_pack(self):
+        encoder = get_encoder(H264_CODEC)
+        self.assertTrue(isinstance(encoder, H264Encoder))
+
+        packet = self.create_packet(payload=bytes([0, 0, 1, 0]), pts=1)
+        payloads, timestamp = encoder.pack(packet)
+        self.assertEqual(payloads, [b"\x00"])
+        self.assertEqual(timestamp, 90)
 
     def test_encoder_buffering(self):
         create_encoder_context = h264.create_encoder_context
