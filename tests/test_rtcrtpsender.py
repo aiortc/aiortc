@@ -217,7 +217,6 @@ class RTCRtpSenderTest(TestCase):
 
     @asynctest
     async def test_playout_delay(self):
-
         """
         Simulate playout delay request
         """
