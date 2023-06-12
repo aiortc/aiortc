@@ -786,6 +786,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for t in self.__transceivers:
             if description.type in ["answer", "pranswer"]:
                 t._currentDirection = and_direction(t.direction, t._offerDirection)
+                if t._currentDirection == "inactive":
+                    t.receiver.stop()
 
         # gather candidates
         await self.__gather()
@@ -872,25 +874,24 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     transceiver._offerDirection = direction
 
                 # create remote stream track
-                if not transceiver.receiver.track:
-                    if (
-                        direction in ["recvonly", "sendrecv"]
-                    ):
-                        transceiver.receiver._track = RemoteStreamTrack(
-                            kind=media.kind, id=description.webrtc_track_id(media)
+                track_id = description.webrtc_track_id(media)
+                if (
+                    direction in ["recvonly", "sendrecv"]
+                    and (not transceiver.receiver.track or transceiver.receiver._track.readyState == "ended")
+                ):
+                    transceiver.receiver._track = RemoteStreamTrack(
+                        kind=media.kind, id=track_id
+                    )
+                    trackEvents.append(
+                        RTCTrackEvent(
+                            receiver=transceiver.receiver,
+                            track=transceiver.receiver.track,
+                            transceiver=transceiver,
                         )
-                        # write msid even if no msid-semantic is present (livekit glitch compat)
-                        transceiver.receiver._track.msid = media.msid
-                        trackEvents.append(
-                            RTCTrackEvent(
-                                receiver=transceiver.receiver,
-                                track=transceiver.receiver.track,
-                                transceiver=transceiver,
-                            )
-                        )
-                elif media.msid and transceiver.receiver._track.msid != media.msid:
-                    transceiver.receiver._track.old_msid = transceiver.receiver._track.msid
-                    transceiver.receiver._track.msid = media.msid
+                    )
+                elif transceiver.receiver.track and media.msid and transceiver.receiver.track.id != track_id:
+                    # the track_id changed for this msid, notify the application
+                    transceiver.receiver.track._id = track_id
                     trackEvents.append(
                         RTCTrackEvent(
                             receiver=transceiver.receiver,
