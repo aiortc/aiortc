@@ -32,6 +32,9 @@ CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
     ],
     "video": [],
 }
+# Note, the id space for these extensions is shared across media types when BUNDLE
+# is negotiated. If you add a audio- or video-specific extension, make sure it has
+# a unique id.
 HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
         RTCRtpHeaderExtensionParameters(
@@ -46,7 +49,7 @@ HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
             id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
         ),
         RTCRtpHeaderExtensionParameters(
-            id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+            id=3, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
         ),
     ],
 }
