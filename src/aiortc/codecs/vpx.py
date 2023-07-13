@@ -19,6 +19,17 @@ MAX_BITRATE = 1500000  # 1.5 Mbps
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
+LAG_IN_FRAMES = 0
+RESIZE_ALLOWED = 0
+MIN_QUANTIZER = 2
+MAX_QUANTIZER = 56
+UNDERSHOOT_PERCENT = 100
+OVERSHOOT_PERCENT = 15
+INITIAL_BUFFER_SIZE = 500
+OPTIMAL_BUFFER_SIZE = 600
+BUFFER_SIZE = 1000
+MAX_KEYFRAME_DIST = 3000
+
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
 
 
@@ -260,23 +271,23 @@ class Vp8Encoder(Encoder):
             self.codec = ffi.new("vpx_codec_ctx_t *")
             self.cfg.g_timebase.num = 1
             self.cfg.g_timebase.den = VIDEO_CLOCK_RATE
-            self.cfg.g_lag_in_frames = 0
+            self.cfg.g_lag_in_frames = LAG_IN_FRAMES
             self.cfg.g_threads = number_of_threads(
                 frame.width * frame.height, multiprocessing.cpu_count()
             )
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
-            self.cfg.rc_resize_allowed = 0
+            self.cfg.rc_resize_allowed = RESIZE_ALLOWED
             self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = 2
-            self.cfg.rc_max_quantizer = 56
-            self.cfg.rc_undershoot_pct = 100
-            self.cfg.rc_overshoot_pct = 15
-            self.cfg.rc_buf_initial_sz = 500
-            self.cfg.rc_buf_optimal_sz = 600
-            self.cfg.rc_buf_sz = 1000
+            self.cfg.rc_min_quantizer = MIN_QUANTIZER
+            self.cfg.rc_max_quantizer = MAX_QUANTIZER
+            self.cfg.rc_undershoot_pct = UNDERSHOOT_PERCENT
+            self.cfg.rc_overshoot_pct = OVERSHOOT_PERCENT
+            self.cfg.rc_buf_initial_sz = INITIAL_BUFFER_SIZE
+            self.cfg.rc_buf_optimal_sz = OPTIMAL_BUFFER_SIZE
+            self.cfg.rc_buf_sz = BUFFER_SIZE
             self.cfg.kf_mode = lib.VPX_KF_AUTO
-            self.cfg.kf_max_dist = 3000
+            self.cfg.kf_max_dist = MAX_KEYFRAME_DIST
             self.__update_config()
             _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
 
