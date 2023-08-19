@@ -86,7 +86,10 @@ class HeaderExtensionsMap:
             elif x_id == self.__ids.rtp_stream_id:
                 values.rtp_stream_id = x_value.decode("ascii")
             elif x_id == self.__ids.abs_send_time:
-                values.abs_send_time = unpack("!L", b"\00" + x_value)[0]
+                def pad_value(value):
+                    length_to_pad = 4 - len(value)
+                    return b'\00' * length_to_pad + value
+                values.abs_send_time = unpack("!L", pad_value(x_value))[0]
             elif x_id == self.__ids.transmission_offset:
                 values.transmission_offset = unpack("!l", x_value + b"\00")[0] >> 8
             elif x_id == self.__ids.audio_level:
