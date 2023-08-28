@@ -616,7 +616,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         Flush outgoing data which OpenSSL put in our BIO to the transport.
         """
         try:
-            data = self.ssl.bio_read(1500)
+            data = self.ssl.bio_read(8192)
         except SSL.Error:
             data = b""
         if data:
