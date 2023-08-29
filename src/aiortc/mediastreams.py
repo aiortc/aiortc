@@ -93,10 +93,10 @@ class AudioStreamTrack(MediaStreamTrack):
 
         if hasattr(self, "_timestamp"):
             self._timestamp += samples
-            wait = self._start + (self._timestamp / sample_rate) - time.time()
+            wait = self._start + (self._timestamp / sample_rate) - time.monotonic()
             await asyncio.sleep(wait)
         else:
-            self._start = time.time()
+            self._start = time.monotonic()
             self._timestamp = 0
 
         frame = AudioFrame(format="s16", layout="mono", samples=samples)
@@ -124,10 +124,10 @@ class VideoStreamTrack(MediaStreamTrack):
 
         if hasattr(self, "_timestamp"):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
-            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.monotonic()
             await asyncio.sleep(wait)
         else:
-            self._start = time.time()
+            self._start = time.monotonic()
             self._timestamp = 0
         return self._timestamp, VIDEO_TIME_BASE
 
