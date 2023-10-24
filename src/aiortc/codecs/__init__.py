@@ -46,7 +46,7 @@ HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
             id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
         ),
         RTCRtpHeaderExtensionParameters(
-            id=2, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+            id=3, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
         ),
     ],
 }
