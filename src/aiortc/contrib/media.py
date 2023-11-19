@@ -300,7 +300,7 @@ class MediaPlayer:
     """
 
     def __init__(
-        self, file, format=None, options={}, timeout=None, loop=False, decode=True
+        self, file, format=None, options=None, timeout=None, loop=False, decode=True
     ):
         self.__container = av.open(
             file=file, format=format, mode="r", options=options, timeout=timeout
@@ -418,7 +418,7 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, options={}):
+    def __init__(self, file, format=None, options=None):
         self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__tracks = {}
 
