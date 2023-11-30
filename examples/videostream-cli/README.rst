@@ -45,7 +45,7 @@ If you want to play a media file instead of sending the example image, run:
 
 .. code-block:: console
 
-   $ python cli.py --play-from video.mp4
+   $ python cli.py offer --play-from video.mp4
 
 If you want to recording the received video you can run one of the following:
 
