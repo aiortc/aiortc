@@ -1,2 +1,2 @@
 sphinx_autodoc_typehints
-sphinxcontrib-asyncio
+sphinxcontrib-trio
