@@ -21,21 +21,6 @@ import sys
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('..'))
 
-
-class MockOpus:
-    OpusDecoder = None
-    OpusEncoder = None
-
-
-class MockVpx:
-    Vp8Decoder = None
-    Vp8Encoder = None
-    vp8_depayload = None
-
-
-sys.modules.update({'aiortc.codecs.opus': MockOpus()})
-sys.modules.update({'aiortc.codecs.vpx': MockVpx()})
-
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
