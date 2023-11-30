@@ -49,7 +49,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
     'sphinx_autodoc_typehints',
-    'sphinxcontrib.asyncio',
+    'sphinxcontrib_trio',
 ]
 
 autodoc_member_order = 'bysource'
