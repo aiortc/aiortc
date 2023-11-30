@@ -3,6 +3,14 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.6.0
+-----
+
+ * Build wheels using `Py_LIMITED_ABI` to make them compatible with future Python versions.
+ * Build wheels using opus 1.4 and vpx 1.13.1.
+ * Use unique IDs for audio and video header extensions.
+ * Allow :class:`aiortc.contrib.media.MediaRecorder` to record audio from pulse.
+
 1.5.0
 -----
 
