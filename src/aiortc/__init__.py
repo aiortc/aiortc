@@ -4,7 +4,7 @@ import logging
 import av.logging
 
 from .exceptions import InvalidAccessError, InvalidStateError
-from .mediastreams import MediaStreamTrack, VideoStreamTrack
+from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (
