@@ -191,7 +191,9 @@ class RTCCertificate:
         )
         ctx.use_certificate(self._cert)
         ctx.use_privatekey(self._key)
-        ctx.set_cipher_list(b"HIGH:!CAMELLIA:!aNULL")
+        ctx.set_cipher_list(
+            b"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA"
+        )
         ctx.set_tlsext_use_srtp(b":".join(x.openssl_profile for x in srtp_profiles))
 
         return ctx
