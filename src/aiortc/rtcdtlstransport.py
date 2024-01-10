@@ -33,12 +33,59 @@ from .rtp import (
 )
 from .stats import RTCStatsReport, RTCTransportStats
 
-SRTP_KEY_LEN = 16
-SRTP_SALT_LEN = 14
-
 CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SRTPProtectionProfile:
+    libsrtp_profile: int
+    openssl_profile: bytes
+    key_length: int
+    salt_length: int
+
+    def get_key_and_salt(self, src, idx: int) -> bytes:
+        key_start = idx * self.key_length
+        salt_start = 2 * self.key_length + idx * self.salt_length
+        return (
+            src[key_start : key_start + self.key_length]
+            + src[salt_start : salt_start + self.salt_length]
+        )
+
+
+SRTP_AEAD_AES_256_GCM = SRTPProtectionProfile(
+    libsrtp_profile=Policy.SRTP_PROFILE_AEAD_AES_256_GCM,
+    openssl_profile=b"SRTP_AEAD_AES_256_GCM",
+    key_length=32,
+    salt_length=12,
+)
+SRTP_AEAD_AES_128_GCM = SRTPProtectionProfile(
+    libsrtp_profile=Policy.SRTP_PROFILE_AEAD_AES_128_GCM,
+    openssl_profile=b"SRTP_AEAD_AES_128_GCM",
+    key_length=16,
+    salt_length=12,
+)
+SRTP_AES128_CM_SHA1_80 = SRTPProtectionProfile(
+    libsrtp_profile=Policy.SRTP_PROFILE_AES128_CM_SHA1_80,
+    openssl_profile=b"SRTP_AES128_CM_SHA1_80",
+    key_length=16,
+    salt_length=14,
+)
+
+# AES-GCM may not be available depending on how libsrtp2 was built.
+SRTP_PROFILES: List[SRTPProtectionProfile] = []
+for srtp_profile in [
+    SRTP_AEAD_AES_256_GCM,
+    SRTP_AEAD_AES_128_GCM,
+    SRTP_AES128_CM_SHA1_80,
+]:
+    try:
+        Policy(srtp_profile=srtp_profile.libsrtp_profile)
+    except pylibsrtp.Error:
+        pass
+    else:
+        SRTP_PROFILES.append(srtp_profile)
 
 
 def certificate_digest(x509: crypto.X509) -> str:
@@ -65,15 +112,6 @@ def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
         .not_valid_after(now + datetime.timedelta(days=30))
     )
     return builder.sign(key, hashes.SHA256(), default_backend())
-
-
-def get_srtp_key_salt(src, idx: int) -> bytes:
-    key_start = idx * SRTP_KEY_LEN
-    salt_start = 2 * SRTP_KEY_LEN + idx * SRTP_SALT_LEN
-    return (
-        src[key_start : key_start + SRTP_KEY_LEN]
-        + src[salt_start : salt_start + SRTP_SALT_LEN]
-    )
 
 
 class State(enum.Enum):
@@ -144,7 +182,9 @@ class RTCCertificate:
             cert=crypto.X509.from_cryptography(cert),
         )
 
-    def _create_ssl_context(self) -> SSL.Context:
+    def _create_ssl_context(
+        self, srtp_profiles: List[SRTPProtectionProfile]
+    ) -> SSL.Context:
         ctx = SSL.Context(SSL.DTLS_METHOD)
         ctx.set_verify(
             SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, lambda *args: 1
@@ -152,7 +192,7 @@ class RTCCertificate:
         ctx.use_certificate(self._cert)
         ctx.use_privatekey(self._key)
         ctx.set_cipher_list(b"HIGH:!CAMELLIA:!aNULL")
-        ctx.set_tlsext_use_srtp(b"SRTP_AES128_CM_SHA1_80")
+        ctx.set_tlsext_use_srtp(b":".join(x.openssl_profile for x in srtp_profiles))
 
         return ctx
 
@@ -306,9 +346,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._rx_srtp: Session = None
         self._tx_srtp: Session = None
 
-        # SSL init
-        self.ssl = SSL.Connection(certificate._create_ssl_context())
-
+        # SSL
+        self._srtp_profiles = SRTP_PROFILES
+        self._ssl: Optional[SSL.Connection] = None
         self.__local_certificate = certificate
 
     @property
@@ -357,16 +397,22 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             else:
                 self._set_role("client")
 
+        # Initialise SSL.
+        self._ssl = SSL.Connection(
+            self.__local_certificate._create_ssl_context(
+                srtp_profiles=self._srtp_profiles
+            )
+        )
         if self._role == "server":
-            self.ssl.set_accept_state()
+            self._ssl.set_accept_state()
         else:
-            self.ssl.set_connect_state()
+            self._ssl.set_connect_state()
 
         self._set_state(State.CONNECTING)
         try:
             while not self.encrypted:
                 try:
-                    self.ssl.do_handshake()
+                    self._ssl.do_handshake()
                 except SSL.WantReadError:
                     await self._write_ssl()
                     await self._recv_next()
@@ -382,7 +428,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             return
 
         # check remote fingerprint
-        x509 = self.ssl.get_peer_certificate()
+        x509 = self._ssl.get_peer_certificate()
         remote_fingerprint = certificate_digest(x509)
         fingerprint_is_valid = False
         for f in remoteParameters.fingerprints:
@@ -398,22 +444,43 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             return
 
         # generate keying material
-        view = self.ssl.export_keying_material(
-            b"EXTRACTOR-dtls_srtp", 2 * (SRTP_KEY_LEN + SRTP_SALT_LEN)
+        openssl_profile = self._ssl.get_selected_srtp_profile()
+        for srtp_profile in self._srtp_profiles:
+            if srtp_profile.openssl_profile == openssl_profile:
+                self.__log_debug(
+                    "x DTLS handshake negotiated %s",
+                    srtp_profile.openssl_profile.decode(),
+                )
+                break
+        else:
+            self.__log_debug("x DTLS handshake failed (no SRTP profile negotiated)")
+            self._set_state(State.FAILED)
+            return
+        view = self._ssl.export_keying_material(
+            b"EXTRACTOR-dtls_srtp",
+            2 * (srtp_profile.key_length + srtp_profile.salt_length),
         )
         if self._role == "server":
-            srtp_tx_key = get_srtp_key_salt(view, 1)
-            srtp_rx_key = get_srtp_key_salt(view, 0)
+            srtp_tx_key = srtp_profile.get_key_and_salt(view, 1)
+            srtp_rx_key = srtp_profile.get_key_and_salt(view, 0)
         else:
-            srtp_tx_key = get_srtp_key_salt(view, 0)
-            srtp_rx_key = get_srtp_key_salt(view, 1)
+            srtp_tx_key = srtp_profile.get_key_and_salt(view, 0)
+            srtp_rx_key = srtp_profile.get_key_and_salt(view, 1)
 
-        rx_policy = Policy(key=srtp_rx_key, ssrc_type=Policy.SSRC_ANY_INBOUND)
+        rx_policy = Policy(
+            key=srtp_rx_key,
+            ssrc_type=Policy.SSRC_ANY_INBOUND,
+            srtp_profile=srtp_profile.libsrtp_profile,
+        )
         rx_policy.allow_repeat_tx = True
         rx_policy.window_size = 1024
         self._rx_srtp = Session(rx_policy)
 
-        tx_policy = Policy(key=srtp_tx_key, ssrc_type=Policy.SSRC_ANY_OUTBOUND)
+        tx_policy = Policy(
+            key=srtp_tx_key,
+            ssrc_type=Policy.SSRC_ANY_OUTBOUND,
+            srtp_profile=srtp_profile.libsrtp_profile,
+        )
         tx_policy.allow_repeat_tx = True
         tx_policy.window_size = 1024
         self._tx_srtp = Session(tx_policy)
@@ -431,9 +498,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._task.cancel()
             self._task = None
 
-        if self._state in [State.CONNECTING, State.CONNECTED]:
+        if self._ssl and self._state in [State.CONNECTING, State.CONNECTED]:
             try:
-                self.ssl.shutdown()
+                self._ssl.shutdown()
             except SSL.Error:
                 pass
             try:
@@ -503,7 +570,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         # get timeout
         timeout = None
         if not self.encrypted:
-            timeout = self.ssl.DTLSv1_get_timeout()
+            timeout = self._ssl.DTLSv1_get_timeout()
 
         # receive next datagram
         if timeout is not None:
@@ -511,7 +578,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
             except asyncio.TimeoutError:
                 self.__log_debug("x DTLS handling timeout")
-                self.ssl.DTLSv1_handle_timeout()
+                self._ssl.DTLSv1_handle_timeout()
                 await self._write_ssl()
                 return
         else:
@@ -523,9 +590,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         first_byte = data[0]
         if first_byte > 19 and first_byte < 64:
             # DTLS
-            self.ssl.bio_write(data)
+            self._ssl.bio_write(data)
             try:
-                data = self.ssl.recv(1500)
+                data = self._ssl.recv(1500)
             except SSL.ZeroReturnError:
                 data = None
             except SSL.Error:
@@ -576,7 +643,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         if self._state != State.CONNECTED:
             raise ConnectionError("Cannot send encrypted data, not connected")
 
-        self.ssl.send(data)
+        self._ssl.send(data)
         await self._write_ssl()
 
     async def _send_rtp(self, data: bytes) -> None:
@@ -615,7 +682,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         Flush outgoing data which OpenSSL put in our BIO to the transport.
         """
         try:
-            data = self.ssl.bio_read(1500)
+            data = self._ssl.bio_read(1500)
         except SSL.Error:
             data = b""
         if data:
