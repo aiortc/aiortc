@@ -1,6 +1,6 @@
 import argparse
-import logging
 import json
+import logging
 import os
 import platform
 import shutil

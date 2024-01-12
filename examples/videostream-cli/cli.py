@@ -123,8 +123,8 @@ async def run(pc, player, recorder, signaling, role):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Video stream from the command line")
     parser.add_argument("role", choices=["offer", "answer"])
-    parser.add_argument("--play-from", help="Read the media from a file and sent it."),
-    parser.add_argument("--record-to", help="Write received media to a file."),
+    parser.add_argument("--play-from", help="Read the media from a file and sent it.")
+    parser.add_argument("--record-to", help="Write received media to a file.")
     parser.add_argument("--verbose", "-v", action="count")
     add_signaling_arguments(parser)
     args = parser.parse_args()

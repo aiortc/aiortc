@@ -28,11 +28,11 @@ jobs:
         with:
           python-version: 3.8
       - name: Install packages
-        run: pip install black mypy ruff
+        run: pip install mypy ruff
       - name: Run linters
         run: |
-          ruff examples src tests
-          black --check --diff examples src tests
+          ruff .
+          ruff format --check --diff .
 
   test:
     runs-on: ${{ matrix.os }}
