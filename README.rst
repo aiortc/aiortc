@@ -1,28 +1,30 @@
-aiortc
-======
+.. image:: docs/_static/aiortc.svg
+   :width: 120px
+   :alt: aiortc
 
-|rtd| |pypi-v| |pypi-pyversions| |pypi-l| |tests| |codecov| |gitter|
+.. image:: https://img.shields.io/pypi/l/aiortc.svg
+   :target: https://pypi.python.org/pypi/aiortc
+   :alt: License
 
-.. |rtd| image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
+.. image:: https://img.shields.io/pypi/v/aiortc.svg
+   :target: https://pypi.python.org/pypi/aiortc
+   :alt: Version
+
+.. image:: https://img.shields.io/pypi/pyversions/aiortc.svg
+   :target: https://pypi.python.org/pypi/aiortc
+   :alt: Python versions
+
+.. image:: https://github.com/aiortc/aiortc/workflows/tests/badge.svg
+   :target: https://github.com/aiortc/aiortc/actions
+   :alt: Tests
+
+.. image:: https://img.shields.io/codecov/c/github/aiortc/aiortc.svg
+   :target: https://codecov.io/gh/aiortc/aiortc
+   :alt: Coverage
+
+.. image:: https://readthedocs.org/projects/aiortc/badge/?version=latest
    :target: https://aiortc.readthedocs.io/
-
-.. |pypi-v| image:: https://img.shields.io/pypi/v/aiortc.svg
-    :target: https://pypi.python.org/pypi/aiortc
-
-.. |pypi-pyversions| image:: https://img.shields.io/pypi/pyversions/aiortc.svg
-    :target: https://pypi.python.org/pypi/aiortc
-
-.. |pypi-l| image:: https://img.shields.io/pypi/l/aiortc.svg
-    :target: https://pypi.python.org/pypi/aiortc
-
-.. |tests| image:: https://github.com/aiortc/aiortc/workflows/tests/badge.svg
-    :target: https://github.com/aiortc/aiortc/actions
-
-.. |codecov| image:: https://img.shields.io/codecov/c/github/aiortc/aiortc.svg
-    :target: https://codecov.io/gh/aiortc/aiortc
-
-.. |gitter| image:: https://img.shields.io/gitter/room/aiortc/Lobby.svg
-    :target: https://gitter.im/aiortc/Lobby
+   :alt: Documentation
 
 What is ``aiortc``?
 -------------------
@@ -84,8 +86,7 @@ some of its features:
 Installing
 ----------
 
-Since release 0.9.28 binary wheels are available on PyPI for Linux, Mac and
-Windows. The easiest way to install ``aiortc`` is to run:
+The easiest way to install ``aiortc`` is to run:
 
 .. code:: bash
 
@@ -97,10 +98,8 @@ Building from source
 If there are no wheels for your system or if you wish to build aiortc from
 source you will need a couple of libraries installed on your system:
 
-- OpenSSL 1.0.2 or greater
-- FFmpeg 4.0 or greater
-- LibVPX for video encoding / decoding
 - Opus for audio encoding / decoding
+- LibVPX for video encoding / decoding
 
 Linux
 .....
@@ -109,14 +108,7 @@ On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config
-
-`pylibsrtp` comes with binary wheels for most platforms, but if it needs to be
-built from you will also need to run:
-
-.. code:: bash
-
-    apt install libsrtp2-dev
+    apt install libopus-dev libvpx-dev
 
 OS X
 ....
@@ -125,7 +117,7 @@ On OS X run:
 
 .. code:: bash
 
-    brew install ffmpeg opus libvpx pkg-config
+    brew install opus libvpx
 
 License
 -------
