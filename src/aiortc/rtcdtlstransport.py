@@ -40,6 +40,11 @@ CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 
 logger = logging.getLogger(__name__)
 
+# Log TLS secrets to a file, similar to browsers
+SSLKEYLOGFILE = os.getenv("SSLKEYLOGFILE")
+if SSLKEYLOGFILE:
+    logger.warning("Logging all TLS keys to %s", SSLKEYLOGFILE)
+
 
 def certificate_digest(x509: crypto.X509) -> str:
     return x509.digest("SHA256").decode("ascii")
@@ -73,6 +78,13 @@ def get_srtp_key_salt(src, idx: int) -> bytes:
         src[key_start : key_start + SRTP_KEY_LEN]
         + src[salt_start : salt_start + SRTP_SALT_LEN]
     )
+
+
+def tls_keylog(ssl, line):
+    if SSLKEYLOGFILE:
+        with open(SSLKEYLOGFILE, "ab") as f:
+            f.write(line)
+            f.write(b"\n")
 
 
 class State(enum.Enum):
@@ -150,6 +162,8 @@ class RTCCertificate:
         ctx.set_verify(
             SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, lambda *args: 1
         )
+        if SSLKEYLOGFILE:
+            ctx.set_keylog_callback(tls_keylog)
         ctx.use_certificate(self._cert)
         ctx.use_privatekey(self._key)
         ctx.set_cipher_list(b"HIGH:!CAMELLIA:!aNULL")
