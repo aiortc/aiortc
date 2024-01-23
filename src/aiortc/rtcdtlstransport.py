@@ -54,14 +54,15 @@ def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
             )
         ]
     )
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
     builder = (
         x509.CertificateBuilder()
         .subject_name(name)
         .issuer_name(name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow() - datetime.timedelta(days=1))
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=30))
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=30))
     )
     return builder.sign(key, hashes.SHA256(), default_backend())
 
@@ -115,9 +116,7 @@ class RTCCertificate:
         """
         The date and time after which the certificate will be considered invalid.
         """
-        return self._cert.to_cryptography().not_valid_after.replace(
-            tzinfo=datetime.timezone.utc
-        )
+        return self._cert.to_cryptography().not_valid_after_utc
 
     def getFingerprints(self) -> List[RTCDtlsFingerprint]:
         """
