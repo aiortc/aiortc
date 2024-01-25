@@ -1,26 +1,26 @@
 var pc = null;
 
 function negotiate() {
-    pc.addTransceiver('video', {direction: 'recvonly'});
-    pc.addTransceiver('audio', {direction: 'recvonly'});
-    return pc.createOffer().then(function(offer) {
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+    return pc.createOffer().then((offer) => {
         return pc.setLocalDescription(offer);
-    }).then(function() {
+    }).then(() => {
         // wait for ICE gathering to complete
-        return new Promise(function(resolve) {
+        return new Promise((resolve) => {
             if (pc.iceGatheringState === 'complete') {
                 resolve();
             } else {
-                function checkState() {
+                const checkState = () => {
                     if (pc.iceGatheringState === 'complete') {
                         pc.removeEventListener('icegatheringstatechange', checkState);
                         resolve();
                     }
-                }
+                };
                 pc.addEventListener('icegatheringstatechange', checkState);
             }
         });
-    }).then(function() {
+    }).then(() => {
         var offer = pc.localDescription;
         return fetch('/offer', {
             body: JSON.stringify({
@@ -32,11 +32,11 @@ function negotiate() {
             },
             method: 'POST'
         });
-    }).then(function(response) {
+    }).then((response) => {
         return response.json();
-    }).then(function(answer) {
+    }).then((answer) => {
         return pc.setRemoteDescription(answer);
-    }).catch(function(e) {
+    }).catch((e) => {
         alert(e);
     });
 }
@@ -47,13 +47,13 @@ function start() {
     };
 
     if (document.getElementById('use-stun').checked) {
-        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
+        config.iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
     }
 
     pc = new RTCPeerConnection(config);
 
     // connect audio / video
-    pc.addEventListener('track', function(evt) {
+    pc.addEventListener('track', (evt) => {
         if (evt.track.kind == 'video') {
             document.getElementById('video').srcObject = evt.streams[0];
         } else {
@@ -70,7 +70,7 @@ function stop() {
     document.getElementById('stop').style.display = 'none';
 
     // close peer connection
-    setTimeout(function() {
+    setTimeout(() => {
         pc.close();
     }, 500);
 }
