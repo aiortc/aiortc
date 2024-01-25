@@ -48,6 +48,32 @@ function createPeerConnection() {
     return pc;
 }
 
+function enumerateInputDevices() {
+    const populateSelect = (select, devices) => {
+        let counter = 1;
+        devices.forEach((device) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || ('Device #' + counter);
+            select.appendChild(option);
+            counter += 1;
+        });
+    };
+
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+        populateSelect(
+            document.getElementById('audio-input'),
+            devices.filter((device) => device.kind == 'audioinput')
+        );
+        populateSelect(
+            document.getElementById('video-input'),
+            devices.filter((device) => device.kind == 'videoinput')
+        );
+    }).catch((e) => {
+        alert(e);
+    });
+}
+
 function negotiate() {
     return pc.createOffer().then((offer) => {
         return pc.setLocalDescription(offer);
@@ -144,23 +170,43 @@ function start() {
         });
     }
 
-    var constraints = {
-        audio: document.getElementById('use-audio').checked,
+    // Build media constraints.
+
+    const constraints = {
+        audio: false,
         video: false
     };
 
-    if (document.getElementById('use-video').checked) {
-        var resolution = document.getElementById('video-resolution').value;
-        if (resolution) {
-            resolution = resolution.split('x');
-            constraints.video = {
-                width: parseInt(resolution[0], 0),
-                height: parseInt(resolution[1], 0)
-            };
-        } else {
-            constraints.video = true;
+    if (document.getElementById('use-audio').checked) {
+        const audioConstraints = {};
+
+        const device = document.getElementById('audio-input').value;
+        if (device) {
+            audioConstraints.deviceId = { exact: device };
         }
+
+        constraints.audio = Object.keys(audioConstraints).length ? audioConstraints : true;
     }
+
+    if (document.getElementById('use-video').checked) {
+        const videoConstraints = {};
+
+        const device = document.getElementById('video-input').value;
+        if (device) {
+            videoConstraints.deviceId = { exact: device };
+        }
+
+        const resolution = document.getElementById('video-resolution').value;
+        if (resolution) {
+            const dimensions = resolution.split('x');
+            videoConstraints.width = parseInt(dimensions[0], 0);
+            videoConstraints.height = parseInt(dimensions[1], 0);
+        }
+
+        constraints.video = Object.keys(videoConstraints).length ? videoConstraints : true;
+    }
+
+    // Acquire media and start negociation.
 
     if (constraints.audio || constraints.video) {
         if (constraints.video) {
@@ -269,3 +315,5 @@ function sdpFilterCodec(kind, codec, realSdp) {
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
+
+enumerateInputDevices();
