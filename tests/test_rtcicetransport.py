@@ -262,15 +262,21 @@ class RTCIceGathererTest(TestCase):
 class RTCIceTransportTest(TestCase):
     def setUp(self):
         # save timers
+        self.consent_failures = aioice.ice.CONSENT_FAILURES
+        self.consent_interval = aioice.ice.CONSENT_INTERVAL
         self.retry_max = aioice.stun.RETRY_MAX
         self.retry_rto = aioice.stun.RETRY_RTO
 
         # shorten timers to run tests faster
+        aioice.ice.CONSENT_FAILURES = 1
+        aioice.ice.CONSENT_INTERVAL = 1
         aioice.stun.RETRY_MAX = 1
         aioice.stun.RETRY_RTO = 0.1
 
     def tearDown(self):
         # restore timers
+        aioice.ice.CONSENT_FAILURES = self.consent_failures
+        aioice.ice.CONSENT_INTERVAL = self.consent_interval
         aioice.stun.RETRY_MAX = self.retry_max
         aioice.stun.RETRY_RTO = self.retry_rto
 
@@ -355,6 +361,42 @@ class RTCIceTransportTest(TestCase):
         # cleanup
         await asyncio.gather(transport_1.stop(), transport_2.stop())
         self.assertEqual(transport_1.state, "closed")
+        self.assertEqual(transport_2.state, "closed")
+
+    @asynctest
+    async def test_connect_then_consent_expires(self):
+        gatherer_1 = RTCIceGatherer()
+        transport_1 = RTCIceTransport(gatherer_1)
+
+        gatherer_2 = RTCIceGatherer()
+        transport_2 = RTCIceTransport(gatherer_2)
+
+        # gather candidates
+        await asyncio.gather(gatherer_1.gather(), gatherer_2.gather())
+        for candidate in gatherer_2.getLocalCandidates():
+            await transport_1.addRemoteCandidate(candidate)
+        for candidate in gatherer_1.getLocalCandidates():
+            await transport_2.addRemoteCandidate(candidate)
+        self.assertEqual(transport_1.state, "new")
+        self.assertEqual(transport_2.state, "new")
+
+        # connect
+        await asyncio.gather(
+            transport_1.start(gatherer_2.getLocalParameters()),
+            transport_2.start(gatherer_1.getLocalParameters()),
+        )
+        self.assertEqual(transport_1.state, "completed")
+        self.assertEqual(transport_2.state, "completed")
+
+        # close one side
+        await transport_1.stop()
+        self.assertEqual(transport_1.state, "closed")
+
+        # wait for consent to expire
+        await asyncio.sleep(2)
+
+        # close other side
+        await transport_2.stop()
         self.assertEqual(transport_2.state, "closed")
 
     @asynctest

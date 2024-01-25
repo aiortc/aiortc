@@ -311,10 +311,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__stream_id = str(uuid.uuid4())
         self.__transceivers: List[RTCRtpTransceiver] = []
 
+        self.__closeTask: Optional[asyncio.Task] = None
         self.__connectionState = "new"
         self.__iceConnectionState = "new"
         self.__iceGatheringState = "new"
-        self.__isClosed = False
+        self.__isClosed: Optional[asyncio.Future[bool]] = None
         self.__signalingState = "stable"
 
         self.__currentLocalDescription: Optional[sdp.SessionDescription] = None
@@ -479,8 +480,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         Terminate the ICE agent, ending ICE processing and streams.
         """
         if self.__isClosed:
+            await self.__isClosed
             return
-        self.__isClosed = True
+        self.__isClosed = asyncio.Future()
         self.__setSignalingState("closed")
 
         # stop senders / receivers
@@ -505,6 +507,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # no more events will be emitted, so remove all event listeners
         # to facilitate garbage collection.
         self.remove_all_listeners()
+
+        self.__isClosed.set_result(True)
 
     async def createAnswer(self):
         """
@@ -1176,6 +1180,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.__log_debug("connectionState %s -> %s", self.__connectionState, state)
             self.__connectionState = state
             self.emit("connectionstatechange")
+
+        # if all DTLS connections are closed, initiate a shutdown
+        if (
+            not self.__isClosed
+            and self.__closeTask is None
+            and dtlsStates == set(["closed"])
+        ):
+            self.__closeTask = asyncio.ensure_future(self.close())
 
     def __updateIceConnectionState(self) -> None:
         # compute new state
