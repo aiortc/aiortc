@@ -371,6 +371,10 @@ class RTCRtpSender:
             self.__track.stop()
             self.__track = None
 
+        # release encoder
+        if self.__encoder:
+            del self.__encoder
+
         self.__log_debug("- RTP finished")
         self.__rtp_exited.set()
 
