@@ -82,7 +82,7 @@ for srtp_profile in [
 ]:
     try:
         Policy(srtp_profile=srtp_profile.libsrtp_profile)
-    except pylibsrtp.Error:
+    except pylibsrtp.Error:  # pragma: no cover
         pass
     else:
         SRTP_PROFILES.append(srtp_profile)

@@ -33,7 +33,7 @@ dependencies = [
     'dataclasses; python_version < "3.7"',
     "google-crc32c>=1.1",
     "pyee>=9.0.0",
-    "pylibsrtp>=0.5.6",
+    "pylibsrtp>=0.10.0",
     "pyopenssl>=24.0.0",
 ]
 dynamic = ["version"]
