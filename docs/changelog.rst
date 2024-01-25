@@ -3,6 +3,13 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.7.0
+-----
+
+ * Add support for GCM based SRTP protection profiles.
+ * Reduce supported DTLS cipher list to avoid Client Hello fragmentation.
+ * Fix `utcnow()` deprecation warning on Python 3.12.
+
 1.6.0
 -----
 
