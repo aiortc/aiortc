@@ -391,9 +391,11 @@ class RTCRtpReceiver:
             )
             self.__decoder_thread.start()
 
-            self.__transport._register_rtp_receiver(self, parameters)
+            #self.__transport._register_rtp_receiver(self, parameters)
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
+        # register new parameters anyway
+        self.__transport._register_rtp_receiver(self, parameters)
 
     def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
@@ -403,6 +405,7 @@ class RTCRtpReceiver:
         Irreversibly stop the receiver.
         """
         if self.__started:
+            self.__started = False
             self.__transport._unregister_rtp_receiver(self)
             self.__stop_decoder()
 
