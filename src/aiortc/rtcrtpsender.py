@@ -78,6 +78,7 @@ class RTCRtpSender:
         self._rtx_ssrc = random32()
         # FIXME: how should this be initialised?
         self._stream_id = str(uuid.uuid4())
+        self._enabled = True
         self.__encoder: Optional[Encoder] = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
@@ -268,6 +269,13 @@ class RTCRtpSender:
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
         # get [Frame|Packet]
         data = await self.__track.recv()
+
+        # If the sender is disabled, drop the frame instead of encoding it.
+        # We still want to read from the track in order to avoid frames
+        # accumulating in memory.
+        if not self._enabled:
+            return None
+
         audio_level = None
 
         if self.__encoder is None:
@@ -325,7 +333,12 @@ class RTCRtpSender:
                     await asyncio.sleep(0.02)
                     continue
 
+                # Fetch the next encoded frame. This can be `None` if the sender
+                # is disabled, in which case we just continue the loop.
                 enc_frame = await self._next_encoded_frame(codec)
+                if enc_frame is None:
+                    continue
+
                 timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
 
                 for i, payload in enumerate(enc_frame.payloads):

@@ -29,6 +29,7 @@ class RTCRtpTransceiver:
         sender: RTCRtpSender,
         direction: str = "sendrecv",
     ):
+        self.__currentDirection: Optional[str] = None
         self.__direction = direction
         self.__kind = kind
         self.__mid: Optional[str] = None
@@ -37,7 +38,6 @@ class RTCRtpTransceiver:
         self.__sender = sender
         self.__stopped = False
 
-        self._currentDirection: Optional[str] = None
         self._offerDirection: Optional[str] = None
         self._preferred_codecs: List[RTCRtpCodecCapability] = []
         self._transport: RTCDtlsTransport = None
@@ -54,7 +54,7 @@ class RTCRtpTransceiver:
 
         One of `'sendrecv'`, `'sendonly'`, `'recvonly'`, `'inactive'` or `None`.
         """
-        return self._currentDirection
+        return self.__currentDirection
 
     @property
     def direction(self) -> str:
@@ -129,6 +129,22 @@ class RTCRtpTransceiver:
         await self.__receiver.stop()
         await self.__sender.stop()
         self.__stopped = True
+
+    def _setCurrentDirection(self, direction: str) -> None:
+        self.__currentDirection = direction
+
+        if direction == "sendrecv":
+            self.__sender._enabled = True
+            self.__receiver._enabled = True
+        elif direction == "sendonly":
+            self.__sender._enabled = True
+            self.__receiver._enabled = False
+        elif direction == "recvonly":
+            self.__sender._enabled = False
+            self.__receiver._enabled = True
+        elif direction == "inactive":
+            self.__sender._enabled = False
+            self.__receiver._enabled = False
 
     def _set_mid(self, mid: str) -> None:
         self.__mid = mid
