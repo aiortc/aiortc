@@ -789,7 +789,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # configure direction
         for t in self.__transceivers:
             if description.type in ["answer", "pranswer"]:
-                t._currentDirection = and_direction(t.direction, t._offerDirection)
+                t._setCurrentDirection(and_direction(t.direction, t._offerDirection))
 
         # gather candidates
         await self.__gather()
@@ -871,7 +871,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 # configure direction
                 direction = reverse_direction(media.direction)
                 if description.type in ["answer", "pranswer"]:
-                    transceiver._currentDirection = direction
+                    transceiver._setCurrentDirection(direction)
                 else:
                     transceiver._offerDirection = direction
 

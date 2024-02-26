@@ -263,6 +263,7 @@ class RTCRtpReceiver:
         if transport.state == "closed":
             raise InvalidStateError
 
+        self._enabled = True
         self.__active_ssrc: Dict[int, datetime.datetime] = {}
         self.__codecs: Dict[int, RTCRtpCodecParameters] = {}
         self.__decoder_queue: queue.Queue = queue.Queue()
@@ -449,6 +450,10 @@ class RTCRtpReceiver:
         Handle an incoming RTP packet.
         """
         self.__log_debug("< %s", packet)
+
+        # If the receiver is disabled, discard the packet.
+        if not self._enabled:
+            return
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:

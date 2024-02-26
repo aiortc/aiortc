@@ -390,6 +390,31 @@ class RTCRtpSenderTest(TestCase):
             self.assertEqual(found_rtx.payload[0:2], pack("!H", packet.sequence_number))
 
     @asynctest
+    async def test_disabled(self):
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            self.assertEqual(sender.kind, "audio")
+            self.assertEqual(sender._enabled, True)
+
+            await sender.send(RTCRtpParameters(codecs=[PCMU_CODEC]))
+            sender._enabled = False
+            self.assertEqual(sender._enabled, False)
+
+            # check stats
+            report = await sender.getStats()
+            self.assertIsInstance(report, RTCStatsReport)
+            self.assertEqual(
+                sorted([s.type for s in report.values()]),
+                ["outbound-rtp", "transport"],
+            )
+
+            outbound_rtp = report["outbound-rtp_" + str(id(sender))]
+            self.assertEqual(outbound_rtp.packetsSent, 0)
+
+            # clean shutdown
+            await sender.stop()
+
+    @asynctest
     async def test_stop(self):
         async with dummy_dtls_transport_pair() as (local_transport, _):
             sender = RTCRtpSender(AudioStreamTrack(), local_transport)

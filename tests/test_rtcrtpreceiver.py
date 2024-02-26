@@ -450,6 +450,28 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
+    async def test_rtp_disabled(self):
+        async with create_receiver("audio") as receiver:
+            self.assertEqual(receiver._enabled, True)
+            receiver._track = RemoteStreamTrack(kind="audio")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+            receiver._enabled = False
+            self.assertEqual(receiver._enabled, False)
+
+            # receive RTP while disabled.
+            packet = RtpPacket(payload_type=0)
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # check stats
+            report = await receiver.getStats()
+            self.assertIsInstance(report, RTCStatsReport)
+            self.assertEqual(
+                sorted([s.type for s in report.values()]),
+                ["transport"],
+            )
+
+    @asynctest
     async def test_rtp_rtx(self):
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
