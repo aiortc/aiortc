@@ -348,9 +348,9 @@ class RTCRtpSender:
 
                     # send packet
                     self.__log_debug("> %s", packet)
-                    self.__rtp_history[
-                        packet.sequence_number % RTP_HISTORY_SIZE
-                    ] = packet
+                    self.__rtp_history[packet.sequence_number % RTP_HISTORY_SIZE] = (
+                        packet
+                    )
                     packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
                     await self.transport._send_rtp(packet_bytes)
 
