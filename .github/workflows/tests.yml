@@ -125,6 +125,9 @@ jobs:
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
           CIBW_SKIP: '*-musllinux*'
+          CIBW_TEST_COMMAND: python -c "import aiortc"
+          # There are no binary wheels for cryptography on these platforms.
+          CIBW_TEST_SKIP: "*-{manylinux_i686,win32} pp*"
         run: |
           pip install cibuildwheel
           cibuildwheel --output-dir dist
