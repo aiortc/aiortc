@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Install OS packages
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Install packages
@@ -48,7 +48,7 @@ jobs:
           - '3.8'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Install OS packages and disable firewall
@@ -70,13 +70,13 @@ jobs:
           coverage xml
         shell: bash
       - name: Upload coverage report
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
   package-source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Build source package
@@ -84,9 +84,9 @@ jobs:
           pip install -U build
           python -m build --sdist
       - name: Upload source package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-source
           path: dist/
 
   package-wheel:
@@ -111,7 +111,7 @@ jobs:
             arch: x86
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Install QEMU
@@ -130,9 +130,9 @@ jobs:
           cibuildwheel --output-dir dist
         shell: bash
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-wheel-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/
 
   publish:
@@ -140,9 +140,9 @@ jobs:
     needs: [lint, test, package-source, package-wheel]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: dist
+          merge-multiple: true
           path: dist/
       - name: Publish to PyPI
         if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/')
