@@ -31,7 +31,7 @@ jobs:
         run: pip install mypy ruff
       - name: Run linters
         run: |
-          ruff .
+          ruff check .
           ruff format --check --diff .
 
   test:
