@@ -1,14 +1,13 @@
-from cffi import FFI
+import cffi
 
-ffibuilder = FFI()
+module_name = "aiortc.codecs._opus"
 
-ffibuilder.set_source(
-    "aiortc.codecs._opus",
-    """
-#include <opus/opus.h>
-    """,
-    libraries=["opus"],
-)
+ffibuilder = cffi.FFI()
+
+try:
+    ffibuilder.set_source_pkgconfig(module_name, ["opus"], "#include <opus.h>")
+except cffi.PkgConfigError:
+    ffibuilder.set_source(module_name, "#include <opus/opus.h>", libraries=["opus"])
 
 ffibuilder.cdef(
     """
