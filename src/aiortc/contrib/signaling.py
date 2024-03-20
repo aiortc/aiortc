@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+from abc import abstractmethod
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
@@ -40,7 +41,25 @@ def object_to_string(obj):
     return json.dumps(message, sort_keys=True)
 
 
-class CopyAndPasteSignaling:
+class ISignaling:
+    @abstractmethod
+    async def connect(self):
+        pass
+
+    @abstractmethod
+    async def send(self, descr):
+        pass
+
+    @abstractmethod
+    async def receive(self):
+        pass
+
+    @abstractmethod
+    async def close(self):
+        pass
+
+
+class CopyAndPasteSignaling(ISignaling):
     def __init__(self):
         self._read_pipe = sys.stdin
         self._read_transport = None
@@ -73,7 +92,7 @@ class CopyAndPasteSignaling:
         print()
 
 
-class TcpSocketSignaling:
+class TcpSocketSignaling(ISignaling):
     def __init__(self, host, port):
         self._host = host
         self._port = port
@@ -129,7 +148,7 @@ class TcpSocketSignaling:
         self._writer.write(data + b"\n")
 
 
-class UnixSocketSignaling:
+class UnixSocketSignaling(ISignaling):
     def __init__(self, path):
         self._path = path
         self._server = None
@@ -205,7 +224,7 @@ def add_signaling_arguments(parser):
     )
 
 
-def create_signaling(args):
+def create_signaling(args) -> ISignaling:
     """
     Create a signaling method based on command-line arguments.
     """
