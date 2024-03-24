@@ -266,8 +266,10 @@ class RTCRtpSender:
             except ValueError:
                 pass
 
-    async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
-        # get [Frame|Packet]
+    async def _next_encoded_frame(
+        self, codec: RTCRtpCodecParameters
+    ) -> Optional[RTCEncodedFrame]:
+        # Get [Frame|Packet].
         data = await self.__track.recv()
 
         # If the sender is disabled, drop the frame instead of encoding it.
@@ -282,7 +284,7 @@ class RTCRtpSender:
             self.__encoder = get_encoder(codec)
 
         if isinstance(data, Frame):
-            # encode frame
+            # Encode the frame.
             if isinstance(data, AudioFrame):
                 audio_level = rtp.compute_audio_level_dbov(data)
 
@@ -292,7 +294,13 @@ class RTCRtpSender:
                 None, self.__encoder.encode, data, force_keyframe
             )
         else:
+            # Pack the pre-encoded data.
             payloads, timestamp = self.__encoder.pack(data)
+
+        # If the encoder did not return any payloads, return `None`.
+        # This may be due to a delay caused by resampling.
+        if not payloads:
+            return None
 
         return RTCEncodedFrame(payloads, timestamp, audio_level)
 

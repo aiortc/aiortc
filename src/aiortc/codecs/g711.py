@@ -1,9 +1,9 @@
-import audioop
 import fractions
-from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
-from av import AudioFrame
+from av import AudioFrame, CodecContext
+from av.audio.codeccontext import AudioCodecContext
+from av.audio.resampler import AudioResampler
 from av.frame import Frame
 from av.packet import Packet
 
@@ -17,29 +17,35 @@ SAMPLES_PER_FRAME = 160
 TIME_BASE = fractions.Fraction(1, 8000)
 
 
-class PcmDecoder(ABC, Decoder):
-    @staticmethod
-    @abstractmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        pass  # pragma: no cover
+class PcmDecoder(Decoder):
+    def __init__(self, codec_name: str) -> None:
+        self.codec: AudioCodecContext = CodecContext.create(codec_name, "r")
+        self.codec.format = "s16"
+        self.codec.layout = "mono"
+        self.codec.sample_rate = SAMPLE_RATE
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
-        frame.planes[0].update(self._convert(encoded_frame.data, SAMPLE_WIDTH))
-        frame.pts = encoded_frame.timestamp
-        frame.sample_rate = SAMPLE_RATE
-        frame.time_base = TIME_BASE
-        return [frame]
+        packet = Packet(encoded_frame.data)
+        packet.pts = encoded_frame.timestamp
+        packet.time_base = TIME_BASE
+        return self.codec.decode(packet)
 
 
-class PcmEncoder(ABC, Encoder):
-    @staticmethod
-    @abstractmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        pass  # pragma: no cover
+class PcmEncoder(Encoder):
+    def __init__(self, codec_name: str) -> None:
+        self.codec: AudioCodecContext = CodecContext.create(codec_name, "w")
+        self.codec.format = "s16"
+        self.codec.layout = "mono"
+        self.codec.sample_rate = SAMPLE_RATE
+        self.codec.time_base = TIME_BASE
 
-    def __init__(self) -> None:
-        self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
+        # Create our own resampler to control the frame size.
+        self.resampler = AudioResampler(
+            format="s16",
+            layout="mono",
+            rate=SAMPLE_RATE,
+            frame_size=SAMPLES_PER_FRAME,
+        )
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -48,28 +54,17 @@ class PcmEncoder(ABC, Encoder):
         assert frame.format.name == "s16"
         assert frame.layout.name in ["mono", "stereo"]
 
-        channels = len(frame.layout.channels)
-        data = bytes(frame.planes[0])
-        timestamp = frame.pts
+        # Send frame through resampler and encoder.
+        packets = []
+        for frame in self.resampler.resample(frame):
+            packets += self.codec.encode(frame)
 
-        # resample at 8 kHz
-        if frame.sample_rate != SAMPLE_RATE:
-            data, self.rate_state = audioop.ratecv(
-                data,
-                SAMPLE_WIDTH,
-                channels,
-                frame.sample_rate,
-                SAMPLE_RATE,
-                self.rate_state,
-            )
-            timestamp = (timestamp * SAMPLE_RATE) // frame.sample_rate
-
-        # convert to mono
-        if channels == 2:
-            data = audioop.tomono(data, SAMPLE_WIDTH, 1, 1)
-
-        data = self._convert(data, SAMPLE_WIDTH)
-        return [data], timestamp
+        if packets:
+            # Packets were returned.
+            return [bytes(p) for p in packets], packets[0].pts
+        else:
+            # No packets were returned due to buffering.
+            return [], None
 
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
@@ -77,24 +72,20 @@ class PcmEncoder(ABC, Encoder):
 
 
 class PcmaDecoder(PcmDecoder):
-    @staticmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        return audioop.alaw2lin(data, width)
+    def __init__(self) -> None:
+        super().__init__("pcm_alaw")
 
 
 class PcmaEncoder(PcmEncoder):
-    @staticmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        return audioop.lin2alaw(data, width)
+    def __init__(self) -> None:
+        super().__init__("pcm_alaw")
 
 
 class PcmuDecoder(PcmDecoder):
-    @staticmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        return audioop.ulaw2lin(data, width)
+    def __init__(self) -> None:
+        super().__init__("pcm_mulaw")
 
 
 class PcmuEncoder(PcmEncoder):
-    @staticmethod
-    def _convert(data: bytes, width: int) -> bytes:
-        return audioop.lin2ulaw(data, width)
+    def __init__(self) -> None:
+        super().__init__("pcm_mulaw")

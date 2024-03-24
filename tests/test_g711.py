@@ -57,12 +57,27 @@ class PcmaTest(CodecTestCase):
         encoder = get_encoder(PCMA_CODEC)
         self.assertIsInstance(encoder, PcmaEncoder)
 
-        for frame in self.create_audio_frames(
-            layout="stereo", sample_rate=48000, count=10
-        ):
-            payloads, timestamp = encoder.encode(frame)
-            self.assertEqual(payloads, [PCMA_PAYLOAD])
-            self.assertEqual(timestamp, frame.pts // 6)
+        output = [
+            encoder.encode(frame)
+            for frame in self.create_audio_frames(
+                layout="stereo", sample_rate=48000, count=10
+            )
+        ]
+        self.assertEqual(
+            output,
+            [
+                ([], None),  # No output due to buffering.
+                ([PCMA_PAYLOAD], 0),
+                ([PCMA_PAYLOAD], 160),
+                ([PCMA_PAYLOAD], 320),
+                ([PCMA_PAYLOAD], 480),
+                ([PCMA_PAYLOAD], 640),
+                ([PCMA_PAYLOAD], 800),
+                ([PCMA_PAYLOAD], 960),
+                ([PCMA_PAYLOAD], 1120),
+                ([PCMA_PAYLOAD], 1280),
+            ],
+        )
 
     def test_encoder_pack(self):
         encoder = get_encoder(PCMA_CODEC)
@@ -124,12 +139,27 @@ class PcmuTest(CodecTestCase):
         encoder = get_encoder(PCMU_CODEC)
         self.assertIsInstance(encoder, PcmuEncoder)
 
-        for frame in self.create_audio_frames(
-            layout="stereo", sample_rate=48000, count=10
-        ):
-            payloads, timestamp = encoder.encode(frame)
-            self.assertEqual(payloads, [PCMU_PAYLOAD])
-            self.assertEqual(timestamp, frame.pts // 6)
+        output = [
+            encoder.encode(frame)
+            for frame in self.create_audio_frames(
+                layout="stereo", sample_rate=48000, count=10
+            )
+        ]
+        self.assertEqual(
+            output,
+            [
+                ([], None),  # No output due to buffering
+                ([PCMU_PAYLOAD], 0),
+                ([PCMU_PAYLOAD], 160),
+                ([PCMU_PAYLOAD], 320),
+                ([PCMU_PAYLOAD], 480),
+                ([PCMU_PAYLOAD], 640),
+                ([PCMU_PAYLOAD], 800),
+                ([PCMU_PAYLOAD], 960),
+                ([PCMU_PAYLOAD], 1120),
+                ([PCMU_PAYLOAD], 1280),
+            ],
+        )
 
     def test_roundtrip(self):
         self.roundtrip_audio(PCMU_CODEC, output_layout="mono", output_sample_rate=8000)
