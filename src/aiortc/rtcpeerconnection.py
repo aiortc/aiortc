@@ -928,6 +928,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     iceTransport._role_set = True
 
                 # set DTLS role
+                if description.type == "offer" and media.dtls.role == "client":
+                    dtlsTransport._set_role(role="server")
                 if description.type == "answer":
                     dtlsTransport._set_role(
                         role="server" if media.dtls.role == "client" else "client"
@@ -1273,8 +1275,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 raise ValueError("ICE username fragment or password is missing")
 
             # check DTLS role is allowed
-            if description.type == "offer" and media.dtls.role != "auto":
-                raise ValueError("DTLS setup attribute must be 'actpass' for an offer")
             if description.type in ["answer", "pranswer"] and media.dtls.role not in [
                 "client",
                 "server",
