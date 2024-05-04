@@ -4686,30 +4686,6 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_with_invalid_dtls_setup_for_offer(self):
-        pc1 = RTCPeerConnection()
-        pc2 = RTCPeerConnection()
-
-        # apply offer
-        pc1.addTrack(AudioStreamTrack())
-        offer = await pc1.createOffer()
-        await pc1.setLocalDescription(offer)
-        mangled = RTCSessionDescription(
-            sdp=pc1.localDescription.sdp.replace("a=setup:actpass", "a=setup:active"),
-            type=pc1.localDescription.type,
-        )
-        with self.assertRaises(ValueError) as cm:
-            await pc2.setRemoteDescription(mangled)
-        self.assertEqual(
-            str(cm.exception),
-            "DTLS setup attribute must be 'actpass' for an offer",
-        )
-
-        # close
-        await pc1.close()
-        await pc2.close()
-
-    @asynctest
     async def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(self):
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
@@ -4975,4 +4951,194 @@ a=rtpmap:0 PCMU/8000
                 "stable",
                 "closed",
             ],
+        )
+
+    @asynctest
+    async def test_dtls_role_offer_actpass(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1_states = track_states(pc1)
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.createDataChannel("chat", protocol="")
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+
+        # set remote description
+        await pc2.setRemoteDescription(pc1.localDescription)
+
+        # create answer
+        answer = await pc2.createAnswer()
+        self.assertHasDtls(answer, "active")
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+
+        # handle answer
+        await pc1.setRemoteDescription(pc2.localDescription)
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        self.assertEqual(pc1.sctp.transport._role, "server")
+        self.assertEqual(pc2.sctp.transport._role, "client")
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+
+    @asynctest
+    async def test_dtls_role_offer_passive(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1_states = track_states(pc1)
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.createDataChannel("chat", protocol="")
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+
+        # handle offer with replaced DTLS role
+        await pc2.setRemoteDescription(
+            RTCSessionDescription(
+                type="offer", sdp=pc1.localDescription.sdp.replace("actpass", "passive")
+            )
+        )
+
+        # create answer
+        answer = await pc2.createAnswer()
+        self.assertHasDtls(answer, "active")
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+
+        # handle answer
+        await pc1.setRemoteDescription(pc2.localDescription)
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        # pc1 is explicity passive so server.
+        self.assertEqual(pc1.sctp.transport._role, "server")
+        self.assertEqual(pc2.sctp.transport._role, "client")
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+
+    @asynctest
+    async def test_dtls_role_offer_active(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1_states = track_states(pc1)
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.createDataChannel("chat", protocol="")
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+
+        # handle offer with replaced DTLS role
+        await pc2.setRemoteDescription(
+            RTCSessionDescription(
+                type="offer", sdp=pc1.localDescription.sdp.replace("actpass", "active")
+            )
+        )
+
+        # create answer
+        answer = await pc2.createAnswer()
+        self.assertHasDtls(answer, "passive")
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+
+        # handle answer
+        await pc1.setRemoteDescription(pc2.localDescription)
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        # pc1 is explicity active so client.
+        self.assertEqual(pc1.sctp.transport._role, "client")
+        self.assertEqual(pc2.sctp.transport._role, "server")
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
         )
