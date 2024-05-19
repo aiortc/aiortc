@@ -97,9 +97,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-14
             arch: arm64
-          - os: macos-latest
+          - os: macos-13
             arch: x86_64
           - os: ubuntu-latest
             arch: aarch64
