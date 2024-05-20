@@ -73,7 +73,15 @@ class CodecTestCase(TestCase):
             )
         return frames
 
-    def roundtrip_audio(self, codec, output_layout, output_sample_rate, drop=[]):
+    def roundtrip_audio(
+        self,
+        codec,
+        output_layout,
+        output_sample_rate,
+        input_layout="mono",
+        input_sample_rate=8000,
+        drop=[],
+    ):
         """
         Round-trip an AudioFrame through encoder then decoder.
         """
@@ -81,7 +89,7 @@ class CodecTestCase(TestCase):
         decoder = get_decoder(codec)
 
         input_frames = self.create_audio_frames(
-            layout="mono", sample_rate=8000, count=10
+            layout=input_layout, sample_rate=input_sample_rate, count=10
         )
 
         output_sample_count = int(output_sample_rate * AUDIO_PTIME)
