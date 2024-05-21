@@ -31,7 +31,7 @@ async def consume_signaling(pc, signaling):
             break
 
 
-async def run_answer(pc, signaling, filename):
+async def run_answer(pc, signaling, fp):
     await signaling.connect()
 
     @pc.on("datachannel")
