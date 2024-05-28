@@ -90,6 +90,7 @@ class RTCRtpSender:
         self.__rtp_history: Dict[int, RtpPacket] = {}
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_started = asyncio.Event()
+        self.__rtcp_quitting = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random16()
@@ -217,6 +218,7 @@ class RTCRtpSender:
             await asyncio.gather(self.__rtp_started.wait(), self.__rtcp_started.wait())
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
+            self.__rtcp_quitting.set()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
     async def _handle_rtcp_packet(self, packet):
@@ -404,7 +406,7 @@ class RTCRtpSender:
         self.__rtcp_started.set()
 
         try:
-            while True:
+            while self.__rtcp_quitting.is_set() == False:
                 # The interval between RTCP packets is varied randomly over the
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
@@ -437,7 +439,7 @@ class RTCRtpSender:
                         )
                     )
 
-                await self._send_rtcp(packets)
+                await asyncio.wait_for(self._send_rtcp(packets), timeout=5.0)
         except asyncio.CancelledError:
             pass
 
