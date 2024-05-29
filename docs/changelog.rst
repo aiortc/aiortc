@@ -3,13 +3,20 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.9.0
+-----
+
+ * Handle offers with `active` or `passive` DTLS setups.
+ * Stop using the deprecated `audioop` standard library module.
+ * Allow using PyAV 12.x.
+
 1.8.0
 -----
 
-* Only send / receive RTP according to :attr:`RTCRtpTransceiver.currentDirection`.
-* Close the :class:`RTCPeerConnection` if all DTLS transports are closed.
-* Free the encoder as soon as the :class:`RTCRtpSender` stops to save memory.
-* Modernise JavaScript in `server` and `webcam` examples.
+ * Only send / receive RTP according to :attr:`RTCRtpTransceiver.currentDirection`.
+ * Close the :class:`RTCPeerConnection` if all DTLS transports are closed.
+ * Free the encoder as soon as the :class:`RTCRtpSender` stops to save memory.
+ * Modernise JavaScript in `server` and `webcam` examples.
 
 1.7.0
 -----
