@@ -374,7 +374,7 @@ class RtcpSenderInfo:
 
     def __bytes__(self) -> bytes:
         return pack(
-            "!QLLL",
+            "!QQQQ",
             self.ntp_timestamp,
             self.rtp_timestamp,
             self.packet_count,
