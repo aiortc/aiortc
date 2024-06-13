@@ -5142,3 +5142,28 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(
             pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
         )
+
+    @asynctest
+    async def test_right_mid_order(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        tr1_a = pc1.addTransceiver("video", "recvonly")
+        tr1_b = pc1.addTransceiver("video", "recvonly")
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+
+        await pc1.setLocalDescription(offer)
+
+        tr2_a = pc2.addTransceiver(VideoStreamTrack())
+        tr2_b = pc2.addTransceiver(VideoStreamTrack())
+        await pc2.setRemoteDescription(offer)
+
+        self.assertEqual(tr1_a.mid, tr2_a.mid)
+        self.assertEqual(tr1_b.mid, tr2_b.mid)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
