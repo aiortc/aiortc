@@ -377,8 +377,8 @@ class RTCRtpSender:
 
                     self.__ntp_timestamp = clock.current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
-                    self.__octet_count += len(payload)
-                    self.__packet_count += 1
+                    self.__octet_count += uint32_add(self.__octet_count, len(payload))
+                    self.__packet_count = uint32_add(self.__packet_count, 1)
                     sequence_number = uint16_add(sequence_number, 1)
         except (asyncio.CancelledError, ConnectionError, MediaStreamError):
             pass
