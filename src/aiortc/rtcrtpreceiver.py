@@ -497,13 +497,15 @@ class RTCRtpReceiver:
                 self.__log_debug("x RTX packet from unknown SSRC %d", packet.ssrc)
                 return
 
-            if len(packet.payload) < 2:
+            apt = codec.parameters.get("apt")
+            if (
+                len(packet.payload) < 2
+                or not isinstance(apt, int)
+                or apt not in self.__codecs
+            ):
                 return
 
-            codec = self.__codecs[codec.parameters["apt"]]
-            packet = unwrap_rtx(
-                packet, payload_type=codec.payloadType, ssrc=original_ssrc
-            )
+            packet = unwrap_rtx(packet, payload_type=apt, ssrc=original_ssrc)
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):

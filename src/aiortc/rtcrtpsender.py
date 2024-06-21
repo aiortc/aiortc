@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 RTT_ALPHA = 0.85
 
 
-def random_sequence_number():
+def random_sequence_number() -> int:
     """
     Generate a random RTP sequence number.
 

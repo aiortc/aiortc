@@ -88,8 +88,9 @@ def find_common_codecs(
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
         if is_rtx(c):
-            if c.parameters.get("apt") in common_base:
-                base = common_base[c.parameters["apt"]]
+            apt = c.parameters.get("apt")
+            if isinstance(apt, int) and apt in common_base:
+                base = common_base[apt]
                 if c.clockRate == base.clockRate:
                     common.append(copy.deepcopy(c))
             continue
@@ -135,7 +136,7 @@ def is_codec_compatible(a: RTCRtpCodecParameters, b: RTCRtpCodecParameters) -> b
             # consider the absence of a profile-level-id parameter to mean
             # "constrained baseline level 3.1"
             return sdp.parse_h264_profile_level_id(
-                c.parameters.get("profile-level-id", "42E01F")
+                str(c.parameters.get("profile-level-id", "42E01F"))
             )[0]
 
         try:
@@ -510,7 +511,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         self.__isClosed.set_result(True)
 
-    async def createAnswer(self):
+    async def createAnswer(self) -> RTCSessionDescription:
         """
         Create an SDP answer to an offer received from a remote peer during
         the offer/answer negotiation of a WebRTC connection.
@@ -575,7 +576,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         protocol="",
         negotiated=False,
         id=None,
-    ):
+    ) -> RTCDataChannel:
         """
         Create a data channel with the given label.
 
@@ -1077,7 +1078,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__sctp._bundled = False
         self.__sctp.mid = None
 
-        @self.__sctp.on("datachannel")
+        @self.__sctp.on("datachannel")  # type: ignore
         def on_datachannel(channel):
             self.emit("datachannel", channel)
 
@@ -1139,8 +1140,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             encodings: Dict[int, RTCRtpDecodingParameters] = {}
             for codec in transceiver._codecs:
                 if is_rtx(codec):
-                    if codec.parameters["apt"] in encodings and len(media.ssrc) == 2:
-                        encodings[codec.parameters["apt"]].rtx = RTCRtpRtxParameters(
+                    apt = codec.parameters.get("apt")
+                    if (
+                        isinstance(apt, int)
+                        and apt in encodings
+                        and len(media.ssrc) == 2
+                    ):
+                        encodings[apt].rtx = RTCRtpRtxParameters(
                             ssrc=media.ssrc[1].ssrc
                         )
                     continue
