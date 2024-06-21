@@ -27,13 +27,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.9
-      - name: Install packages
-        run: pip install check-manifest mypy ruff
+      - name: Install OS packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install libopus-dev libvpx-dev
       - name: Run linters
         run: |
+          pip install . -r requirements/lint.txt
           ruff check .
           ruff format --check --diff .
           check-manifest
+          mypy src
 
   test:
     runs-on: ${{ matrix.os }}

@@ -53,7 +53,7 @@ class SRTPProtectionProfile:
     key_length: int
     salt_length: int
 
-    def get_key_and_salt(self, src, idx: int) -> bytes:
+    def get_key_and_salt(self, src: bytes, idx: int) -> bytes:
         key_start = idx * self.key_length
         salt_start = 2 * self.key_length + idx * self.salt_length
         return (
