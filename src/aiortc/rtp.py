@@ -310,14 +310,14 @@ def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, by
     return extension_profile, extension_value
 
 
-def compute_audio_level_dbov(frame: AudioFrame):
+def compute_audio_level_dbov(frame: AudioFrame) -> int:
     """
     Compute the energy level as spelled out in RFC 6465, Appendix A.
     """
     MAX_SAMPLE_VALUE = 32767
     MAX_AUDIO_LEVEL = 0
     MIN_AUDIO_LEVEL = -127
-    rms = 0
+    rms = 0.0
     buf = bytes(frame.planes[0])
     s = struct.Struct("h")
     for unpacked in s.iter_unpack(buf):

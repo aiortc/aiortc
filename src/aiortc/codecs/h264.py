@@ -3,11 +3,12 @@ import logging
 import math
 from itertools import tee
 from struct import pack, unpack_from
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar, cast
 
 import av
 from av.frame import Frame
 from av.packet import Packet
+from av.video.codeccontext import VideoCodecContext
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
@@ -104,27 +105,25 @@ class H264PayloadDescriptor:
 
 class H264Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = av.CodecContext.create("h264", "r")
+        self.codec = cast(VideoCodecContext, av.CodecContext.create("h264", "r"))
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         try:
             packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
-            frames = self.codec.decode(packet)
+            return cast(List[Frame], self.codec.decode(packet))
         except av.AVError as e:
             logger.warning(
                 "H264Decoder() failed to decode, skipping package: " + str(e)
             )
             return []
 
-        return frames
-
 
 def create_encoder_context(
     codec_name: str, width: int, height: int, bitrate: int
-) -> Tuple[av.CodecContext, bool]:
-    codec = av.CodecContext.create(codec_name, "w")
+) -> Tuple[VideoCodecContext, bool]:
+    codec = cast(VideoCodecContext, av.CodecContext.create(codec_name, "w"))
     codec.width = width
     codec.height = height
     codec.bit_rate = bitrate
@@ -144,7 +143,7 @@ class H264Encoder(Encoder):
     def __init__(self) -> None:
         self.buffer_data = b""
         self.buffer_pts: Optional[int] = None
-        self.codec: Optional[av.CodecContext] = None
+        self.codec: Optional[VideoCodecContext] = None
         self.codec_buffering = False
         self.__target_bitrate = DEFAULT_BITRATE
 
