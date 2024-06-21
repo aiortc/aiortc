@@ -19,29 +19,41 @@ TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
 class OpusDecoder(Decoder):
-    def __init__(self) -> None:
+    def __init__(self, audio_ptime, sample_rate) -> None:
+        self.audio_ptime = self.build_ptime(audio_ptime*1000)/1000 if audio_ptime!=None else 0.020
+        self.sample_rate = sample_rate if sample_rate!=None else SAMPLE_RATE
+        self.samples_per_frame = int(self.audio_ptime*self.sample_rate)
+        self.time_base = fractions.Fraction(1, self.sample_rate)        
+        
         error = ffi.new("int *")
         self.decoder = lib.opus_decoder_create(SAMPLE_RATE, CHANNELS, error)
         assert error[0] == lib.OPUS_OK
 
+    def build_ptime(self, audio_ptime)->int:
+        if((audio_ptime/10)%2==0):
+            return audio_ptime
+        else:
+            return audio_ptime+10
+        
     def __del__(self) -> None:
         lib.opus_decoder_destroy(self.decoder)
 
+    # original
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        frame = AudioFrame(format="s16", layout="stereo", samples=SAMPLES_PER_FRAME)
+        frame = AudioFrame(format="s16", layout="stereo", samples=self.samples_per_frame)
         frame.pts = encoded_frame.timestamp
         frame.sample_rate = SAMPLE_RATE
-        frame.time_base = TIME_BASE
-
+        frame.time_base = self.time_base
+        
         length = lib.opus_decode(
             self.decoder,
             encoded_frame.data,
             len(encoded_frame.data),
             ffi.cast("int16_t *", frame.planes[0].buffer_ptr),
-            SAMPLES_PER_FRAME,
+            self.samples_per_frame,
             0,
         )
-        assert length == SAMPLES_PER_FRAME
+        assert length == self.samples_per_frame
         return [frame]
 
 

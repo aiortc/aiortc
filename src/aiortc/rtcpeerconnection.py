@@ -811,7 +811,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.__pendingLocalDescription = description
 
     async def setRemoteDescription(
-        self, sessionDescription: RTCSessionDescription
+        self, sessionDescription: RTCSessionDescription,
+        custom_codecs: Optional[List[RTCRtpCodecParameters]] = [],
+        kind:Optional[str]=None
     ) -> None:
         """
         Changes the remote description associated with the connection.
@@ -863,6 +865,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                         )
                     )
 
+
+                if media.kind == kind and len(common)>0 and len(custom_codecs)>0:
+                    common[0].clockRate = custom_codecs[0].clockRate
+                    common[0].parameters = custom_codecs[0].parameters
+     
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(
                     HEADER_EXTENSIONS[media.kind], media.rtp.headerExtensions
