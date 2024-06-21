@@ -431,17 +431,15 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
 
         # check remote fingerprint
         x509 = self._ssl.get_peer_certificate()
-        remote_fingerprint = certificate_digest(x509)
-        fingerprint_is_valid = False
         for f in remoteParameters.fingerprints:
-            if (
-                f.algorithm.lower() == "sha-256"
-                and f.value.lower() == remote_fingerprint.lower()
-            ):
-                fingerprint_is_valid = True
+            try:
+                fingerprint = x509.digest(f.algorithm).decode("ascii").upper()
+            except ValueError:
+                continue
+            if f.value.upper() == fingerprint:
                 break
-        if not fingerprint_is_valid:
-            self.__log_debug("x DTLS handshake failed (fingerprint mismatch)")
+        else:
+            self.__log_debug("x DTLS handshake failed (fingerprintt mismatch)")
             self._set_state(State.FAILED)
             return
 
