@@ -122,7 +122,7 @@ class RTCRtpTransceiver:
                 unique.insert(0, codec)
         self._preferred_codecs = unique
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Permanently stops the :class:`RTCRtpTransceiver`.
         """

@@ -40,7 +40,7 @@ REAL_TIME_FORMATS = [
 ]
 
 
-async def blackhole_consume(track):
+async def blackhole_consume(track: MediaStreamTrack) -> None:
     while True:
         try:
             await track.recv()
@@ -53,8 +53,8 @@ class MediaBlackhole:
     A media sink that consumes and discards all media.
     """
 
-    def __init__(self):
-        self.__tracks = {}
+    def __init__(self) -> None:
+        self.__tracks: Dict[MediaStreamTrack, asyncio.Future] = {}
 
     def addTrack(self, track):
         """
@@ -65,7 +65,7 @@ class MediaBlackhole:
         if track not in self.__tracks:
             self.__tracks[track] = None
 
-    async def start(self):
+    async def start(self) -> None:
         """
         Start discarding media.
         """
@@ -73,7 +73,7 @@ class MediaBlackhole:
             if task is None:
                 self.__tracks[track] = asyncio.ensure_future(blackhole_consume(track))
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Stop discarding media.
         """
@@ -219,12 +219,12 @@ def player_worker_demux(
 
 
 class PlayerStreamTrack(MediaStreamTrack):
-    def __init__(self, player, kind):
+    def __init__(self, player: "MediaPlayer", kind: str) -> None:
         super().__init__()
         self.kind = kind
         self._player = player
-        self._queue = asyncio.Queue()
-        self._start = None
+        self._queue: asyncio.Queue[Union[Frame, Packet]] = asyncio.Queue()
+        self._start: Optional[float] = None
 
     async def recv(self) -> Union[Frame, Packet]:
         if self.readyState != "live":
@@ -254,7 +254,7 @@ class PlayerStreamTrack(MediaStreamTrack):
 
         return data
 
-    def stop(self):
+    def stop(self) -> None:
         super().stop()
         if self._player is not None:
             self._player._stop(self)
@@ -301,7 +301,7 @@ class MediaPlayer:
 
     def __init__(
         self, file, format=None, options=None, timeout=None, loop=False, decode=True
-    ):
+    ) -> None:
         self.__container = av.open(
             file=file, format=format, mode="r", options=options, timeout=timeout
         )
@@ -393,7 +393,7 @@ class MediaPlayer:
 
 
 class MediaRecorderContext:
-    def __init__(self, stream):
+    def __init__(self, stream) -> None:
         self.started = False
         self.stream = stream
         self.task = None
@@ -422,7 +422,7 @@ class MediaRecorder:
         self.__container = av.open(file=file, format=format, mode="w", options=options)
         self.__tracks = {}
 
-    def addTrack(self, track):
+    def addTrack(self, track: MediaStreamTrack) -> None:
         """
         Add a track to be recorded.
 
@@ -445,7 +445,7 @@ class MediaRecorder:
                 stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
 
-    async def start(self):
+    async def start(self) -> None:
         """
         Start recording.
         """
@@ -453,7 +453,7 @@ class MediaRecorder:
             if context.task is None:
                 context.task = asyncio.ensure_future(self.__run_track(track, context))
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Stop recording.
         """
@@ -470,7 +470,9 @@ class MediaRecorder:
                 self.__container.close()
                 self.__container = None
 
-    async def __run_track(self, track: MediaStreamTrack, context: MediaRecorderContext):
+    async def __run_track(
+        self, track: MediaStreamTrack, context: MediaRecorderContext
+    ) -> None:
         while True:
             try:
                 frame = await track.recv()
@@ -496,8 +498,8 @@ class RelayStreamTrack(MediaStreamTrack):
         self._source: Optional[MediaStreamTrack] = source
         self._buffered = buffered
 
-        self._frame: Optional[Frame] = None
-        self._queue: Optional[asyncio.Queue[Optional[Frame]]] = None
+        self._frame: Union[Frame, Packet, None] = None
+        self._queue: Optional[asyncio.Queue[Union[Frame, Packet, None]]] = None
         self._new_frame_event: Optional[asyncio.Event] = None
 
         if self._buffered:
@@ -505,7 +507,7 @@ class RelayStreamTrack(MediaStreamTrack):
         else:
             self._new_frame_event = asyncio.Event()
 
-    async def recv(self):
+    async def recv(self) -> Union[Frame, Packet]:
         if self.readyState != "live":
             raise MediaStreamError
 
@@ -522,7 +524,7 @@ class RelayStreamTrack(MediaStreamTrack):
             raise MediaStreamError
         return self._frame
 
-    def stop(self):
+    def stop(self) -> None:
         super().stop()
         if self._relay is not None:
             self._relay._stop(self)

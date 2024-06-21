@@ -104,7 +104,7 @@ class RTCRtpSender:
         self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
-        self.__rtt = None
+        self.__rtt: Optional[float] = None
 
         # logging
         self.__log_debug: Callable[..., None] = lambda *args: None
@@ -206,7 +206,7 @@ class RTCRtpSender:
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
-    async def stop(self):
+    async def stop(self) -> None:
         """
         Irreversibly stop the sender.
         """
@@ -219,7 +219,7 @@ class RTCRtpSender:
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
-    async def _handle_rtcp_packet(self, packet):
+    async def _handle_rtcp_packet(self, packet) -> None:
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
