@@ -2,7 +2,7 @@ import math
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
-from utils import uint32_add, uint32_gt
+from .utils import uint32_add, uint32_gt
 
 BURST_DELTA_THRESHOLD_MS = 5
 
