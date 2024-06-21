@@ -3,16 +3,17 @@ requires = ["cffi>=1.0.0", "setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aiortc"
+name = "vsaiortc"
 description = "An implementation of WebRTC and ORTC"
 readme = "README.rst"
 requires-python = ">=3.8"
 license = { text = "BSD-3-Clause" }
 authors = [
-    { name = "Jeremy Lainé", email = "jeremy.laine@m4x.org" },
+    { name = "Yash Chudasama", email = "yash@videosdk.live" },
+    { name = "Ankit Chotaliya", email = "ankit@videosdk.live" }
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 1 - Production/Beta",
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: BSD License",
@@ -46,15 +47,15 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/aiortc/aiortc"
-changelog = "https://aiortc.readthedocs.io/en/stable/changelog.html"
-documentation = "https://aiortc.readthedocs.io/"
+homepage = "https://docs.videosdk.live"
+changelog = "https://videosdk.live"
+documentation = "https://docs.videosdk.live/"
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover"]
 
 [tool.coverage.run]
-source = ["aiortc"]
+source = ["vsaiortc"]
 
 [tool.mypy]
 disallow_untyped_calls = true
@@ -74,7 +75,7 @@ select = [
 ]
 
 [tool.setuptools.dynamic]
-version = {attr = "aiortc.__version__"}
+version = {attr = "vsaiortc.__version__"}
 
 [tool.setuptools.packages.find]
 exclude = ["_cffi_src"]
