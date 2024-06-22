@@ -4,10 +4,10 @@ import fractions
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.codecs import PCMU_CODEC, get_encoder
-from aiortc.exceptions import InvalidStateError
-from aiortc.mediastreams import MediaStreamError
-from aiortc.rtcrtpparameters import (
+from vsaiortc.codecs import PCMU_CODEC, get_encoder
+from vsaiortc.exceptions import InvalidStateError
+from vsaiortc.mediastreams import MediaStreamError
+from vsaiortc.rtcrtpparameters import (
     RTCRtpCapabilities,
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
@@ -16,7 +16,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpReceiveParameters,
     RTCRtpRtxParameters,
 )
-from aiortc.rtcrtpreceiver import (
+from vsaiortc.rtcrtpreceiver import (
     NackGenerator,
     RemoteStreamTrack,
     RTCRtpReceiver,
@@ -24,9 +24,9 @@ from aiortc.rtcrtpreceiver import (
     StreamStatistics,
     TimestampMapper,
 )
-from aiortc.rtp import RtcpPacket, RtpPacket
-from aiortc.stats import RTCStatsReport
-from aiortc.utils import uint16_add
+from vsaiortc.rtp import RtcpPacket, RtpPacket
+from vsaiortc.stats import RTCStatsReport
+from vsaiortc.utils import uint16_add
 
 from .codecs import CodecTestCase
 from .utils import ClosedDtlsTransport, asynctest, dummy_dtls_transport_pair, load

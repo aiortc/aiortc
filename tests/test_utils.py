@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiortc.utils import (
+from vsaiortc.utils import (
     uint16_add,
     uint16_gt,
     uint16_gte,

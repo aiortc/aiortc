@@ -3,9 +3,9 @@ import math
 import sys
 from unittest import TestCase
 
-from aiortc import rtp
-from aiortc.rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
-from aiortc.rtp import (
+from vsaiortc import rtp
+from vsaiortc.rtcrtpparameters import RTCRtpHeaderExtensionParameters, RTCRtpParameters
+from vsaiortc.rtp import (
     RtcpByePacket,
     RtcpPacket,
     RtcpPsfbPacket,

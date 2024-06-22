@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from aiortc.rate import (
+from vsaiortc.rate import (
     AimdRateControl,
     BandwidthUsage,
     InterArrival,
