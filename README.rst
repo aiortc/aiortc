@@ -90,7 +90,7 @@ The easiest way to install ``vsaiortc`` is to run:
 
 .. code:: bash
 
-    pip install aiortc
+    pip install vsaiortc
 
 Building from source
 --------------------

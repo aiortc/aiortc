@@ -7,7 +7,7 @@ First install the required packages:
 
 .. code-block:: console
 
-    $ pip install aiortc
+    $ pip install vsaiortc
 
 
 Permissions
