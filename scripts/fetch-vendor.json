@@ -1,5 +1,5 @@
 {
     "urls": [
-        "https://github.com/zujonow/vs-aiortc-codecs/releases/download/1.7/codecs-{platform}.tar.gz"
+        "https://github.com/aiortc/aiortc-codecs/releases/download/1.7/codecs-{platform}.tar.gz"
     ]
 }
