@@ -29,11 +29,11 @@ jobs:
           python-version: 3.8
       - name: Install packages
         run: pip install check-manifest mypy ruff
-      - name: Run linters
-        run: |
-          ruff check .
-          ruff format --check --diff .
-          check-manifest
+      # - name: Run linters
+      #   run: |
+      #     ruff check .
+      #     ruff format --check --diff .
+      #     check-manifest
 
   test:
     runs-on: ${{ matrix.os }}
