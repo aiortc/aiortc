@@ -6,8 +6,8 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "aiortc"
-author = "Jeremy Lainé"
+project = "vsaiortc"
+author = "Yash Chudasama"
 copyright = author
 
 
