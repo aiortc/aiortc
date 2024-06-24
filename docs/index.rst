@@ -1,24 +1,24 @@
-aiortc
+vsaiortc
 =========
 
-.. image:: https://img.shields.io/pypi/l/aiortc.svg
-   :target: https://pypi.python.org/pypi/aiortc
+.. image:: https://img.shields.io/pypi/l/vsaiortc.svg
+   :target: https://pypi.python.org/pypi/vsaiortc
    :alt: License
 
-.. image:: https://img.shields.io/pypi/v/aiortc.svg
-   :target: https://pypi.python.org/pypi/aiortc
+.. image:: https://img.shields.io/pypi/v/vsaiortc.svg
+   :target: https://pypi.python.org/pypi/vsaiortc
    :alt: Version
 
-.. image:: https://img.shields.io/pypi/pyversions/aiortc.svg
-   :target: https://pypi.python.org/pypi/aiortc
+.. image:: https://img.shields.io/pypi/pyversions/vsaiortc.svg
+   :target: https://pypi.python.org/pypi/vsaiortc
    :alt: Python versions
 
-.. image:: https://github.com/zujonow/vs-aiortc/workflows/tests/badge.svg
-   :target: https://github.com/zujonow/vs-aiortc/actions
+.. image:: https://github.com/zujonow/vs-vsaiortc/workflows/tests/badge.svg
+   :target: https://github.com/zujonow/vs-vsaiortc/actions
    :alt: Tests
 
-.. image:: https://img.shields.io/codecov/c/github/aiortc/aiortc.svg
-   :target: https://codecov.io/gh/aiortc/aiortc
+.. image:: https://img.shields.io/codecov/c/github/vsaiortc/vsaiortc.svg
+   :target: https://codecov.io/gh/vsaiortc/vsaiortc
    :alt: Coverage
 
 ``vsaiortc`` is a library for `Web Real-Time Communication (WebRTC)`_ and
@@ -35,7 +35,7 @@ constructs:
 .. _Object Real-Time Communication (ORTC): https://ortc.org/
 
 Why should I use ``vsaiortc``?
-----------------------------
+-------------------------------
 
 The main WebRTC and ORTC implementations are either built into web browsers,
 or come in the form of native code. While they are extensively battle tested,

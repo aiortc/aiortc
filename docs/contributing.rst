@@ -10,7 +10,7 @@ This project and everyone participating in it is governed by the `Code of
 Conduct`_. By participating, you are expected to uphold this code. Please
 report inappropriate behavior to jeremy DOT laine AT m4x DOT org.
 
-.. _Code of Conduct: https://github.com/zujonow/vs-aiortc/blob/main/CODE_OF_CONDUCT.md
+.. _Code of Conduct: https://github.com/zujonow/vs-vsaiortc/blob/main/CODE_OF_CONDUCT.md
 
 Contributions
 -------------
@@ -26,8 +26,8 @@ Code contributions *must* come with full unit test coverage. WebRTC is a
 complex protocol stack and ensuring correct behaviour now and in the future
 requires a proper investment in automated testing.
 
-.. _issue: https://github.com/zujonow/vs-aiortc/issues/new
-.. _pull request: https://github.com/zujonow/vs-aiortc/compare/
+.. _issue: https://github.com/zujonow/vs-vsaiortc/issues/new
+.. _pull request: https://github.com/zujonow/vs-vsaiortc/compare/
 
 Questions
 ---------

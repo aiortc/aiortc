@@ -6,4 +6,4 @@ for new users.
 
 The examples can be browsed on GitHub:
 
-https://github.com/zujonow/vs-aiortc/tree/main/examples
+https://github.com/zujonow/vs-vsaiortc/tree/main/examples

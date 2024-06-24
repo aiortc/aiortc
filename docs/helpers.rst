@@ -1,7 +1,7 @@
 Helpers
 =============
 
-.. currentmodule:: aiortc
+.. currentmodule:: vsaiortc
 
 These classes are not part of the WebRTC or ORTC API, but provide higher-level
 helpers for tasks like manipulating media streams.
@@ -9,20 +9,20 @@ helpers for tasks like manipulating media streams.
 Media sources
 -------------
 
-   .. autoclass:: aiortc.contrib.media.MediaPlayer
+   .. autoclass:: vsaiortc.contrib.media.MediaPlayer
       :members:
 
 Media sinks
 -----------
 
-   .. autoclass:: aiortc.contrib.media.MediaRecorder
+   .. autoclass:: vsaiortc.contrib.media.MediaRecorder
       :members:
 
-   .. autoclass:: aiortc.contrib.media.MediaBlackhole
+   .. autoclass:: vsaiortc.contrib.media.MediaBlackhole
       :members:
 
 Media transforms
 ----------------
 
-   .. autoclass:: aiortc.contrib.media.MediaRelay
+   .. autoclass:: vsaiortc.contrib.media.MediaRelay
       :members:
