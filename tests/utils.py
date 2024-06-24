@@ -4,7 +4,7 @@ import functools
 import logging
 import os
 
-from vsaiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
+from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
 
 def lf2crlf(x):

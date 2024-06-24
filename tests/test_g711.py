@@ -1,9 +1,9 @@
 import fractions
 import sys
 
-from vsaiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
-from vsaiortc.codecs.g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
-from vsaiortc.jitterbuffer import JitterFrame
+from aiortc.codecs import PCMA_CODEC, PCMU_CODEC, get_decoder, get_encoder
+from aiortc.codecs.g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+from aiortc.jitterbuffer import JitterFrame
 
 from .codecs import CodecTestCase
 

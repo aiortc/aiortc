@@ -1,9 +1,9 @@
 import fractions
 
-from vsaiortc.codecs import get_decoder, get_encoder
-from vsaiortc.codecs.opus import OpusDecoder, OpusEncoder
-from vsaiortc.jitterbuffer import JitterFrame
-from vsaiortc.rtcrtpparameters import RTCRtpCodecParameters
+from aiortc.codecs import get_decoder, get_encoder
+from aiortc.codecs.opus import OpusDecoder, OpusEncoder
+from aiortc.jitterbuffer import JitterFrame
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
 

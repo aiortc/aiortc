@@ -7,9 +7,9 @@ import platform
 import ssl
 
 from aiohttp import web
-from vsaiortc import RTCPeerConnection, RTCSessionDescription
-from vsaiortc.contrib.media import MediaPlayer, MediaRelay
-from vsaiortc.rtcrtpsender import RTCRtpSender
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaPlayer, MediaRelay
+from aiortc.rtcrtpsender import RTCRtpSender
 
 ROOT = os.path.dirname(__file__)
 

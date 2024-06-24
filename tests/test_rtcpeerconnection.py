@@ -4,33 +4,33 @@ from unittest import TestCase
 
 import aioice.ice
 import aioice.stun
-from vsaiortc import (
+from aiortc import (
     RTCConfiguration,
     RTCIceCandidate,
     RTCPeerConnection,
     RTCSessionDescription,
 )
-from vsaiortc.contrib.media import MediaPlayer
-from vsaiortc.exceptions import (
+from aiortc.contrib.media import MediaPlayer
+from aiortc.exceptions import (
     InternalError,
     InvalidAccessError,
     InvalidStateError,
     OperationError,
 )
-from vsaiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
-from vsaiortc.rtcpeerconnection import (
+from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from aiortc.rtcpeerconnection import (
     filter_preferred_codecs,
     find_common_codecs,
     is_codec_compatible,
 )
-from vsaiortc.rtcrtpparameters import (
+from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
 )
-from vsaiortc.rtcrtpsender import RTCRtpSender
-from vsaiortc.sdp import SessionDescription
-from vsaiortc.stats import RTCStatsReport
+from aiortc.rtcrtpsender import RTCRtpSender
+from aiortc.sdp import SessionDescription
+from aiortc.stats import RTCStatsReport
 
 from .test_contrib_media import MediaTestCase
 from .utils import asynctest, lf2crlf

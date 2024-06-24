@@ -3,8 +3,8 @@ import asyncio
 import logging
 import time
 
-from vsaiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
-from vsaiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 
 
 def channel_log(channel, t, message):

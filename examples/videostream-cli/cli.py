@@ -5,14 +5,14 @@ import math
 
 import cv2
 import numpy
-from vsaiortc import (
+from aiortc import (
     RTCIceCandidate,
     RTCPeerConnection,
     RTCSessionDescription,
     VideoStreamTrack,
 )
-from vsaiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from vsaiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling
 from av import VideoFrame
 
 

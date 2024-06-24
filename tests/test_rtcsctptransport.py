@@ -3,9 +3,9 @@ import contextlib
 from unittest import TestCase
 from unittest.mock import patch
 
-from vsaiortc.exceptions import InvalidStateError
-from vsaiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
-from vsaiortc.rtcsctptransport import (
+from aiortc.exceptions import InvalidStateError
+from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
+from aiortc.rtcsctptransport import (
     SCTP_DATA_FIRST_FRAG,
     SCTP_DATA_LAST_FRAG,
     SCTP_DATA_UNORDERED,

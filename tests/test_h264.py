@@ -3,10 +3,10 @@ import io
 from contextlib import redirect_stderr
 from unittest import TestCase
 
-from vsaiortc.codecs import get_decoder, get_encoder, h264
-from vsaiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
-from vsaiortc.jitterbuffer import JitterFrame
-from vsaiortc.rtcrtpparameters import RTCRtpCodecParameters
+from aiortc.codecs import get_decoder, get_encoder, h264
+from aiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
+from aiortc.jitterbuffer import JitterFrame
+from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 from av import Packet
 
 from .codecs import CodecTestCase

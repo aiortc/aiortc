@@ -4,7 +4,7 @@ import time
 from typing import Tuple
 from unittest import TestCase
 
-from vsaiortc.mediastreams import (
+from aiortc.mediastreams import (
     VIDEO_CLOCK_RATE,
     VIDEO_PTIME,
     VIDEO_TIME_BASE,

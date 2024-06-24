@@ -2,12 +2,12 @@
 
 from unittest import TestCase
 
-from vsaiortc.rtcrtpparameters import (
+from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionParameters,
 )
-from vsaiortc.sdp import (
+from aiortc.sdp import (
     GroupDescription,
     H264Level,
     H264Profile,
