@@ -31,7 +31,7 @@ browser.
  requests and the current lack of ICE trickle support in aiortc, this example
  may not work with Firefox. For details see:
 
- https://github.com/aiortc/aiortc/issues/481 and
+ https://github.com/zujonow/vs-aiortc/issues/481 and
  https://bugzilla.mozilla.org/show_bug.cgi?id=1691189
 
 Additional options

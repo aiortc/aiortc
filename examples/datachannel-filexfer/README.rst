@@ -8,7 +8,7 @@ First install the required packages:
 
 .. code-block:: console
 
-    $ pip install aiortc
+    $ pip install vsaiortc
 
 On Linux and Mac OS X you can also install uvloop for better performance:
 

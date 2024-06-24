@@ -443,7 +443,12 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
-        self.__tracks[track] = MediaRecorderContext(stream)
+                
+        # print("track adding ", track.id, track.kind)
+        context = MediaRecorderContext(stream)
+        self.__tracks[track] = context
+        # if context.task is None:
+        #     context.task = asyncio.ensure_future(self.__run_track(track, context))
 
     async def start(self):
         """

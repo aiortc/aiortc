@@ -2,7 +2,7 @@ import datetime
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc import clock
+from vsaiortc import clock
 
 
 class ClockTest(TestCase):

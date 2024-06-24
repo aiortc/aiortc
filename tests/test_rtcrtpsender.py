@@ -3,19 +3,19 @@ from struct import pack
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc import MediaStreamTrack
-from aiortc.codecs import PCMU_CODEC
-from aiortc.exceptions import InvalidStateError
-from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
-from aiortc.rtcrtpparameters import (
+from vsaiortc import MediaStreamTrack
+from vsaiortc.codecs import PCMU_CODEC
+from vsaiortc.exceptions import InvalidStateError
+from vsaiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from vsaiortc.rtcrtpparameters import (
     RTCRtpCapabilities,
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionCapability,
     RTCRtpParameters,
 )
-from aiortc.rtcrtpsender import RTCRtpSender
-from aiortc.rtp import (
+from vsaiortc.rtcrtpsender import RTCRtpSender
+from vsaiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
@@ -27,7 +27,7 @@ from aiortc.rtp import (
     is_rtcp,
     pack_remb_fci,
 )
-from aiortc.stats import RTCStatsReport
+from vsaiortc.stats import RTCStatsReport
 
 from tests.test_mediastreams import VideoPacketStreamTrack
 

@@ -6,8 +6,8 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "aiortc"
-author = "Jeremy Lainé"
+project = "vsaiortc"
+author = "Yash Chudasama"
 copyright = author
 
 
@@ -54,9 +54,9 @@ html_theme = "alabaster"
 html_theme_options = {
     "description": "A library for building WebRTC and ORTC applications in Python.",
     "github_button": True,
-    "github_user": "aiortc",
-    "github_repo": "aiortc",
-    "logo": "aiortc.svg",
+    "github_user": "vsaiortc",
+    "github_repo": "vsaiortc",
+    "logo": "vsaiortc.svg",
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

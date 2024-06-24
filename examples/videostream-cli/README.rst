@@ -17,7 +17,7 @@ First install the required packages:
 
 .. code-block:: console
 
-   $ pip install aiortc opencv-python
+   $ pip install vsaiortc opencv-python
 
 Running the example
 -------------------
