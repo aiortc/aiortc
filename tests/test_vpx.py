@@ -1,15 +1,15 @@
 import fractions
 from unittest import TestCase
 
-from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.vpx import (
+from vsaiortc.codecs import get_decoder, get_encoder
+from vsaiortc.codecs.vpx import (
     Vp8Decoder,
     Vp8Encoder,
     VpxPayloadDescriptor,
     _vpx_assert,
     number_of_threads,
 )
-from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from vsaiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
 

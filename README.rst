@@ -27,7 +27,7 @@
    :alt: Documentation
 
 What is ``vsaiortc``?
--------------------
+----------------------
 
 ``vsaiortc`` is a library for `Web Real-Time Communication (WebRTC)`_ and
 `Object Real-Time Communication (ORTC)`_ in Python. It is built on top of
@@ -46,7 +46,7 @@ To learn more about ``vsaiortc`` please `read the documentation`_.
 .. _read the documentation: https://aiortc.readthedocs.io/en/latest/
 
 Why should I use ``vsaiortc``?
-----------------------------
+-------------------------------
 
 The main WebRTC and ORTC implementations are either built into web browsers,
 or come in the form of native code. While they are extensively battle tested,

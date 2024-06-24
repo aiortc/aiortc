@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from aiortc.codecs import get_decoder, get_encoder
-from aiortc.rtcrtpparameters import RTCRtpCodecParameters
+from vsaiortc.codecs import get_decoder, get_encoder
+from vsaiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 BOGUS_CODEC = RTCRtpCodecParameters(
     mimeType="audio/bogus", clockRate=8000, channels=1, payloadType=0
