@@ -197,6 +197,51 @@ class MediaRelayTest(MediaTestCase):
         source.stop()
 
     @asynctest
+    async def test_audio_stop_all_consumers_and_restart_new_consumers(self):
+        source = AudioStreamTrack()
+        relay = MediaRelay()
+        proxy1 = relay.subscribe(source)
+        proxy2 = relay.subscribe(source)
+
+        # read some frames
+        frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+        self.assertIsInstance(frame1, av.AudioFrame)
+        self.assertIsInstance(frame2, av.AudioFrame)
+
+        task = relay._MediaRelay__tasks[source]
+
+        # stop all consumers
+        proxy1.stop()
+        proxy2.stop()
+        exc1, exc2 = await asyncio.gather(
+            proxy1.recv(), proxy2.recv(), return_exceptions=True
+        )
+        self.assertIsInstance(exc1, MediaStreamError)
+        self.assertIsInstance(exc2, MediaStreamError)
+        self.assertTrue(task.cancelled())
+        self.assertEqual(relay._MediaRelay__proxies, {})
+        self.assertEqual(relay._MediaRelay__tasks, {})
+
+        # Start new consumers
+        proxy3 = relay.subscribe(source)
+        proxy4 = relay.subscribe(source)
+
+        # read some frames
+        for i in range(2):
+            frame3, frame4 = await asyncio.gather(
+                proxy3.recv(), proxy4.recv(), return_exceptions=True
+            )
+            self.assertIsInstance(frame3, av.AudioFrame)
+            self.assertIsInstance(frame4, av.AudioFrame)
+
+        # A new task should have been created and is running
+        task = relay._MediaRelay__tasks[source]
+        self.assertFalse(task.done())
+
+        # stop source track
+        source.stop()
+
+    @asynctest
     async def test_audio_stop_consumer_unbuffered(self):
         source = AudioStreamTrack()
         relay = MediaRelay()
