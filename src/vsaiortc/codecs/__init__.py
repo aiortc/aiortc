@@ -134,7 +134,8 @@ def get_capabilities(kind: str) -> RTCRtpCapabilities:
 
     headerExtensions = []
     for extension in HEADER_EXTENSIONS[kind]:
-        headerExtensions.append(RTCRtpHeaderExtensionCapability(uri=extension.uri))
+        headerExtensions.append(
+            RTCRtpHeaderExtensionCapability(uri=extension.uri))
     return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 
@@ -145,8 +146,8 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
         if "ptime" not in codec.parameters:
             codec.parameters["ptime"] = 0.020
         else:
-            codec.parameters["ptime"] = codec.parameters["ptime"]/1000
-        return OpusDecoder(codec.parameters["ptime"], codec.clockRate)
+            audio_ptime = codec.parameters["ptime"]/1000
+        return OpusDecoder(audio_ptime, codec.clockRate)
     elif mimeType == "audio/pcma":
         return PcmaDecoder()
     elif mimeType == "audio/pcmu":
