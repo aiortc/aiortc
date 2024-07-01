@@ -3,7 +3,7 @@ import datetime
 from unittest import TestCase
 from unittest.mock import patch
 
-from aiortc.rtcdtlstransport import (
+from vsaiortc.rtcdtlstransport import (
     SRTP_AEAD_AES_256_GCM,
     SRTP_AES128_CM_SHA1_80,
     RTCCertificate,
@@ -12,12 +12,12 @@ from aiortc.rtcdtlstransport import (
     RTCDtlsTransport,
     RtpRouter,
 )
-from aiortc.rtcrtpparameters import (
+from vsaiortc.rtcrtpparameters import (
     RTCRtpCodecParameters,
     RTCRtpDecodingParameters,
     RTCRtpReceiveParameters,
 )
-from aiortc.rtp import (
+from vsaiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,

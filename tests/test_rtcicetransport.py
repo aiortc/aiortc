@@ -3,9 +3,9 @@ from unittest import TestCase
 
 import aioice.stun
 from aioice import ConnectionClosed
-from aiortc.exceptions import InvalidStateError
-from aiortc.rtcconfiguration import RTCIceServer
-from aiortc.rtcicetransport import (
+from vsaiortc.exceptions import InvalidStateError
+from vsaiortc.rtcconfiguration import RTCIceServer
+from vsaiortc.rtcicetransport import (
     RTCIceCandidate,
     RTCIceGatherer,
     RTCIceParameters,

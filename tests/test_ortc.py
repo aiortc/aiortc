@@ -1,7 +1,7 @@
 import asyncio
 from unittest import TestCase
 
-from aiortc import (
+from vsaiortc import (
     RTCCertificate,
     RTCDtlsTransport,
     RTCIceGatherer,

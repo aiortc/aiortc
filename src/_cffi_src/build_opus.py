@@ -3,7 +3,7 @@ from cffi import FFI
 ffibuilder = FFI()
 
 ffibuilder.set_source(
-    "aiortc.codecs._opus",
+    "vsaiortc.codecs._opus",
     """
 #include <opus/opus.h>
     """,

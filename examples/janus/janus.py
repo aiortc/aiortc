@@ -6,8 +6,8 @@ import string
 import time
 
 import aiohttp
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
-from aiortc.contrib.media import MediaPlayer, MediaRecorder
+from vsaiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from vsaiortc.contrib.media import MediaPlayer, MediaRecorder
 
 pcs = set()
 

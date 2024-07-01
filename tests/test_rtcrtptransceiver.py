@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from aiortc.rtcrtpparameters import RTCRtpCodecCapability
-from aiortc.rtcrtptransceiver import RTCRtpTransceiver
+from vsaiortc.rtcrtpparameters import RTCRtpCodecCapability
+from vsaiortc.rtcrtptransceiver import RTCRtpTransceiver
 
 
 class RTCRtpTransceiverTest(TestCase):

@@ -3,8 +3,8 @@ import asyncio
 import os
 from unittest import TestCase
 
-from aiortc import RTCIceCandidate, RTCSessionDescription
-from aiortc.contrib.signaling import (
+from vsaiortc import RTCIceCandidate, RTCSessionDescription
+from vsaiortc.contrib.signaling import (
     BYE,
     add_signaling_arguments,
     create_signaling,

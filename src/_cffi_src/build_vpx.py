@@ -3,7 +3,7 @@ from cffi import FFI
 ffibuilder = FFI()
 
 ffibuilder.set_source(
-    "aiortc.codecs._vpx",
+    "vsaiortc.codecs._vpx",
     """
 #include <vpx/vpx_decoder.h>
 #include <vpx/vpx_encoder.h>

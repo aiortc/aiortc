@@ -1,7 +1,7 @@
 API Reference
 =============
 
-.. automodule:: aiortc
+.. automodule:: vsaiortc
 
 WebRTC
 ------
