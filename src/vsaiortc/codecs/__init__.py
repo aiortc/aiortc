@@ -144,10 +144,8 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
 
     if mimeType == "audio/opus":
         if "ptime" not in codec.parameters:
-            codec.parameters["ptime"] = 0.020
-        else:
-            audio_ptime = codec.parameters["ptime"]/1000
-        return OpusDecoder(audio_ptime, codec.clockRate)
+            codec.parameters["ptime"] = 20
+        return OpusDecoder(codec.parameters["ptime"]/1000, codec.clockRate)
     elif mimeType == "audio/pcma":
         return PcmaDecoder()
     elif mimeType == "audio/pcmu":
