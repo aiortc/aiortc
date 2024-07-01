@@ -47,7 +47,7 @@ from .stats import (
     RTCTransportStats,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 # Disable PyAV's logging framework as it can lead to thread deadlocks.
 av.logging.restore_default_callback()
