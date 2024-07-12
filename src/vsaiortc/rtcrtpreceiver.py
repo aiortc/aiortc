@@ -49,7 +49,7 @@ from .utils import uint16_add, uint16_gt
 logger = logging.getLogger(__name__)
 
 
-def decoder_worker(loop, input_q, output_q):
+def decoder_worker(loop, input_q, output_q, current_frame_queue:asyncio.Queue):
     codec_name = None
     decoder = None
 
@@ -68,6 +68,10 @@ def decoder_worker(loop, input_q, output_q):
         for frame in decoder.decode(encoded_frame):
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
+            if current_frame_queue.qsize() >= current_frame_queue.maxsize:
+                asyncio.run_coroutine_threadsafe(current_frame_queue.get(), loop).result()
+                current_frame_queue.task_done()
+            asyncio.run_coroutine_threadsafe(current_frame_queue.put(frame), loop)
 
     if decoder is not None:
         del decoder
@@ -189,6 +193,7 @@ class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind: str, id: Optional[str] = None) -> None:
         super().__init__()
         self.kind = kind
+        self._current_frame_queue: asyncio.Queue = asyncio.Queue(1)
         if id is not None:
             self._id = id
         self._queue: asyncio.Queue = asyncio.Queue()
@@ -206,6 +211,8 @@ class RemoteStreamTrack(MediaStreamTrack):
             raise MediaStreamError
         return frame
 
+    async def current_frame(self):
+        return await self._current_frame_queue.get()
 
 class TimestampMapper:
     def __init__(self) -> None:
@@ -388,6 +395,7 @@ class RTCRtpReceiver:
                     asyncio.get_event_loop(),
                     self.__decoder_queue,
                     self._track._queue,
+                    self._track._current_frame_queue
                 ),
             )
             self.__decoder_thread.start()
