@@ -1,6 +1,9 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  release:
+    types: [published]
+    workflow_dispatch:
 
 jobs:
 
