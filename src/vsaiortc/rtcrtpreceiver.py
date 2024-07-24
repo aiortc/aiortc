@@ -193,6 +193,7 @@ class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind: str, id: Optional[str] = None, track_buffer_size: Optional[int] = 5) -> None:
         super().__init__()
         self.kind = kind
+        track_buffer_size = track_buffer_size if track_buffer_size is not None else 5
         self._current_frame_queue: asyncio.Queue = asyncio.Queue(track_buffer_size)
         if id is not None:
             self._id = id
