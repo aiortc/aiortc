@@ -827,7 +827,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         :param sessionDescription: An :class:`RTCSessionDescription` created from
                                     information received over the signaling channel.
         """
-        print("setRemoteDescription..")
         self.__log_debug(
             "setRemoteDescription(%s)\n%s",
             sessionDescription.type,
@@ -895,7 +894,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     direction in ["recvonly", "sendrecv"]
                     and not transceiver.receiver.track
                 ):
-                    print("ankit..", direction, transceiver.receiver.track)
                     transceiver.receiver._track = RemoteStreamTrack(
                         kind=media.kind, id=description.webrtc_track_id(media), track_buffer_size=track_buffer_size
                     )
