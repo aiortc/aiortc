@@ -355,8 +355,12 @@ class Vp8Encoder(Encoder):
         return payloads, timestamp
 
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
-        payloads = self._packetize(bytes(packet), self.picture_id)
-        timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
+        if packet is None:
+            payloads = self._packetize(bytes(), self.picture_id)
+            timestamp = convert_timebase(0, 0, VIDEO_TIME_BASE)
+        else:        
+            payloads = self._packetize(bytes(packet), self.picture_id)
+            timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
         self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads, timestamp
 
