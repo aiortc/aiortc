@@ -45,6 +45,19 @@ logger = logging.getLogger(__name__)
 RTT_ALPHA = 0.85
 
 
+def random_sequence_number():
+    """
+    Generate a random RTP sequence number.
+
+    The sequence number is chosen in the lower half of the allowed range in
+    order to avoid wraparounds which break SRTP decryption.
+
+    See:
+    https://chromiumdash.appspot.com/commit/13b327b05fa3788b4daa9c3463e13282824cb320
+    """
+    return random16() % 32768
+
+
 class RTCEncodedFrame:
     def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
         self.payloads = payloads
@@ -92,7 +105,7 @@ class RTCRtpSender:
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
-        self.__rtx_sequence_number = random16()
+        self.__rtx_sequence_number = random_sequence_number()
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
@@ -333,7 +346,7 @@ class RTCRtpSender:
         self.__log_debug("- RTP started")
         self.__rtp_started.set()
 
-        sequence_number = random16()
+        sequence_number = random_sequence_number()
         timestamp_origin = random32()
         try:
             while True:
