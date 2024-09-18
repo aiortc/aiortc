@@ -6,9 +6,11 @@ import os
 import subprocess
 import av
 import threading
+import av.packet
 from multiprocessing import Event
 from aiohttp import web
 from aiortc.mediastreams import MediaStreamError
+from aiortc.contrib.media import MediaRelay
 from aiortc import (
     RTCConfiguration,
     RTCPeerConnection,
@@ -16,10 +18,10 @@ from aiortc import (
     MediaStreamTrack,
 )
 from aiortc.rtcrtpsender import RTCRtpSender
-import av.packet
 
 ROOT = os.path.dirname(__file__)
 
+relay = None
 track = None
 worker_thread = None
 term_event = Event()
@@ -60,7 +62,6 @@ def run_remux_worker_ffmpeg(source, track, loop):
 
     container = av.open(process.stdout, format="mpegts", mode="r", buffer_size=1000)
     for packet in container.demux(video=0):
-        print(packet)
         if packet.dts is not None:
             asyncio.run_coroutine_threadsafe(track.queue.put(packet), loop)
 
@@ -73,9 +74,10 @@ def run_remux_worker_ffmpeg(source, track, loop):
 
 
 def create_remux_tracks(source: str):
-    global track, worker_thread
+    global relay, track, worker_thread
 
     if not worker_thread:
+        relay = MediaRelay()
         track = PacketStreamTrack()
         worker_thread = threading.Thread(
             target=run_remux_worker_ffmpeg,
@@ -83,7 +85,8 @@ def create_remux_tracks(source: str):
         )
         worker_thread.start()
 
-    return track
+    assert relay and track
+    return relay.subscribe(track)
 
 
 def force_codec(pc, sender, forced_codec):
@@ -119,8 +122,8 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)
 
-    track = create_remux_tracks(args.play_from)
-    video_sender = pc.addTrack(track)
+    video_track = create_remux_tracks(args.play_from)
+    video_sender = pc.addTrack(video_track)
     force_codec(pc, video_sender, args.video_codec)
     await pc.setRemoteDescription(offer)
 
