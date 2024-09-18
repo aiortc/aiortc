@@ -439,7 +439,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             if f.value.upper() == fingerprint:
                 break
         else:
-            self.__log_debug("x DTLS handshake failed (fingerprintt mismatch)")
+            self.__log_debug("x DTLS handshake failed (fingerprint mismatch)")
             self._set_state(State.FAILED)
             return
 
