@@ -133,7 +133,7 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
+        "tune": "zerolatency" if codec_name != "h264_nvenc" else "ull",  # does nothing using h264_omx
     }
     codec.open()
     return codec, codec_name == "h264_omx"
