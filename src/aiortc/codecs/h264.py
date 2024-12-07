@@ -291,6 +291,13 @@ class H264Encoder(Encoder):
                     "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
                 )
             except Exception:
+                pass
+            
+            try:
+                self.codec, self.codec_buffering = create_encoder_context(
+                    "h264_nvenc", frame.width, frame.height, bitrate=self.target_bitrate
+                )
+            except Exception:
                 self.codec, self.codec_buffering = create_encoder_context(
                     "libx264",
                     frame.width,
