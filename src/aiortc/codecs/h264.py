@@ -133,7 +133,7 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
+        "tune": "zerolatency" if codec_name != "h264_nvenc" else "ull",  # does nothing using h264_omx
     }
     codec.open()
     return codec, codec_name == "h264_omx"
@@ -289,6 +289,13 @@ class H264Encoder(Encoder):
             try:
                 self.codec, self.codec_buffering = create_encoder_context(
                     "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                )
+            except Exception:
+                pass
+            
+            try:
+                self.codec, self.codec_buffering = create_encoder_context(
+                    "h264_nvenc", frame.width, frame.height, bitrate=self.target_bitrate
                 )
             except Exception:
                 self.codec, self.codec_buffering = create_encoder_context(
