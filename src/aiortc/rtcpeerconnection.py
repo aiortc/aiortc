@@ -475,7 +475,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             direction=direction, kind=kind, sender_track=track
         )
 
-    async def close(self) -> None:
+    async def close(self):
         """
         Terminate the ICE agent, ending ICE processing and streams.
         """
@@ -988,6 +988,16 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # FIXME: in aiortc 2.0.0 emit RTCTrackEvent directly
         for event in trackEvents:
             self.emit("track", event.track)
+
+        # find media that already inactive and stop the transceiver
+        if description.type == "offer":
+            for t in self.__transceivers:
+                for m in description.media:
+                    if t.mid == m.rtp.muxId and m.direction == "inactive":
+                        # stop transceiver
+                        await t.stop()
+                        # remove transceiver
+                        self.__transceivers.remove(t)
 
         # connect
         asyncio.ensure_future(self.__connect())
