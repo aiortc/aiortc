@@ -475,7 +475,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             direction=direction, kind=kind, sender_track=track
         )
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Terminate the ICE agent, ending ICE processing and streams.
         """
