@@ -44,6 +44,16 @@ logger = logging.getLogger(__name__)
 
 RTT_ALPHA = 0.85
 
+from typing import List, Tuple
+from abc import abstractmethod
+class EncodedMediaStreamTrack(MediaStreamTrack):
+    """
+    A MediaStreamTrack subclass that directly provides encoded frames.
+    The recv method should return a list of byte arrays and a timestamp.
+    """
+    @abstractmethod
+    async def recv(self) -> Tuple[List[bytes], int]:
+        pass
 
 class RTCEncodedFrame:
     def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
@@ -283,19 +293,24 @@ class RTCRtpSender:
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
 
-        if isinstance(data, Frame):
-            # Encode the frame.
-            if isinstance(data, AudioFrame):
-                audio_level = rtp.compute_audio_level_dbov(data)
-
-            force_keyframe = self.__force_keyframe
-            self.__force_keyframe = False
-            payloads, timestamp = await self.__loop.run_in_executor(
-                None, self.__encoder.encode, data, force_keyframe
-            )
+        # Check if the track is pre-encoded
+        if isinstance(self.__track, EncodedMediaStreamTrack):
+            if data:
+                payloads, timestamp = data
         else:
-            # Pack the pre-encoded data.
-            payloads, timestamp = self.__encoder.pack(data)
+            if isinstance(data, Frame):
+                # Encode the frame.
+                if isinstance(data, AudioFrame):
+                    audio_level = rtp.compute_audio_level_dbov(data)
+
+                force_keyframe = self.__force_keyframe
+                self.__force_keyframe = False
+                payloads, timestamp = await self.__loop.run_in_executor(
+                    None, self.__encoder.encode, data, force_keyframe
+                )
+            else:
+                # Pack the pre-encoded data.
+                payloads, timestamp = self.__encoder.pack(data)
 
         # If the encoder did not return any payloads, return `None`.
         # This may be due to a delay caused by resampling.
