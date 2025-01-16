@@ -19,7 +19,7 @@ from .rtcicetransport import (
     RTCIceParameters,
     RTCIceTransport,
 )
-from .rtcpeerconnection import RTCPeerConnection
+from .rtcpeerconnection import RTCPeerConnection, EncodedMediaStreamTrack
 from .rtcrtpparameters import (
     RTCRtcpParameters,
     RTCRtpCapabilities,
