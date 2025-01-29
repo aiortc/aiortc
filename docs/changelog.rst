@@ -3,6 +3,16 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.10.0
+------
+
+ * Add support for Python 3.13, drop end-of-life Python 3.8.
+ * Stop building wheels for Linux aarch64 for now due to CI instability.
+ * Add `py.typed` to indicate the package has typings, fix some annotations.
+ * Avoid early wraparound of RTP sequences numbers which can break SRTP.
+ * Add support for `sha-384` and `sha-512` DTLS certificate fingerprints.
+ * Allow using PyAV 13.x.
+
 1.9.0
 -----
 
