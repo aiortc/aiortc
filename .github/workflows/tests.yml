@@ -103,8 +103,6 @@ jobs:
           - os: macos-13
             arch: x86_64
           - os: ubuntu-latest
-            arch: aarch64
-          - os: ubuntu-latest
             arch: i686
           - os: ubuntu-latest
             arch: x86_64
@@ -129,9 +127,8 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
           CIBW_SKIP: '*-musllinux* pp*'
           CIBW_TEST_COMMAND: python -c "import aiortc"
-          # There are no binary wheels for cryptography on 32-bit platforms,
-          # and Python randomly segfaults on Linux/aarch64.
-          CIBW_TEST_SKIP: "*-{manylinux_aarch64,manylinux_i686,win32}"
+          # There are no binary wheels for cryptography on 32-bit platforms.
+          CIBW_TEST_SKIP: "*-{manylinux_i686,win32}"
         run: |
           pip install cibuildwheel
           cibuildwheel --output-dir dist
