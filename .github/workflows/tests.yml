@@ -127,10 +127,10 @@ jobs:
           CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor.py C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
-          CIBW_SKIP: '*-musllinux*'
+          CIBW_SKIP: '*-musllinux* pp*'
           CIBW_TEST_COMMAND: python -c "import aiortc"
           # There are no binary wheels for cryptography on these platforms.
-          CIBW_TEST_SKIP: "*-{manylinux_i686,win32} pp*"
+          CIBW_TEST_SKIP: "*-{manylinux_i686,win32}"
         run: |
           pip install cibuildwheel
           cibuildwheel --output-dir dist
