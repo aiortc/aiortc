@@ -73,6 +73,9 @@ select = [
     "I",  # isort
 ]
 
+[tool.ruff.lint.isort]
+known-third-party = ["aiortc"]
+
 [tool.setuptools.dynamic]
 version = {attr = "aiortc.__version__"}
 

@@ -335,9 +335,9 @@ class MediaPlayer:
         self._throttle_playback = not container_format.intersection(REAL_TIME_FORMATS)
 
         # check whether the looping is supported
-        assert (
-            not loop or self.__container.duration is not None
-        ), "The `loop` argument requires a seekable file"
+        assert not loop or self.__container.duration is not None, (
+            "The `loop` argument requires a seekable file"
+        )
         self._loop_playback = loop
 
     @property

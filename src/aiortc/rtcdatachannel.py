@@ -69,8 +69,7 @@ class RTCDataChannel(AsyncIOEventEmitter):
             self.__id is None or self.__id < 0 or self.__id > 65534
         ):
             raise ValueError(
-                "ID must be in range 0-65534 "
-                "if data channel is negotiated out-of-band"
+                "ID must be in range 0-65534 if data channel is negotiated out-of-band"
             )
 
         if not self.__parameters.negotiated:
