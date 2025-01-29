@@ -80,9 +80,13 @@ class RTCCertificateTest(TestCase):
         self.assertIsInstance(expires, datetime.datetime)
 
         fingerprints = certificate.getFingerprints()
-        self.assertEqual(len(fingerprints), 1)
+        self.assertEqual(len(fingerprints), 3)
         self.assertEqual(fingerprints[0].algorithm, "sha-256")
         self.assertEqual(len(fingerprints[0].value), 95)
+        self.assertEqual(fingerprints[1].algorithm, "sha-384")
+        self.assertEqual(len(fingerprints[1].value), 143)
+        self.assertEqual(fingerprints[2].algorithm, "sha-512")
+        self.assertEqual(len(fingerprints[2].value), 191)
 
 
 class RTCDtlsTransportTest(TestCase):

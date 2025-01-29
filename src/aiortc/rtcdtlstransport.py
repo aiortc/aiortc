@@ -37,6 +37,14 @@ CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 
 logger = logging.getLogger(__name__)
 
+# Mapping of supported `RTCDtlsFingerprint` algorithms to the
+# corresponding argument for `x509.digest`.
+X509_DIGEST_ALGORITHMS = {
+    "sha-256": "SHA256",
+    "sha-384": "SHA384",
+    "sha-512": "SHA512",
+}
+
 
 @dataclass(frozen=True)
 class SRTPProtectionProfile:
@@ -88,8 +96,8 @@ for srtp_profile in [
         SRTP_PROFILES.append(srtp_profile)
 
 
-def certificate_digest(x509: crypto.X509) -> str:
-    return x509.digest("SHA256").decode("ascii")
+def certificate_digest(x509: crypto.X509, algorithm: str) -> str:
+    return x509.digest(X509_DIGEST_ALGORITHMS[algorithm]).decode("ascii").upper()
 
 
 def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
@@ -163,9 +171,10 @@ class RTCCertificate:
         """
         return [
             RTCDtlsFingerprint(
-                algorithm="sha-256",
-                value=certificate_digest(self._cert),
+                algorithm=algorithm,
+                value=certificate_digest(self._cert, algorithm),
             )
+            for algorithm in X509_DIGEST_ALGORITHMS.keys()
         ]
 
     @classmethod
@@ -429,18 +438,19 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._set_state(State.FAILED)
             return
 
-        # check remote fingerprint
+        # Check remote fingerprints. There must be at least one fingerprint
+        # with a supported algorithm, and all supported fingerprints must
+        # match.
         x509 = self._ssl.get_peer_certificate()
-        remote_fingerprint = certificate_digest(x509)
-        fingerprint_is_valid = False
+        fingerprint_supported = 0
+        fingerprint_valid = 0
         for f in remoteParameters.fingerprints:
-            if (
-                f.algorithm.lower() == "sha-256"
-                and f.value.lower() == remote_fingerprint.lower()
-            ):
-                fingerprint_is_valid = True
-                break
-        if not fingerprint_is_valid:
+            algorithm = f.algorithm.lower()
+            if algorithm in X509_DIGEST_ALGORITHMS:
+                fingerprint_supported += 1
+                if f.value.upper() == certificate_digest(x509, algorithm):
+                    fingerprint_valid += 1
+        if not fingerprint_supported or fingerprint_valid != fingerprint_supported:
             self.__log_debug("x DTLS handshake failed (fingerprint mismatch)")
             self._set_state(State.FAILED)
             return
