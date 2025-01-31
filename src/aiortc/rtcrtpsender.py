@@ -38,7 +38,7 @@ from .stats import (
     RTCRemoteInboundRtpStreamStats,
     RTCStatsReport,
 )
-from .utils import random16, random32, uint16_add, uint32_add
+from .utils import random16, random32, uint16_add, uint16_gt, uint32_add
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +109,10 @@ class RTCRtpSender:
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
+
+        self.__playout_delay = 0
+        self.__playout_delay_first_written = 0
+        self.__playout_delay_write = False
 
         # stats
         self.__lsr: Optional[int] = None
@@ -192,6 +196,20 @@ class RTCRtpSender:
     def setTransport(self, transport) -> None:
         self.__transport = transport
 
+    def setPlayoutDelay(self, min_delay, max_delay) -> None:
+        mask = 0xFFF
+
+        def check(value):
+            if value < 0 or value > mask:
+                raise ValueError("Playout delay values must be in the [0,4095] range")
+
+        check(min_delay)
+        check(max_delay)
+
+        self.__playout_delay = ((min_delay & mask) << 12) | (max_delay & mask)
+        self.__playout_delay_first_written = 0xFFFF
+        self.__playout_delay_write = True
+
     async def send(self, parameters: RTCRtpSendParameters) -> None:
         """
         Attempt to set the parameters controlling the sending of media.
@@ -242,6 +260,12 @@ class RTCRtpSender:
                         self.__rtt = rtt
                     else:
                         self.__rtt = RTT_ALPHA * self.__rtt + (1 - RTT_ALPHA) * rtt
+
+                # Stop writing playout delay when seen by receiver
+                if self.__playout_delay_write:
+                    self.__playout_delay_write = uint16_gt(
+                        self.__playout_delay_first_written, report.highest_sequence
+                    )
 
                 self.__stats.add(
                     RTCRemoteInboundRtpStreamStats(
@@ -377,6 +401,14 @@ class RTCRtpSender:
                         clock.current_ntp_time() >> 14
                     ) & 0x00FFFFFF
                     packet.extensions.mid = self.__mid
+
+                    if self.__playout_delay_write:
+                        packet.extensions.playout_delay = self.__playout_delay
+                        if uint16_gt(
+                            self.__playout_delay_first_written, sequence_number
+                        ):
+                            self.__playout_delay_first_written = sequence_number
+
                     if enc_frame.audio_level is not None:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
 
