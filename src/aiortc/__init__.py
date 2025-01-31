@@ -8,7 +8,7 @@ from .mediastreams import (
     MediaStreamTrack,
     VideoStreamTrack,
 )
-from .rtcconfiguration import RTCConfiguration, RTCIceServer
+from .rtcconfiguration import RTCBundlePolicy, RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (
     RTCCertificate,
@@ -61,6 +61,7 @@ __all__ = [
     "InvalidStateError",
     "MediaStreamError",
     "MediaStreamTrack",
+    "RTCBundlePolicy",
     "RTCCertificate",
     "RTCConfiguration",
     "RTCDataChannel",

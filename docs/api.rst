@@ -12,6 +12,9 @@ WebRTC
    .. autoclass:: RTCSessionDescription
       :members:
 
+   .. autoclass:: RTCBundlePolicy()
+      :members:
+
    .. autoclass:: RTCConfiguration
       :members:
 
