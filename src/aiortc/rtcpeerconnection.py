@@ -16,7 +16,7 @@ from .exceptions import (
     OperationError,
 )
 from .mediastreams import MediaStreamTrack
-from .rtcconfiguration import RTCConfiguration
+from .rtcconfiguration import RTCBundlePolicy, RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsParameters, RTCDtlsTransport
 from .rtcicetransport import (
@@ -1061,7 +1061,23 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     def __createDtlsTransport(self) -> RTCDtlsTransport:
         # create ICE transport
-        iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
+        if len(self.__transceivers) > 0 or self.__sctp:
+            if len(self.__transceivers) > 0:
+                parameters = self.__transceivers[
+                    0
+                ].transport.transport.iceGatherer.getLocalParameters()
+            else:
+                parameters = (
+                    self.__sctp.transport.transport.iceGatherer.getLocalParameters()
+                )
+            iceGatherer = RTCIceGatherer(
+                iceServers=self.__configuration.iceServers,
+                local_username=parameters.usernameFragment,
+                local_password=parameters.password,
+            )
+        else:
+            iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
+
         iceGatherer.on("statechange", self.__updateIceGatheringState)
         iceTransport = RTCIceTransport(iceGatherer)
         iceTransport.on("statechange", self.__updateIceConnectionState)
@@ -1081,8 +1097,17 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return dtlsTransport
 
     def __createSctpTransport(self) -> None:
-        self.__sctp = RTCSctpTransport(self.__createDtlsTransport())
-        self.__sctp._bundled = False
+        dtlsTransport = None
+        bundled = (
+            self.__configuration.bundlePolicy == RTCBundlePolicy.MAX_BUNDLE
+            and len(self.__transceivers) > 0
+        )
+        if bundled:
+            dtlsTransport = self.__transceivers[0].transport
+        else:
+            dtlsTransport = self.__createDtlsTransport()
+        self.__sctp = RTCSctpTransport(dtlsTransport)
+        self.__sctp._bundled = bundled
         self.__sctp.mid = None
 
         @self.__sctp.on("datachannel")
@@ -1092,7 +1117,26 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     def __createTransceiver(
         self, direction: str, kind: str, sender_track=None
     ) -> RTCRtpTransceiver:
-        dtlsTransport = self.__createDtlsTransport()
+        dtlsTransport = None
+        bundled = False
+        if self.__configuration.bundlePolicy == RTCBundlePolicy.MAX_BUNDLE:
+            if len(self.__transceivers) > 0:
+                dtlsTransport = self.__transceivers[0].transport
+                bundled = True
+            elif self.__sctp:
+                dtlsTransport = self.__sctp.transport
+                bundled = True
+        elif self.__configuration.bundlePolicy == RTCBundlePolicy.BALANCED:
+            transceiver = next(
+                filter(lambda t: t.kind == kind, self.__transceivers), None
+            )
+            if transceiver:
+                dtlsTransport = transceiver.transport
+                bundled = True
+
+        if not dtlsTransport:
+            dtlsTransport = self.__createDtlsTransport()
+
         transceiver = RTCRtpTransceiver(
             direction=direction,
             kind=kind,
@@ -1101,7 +1145,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         )
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
         transceiver.sender._stream_id = self.__stream_id
-        transceiver._bundled = False
+        transceiver._bundled = bundled
         transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver
