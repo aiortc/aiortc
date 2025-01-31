@@ -16,7 +16,7 @@ from .exceptions import (
     OperationError,
 )
 from .mediastreams import MediaStreamTrack
-from .rtcconfiguration import RTCConfiguration
+from .rtcconfiguration import RTCBundlePolicy, RTCConfiguration
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import RTCCertificate, RTCDtlsParameters, RTCDtlsTransport
 from .rtcicetransport import (
@@ -295,6 +295,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
+        if self.__configuration.bundlePolicy != RTCBundlePolicy.MAX_COMPAT:
+            logger.warning(
+                "Ignoring unsupported bundlePolicy", self.__configuration.bundlePolicy
+            )
         self.__dtlsTransports: set[RTCDtlsTransport] = set()
         self.__iceTransports: set[RTCIceTransport] = set()
         self.__remoteDtls: dict[

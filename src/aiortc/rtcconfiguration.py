@@ -1,3 +1,4 @@
+import enum
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -22,6 +23,16 @@ class RTCIceServer:
     credentialType: str = "password"
 
 
+class RTCBundlePolicy(enum.Enum):
+    """
+    See https://w3c.github.io/webrtc-pc/#rtcbundlepolicy-enum
+    """
+
+    BALANCED = "balanced"
+    MAX_COMPAT = "max-compat"
+    MAX_BUNDLE = "max-bundle"
+
+
 @dataclass
 class RTCConfiguration:
     """
@@ -31,3 +42,6 @@ class RTCConfiguration:
 
     iceServers: Optional[list[RTCIceServer]] = None
     "A list of :class:`RTCIceServer` objects to configure STUN / TURN servers."
+
+    bundlePolicy: Optional[RTCBundlePolicy] = RTCBundlePolicy.BALANCED
+    "Note: only max-compat is implemented currently."
