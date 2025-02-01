@@ -1061,6 +1061,18 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # create ICE transport
         iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
         iceGatherer.on("statechange", self.__updateIceGatheringState)
+        if (
+            self.__configuration.bundlePolicy == RTCBundlePolicy.BALANCED
+            and len(self.__transceivers) > 0
+        ):
+            # ICE credentials are shared in "balanced" mode.
+            # TODO: fix aioice to take parameters instead
+            parameters = self.__transceivers[
+                0
+            ].transport.transport.iceGatherer.getLocalParameters()
+            iceGatherer._connection.local_username = parameters.usernameFragment
+            iceGatherer._connection.local_password = parameters.password
+
         iceTransport = RTCIceTransport(iceGatherer)
         iceTransport.on("statechange", self.__updateIceConnectionState)
         iceTransport.on("statechange", self.__updateConnectionState)

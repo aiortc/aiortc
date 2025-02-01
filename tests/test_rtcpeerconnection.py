@@ -5,6 +5,7 @@ from unittest import TestCase
 import aioice.ice
 import aioice.stun
 from aiortc import (
+    RTCBundlePolicy,
     RTCConfiguration,
     RTCIceCandidate,
     RTCPeerConnection,
@@ -2001,12 +2002,8 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-remote-offer", "stable", "closed"],
         )
 
-    @asynctest
-    async def test_connect_audio_and_video(self):
-        pc1 = RTCPeerConnection()
+    async def _test_connect_audio_video(self, pc1, pc2):
         pc1_states = track_states(pc1)
-
-        pc2 = RTCPeerConnection()
         pc2_states = track_states(pc2)
 
         self.assertEqual(pc1.connectionState, "new")
@@ -2100,6 +2097,18 @@ a=rtpmap:0 PCMU/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_audio_and_video(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        await self._test_connect_audio_video(pc1, pc2)
+
+    @asynctest
+    async def test_connect_audio_and_video_bundlepolicy_balanced(self):
+        pc1 = RTCPeerConnection(RTCConfiguration(bundlePolicy=RTCBundlePolicy.BALANCED))
+        pc2 = RTCPeerConnection()
+        await self._test_connect_audio_video(pc1, pc2)
 
     async def _test_connect_audio_and_video_mediaplayer(self, stop_tracks: bool):
         """
@@ -5142,3 +5151,15 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(
             pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
         )
+
+    @asynctest
+    async def test_bundlepolicy_balanced_ufrag_and_pwd(self):
+        pc = RTCPeerConnection(RTCConfiguration(bundlePolicy=RTCBundlePolicy.BALANCED))
+        transceiver1 = pc.addTransceiver("audio")
+        transceiver2 = pc.addTransceiver("video")
+
+        await pc.createOffer()
+        param1 = transceiver1.transport.transport.iceGatherer.getLocalParameters()
+        param2 = transceiver2.transport.transport.iceGatherer.getLocalParameters()
+        self.assertEqual(param1.usernameFragment, param2.usernameFragment)
+        self.assertEqual(param1.password, param2.password)
