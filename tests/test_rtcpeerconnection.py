@@ -2110,6 +2110,14 @@ a=rtpmap:0 PCMU/8000
         pc2 = RTCPeerConnection()
         await self._test_connect_audio_video(pc1, pc2)
 
+    @asynctest
+    async def test_connect_audio_and_video_bundlepolicy_max_bundle(self):
+        pc1 = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_BUNDLE)
+        )
+        pc2 = RTCPeerConnection()
+        await self._test_connect_audio_video(pc1, pc2)
+
     async def _test_connect_audio_and_video_mediaplayer(self, stop_tracks: bool):
         """
         Negotiate bidirectional audio + video, with one party reading media from a file.
@@ -2234,12 +2242,8 @@ a=rtpmap:0 PCMU/8000
     async def test_connect_audio_and_video_mediaplayer_stop_tracks(self):
         await self._test_connect_audio_and_video_mediaplayer(stop_tracks=True)
 
-    @asynctest
-    async def test_connect_audio_and_video_and_data_channel(self):
-        pc1 = RTCPeerConnection()
+    async def _test_connect_audio_and_video_and_data_channel(self, pc1, pc2):
         pc1_states = track_states(pc1)
-
-        pc2 = RTCPeerConnection()
         pc2_states = track_states(pc2)
 
         self.assertEqual(pc1.iceConnectionState, "new")
@@ -2335,6 +2339,20 @@ a=rtpmap:0 PCMU/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_audio_and_video_and_data_channel(self):
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        self._test_connect_audio_and_video_and_data_channel(pc1, pc2)
+
+    @asynctest
+    async def test_connect_audio_and_video_and_data_channel_max_bundle(self):
+        pc1 = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_BUNDLE)
+        )
+        pc2 = RTCPeerConnection()
+        await self._test_connect_audio_and_video_and_data_channel(pc1, pc2)
 
     @asynctest
     async def test_connect_audio_and_video_and_data_channel_ice_fail(self):
@@ -5163,3 +5181,18 @@ a=rtpmap:0 PCMU/8000
         param2 = transceiver2.transport.transport.iceGatherer.getLocalParameters()
         self.assertEqual(param1.usernameFragment, param2.usernameFragment)
         self.assertEqual(param1.password, param2.password)
+
+    @asynctest
+    async def test_bundlepolicy_max_bundle_ufrag_and_pwd(self):
+        pc = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_BUNDLE)
+        )
+        transceiver1 = pc.addTransceiver("audio")
+        transceiver2 = pc.addTransceiver("video")
+
+        await pc.createOffer()
+        param1 = transceiver1.transport.transport.iceGatherer.getLocalParameters()
+        param2 = transceiver2.transport.transport.iceGatherer.getLocalParameters()
+        self.assertEqual(param1.usernameFragment, param2.usernameFragment)
+        self.assertEqual(param1.password, param2.password)
+        self.assertEqual(transceiver1.transport, transceiver2.transport)
