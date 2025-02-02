@@ -110,6 +110,8 @@ jobs:
             arch: i686
           - os: ubuntu-latest
             arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
           - os: windows-latest
             arch: AMD64
           - os: windows-latest
@@ -118,10 +120,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.9
-      - name: Install QEMU
-        if: matrix.os == 'ubuntu-latest'
-        uses: docker/setup-qemu-action@v3
+          python-version: 3.11
       - name: Build wheels
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
