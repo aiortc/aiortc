@@ -122,7 +122,7 @@ class H264Decoder(Decoder):
 
 def create_encoder_context(
     codec_name: str, width: int, height: int, bitrate: int
-) -> Tuple[VideoCodecContext, bool]:
+) -> VideoCodecContext:
     codec = cast(VideoCodecContext, av.CodecContext.create(codec_name, "w"))
     codec.width = width
     codec.height = height
@@ -133,10 +133,10 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
+        "tune": "zerolatency",
     }
     codec.open()
-    return codec, codec_name == "h264_omx"
+    return codec
 
 
 class H264Encoder(Encoder):
@@ -144,7 +144,6 @@ class H264Encoder(Encoder):
         self.buffer_data = b""
         self.buffer_pts: Optional[int] = None
         self.codec: Optional[VideoCodecContext] = None
-        self.codec_buffering = False
         self.__target_bitrate = DEFAULT_BITRATE
 
     @staticmethod
@@ -286,32 +285,16 @@ class H264Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
-            try:
-                self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
-                )
-            except Exception:
-                self.codec, self.codec_buffering = create_encoder_context(
-                    "libx264",
-                    frame.width,
-                    frame.height,
-                    bitrate=self.target_bitrate,
-                )
+            self.codec = create_encoder_context(
+                "libx264",
+                frame.width,
+                frame.height,
+                bitrate=self.target_bitrate,
+            )
 
         data_to_send = b""
         for package in self.codec.encode(frame):
-            package_bytes = bytes(package)
-            if self.codec_buffering:
-                # delay sending to ensure we accumulate all packages
-                # for a given PTS
-                if package.pts == self.buffer_pts:
-                    self.buffer_data += package_bytes
-                else:
-                    data_to_send += self.buffer_data
-                    self.buffer_data = package_bytes
-                    self.buffer_pts = package.pts
-            else:
-                data_to_send += package_bytes
+            data_to_send += bytes(package)
 
         if data_to_send:
             yield from self._split_bitstream(data_to_send)
