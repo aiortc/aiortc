@@ -1061,6 +1061,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # create ICE transport
         iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
         iceGatherer.on("statechange", self.__updateIceGatheringState)
+        # TODO: credentials should *always be shared (also with __sctp.transport)
         if (
             self.__configuration.bundlePolicy == RTCBundlePolicy.BALANCED
             and len(self.__transceivers) > 0
@@ -1112,15 +1113,25 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self, direction: str, kind: str, sender_track=None
     ) -> RTCRtpTransceiver:
         dtlsTransport = None
-        # max-bundle shares the DTLS transport.
-        bundled = (
-            self.__configuration.bundlePolicy == RTCBundlePolicy.MAX_BUNDLE
-            and len(self.__transceivers) > 0
-        )
-        if bundled:
-            dtlsTransport = self.__transceivers[0].transport
-        else:
+        bundled = False
+        if self.__configuration.bundlePolicy == RTCBundlePolicy.MAX_BUNDLE:
+            if len(self.__transceivers) > 0:
+                dtlsTransport = self.__transceivers[0].transport
+                bundled = True
+            elif self.__sctp:
+                dtlsTransport = self.__sctp.transport
+                bundled = True
+        elif self.__configuration.bundlePolicy == RTCBundlePolicy.BALANCED:
+            transceiver = next(
+                filter(lambda t: t.kind == kind, self.__transceivers), None
+            )
+            if transceiver:
+                dtlsTransport = transceiver.transport
+                bundled = True
+
+        if not dtlsTransport:
             dtlsTransport = self.__createDtlsTransport()
+
         transceiver = RTCRtpTransceiver(
             direction=direction,
             kind=kind,

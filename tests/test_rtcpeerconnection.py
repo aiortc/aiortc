@@ -5196,3 +5196,57 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(param1.usernameFragment, param2.usernameFragment)
         self.assertEqual(param1.password, param2.password)
         self.assertEqual(transceiver1.transport, transceiver2.transport)
+
+    @asynctest
+    async def test_bundlepolicy_max_bundle_ufrag_and_pwd_datachannel(self):
+        pc = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_BUNDLE)
+        )
+        pc.createDataChannel("somechannel")
+        transceiver = pc.addTransceiver("audio")
+
+        await pc.createOffer()
+        param1 = transceiver.transport.transport.iceGatherer.getLocalParameters()
+        param2 = pc.sctp.transport.transport.iceGatherer.getLocalParameters()
+        self.assertEqual(param1.usernameFragment, param2.usernameFragment)
+        self.assertEqual(param1.password, param2.password)
+        self.assertEqual(transceiver.transport, pc.sctp.transport)
+
+    @asynctest
+    async def test_bundlepolicy_transports_balanced(self):
+        pc = RTCPeerConnection(RTCConfiguration(bundlePolicy=RTCBundlePolicy.BALANCED))
+        transceiver1 = pc.addTransceiver("audio")
+        transceiver2 = pc.addTransceiver("video")
+        transceiver3 = pc.addTransceiver("audio")
+        pc.createDataChannel("somechannel")
+        self.assertNotEqual(transceiver1.transport, transceiver2.transport)
+        self.assertEqual(transceiver1.transport, transceiver3.transport)
+        self.assertNotEqual(transceiver1.transport, pc.sctp.transport)
+        self.assertNotEqual(transceiver2.transport, pc.sctp.transport)
+
+    @asynctest
+    async def test_bundlepolicy_transports_max_compat(self):
+        pc = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_COMPAT)
+        )
+        transceiver1 = pc.addTransceiver("audio")
+        transceiver2 = pc.addTransceiver("video")
+        transceiver3 = pc.addTransceiver("audio")
+        pc.createDataChannel("somechannel")
+        self.assertNotEqual(transceiver1.transport, transceiver2.transport)
+        self.assertNotEqual(transceiver1.transport, transceiver3.transport)
+        self.assertNotEqual(transceiver1.transport, pc.sctp.transport)
+        self.assertNotEqual(transceiver2.transport, pc.sctp.transport)
+
+    @asynctest
+    async def test_bundlepolicy_transports_max_bundle(self):
+        pc = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_BUNDLE)
+        )
+        transceiver1 = pc.addTransceiver("audio")
+        transceiver2 = pc.addTransceiver("video")
+        transceiver3 = pc.addTransceiver("audio")
+        pc.createDataChannel("somechannel")
+        self.assertEqual(transceiver1.transport, transceiver2.transport)
+        self.assertEqual(transceiver1.transport, transceiver3.transport)
+        self.assertEqual(transceiver1.transport, pc.sctp.transport)
