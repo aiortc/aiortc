@@ -34,7 +34,7 @@ from .rtcrtpreceiver import (
     RTCRtpReceiver,
     RTCRtpSynchronizationSource,
 )
-from .rtcrtpsender import RTCRtpSender
+from .rtcrtpsender import RTCRtpSender, EncodedMediaStreamTrack
 from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
