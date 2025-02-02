@@ -3,6 +3,13 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.10.1
+------
+
+ * Build wheels for Linux aarch64 again.
+ * Be more cautious when releasing :class:`RTCRtpSender`'s encoder.
+ * Set correct codec for :class:`~aiortc.contrib.media.MediaRecorder` OGG output.
+
 1.10.0
 ------
 
