@@ -360,7 +360,7 @@ class BufferingInputContainer:
         # fail with EAGAIN once
         if not self.__failed:
             self.__failed = True
-            raise av.AVError(errno.EAGAIN, "EAGAIN")
+            raise av.FFmpegError(errno.EAGAIN, "EAGAIN")
 
         return self.__real.decode(*args, **kwargs)
 
@@ -368,7 +368,7 @@ class BufferingInputContainer:
         # fail with EAGAIN once
         if not self.__failed:
             self.__failed = True
-            raise av.AVError(errno.EAGAIN, "EAGAIN")
+            raise av.FFmpegError(errno.EAGAIN, "EAGAIN")
 
         return self.__real.demux(*args, **kwargs)
 
