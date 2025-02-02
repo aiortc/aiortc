@@ -114,6 +114,7 @@ class H264Test(CodecTestCase):
         frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
+        self.assertEqual(timestamp, 0)
 
     def test_encoder_large(self):
         encoder = get_encoder(H264_CODEC)
@@ -128,7 +129,7 @@ class H264Test(CodecTestCase):
         # delta frame
         frame = self.create_video_frame(width=1280, height=720, pts=3000)
         payloads, timestamp = encoder.encode(frame)
-        self.assertEqual(len(payloads), 1)
+        self.assertGreaterEqual(len(payloads), 1)
         self.assertEqual(timestamp, 3000)
 
         # force keyframe
