@@ -16,3 +16,6 @@ python:
     - method: pip
       path: .
     - requirements: requirements/doc.txt
+
+sphinx:
+  configuration: docs/conf.py
