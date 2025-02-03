@@ -843,6 +843,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 for t in self.__transceivers:
                     if t.kind == media.kind and t.mid in [None, media.rtp.muxId]:
                         transceiver = t
+                        break
                 if transceiver is None:
                     transceiver = self.__createTransceiver(
                         direction="recvonly", kind=media.kind
