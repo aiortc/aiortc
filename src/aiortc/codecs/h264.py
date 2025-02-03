@@ -131,10 +131,10 @@ def create_encoder_context(
     codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
     codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
     codec.options = {
-        "profile": "baseline",
         "level": "31",
         "tune": "zerolatency",
     }
+    codec.profile = "Baseline"
     codec.open()
     return codec
 
