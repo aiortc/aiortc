@@ -12,6 +12,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionCapability,
+    RTCRtpHeaderExtensionParameters,
     RTCRtpParameters,
 )
 from aiortc.rtcrtpsender import RTCRtpSender
@@ -19,6 +20,7 @@ from aiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    HeaderExtensionsMap,
     RtcpPsfbPacket,
     RtcpReceiverInfo,
     RtcpRrPacket,
@@ -117,6 +119,9 @@ class RTCRtpSenderTest(TestCase):
                 RTCRtpHeaderExtensionCapability(
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
                 ),
+                RTCRtpHeaderExtensionCapability(
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay"
+                ),
             ],
         )
 
@@ -209,6 +214,72 @@ class RTCRtpSenderTest(TestCase):
 
             # clean shutdown
             await sender.stop()
+
+    @asynctest
+    async def test_playout_delay(self):
+        """
+        Simulate playout delay request
+        """
+        queue = asyncio.Queue()
+
+        parameters = RTCRtpParameters(
+            codecs=[VP8_CODEC],
+            headerExtensions=[
+                RTCRtpHeaderExtensionParameters(
+                    id=6,
+                    uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+                )
+            ],
+        )
+
+        ext_map = HeaderExtensionsMap()
+        ext_map.configure(parameters)
+
+        async def mock_send_rtp(data):
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data, ext_map))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp
+
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            self.assertEqual(sender.kind, "video")
+
+            self.assertRaises(ValueError, lambda: sender.setPlayoutDelay(4096, 0))
+            self.assertRaises(ValueError, lambda: sender.setPlayoutDelay(0, 4096))
+
+            min_delay = 4000
+            max_delay = 4095
+            sender.setPlayoutDelay(min_delay, max_delay)
+
+            await sender.send(parameters)
+
+            # wait for packet to be transmitted, expect playout delay
+            packet = await queue.get()
+            encoded_delay = (min_delay << 12) | max_delay
+            self.assertEqual(packet.extensions.playout_delay, encoded_delay)
+
+            # receive RTCP RR
+            packet = RtcpRrPacket(
+                ssrc=1234,
+                reports=[
+                    RtcpReceiverInfo(
+                        ssrc=sender._ssrc,
+                        fraction_lost=0,
+                        packets_lost=0,
+                        highest_sequence=packet.sequence_number,
+                        jitter=1906,
+                        lsr=0,
+                        dlsr=0,
+                    )
+                ],
+            )
+
+            await sender._handle_rtcp_packet(packet)
+
+            # wait for packet to be transmitted, expect no more playout delay
+            packet = await queue.get()
+            self.assertEqual(packet.extensions.playout_delay, None)
 
     @asynctest
     async def test_handle_rtcp_rr(self):

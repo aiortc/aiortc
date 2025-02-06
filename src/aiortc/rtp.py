@@ -40,6 +40,7 @@ RTCP_PSFB_APP = 15
 @dataclass
 class HeaderExtensions:
     abs_send_time: Optional[int] = None
+    playout_delay: Optional[int] = None
     audio_level: Any = None
     mid: Any = None
     repaired_rtp_stream_id: Any = None
@@ -64,6 +65,10 @@ class HeaderExtensionsMap:
                 ext.uri == "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
             ):
                 self.__ids.abs_send_time = ext.id
+            elif (
+                ext.uri == "http://www.webrtc.org/experiments/rtp-hdrext/playout-delay"
+            ):
+                self.__ids.playout_delay = ext.id
             elif ext.uri == "urn:ietf:params:rtp-hdrext:toffset":
                 self.__ids.transmission_offset = ext.id
             elif ext.uri == "urn:ietf:params:rtp-hdrext:ssrc-audio-level":
@@ -87,6 +92,8 @@ class HeaderExtensionsMap:
                 values.rtp_stream_id = x_value.decode("ascii")
             elif x_id == self.__ids.abs_send_time:
                 values.abs_send_time = unpack("!L", b"\00" + x_value)[0]
+            elif x_id == self.__ids.playout_delay:
+                values.playout_delay = unpack("!L", b"\00" + x_value)[0]
             elif x_id == self.__ids.transmission_offset:
                 values.transmission_offset = unpack("!l", x_value + b"\00")[0] >> 8
             elif x_id == self.__ids.audio_level:
@@ -117,6 +124,10 @@ class HeaderExtensionsMap:
         if values.abs_send_time is not None and self.__ids.abs_send_time:
             extensions.append(
                 (self.__ids.abs_send_time, pack("!L", values.abs_send_time)[1:])
+            )
+        if values.playout_delay is not None and self.__ids.playout_delay:
+            extensions.append(
+                (self.__ids.playout_delay, pack("!L", values.playout_delay)[1:])
             )
         if values.transmission_offset is not None and self.__ids.transmission_offset:
             extensions.append(
