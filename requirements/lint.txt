@@ -1,3 +1,4 @@
 check-manifest
 mypy
+types-pyOpenSSL
 ruff
