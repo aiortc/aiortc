@@ -30,6 +30,10 @@ vpx_codec_err_t vpx_codec_enc_init(vpx_codec_ctx_t *ctx,
 }
     """,
     libraries=["vpx"],
+    # Comment the above line and uncomment the lines below to static link
+    #libraries=[":libvpx.a"],
+    #library_dirs=["/usr/local/lib"],
+    #extra_link_args=["-static-libgcc"]
 )
 
 ffibuilder.cdef(

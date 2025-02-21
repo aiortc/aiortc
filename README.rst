@@ -119,6 +119,16 @@ On OS X run:
 
     brew install opus libvpx
 
+Building a wheel without dynamic linking
+....
+
+If you want to build a wheel that does not depend on the system libraries, you
+must first build opus and vpx from source and statically link them. For Linux,
+an example of how to do this would be to build the Dockerfile in this repo,
+uncomment lines in src/_cffi_src/build_[opus/vpx].py to statically link the
+newly built libraries, and then run `python -m build`. You can then copy the
+wheel via `docker cp`.
+
 License
 -------
 

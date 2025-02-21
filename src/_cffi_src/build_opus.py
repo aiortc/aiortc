@@ -8,6 +8,10 @@ ffibuilder.set_source(
 #include <opus/opus.h>
     """,
     libraries=["opus"],
+    # Comment the above line and uncomment the lines below to static link
+    #libraries=[":libopus.a"],
+    #library_dirs=["/usr/local/lib"],
+    #extra_link_args=["-static-libgcc"]
 )
 
 ffibuilder.cdef(
