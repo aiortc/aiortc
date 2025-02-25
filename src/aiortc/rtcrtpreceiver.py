@@ -506,6 +506,7 @@ class RTCRtpReceiver:
                 return
 
             packet = unwrap_rtx(packet, payload_type=apt, ssrc=original_ssrc)
+            codec = self.__codecs[apt]
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
