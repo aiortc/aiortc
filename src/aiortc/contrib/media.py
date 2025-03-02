@@ -138,7 +138,10 @@ def player_worker_decode(
                 audio_samples += frame.samples
 
                 frame_time = frame.time
-                asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
+                if not loop.is_closed():
+                    asyncio.run_coroutine_threadsafe(audio_track._queue.put(frame), loop)
+                else:
+                    quit_event.set()
         elif isinstance(frame, VideoFrame) and video_track:
             if frame.pts is None:  # pragma: no cover
                 logger.warning(
@@ -152,8 +155,10 @@ def player_worker_decode(
             frame.pts -= video_first_pts
 
             frame_time = frame.time
-            asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
-
+            if not loop.is_closed():
+                asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
+            else:
+                quit_event.set()
 
 def player_worker_demux(
     loop,
