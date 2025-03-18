@@ -1078,7 +1078,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__sctp._bundled = False
         self.__sctp.mid = None
 
-        @self.__sctp.on("datachannel")  # type: ignore
+        @self.__sctp.on("datachannel")
         def on_datachannel(channel):
             self.emit("datachannel", channel)
 
