@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 @dataclass
@@ -10,7 +10,7 @@ class RTCIceServer:
     if any, to connect to the server.
     """
 
-    urls: str
+    urls: Union[str, List[str]]
     """
     This required property is either a single string or a list of strings,
     each specifying a URL which can be used to connect to the server.
