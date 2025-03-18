@@ -31,7 +31,7 @@ dependencies = [
     "cffi>=1.0.0",
     "cryptography>=42.0.0",
     "google-crc32c>=1.1",
-    "pyee>=9.0.0",
+    "pyee>=13.0.0",
     "pylibsrtp>=0.10.0",
     "pyopenssl>=24.0.0",
 ]
