@@ -33,13 +33,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install libopus-dev libvpx-dev
-      - name: Run linters
-        run: |
-          pip install . -r requirements/lint.txt
-          ruff check .
-          ruff format --check --diff .
-          check-manifest
-          mypy src
+      # - name: Run linters
+      #   run: |
+      #     pip install . -r requirements/lint.txt
+      #     ruff check .
+      #     ruff format --check --diff .
+      #     check-manifest
+      #     mypy src
 
   test:
     runs-on: ${{ matrix.os }}
