@@ -1,9 +1,8 @@
 import fractions
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
-from av import AudioFrame, CodecContext
+from av import AudioFrame, AudioResampler, CodecContext
 from av.audio.codeccontext import AudioCodecContext
-from av.audio.resampler import AudioResampler
 from av.frame import Frame
 from av.packet import Packet
 
@@ -19,7 +18,7 @@ TIME_BASE = fractions.Fraction(1, 8000)
 
 class PcmDecoder(Decoder):
     def __init__(self, codec_name: str) -> None:
-        self.codec: AudioCodecContext = CodecContext.create(codec_name, "r")
+        self.codec = cast(AudioCodecContext, CodecContext.create(codec_name, "r"))
         self.codec.format = "s16"
         self.codec.layout = "mono"
         self.codec.sample_rate = SAMPLE_RATE
@@ -28,12 +27,12 @@ class PcmDecoder(Decoder):
         packet = Packet(encoded_frame.data)
         packet.pts = encoded_frame.timestamp
         packet.time_base = TIME_BASE
-        return self.codec.decode(packet)
+        return cast(List[Frame], self.codec.decode(packet))
 
 
 class PcmEncoder(Encoder):
     def __init__(self, codec_name: str) -> None:
-        self.codec: AudioCodecContext = CodecContext.create(codec_name, "w")
+        self.codec = cast(AudioCodecContext, CodecContext.create(codec_name, "w"))
         self.codec.format = "s16"
         self.codec.layout = "mono"
         self.codec.sample_rate = SAMPLE_RATE

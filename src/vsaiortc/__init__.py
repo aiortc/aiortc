@@ -47,10 +47,52 @@ from .stats import (
     RTCTransportStats,
 )
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 # Disable PyAV's logging framework as it can lead to thread deadlocks.
 av.logging.restore_default_callback()
 
 # Set default logging handler to avoid "No handler found" warnings.
 logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+__all__ = [
+    "AudioStreamTrack",
+    "InvalidAccessError",
+    "InvalidStateError",
+    "MediaStreamTrack",
+    "RTCCertificate",
+    "RTCConfiguration",
+    "RTCDataChannel",
+    "RTCDataChannelParameters",
+    "RTCDtlsFingerprint",
+    "RTCDtlsParameters",
+    "RTCDtlsTransport",
+    "RTCIceCandidate",
+    "RTCIceGatherer",
+    "RTCIceParameters",
+    "RTCIceServer",
+    "RTCIceTransport",
+    "RTCInboundRtpStreamStats",
+    "RTCOutboundRtpStreamStats",
+    "RTCPeerConnection",
+    "RTCRemoteInboundRtpStreamStats",
+    "RTCRemoteOutboundRtpStreamStats",
+    "RTCRtcpParameters",
+    "RTCRtpCapabilities",
+    "RTCRtpCodecCapability",
+    "RTCRtpCodecParameters",
+    "RTCRtpContributingSource",
+    "RTCRtpHeaderExtensionCapability",
+    "RTCRtpHeaderExtensionParameters",
+    "RTCRtpParameters",
+    "RTCRtpReceiver",
+    "RTCRtpSender",
+    "RTCRtpSynchronizationSource",
+    "RTCRtpTransceiver",
+    "RTCSctpCapabilities",
+    "RTCSctpTransport",
+    "RTCSessionDescription",
+    "RTCStatsReport",
+    "RTCTransportStats",
+    "VideoStreamTrack",
+]

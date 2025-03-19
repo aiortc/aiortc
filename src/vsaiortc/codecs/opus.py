@@ -1,8 +1,7 @@
 import fractions
 from typing import List, Tuple
 
-from av import AudioFrame
-from av.audio.resampler import AudioResampler
+from av import AudioFrame, AudioResampler
 from av.frame import Frame
 from av.packet import Packet
 

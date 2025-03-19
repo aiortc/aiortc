@@ -6,14 +6,13 @@ on:
     workflow_dispatch:
 
 jobs:
-
   docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Install OS packages
         run: |
           sudo apt-get update
@@ -29,14 +28,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
-      - name: Install packages
-        run: pip install check-manifest mypy ruff
-      # - name: Run linters
-      #   run: |
-      #     ruff check .
-      #     ruff format --check --diff .
-      #     check-manifest
+          python-version: 3.9
+      - name: Install OS packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install libopus-dev libvpx-dev
+      - name: Run linters
+        run: |
+          pip install . -r requirements/lint.txt
+          ruff check .
+          ruff format --check --diff .
+          check-manifest
+          mypy src
 
   test:
     runs-on: ${{ matrix.os }}
@@ -45,11 +48,11 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python:
-          - '3.12'
-          - '3.11'
-          - '3.10'
-          - '3.9'
-          - '3.8'
+          - "3.13"
+          - "3.12"
+          - "3.11"
+          - "3.10"
+          - "3.9"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -82,7 +85,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Build source package
         run: |
           pip install -U build
@@ -104,11 +107,11 @@ jobs:
           - os: macos-13
             arch: x86_64
           - os: ubuntu-latest
-            arch: aarch64
-          - os: ubuntu-latest
             arch: i686
           - os: ubuntu-latest
             arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
           - os: windows-latest
             arch: AMD64
           - os: windows-latest
@@ -117,10 +120,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
-      - name: Install QEMU
-        if: matrix.os == 'ubuntu-latest'
-        uses: docker/setup-qemu-action@v3
+          python-version: 3.11
       - name: Build wheels
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
@@ -128,10 +128,10 @@ jobs:
           CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor.py C:\cibw\vendor
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
-          CIBW_SKIP: '*-musllinux*'
-          CIBW_TEST_COMMAND: python -c "import vsaiortc"
-          # There are no binary wheels for cryptography on these platforms.
-          CIBW_TEST_SKIP: "*-{manylinux_i686,win32} pp*"
+          CIBW_SKIP: "*-musllinux* pp*"
+          CIBW_TEST_COMMAND: python -c "import aiortc"
+          # There are no binary wheels for cryptography on 32-bit platforms.
+          CIBW_TEST_SKIP: "*-{manylinux_i686,win32}"
         run: |
           pip install cibuildwheel
           cibuildwheel --output-dir dist

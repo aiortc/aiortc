@@ -3,7 +3,7 @@ import io
 from contextlib import redirect_stderr
 from unittest import TestCase
 
-from vsaiortc.codecs import get_decoder, get_encoder, h264
+from vsaiortc.codecs import get_decoder, get_encoder
 from vsaiortc.codecs.h264 import H264Decoder, H264Encoder, H264PayloadDescriptor
 from vsaiortc.jitterbuffer import JitterFrame
 from vsaiortc.rtcrtpparameters import RTCRtpCodecParameters
@@ -114,6 +114,7 @@ class H264Test(CodecTestCase):
         frame = self.create_video_frame(width=640, height=480, pts=0)
         packages, timestamp = encoder.encode(frame)
         self.assertGreaterEqual(len(packages), 1)
+        self.assertEqual(timestamp, 0)
 
     def test_encoder_large(self):
         encoder = get_encoder(H264_CODEC)
@@ -128,7 +129,7 @@ class H264Test(CodecTestCase):
         # delta frame
         frame = self.create_video_frame(width=1280, height=720, pts=3000)
         payloads, timestamp = encoder.encode(frame)
-        self.assertEqual(len(payloads), 1)
+        self.assertGreaterEqual(len(payloads), 1)
         self.assertEqual(timestamp, 3000)
 
         # force keyframe
@@ -145,28 +146,6 @@ class H264Test(CodecTestCase):
         payloads, timestamp = encoder.pack(packet)
         self.assertEqual(payloads, [b"\x00"])
         self.assertEqual(timestamp, 90)
-
-    def test_encoder_buffering(self):
-        create_encoder_context = h264.create_encoder_context
-
-        def mock_create_encoder_context(*args, **kwargs):
-            codec, _ = create_encoder_context(*args, **kwargs)
-            return FragmentedCodecContext(codec), True
-
-        h264.create_encoder_context = mock_create_encoder_context
-        try:
-            encoder = get_encoder(H264_CODEC)
-            self.assertIsInstance(encoder, H264Encoder)
-
-            frame = self.create_video_frame(width=640, height=480, pts=0)
-            packages, timestamp = encoder.encode(frame)
-            self.assertEqual(len(packages), 0)
-
-            frame = self.create_video_frame(width=640, height=480, pts=3000)
-            packages, timestamp = encoder.encode(frame)
-            self.assertGreaterEqual(len(packages), 1)
-        finally:
-            h264.create_encoder_context = create_encoder_context
 
     def test_encoder_target_bitrate(self):
         encoder = get_encoder(H264_CODEC)

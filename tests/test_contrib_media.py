@@ -360,7 +360,7 @@ class BufferingInputContainer:
         # fail with EAGAIN once
         if not self.__failed:
             self.__failed = True
-            raise av.AVError(errno.EAGAIN, "EAGAIN")
+            raise av.FFmpegError(errno.EAGAIN, "EAGAIN")
 
         return self.__real.decode(*args, **kwargs)
 
@@ -368,7 +368,7 @@ class BufferingInputContainer:
         # fail with EAGAIN once
         if not self.__failed:
             self.__failed = True
-            raise av.AVError(errno.EAGAIN, "EAGAIN")
+            raise av.FFmpegError(errno.EAGAIN, "EAGAIN")
 
         return self.__real.demux(*args, **kwargs)
 
@@ -606,39 +606,34 @@ class MediaPlayerNoDecodeTest(MediaPlayerTest):
 
 
 class MediaRecorderTest(MediaTestCase):
-    @asynctest
-    async def test_audio_mp3(self):
-        path = self.temporary_path("test.mp3")
+    async def check_audio_recording(self, filename, codec_names):
+        # Record audio.
+        path = self.temporary_path(filename)
         recorder = MediaRecorder(path)
         recorder.addTrack(AudioStreamTrack())
         await recorder.start()
         await asyncio.sleep(2)
         await recorder.stop()
 
-        # check output media
+        # Check audio recording.
         container = av.open(path, "r")
         self.assertEqual(len(container.streams), 1)
-        self.assertIn(container.streams[0].codec.name, ("mp3", "mp3float"))
+        self.assertIn(container.streams[0].codec.name, codec_names)
         self.assertGreater(
             float(container.streams[0].duration * container.streams[0].time_base), 0
         )
+
+    @asynctest
+    async def test_audio_mp3(self):
+        await self.check_audio_recording("test.mp3", ("mp3", "mp3float"))
+
+    @asynctest
+    async def test_audio_ogg(self):
+        await self.check_audio_recording("test.ogg", ("opus",))
 
     @asynctest
     async def test_audio_wav(self):
-        path = self.temporary_path("test.wav")
-        recorder = MediaRecorder(path)
-        recorder.addTrack(AudioStreamTrack())
-        await recorder.start()
-        await asyncio.sleep(2)
-        await recorder.stop()
-
-        # check output media
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 1)
-        self.assertEqual(container.streams[0].codec.name, "pcm_s16le")
-        self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 0
-        )
+        await self.check_audio_recording("test.wav", ("pcm_s16le",))
 
     @asynctest
     async def test_audio_wav_ended(self):

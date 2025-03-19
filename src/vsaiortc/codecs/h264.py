@@ -3,11 +3,12 @@ import logging
 import math
 from itertools import tee
 from struct import pack, unpack_from
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, TypeVar, cast
 
 import av
 from av.frame import Frame
 from av.packet import Packet
+from av.video.codeccontext import VideoCodecContext
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
@@ -104,27 +105,25 @@ class H264PayloadDescriptor:
 
 class H264Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = av.CodecContext.create("h264", "r")
+        self.codec = cast(VideoCodecContext, av.CodecContext.create("h264", "r"))
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
         try:
             packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
-            frames = self.codec.decode(packet)
-        except av.AVError as e:
+            return cast(List[Frame], self.codec.decode(packet))
+        except av.FFmpegError as e:
             logger.warning(
                 "H264Decoder() failed to decode, skipping package: " + str(e)
             )
             return []
 
-        return frames
-
 
 def create_encoder_context(
     codec_name: str, width: int, height: int, bitrate: int
-) -> Tuple[av.CodecContext, bool]:
-    codec = av.CodecContext.create(codec_name, "w")
+) -> VideoCodecContext:
+    codec = cast(VideoCodecContext, av.CodecContext.create(codec_name, "w"))
     codec.width = width
     codec.height = height
     codec.bit_rate = bitrate
@@ -134,18 +133,17 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
+        "tune": "zerolatency",
     }
     codec.open()
-    return codec, codec_name == "h264_omx"
+    return codec
 
 
 class H264Encoder(Encoder):
     def __init__(self) -> None:
         self.buffer_data = b""
         self.buffer_pts: Optional[int] = None
-        self.codec: Optional[av.CodecContext] = None
-        self.codec_buffering = False
+        self.codec: Optional[VideoCodecContext] = None
         self.__target_bitrate = DEFAULT_BITRATE
 
     @staticmethod
@@ -287,32 +285,16 @@ class H264Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
-            try:
-                self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
-                )
-            except Exception:
-                self.codec, self.codec_buffering = create_encoder_context(
-                    "libx264",
-                    frame.width,
-                    frame.height,
-                    bitrate=self.target_bitrate,
-                )
+            self.codec = create_encoder_context(
+                "libx264",
+                frame.width,
+                frame.height,
+                bitrate=self.target_bitrate,
+            )
 
         data_to_send = b""
         for package in self.codec.encode(frame):
-            package_bytes = bytes(package)
-            if self.codec_buffering:
-                # delay sending to ensure we accumulate all packages
-                # for a given PTS
-                if package.pts == self.buffer_pts:
-                    self.buffer_data += package_bytes
-                else:
-                    data_to_send += self.buffer_data
-                    self.buffer_data = package_bytes
-                    self.buffer_pts = package.pts
-            else:
-                data_to_send += package_bytes
+            data_to_send += bytes(package)
 
         if data_to_send:
             yield from self._split_bitstream(data_to_send)

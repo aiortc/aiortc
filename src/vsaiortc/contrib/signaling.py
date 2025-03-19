@@ -168,7 +168,10 @@ class UnixSocketSignaling:
         if self._server is not None:
             self._server.close()
             self._server = None
-            os.unlink(self._path)
+            # In Python 3.13, asyncio Unix sockets are removed when the server is
+            # closed. On previous version we need to remove the socket ourselves.
+            if sys.version_info < (3, 13):
+                os.unlink(self._path)
 
     async def receive(self):
         await self._connect(False)
