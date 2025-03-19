@@ -129,7 +129,7 @@ jobs:
           CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
           CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
           CIBW_SKIP: "*-musllinux* pp*"
-          CIBW_TEST_COMMAND: python -c "import aiortc"
+          CIBW_TEST_COMMAND: python -c "import vsaiortc"
           # There are no binary wheels for cryptography on 32-bit platforms.
           CIBW_TEST_SKIP: "*-{manylinux_i686,win32}"
         run: |
