@@ -578,7 +578,9 @@ class MediaRelay:
             # unregister proxy
             self.__log_debug("Stop proxy %s", id(proxy))
             self.__proxies[track].discard(proxy)
-            if len(self.__proxies[track]) == 0 and track in self.__tasks:
+
+            # stop worker if this was the last proxy
+            if not self.__proxies[track] and track in self.__tasks:
                 self.__tasks[track].cancel()
 
     def __log_debug(self, msg: str, *args) -> None:
