@@ -4,7 +4,12 @@ import logging
 import av.logging
 
 from .exceptions import InvalidAccessError, InvalidStateError
-from .mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
+from .mediastreams import (
+    AudioStreamTrack,
+    MediaStreamError,
+    MediaStreamTrack,
+    VideoStreamTrack,
+)
 from .rtcconfiguration import RTCConfiguration, RTCIceServer
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (
@@ -59,6 +64,7 @@ __all__ = [
     "AudioStreamTrack",
     "InvalidAccessError",
     "InvalidStateError",
+    "MediaStreamError",
     "MediaStreamTrack",
     "RTCCertificate",
     "RTCConfiguration",
