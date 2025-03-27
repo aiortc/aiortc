@@ -583,17 +583,25 @@ class MediaRelay:
             self.__log_debug("Stop proxy %s", id(proxy))
             self.__proxies[track].discard(proxy)
 
+            # stop worker if this was the last proxy
+            if not self.__proxies[track] and track in self.__tasks:
+                self.__tasks[track].cancel()
+
     def __log_debug(self, msg: str, *args) -> None:
         logger.debug(f"MediaRelay(%s) {msg}", id(self), *args)
 
     async def __run_track(self, track: MediaStreamTrack) -> None:
         self.__log_debug("Start reading source %s" % id(track))
 
+        task_cancelled_error = None
         while True:
             try:
                 frame = await track.recv()
             except MediaStreamError:
                 frame = None
+            except asyncio.CancelledError as e:
+                frame = None
+                task_cancelled_error = e
             for proxy in self.__proxies[track]:
                 if proxy._buffered:
                     proxy._queue.put_nowait(frame)
@@ -606,3 +614,6 @@ class MediaRelay:
         self.__log_debug("Stop reading source %s", id(track))
         del self.__proxies[track]
         del self.__tasks[track]
+
+        if task_cancelled_error:
+            raise task_cancelled_error
