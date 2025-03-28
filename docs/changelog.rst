@@ -3,6 +3,15 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.11.0
+------
+
+ * Fix decoding of RTX retransmission packets.
+ * Drop support for obsolete `h264_omx` codec.
+ * Require PyAV 14.x to support recent FFmpeg versions.
+ * Require pyee 13.x for better typing support.
+ * Require pyOpenSSL 25.x and fix deprecation warnings.
+
 1.10.1
 ------
 
