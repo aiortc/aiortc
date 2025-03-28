@@ -13,7 +13,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from OpenSSL import SSL, crypto
+from OpenSSL import SSL
 from pyee.asyncio import AsyncIOEventEmitter
 from pylibsrtp import Policy, Session
 
@@ -38,11 +38,11 @@ CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
 logger = logging.getLogger(__name__)
 
 # Mapping of supported `RTCDtlsFingerprint` algorithms to the
-# corresponding argument for `x509.digest`.
+# corresponding argument for `x509.Certificate.fingerprint`.
 X509_DIGEST_ALGORITHMS = {
-    "sha-256": "SHA256",
-    "sha-384": "SHA384",
-    "sha-512": "SHA512",
+    "sha-256": hashes.SHA256(),
+    "sha-384": hashes.SHA384(),
+    "sha-512": hashes.SHA512(),
 }
 
 
@@ -96,8 +96,9 @@ for srtp_profile in [
         SRTP_PROFILES.append(srtp_profile)
 
 
-def certificate_digest(x509: crypto.X509, algorithm: str) -> str:
-    return x509.digest(X509_DIGEST_ALGORITHMS[algorithm]).decode("ascii").upper()
+def certificate_digest(certificate: x509.Certificate, algorithm: str) -> str:
+    hexstring = certificate.fingerprint(X509_DIGEST_ALGORITHMS[algorithm]).hex().upper()
+    return ":".join(hexstring[x : x + 2] for x in range(0, len(hexstring), 2))
 
 
 def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
@@ -153,7 +154,7 @@ class RTCCertificate:
     :func:`generateCertificate`.
     """
 
-    def __init__(self, key: crypto.PKey, cert: crypto.X509) -> None:
+    def __init__(self, key: ec.EllipticCurvePrivateKey, cert: x509.Certificate) -> None:
         self._key = key
         self._cert = cert
 
@@ -162,7 +163,7 @@ class RTCCertificate:
         """
         The date and time after which the certificate will be considered invalid.
         """
-        return self._cert.to_cryptography().not_valid_after_utc
+        return self._cert.not_valid_after_utc
 
     def getFingerprints(self) -> List[RTCDtlsFingerprint]:
         """
@@ -186,10 +187,7 @@ class RTCCertificate:
         """
         key = ec.generate_private_key(ec.SECP256R1(), default_backend())
         cert = generate_certificate(key)
-        return cls(
-            key=crypto.PKey.from_cryptography_key(key),
-            cert=crypto.X509.from_cryptography(cert),
-        )
+        return cls(key=key, cert=cert)
 
     def _create_ssl_context(
         self, srtp_profiles: List[SRTPProtectionProfile]
@@ -441,14 +439,14 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         # Check remote fingerprints. There must be at least one fingerprint
         # with a supported algorithm, and all supported fingerprints must
         # match.
-        x509 = self._ssl.get_peer_certificate()
+        certificate = self._ssl.get_peer_certificate(as_cryptography=True)
         fingerprint_supported = 0
         fingerprint_valid = 0
         for f in remoteParameters.fingerprints:
             algorithm = f.algorithm.lower()
             if algorithm in X509_DIGEST_ALGORITHMS:
                 fingerprint_supported += 1
-                if f.value.upper() == certificate_digest(x509, algorithm):
+                if f.value.upper() == certificate_digest(certificate, algorithm):
                     fingerprint_valid += 1
         if not fingerprint_supported or fingerprint_valid != fingerprint_supported:
             self.__log_debug("x DTLS handshake failed (fingerprint mismatch)")
