@@ -140,5 +140,5 @@ class CodecTestCase(TestCase):
             self.assertEqual(len(frames), 1)
             self.assertEqual(frames[0].width, frame.width)
             self.assertEqual(frames[0].height, frame.height)
-            self.assertEqual(frames[0].pts, i * 3000)
+            self.assertAlmostEqual(frames[0].pts, i * 3000, delta=1)
             self.assertEqual(frames[0].time_base, VIDEO_TIME_BASE)

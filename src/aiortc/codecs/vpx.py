@@ -1,15 +1,15 @@
-import multiprocessing
 import random
 from struct import pack, unpack_from
-from typing import List, Tuple, Type, TypeVar, cast
+from typing import List, Optional, Tuple, Type, TypeVar, cast
 
-from av import VideoFrame
+import av
+from av import CodecContext, VideoFrame
 from av.frame import Frame
 from av.packet import Packet
+from av.video.codeccontext import VideoCodecContext
 
 from ..jitterbuffer import JitterFrame
-from ..mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, convert_timebase
-from ._vpx import ffi, lib
+from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 from .base import Decoder, Encoder
 
 DEFAULT_BITRATE = 500000  # 500 kbps
@@ -20,17 +20,6 @@ MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
-
-
-def number_of_threads(pixels: int, cpus: int) -> int:
-    if pixels >= 1920 * 1080 and cpus > 8:
-        return 8
-    elif pixels > 1280 * 960 and cpus >= 6:
-        return 3
-    elif pixels > 640 * 480 and cpus >= 3:
-        return 2
-    else:
-        return 1
 
 
 class VpxPayloadDescriptor:
@@ -162,87 +151,22 @@ class VpxPayloadDescriptor:
         return obj, data[pos:]
 
 
-def _vpx_assert(err: int) -> None:
-    if err != lib.VPX_CODEC_OK:
-        reason = ffi.string(lib.vpx_codec_err_to_string(err))
-        raise Exception("libvpx error: " + reason.decode("utf8"))
-
-
 class Vp8Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = ffi.new("vpx_codec_ctx_t *")
-        _vpx_assert(
-            lib.vpx_codec_dec_init(self.codec, lib.vpx_codec_vp8_dx(), ffi.NULL, 0)
-        )
-
-        ppcfg = ffi.new("vp8_postproc_cfg_t *")
-        ppcfg.post_proc_flag = lib.VP8_DEMACROBLOCK | lib.VP8_DEBLOCK
-        ppcfg.deblocking_level = 3
-        lib.vpx_codec_control_(self.codec, lib.VP8_SET_POSTPROC, ppcfg)
-
-    def __del__(self) -> None:
-        lib.vpx_codec_destroy(self.codec)
+        self.codec = cast(VideoCodecContext, CodecContext.create("libvpx", "r"))
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        frames: List[Frame] = []
-        result = lib.vpx_codec_decode(
-            self.codec,
-            encoded_frame.data,
-            len(encoded_frame.data),
-            ffi.NULL,
-            lib.VPX_DL_REALTIME,
-        )
-        if result == lib.VPX_CODEC_OK:
-            it = ffi.new("vpx_codec_iter_t *")
-            while True:
-                img = lib.vpx_codec_get_frame(self.codec, it)
-                if not img:
-                    break
-                assert img.fmt == lib.VPX_IMG_FMT_I420
-
-                frame = VideoFrame(width=img.d_w, height=img.d_h)
-                frame.pts = encoded_frame.timestamp
-                frame.time_base = VIDEO_TIME_BASE
-
-                for p in range(3):
-                    i_stride = img.stride[p]
-                    i_buf = ffi.buffer(img.planes[p], i_stride * img.d_h)
-                    i_pos = 0
-
-                    o_stride = frame.planes[p].line_size
-                    o_buf = memoryview(cast(bytes, frame.planes[p]))
-                    o_pos = 0
-
-                    div = p and 2 or 1
-                    for r in range(0, img.d_h // div):
-                        o_buf[o_pos : o_pos + o_stride] = i_buf[
-                            i_pos : i_pos + o_stride
-                        ]
-                        i_pos += i_stride
-                        o_pos += o_stride
-
-                frames.append(frame)
-
-        return frames
+        packet = Packet(encoded_frame.data)
+        packet.pts = encoded_frame.timestamp
+        packet.time_base = VIDEO_TIME_BASE
+        return cast(List[Frame], self.codec.decode(packet))
 
 
 class Vp8Encoder(Encoder):
     def __init__(self) -> None:
-        self.cx = lib.vpx_codec_vp8_cx()
-
-        self.cfg = ffi.new("vpx_codec_enc_cfg_t *")
-        lib.vpx_codec_enc_config_default(self.cx, self.cfg, 0)
-
-        self.buffer = bytearray(8000)
-        self.codec = None
+        self.codec: Optional[VideoCodecContext] = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
-        self.timestamp_increment = VIDEO_CLOCK_RATE // MAX_FRAME_RATE
         self.__target_bitrate = DEFAULT_BITRATE
-        self.__update_config_needed = False
-
-    def __del__(self) -> None:
-        if self.codec:
-            lib.vpx_codec_destroy(self.codec)
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -251,105 +175,51 @@ class Vp8Encoder(Encoder):
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
 
-        if self.codec and (frame.width != self.cfg.g_w or frame.height != self.cfg.g_h):
-            lib.vpx_codec_destroy(self.codec)
+        if self.codec and (
+            frame.width != self.codec.width
+            or frame.height != self.codec.height
+            # We only adjust bitrate if it changes by over 10%.
+            or abs(self.target_bitrate - self.codec.bit_rate) / self.codec.bit_rate
+            > 0.1
+        ):
             self.codec = None
 
-        if not self.codec:
-            # create codec
-            self.codec = ffi.new("vpx_codec_ctx_t *")
-            self.cfg.g_timebase.num = 1
-            self.cfg.g_timebase.den = VIDEO_CLOCK_RATE
-            self.cfg.g_lag_in_frames = 0
-            self.cfg.g_threads = number_of_threads(
-                frame.width * frame.height, multiprocessing.cpu_count()
-            )
-            self.cfg.g_w = frame.width
-            self.cfg.g_h = frame.height
-            self.cfg.rc_resize_allowed = 0
-            self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = 2
-            self.cfg.rc_max_quantizer = 56
-            self.cfg.rc_undershoot_pct = 100
-            self.cfg.rc_overshoot_pct = 15
-            self.cfg.rc_buf_initial_sz = 500
-            self.cfg.rc_buf_optimal_sz = 600
-            self.cfg.rc_buf_sz = 1000
-            self.cfg.kf_mode = lib.VPX_KF_AUTO
-            self.cfg.kf_max_dist = 3000
-            self.__update_config()
-            _vpx_assert(lib.vpx_codec_enc_init(self.codec, self.cx, self.cfg, 0))
-
-            lib.vpx_codec_control_(
-                self.codec, lib.VP8E_SET_NOISE_SENSITIVITY, ffi.cast("int", 4)
-            )
-            lib.vpx_codec_control_(
-                self.codec, lib.VP8E_SET_STATIC_THRESHOLD, ffi.cast("int", 1)
-            )
-            lib.vpx_codec_control_(
-                self.codec, lib.VP8E_SET_CPUUSED, ffi.cast("int", -6)
-            )
-            lib.vpx_codec_control_(
-                self.codec,
-                lib.VP8E_SET_TOKEN_PARTITIONS,
-                ffi.cast("int", lib.VP8_ONE_TOKENPARTITION),
-            )
-
-            # create image on a dummy buffer, we will fill the pointers during encoding
-            self.image = ffi.new("vpx_image_t *")
-            lib.vpx_img_wrap(
-                self.image,
-                lib.VPX_IMG_FMT_I420,
-                frame.width,
-                frame.height,
-                1,
-                ffi.cast("void*", 1),
-            )
-        elif self.__update_config_needed:
-            self.__update_config()
-            _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
-
-        # setup image
-        for p in range(3):
-            self.image.planes[p] = ffi.cast("void*", frame.planes[p].buffer_ptr)
-            self.image.stride[p] = frame.planes[p].line_size
-
-        # encode frame
-        flags = 0
+        # Force a complete image if a keyframe was requested.
         if force_keyframe:
-            flags |= lib.VPX_EFLAG_FORCE_KF
-        _vpx_assert(
-            lib.vpx_codec_encode(
-                self.codec,
-                self.image,
-                frame.pts,
-                self.timestamp_increment,
-                flags,
-                lib.VPX_DL_REALTIME,
-            )
-        )
+            frame.pict_type = av.video.frame.PictureType.I
 
-        it = ffi.new("vpx_codec_iter_t *")
-        length = 0
-        while True:
-            pkt = lib.vpx_codec_get_cx_data(self.codec, it)
-            if not pkt:
-                break
-            elif pkt.kind == lib.VPX_CODEC_CX_FRAME_PKT:
-                # resize buffer if needed
-                if length + pkt.data.frame.sz > len(self.buffer):
-                    new_buffer = bytearray(length + pkt.data.frame.sz)
-                    new_buffer[0:length] = self.buffer[0:length]
-                    self.buffer = new_buffer
+        if self.codec is None:
+            self.codec = cast(VideoCodecContext, av.CodecContext.create("libvpx", "w"))
+            self.codec.width = frame.width
+            self.codec.height = frame.height
+            self.codec.bit_rate = self.target_bitrate
+            self.codec.pix_fmt = "yuv420p"
+            self.codec.gop_size = 3000  # kf_max_dist
+            self.codec.qmin = 2  # rc_min_quantizer
+            self.codec.qmax = 56  # rc_max_quantizer
+            self.codec.options = {
+                # We want rc_buf_sz = 1000 and FFmpeg sets:
+                #   rc_buf_sz =  bufsize * 1000 / bit_rate
+                "bufsize": str(self.__target_bitrate),
+                "cpu-used": "-6",
+                "deadline": "realtime",
+                "lag-in-frames": "0",
+                # Setting minrate = maxrate = bit_rate triggers CBR.
+                "minrate": str(self.target_bitrate),
+                "maxrate": str(self.target_bitrate),
+                "noise-sensitivity": "4",
+                "overshoot-pct": "15",
+                "partitions": "0",  # VP8_ONE_TOKENPARTITION
+                "static-thresh": "1",
+                "undershoot-pct": "100",
+            }
 
-                # append new data
-                self.buffer[length : length + pkt.data.frame.sz] = ffi.buffer(
-                    pkt.data.frame.buf, pkt.data.frame.sz
-                )
-                length += pkt.data.frame.sz
+        data_to_send = b""
+        for package in self.codec.encode(frame):
+            data_to_send += bytes(package)
 
-        # packetize
-        payloads = self._packetize(self.buffer[:length], self.picture_id)
+        # Packetize.
+        payloads = self._packetize(data_to_send, self.picture_id)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
         self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads, timestamp
@@ -370,9 +240,7 @@ class Vp8Encoder(Encoder):
     @target_bitrate.setter
     def target_bitrate(self, bitrate: int) -> None:
         bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
-        if bitrate != self.__target_bitrate:
-            self.__target_bitrate = bitrate
-            self.__update_config_needed = True
+        self.__target_bitrate = bitrate
 
     @classmethod
     def _packetize(cls, buffer: bytes, picture_id: int) -> List[bytes]:
@@ -389,10 +257,6 @@ class Vp8Encoder(Encoder):
             descr.partition_start = 0
             pos += size
         return payloads
-
-    def __update_config(self) -> None:
-        self.cfg.rc_target_bitrate = self.__target_bitrate // 1000
-        self.__update_config_needed = False
 
 
 def vp8_depayload(payload: bytes) -> bytes:

@@ -11,10 +11,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.9
-      - name: Install OS packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install libvpx-dev
       - name: Build documentation
         run: |
           pip install . -r requirements/doc.txt
@@ -27,10 +23,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.9
-      - name: Install OS packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install libvpx-dev
       - name: Run linters
         run: |
           pip install . -r requirements/lint.txt
@@ -56,17 +48,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install OS packages and disable firewall
+      - name: Disable firewall
         if: matrix.os == 'macos-latest'
         run: |
-          brew update
-          brew install libvpx
           sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off
-      - name: Install OS packages
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install libvpx-dev
       - name: Run tests
         run: |
           python -m pip install -U pip setuptools wheel
@@ -79,7 +64,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  package-source:
+  package:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
@@ -87,72 +72,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.9
-      - name: Build source package
-        run: |
-          pip install -U build
-          python -m build --sdist
-      - name: Upload source package
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-source
-          path: dist/
-
-  package-wheel:
-    runs-on: ${{ matrix.os }}
-    needs: [package-source]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-13
-            arch: x86_64
-          - os: ubuntu-latest
-            arch: i686
-          - os: ubuntu-latest
-            arch: x86_64
-          - os: ubuntu-24.04-arm
-            arch: aarch64
-          - os: windows-latest
-            arch: AMD64
-          - os: windows-latest
-            arch: x86
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
-      - name: Build wheels
-        env:
-          CIBW_ARCHS: ${{ matrix.arch }}
-          CIBW_BEFORE_BUILD: python scripts/fetch-vendor.py /tmp/vendor
-          CIBW_BEFORE_BUILD_WINDOWS: python scripts\fetch-vendor.py C:\cibw\vendor
-          CIBW_ENVIRONMENT: CFLAGS=-I/tmp/vendor/include LDFLAGS=-L/tmp/vendor/lib
-          CIBW_ENVIRONMENT_WINDOWS: INCLUDE=C:\\cibw\\vendor\\include LIB=C:\\cibw\\vendor\\lib
-          CIBW_SKIP: '*-musllinux* pp*'
-          CIBW_TEST_COMMAND: python -c "import aiortc"
-          # There are no binary wheels for cryptography on 32-bit platforms.
-          CIBW_TEST_SKIP: "*-{manylinux_i686,win32}"
-        run: |
-          pip install cibuildwheel
-          cibuildwheel --output-dir dist
-        shell: bash
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-wheel-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/
-
-  publish:
-    runs-on: ubuntu-latest
-    needs: [lint, test, package-source, package-wheel]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-          path: dist/
+      - name: Install packages
+        run: pip install build wheel
+      - name: Build package
+        run: python -m build
       - name: Publish to PyPI
         if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
