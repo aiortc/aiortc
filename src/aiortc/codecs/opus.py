@@ -1,61 +1,43 @@
 import fractions
-from typing import List, Tuple
+from typing import List, Optional, Tuple, cast
 
-from av import AudioFrame, AudioResampler
+from av import AudioFrame, AudioResampler, CodecContext
+from av.audio.codeccontext import AudioCodecContext
 from av.frame import Frame
 from av.packet import Packet
 
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import convert_timebase
-from ._opus import ffi, lib
 from .base import Decoder, Encoder
 
-CHANNELS = 2
 SAMPLE_RATE = 48000
-SAMPLE_WIDTH = 2
 SAMPLES_PER_FRAME = 960
 TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 
 class OpusDecoder(Decoder):
     def __init__(self) -> None:
-        error = ffi.new("int *")
-        self.decoder = lib.opus_decoder_create(SAMPLE_RATE, CHANNELS, error)
-        assert error[0] == lib.OPUS_OK
-
-    def __del__(self) -> None:
-        lib.opus_decoder_destroy(self.decoder)
+        self.codec = cast(AudioCodecContext, CodecContext.create("libopus", "r"))
+        self.codec.format = "s16"
+        self.codec.layout = "stereo"
+        self.codec.sample_rate = SAMPLE_RATE
 
     def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
-        frame = AudioFrame(format="s16", layout="stereo", samples=SAMPLES_PER_FRAME)
-        frame.pts = encoded_frame.timestamp
-        frame.sample_rate = SAMPLE_RATE
-        frame.time_base = TIME_BASE
-
-        length = lib.opus_decode(
-            self.decoder,
-            encoded_frame.data,
-            len(encoded_frame.data),
-            ffi.cast("int16_t *", frame.planes[0].buffer_ptr),
-            SAMPLES_PER_FRAME,
-            0,
-        )
-        assert length == SAMPLES_PER_FRAME
-        return [frame]
+        packet = Packet(encoded_frame.data)
+        packet.pts = encoded_frame.timestamp
+        packet.time_base = TIME_BASE
+        return cast(List[Frame], self.codec.decode(packet))
 
 
 class OpusEncoder(Encoder):
     def __init__(self) -> None:
-        error = ffi.new("int *")
-        self.encoder = lib.opus_encoder_create(
-            SAMPLE_RATE, CHANNELS, lib.OPUS_APPLICATION_VOIP, error
-        )
-        assert error[0] == lib.OPUS_OK
-
-        self.cdata = ffi.new(
-            "unsigned char []", SAMPLES_PER_FRAME * CHANNELS * SAMPLE_WIDTH
-        )
-        self.buffer = ffi.buffer(self.cdata)
+        self.codec = cast(AudioCodecContext, CodecContext.create("libopus", "w"))
+        self.codec.bit_rate = 96000
+        self.codec.format = "s16"
+        self.codec.layout = "stereo"
+        self.codec.options = {"application": "voip"}
+        self.codec.sample_rate = SAMPLE_RATE
+        self.codec.time_base = TIME_BASE
 
         # Create our own resampler to control the frame size.
         self.resampler = AudioResampler(
@@ -65,8 +47,7 @@ class OpusEncoder(Encoder):
             frame_size=SAMPLES_PER_FRAME,
         )
 
-    def __del__(self) -> None:
-        lib.opus_encoder_destroy(self.encoder)
+        self.first_packet_pts: Optional[int] = None
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -76,24 +57,21 @@ class OpusEncoder(Encoder):
         assert frame.layout.name in ["mono", "stereo"]
 
         # Send frame through resampler and encoder.
-        payloads = []
-        timestamp = None
+        packets = []
         for frame in self.resampler.resample(frame):
-            data = bytes(frame.planes[0])
-            length = lib.opus_encode(
-                self.encoder,
-                ffi.cast("int16_t*", ffi.from_buffer(data)),
-                SAMPLES_PER_FRAME,
-                self.cdata,
-                len(self.cdata),
-            )
-            assert length > 0
+            packets += self.codec.encode(frame)
 
-            payloads.append(self.buffer[0:length])
-            if timestamp is None:
-                timestamp = frame.pts
+        # For some reason the pts starts at a negative value,
+        # so make a note of the first pts to cancel it out.
+        if self.first_packet_pts is None and packets:
+            self.first_packet_pts = packets[0].pts
 
-        return payloads, timestamp
+        if packets:
+            # Packets were returned.
+            return [bytes(p) for p in packets], packets[0].pts - self.first_packet_pts
+        else:
+            # No packets were returned due to buffering.
+            return [], None
 
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
