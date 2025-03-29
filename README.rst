@@ -108,7 +108,7 @@ On Debian/Ubuntu run:
 
 .. code:: bash
 
-    apt install libopus-dev libvpx-dev
+    apt install libvpx-dev
 
 OS X
 ....
@@ -117,7 +117,7 @@ On OS X run:
 
 .. code:: bash
 
-    brew install opus libvpx
+    brew install libvpx
 
 License
 -------

@@ -2,7 +2,6 @@ version: 2
 
 build:
   apt_packages:
-    - libopus-dev
     - libvpx-dev
   os: ubuntu-22.04
   tools:
