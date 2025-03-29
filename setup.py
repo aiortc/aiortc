@@ -14,7 +14,6 @@ class bdist_wheel_abi3(bdist_wheel):
 
 setuptools.setup(
     cffi_modules=[
-        "src/_cffi_src/build_opus.py:ffibuilder",
         "src/_cffi_src/build_vpx.py:ffibuilder",
     ],
     cmdclass={"bdist_wheel": bdist_wheel_abi3},
