@@ -23,10 +23,13 @@ class OpusTest(CodecTestCase):
         frame = frames[0]
         self.assertEqual(frame.format.name, "s16")
         self.assertEqual(frame.layout.name, "stereo")
-        self.assertEqual(bytes(frame.planes[0]), b"\x00" * 4 * 960)
-        self.assertEqual(frame.sample_rate, 48000)
         self.assertEqual(frame.pts, 0)
+        self.assertEqual(frame.samples, 960)
+        self.assertEqual(frame.sample_rate, 48000)
         self.assertEqual(frame.time_base, fractions.Fraction(1, 48000))
+
+        # Note: the frame may be padded so only check the actual samples.
+        self.assertEqual(bytes(frame.planes[0])[0 : 4 * 960], b"\x00" * 4 * 960)
 
     def test_encoder_mono_8khz(self):
         encoder = get_encoder(OPUS_CODEC)
