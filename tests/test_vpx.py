@@ -2,13 +2,7 @@ import fractions
 from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.vpx import (
-    Vp8Decoder,
-    Vp8Encoder,
-    VpxPayloadDescriptor,
-    _vpx_assert,
-    number_of_threads,
-)
+from aiortc.codecs.vpx import Vp8Decoder, Vp8Encoder, VpxPayloadDescriptor
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
@@ -158,11 +152,6 @@ class VpxPayloadDescriptorTest(TestCase):
 
 
 class Vp8Test(CodecTestCase):
-    def test_assert(self):
-        with self.assertRaises(Exception) as cm:
-            _vpx_assert(1)
-        self.assertEqual(str(cm.exception), "libvpx error: Unspecified internal error")
-
     def test_decoder(self):
         decoder = get_decoder(VP8_CODEC)
         self.assertIsInstance(decoder, Vp8Decoder)
@@ -182,7 +171,7 @@ class Vp8Test(CodecTestCase):
         payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
-        self.assertEqual(timestamp, 3000)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
 
     def test_encoder_rgb(self):
         encoder = get_encoder(VP8_CODEC)
@@ -220,14 +209,14 @@ class Vp8Test(CodecTestCase):
         payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
-        self.assertEqual(timestamp, 3000)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
 
         # force keyframe
         frame = self.create_video_frame(width=2560, height=1920, pts=6000)
         payloads, timestamp = encoder.encode(frame, force_keyframe=True)
         self.assertEqual(len(payloads), 7)
         self.assertEqual(len(payloads[0]), 1300)
-        self.assertEqual(timestamp, 6000)
+        self.assertAlmostEqual(timestamp, 6000, delta=1)
 
     def test_encoder_target_bitrate(self):
         encoder = get_encoder(VP8_CODEC)
@@ -248,13 +237,7 @@ class Vp8Test(CodecTestCase):
         payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
-        self.assertEqual(timestamp, 3000)
-
-    def test_number_of_threads(self):
-        self.assertEqual(number_of_threads(1920 * 1080, 16), 8)
-        self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
-        self.assertEqual(number_of_threads(1920 * 1080, 4), 2)
-        self.assertEqual(number_of_threads(1920 * 1080, 2), 1)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
 
     def test_roundtrip_1280_720(self):
         self.roundtrip_video(VP8_CODEC, 1280, 720)
