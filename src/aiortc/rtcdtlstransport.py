@@ -6,7 +6,7 @@ import logging
 import os
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Type, TypeVar
+from typing import Dict, List, Optional, Protocol, Set, Type, TypeVar, Union
 
 import pylibsrtp
 from cryptography import x509
@@ -34,6 +34,8 @@ from .rtp import (
 from .stats import RTCStatsReport, RTCTransportStats
 
 CERTIFICATE_T = TypeVar("CERTIFICATE_T", bound="RTCCertificate")
+K = TypeVar("K")
+V = TypeVar("V")
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +222,18 @@ class RTCDtlsParameters:
     "The DTLS role, with a default of auto."
 
 
+class RtpReceiver(Protocol):
+    def _handle_disconnect(self) -> None: ...
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None: ...
+    async def _handle_rtp_packet(
+        self, packet: RtpPacket, arrival_time_ms: int
+    ) -> None: ...
+
+
+class RtpSender(Protocol):
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None: ...
+
+
 class RtpRouter:
     """
     Router to associate RTP/RTCP packets with streams.
@@ -228,15 +242,15 @@ class RtpRouter:
     """
 
     def __init__(self) -> None:
-        self.receivers: Set = set()
-        self.senders: Dict[int, Any] = {}
-        self.mid_table: Dict[str, Any] = {}
-        self.ssrc_table: Dict[int, Any] = {}
-        self.payload_type_table: Dict[int, Set] = {}
+        self.receivers: Set[RtpReceiver] = set()
+        self.senders: Dict[int, RtpSender] = {}
+        self.mid_table: Dict[str, RtpReceiver] = {}
+        self.ssrc_table: Dict[int, RtpReceiver] = {}
+        self.payload_type_table: Dict[int, Set[RtpReceiver]] = {}
 
     def register_receiver(
         self,
-        receiver,
+        receiver: RtpReceiver,
         ssrcs: List[int],
         payload_types: List[int],
         mid: Optional[str] = None,
@@ -254,10 +268,10 @@ class RtpRouter:
     def register_sender(self, sender, ssrc: int) -> None:
         self.senders[ssrc] = sender
 
-    def route_rtcp(self, packet: AnyRtcpPacket) -> Set:
-        recipients = set()
+    def route_rtcp(self, packet: AnyRtcpPacket) -> Set[Union[RtpReceiver, RtpSender]]:
+        recipients: Set[Union[RtpReceiver, RtpSender]] = set()
 
-        def add_recipient(recipient) -> None:
+        def add_recipient(recipient: Optional[Union[RtpReceiver, RtpSender]]) -> None:
             if recipient is not None:
                 recipients.add(recipient)
 
@@ -285,7 +299,7 @@ class RtpRouter:
 
         return recipients
 
-    def route_rtp(self, packet: RtpPacket) -> Optional[Any]:
+    def route_rtp(self, packet: RtpPacket) -> Optional[RtpReceiver]:
         ssrc_receiver = self.ssrc_table.get(packet.ssrc)
         pt_receivers = self.payload_type_table.get(packet.payload_type, set())
 
@@ -302,17 +316,17 @@ class RtpRouter:
         # discard the packet
         return None
 
-    def unregister_receiver(self, receiver) -> None:
+    def unregister_receiver(self, receiver: RtpReceiver) -> None:
         self.receivers.discard(receiver)
         self.__discard(self.mid_table, receiver)
         self.__discard(self.ssrc_table, receiver)
         for pt, receivers in self.payload_type_table.items():
             receivers.discard(receiver)
 
-    def unregister_sender(self, sender) -> None:
+    def unregister_sender(self, sender: RtpSender) -> None:
         self.__discard(self.senders, sender)
 
-    def __discard(self, d: Dict, value: Any) -> None:
+    def __discard(self, d: dict[K, V], value: V) -> None:
         for k, v in list(d.items()):
             if v == value:
                 d.pop(k)
