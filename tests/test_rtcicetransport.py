@@ -32,6 +32,12 @@ class ConnectionKwargsTest(TestCase):
 
     def test_stun(self):
         self.assertEqual(
+            connection_kwargs([RTCIceServer(urls=["stun:stun.l.google.com:19302"])]),
+            {"stun_server": ("stun.l.google.com", 19302)},
+        )
+
+        # Backwards compatibility: `urls` as a string.
+        self.assertEqual(
             connection_kwargs([RTCIceServer("stun:stun.l.google.com:19302")]),
             {"stun_server": ("stun.l.google.com", 19302)},
         )
@@ -39,7 +45,7 @@ class ConnectionKwargsTest(TestCase):
     def test_stun_with_suffix(self):
         self.assertEqual(
             connection_kwargs(
-                [RTCIceServer("stun:global.stun.twilio.com:3478?transport=udp")]
+                [RTCIceServer(urls=["stun:global.stun.twilio.com:3478?transport=udp"])]
             ),
             {"stun_server": ("global.stun.twilio.com", 3478)},
         )
@@ -48,8 +54,8 @@ class ConnectionKwargsTest(TestCase):
         self.assertEqual(
             connection_kwargs(
                 [
-                    RTCIceServer("stun:stun.l.google.com:19302"),
-                    RTCIceServer("stun:stun.example.com"),
+                    RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+                    RTCIceServer(urls=["stun:stun.example.com"]),
                 ]
             ),
             {"stun_server": ("stun.l.google.com", 19302)},
@@ -60,7 +66,7 @@ class ConnectionKwargsTest(TestCase):
             connection_kwargs(
                 [
                     RTCIceServer(
-                        [
+                        urls=[
                             "stun:stun1.l.google.com:19302",
                             "stun:stun2.l.google.com:19302",
                         ]
@@ -72,7 +78,7 @@ class ConnectionKwargsTest(TestCase):
 
     def test_turn(self):
         self.assertEqual(
-            connection_kwargs([RTCIceServer("turn:turn.example.com")]),
+            connection_kwargs([RTCIceServer(urls=["turn:turn.example.com"])]),
             {
                 "turn_password": None,
                 "turn_server": ("turn.example.com", 3478),
@@ -86,8 +92,8 @@ class ConnectionKwargsTest(TestCase):
         self.assertEqual(
             connection_kwargs(
                 [
-                    RTCIceServer("turn:turn.example.com"),
-                    RTCIceServer("turn:turn.example.net"),
+                    RTCIceServer(urls=["turn:turn.example.com"]),
+                    RTCIceServer(urls=["turn:turn.example.net"]),
                 ]
             ),
             {
@@ -102,7 +108,11 @@ class ConnectionKwargsTest(TestCase):
     def test_turn_multiple_urls(self):
         self.assertEqual(
             connection_kwargs(
-                [RTCIceServer(["turn:turn1.example.com", "turn:turn2.example.com"])]
+                [
+                    RTCIceServer(
+                        urls=["turn:turn1.example.com", "turn:turn2.example.com"]
+                    )
+                ]
             ),
             {
                 "turn_password": None,
@@ -115,13 +125,17 @@ class ConnectionKwargsTest(TestCase):
 
     def test_turn_over_bogus(self):
         self.assertEqual(
-            connection_kwargs([RTCIceServer("turn:turn.example.com?transport=bogus")]),
+            connection_kwargs(
+                [RTCIceServer(urls=["turn:turn.example.com?transport=bogus"])]
+            ),
             {},
         )
 
     def test_turn_over_tcp(self):
         self.assertEqual(
-            connection_kwargs([RTCIceServer("turn:turn.example.com?transport=tcp")]),
+            connection_kwargs(
+                [RTCIceServer(urls=["turn:turn.example.com?transport=tcp"])]
+            ),
             {
                 "turn_password": None,
                 "turn_server": ("turn.example.com", 3478),
@@ -136,7 +150,7 @@ class ConnectionKwargsTest(TestCase):
             connection_kwargs(
                 [
                     RTCIceServer(
-                        urls="turn:turn.example.com", username="foo", credential="bar"
+                        urls=["turn:turn.example.com"], username="foo", credential="bar"
                     )
                 ]
             ),
@@ -154,7 +168,7 @@ class ConnectionKwargsTest(TestCase):
             connection_kwargs(
                 [
                     RTCIceServer(
-                        urls="turn:turn.example.com",
+                        urls=["turn:turn.example.com"],
                         username="foo",
                         credential="bar",
                         credentialType="token",
@@ -166,7 +180,7 @@ class ConnectionKwargsTest(TestCase):
 
     def test_turns(self):
         self.assertEqual(
-            connection_kwargs([RTCIceServer("turns:turn.example.com")]),
+            connection_kwargs([RTCIceServer(urls=["turns:turn.example.com"])]),
             {
                 "turn_password": None,
                 "turn_server": ("turn.example.com", 5349),
@@ -178,7 +192,9 @@ class ConnectionKwargsTest(TestCase):
 
     def test_turns_over_udp(self):
         self.assertEqual(
-            connection_kwargs([RTCIceServer("turns:turn.example.com?transport=udp")]),
+            connection_kwargs(
+                [RTCIceServer(urls=["turns:turn.example.com?transport=udp"])]
+            ),
             {},
         )
 
@@ -255,7 +271,7 @@ class RTCIceGathererTest(TestCase):
     def test_default_ice_servers(self):
         self.assertEqual(
             RTCIceGatherer.getDefaultIceServers(),
-            [RTCIceServer(urls="stun:stun.l.google.com:19302")],
+            [RTCIceServer(urls=["stun:stun.l.google.com:19302"])],
         )
 
 

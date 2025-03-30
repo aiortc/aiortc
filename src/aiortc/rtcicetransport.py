@@ -96,12 +96,7 @@ def connection_kwargs(servers: List[RTCIceServer]) -> Dict[str, Any]:
     kwargs: Dict[str, Any] = {}
 
     for server in servers:
-        if isinstance(server.urls, list):
-            uris = server.urls
-        else:
-            uris = [server.urls]
-
-        for uri in uris:
+        for uri in server.urls:
             parsed = parse_stun_turn_uri(uri)
 
             if parsed["scheme"] == "stun":
@@ -206,7 +201,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
         """
         Return the list of default :class:`RTCIceServer`.
         """
-        return [RTCIceServer("stun:stun.l.google.com:19302")]
+        return [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 
     def getLocalCandidates(self) -> List[RTCIceCandidate]:
         """

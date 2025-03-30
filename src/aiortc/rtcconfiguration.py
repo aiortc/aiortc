@@ -10,16 +10,22 @@ class RTCIceServer:
     if any, to connect to the server.
     """
 
-    urls: str
+    urls: List[str]
     """
-    This required property is either a single string or a list of strings,
-    each specifying a URL which can be used to connect to the server.
+    This required property specifies a list of URLs which can be used to
+    connect to the server.
     """
     username: Optional[str] = None
     "The username to use during authentication (for TURN only)."
     credential: Optional[str] = None
     "The credential to use during authentication (for TURN only)."
     credentialType: str = "password"
+
+    def __post_init__(self):
+        # For backwards compatibility we accept a string, but convert it to
+        # a list with a single item.
+        if isinstance(self.urls, str):
+            self.urls = [self.urls]
 
 
 @dataclass
