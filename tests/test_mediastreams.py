@@ -28,10 +28,10 @@ class VideoPacketStreamTrack(MediaStreamTrack):
     async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
         if hasattr(self, "_timestamp"):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
-            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.monotonic()
             await asyncio.sleep(wait)
         else:
-            self._start = time.time()
+            self._start = time.monotonic()
             self._timestamp = 0
         return self._timestamp, VIDEO_TIME_BASE
 
