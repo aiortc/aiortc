@@ -1,6 +1,6 @@
 import random
 from struct import pack, unpack_from
-from typing import List, Optional, Tuple, Type, TypeVar, cast
+from typing import Optional, Type, TypeVar, cast
 
 import av
 from av import CodecContext, VideoFrame
@@ -80,7 +80,7 @@ class VpxPayloadDescriptor:
         )
 
     @classmethod
-    def parse(cls: Type[DESCRIPTOR_T], data: bytes) -> Tuple[DESCRIPTOR_T, bytes]:
+    def parse(cls: Type[DESCRIPTOR_T], data: bytes) -> tuple[DESCRIPTOR_T, bytes]:
         if len(data) < 1:
             raise ValueError("VPX descriptor is too short")
 
@@ -155,11 +155,11 @@ class Vp8Decoder(Decoder):
     def __init__(self) -> None:
         self.codec = cast(VideoCodecContext, CodecContext.create("libvpx", "r"))
 
-    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
+    def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         packet = Packet(encoded_frame.data)
         packet.pts = encoded_frame.timestamp
         packet.time_base = VIDEO_TIME_BASE
-        return cast(List[Frame], self.codec.decode(packet))
+        return cast(list[Frame], self.codec.decode(packet))
 
 
 class Vp8Encoder(Encoder):
@@ -170,7 +170,7 @@ class Vp8Encoder(Encoder):
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
-    ) -> Tuple[List[bytes], int]:
+    ) -> tuple[list[bytes], int]:
         assert isinstance(frame, VideoFrame)
         if frame.format.name != "yuv420p":
             frame = frame.reformat(format="yuv420p")
@@ -224,7 +224,7 @@ class Vp8Encoder(Encoder):
         self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads, timestamp
 
-    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+    def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         payloads = self._packetize(bytes(packet), self.picture_id)
         timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
         self.picture_id = (self.picture_id + 1) % (1 << 15)
@@ -243,7 +243,7 @@ class Vp8Encoder(Encoder):
         self.__target_bitrate = bitrate
 
     @classmethod
-    def _packetize(cls, buffer: bytes, picture_id: int) -> List[bytes]:
+    def _packetize(cls, buffer: bytes, picture_id: int) -> list[bytes]:
         payloads = []
         descr = VpxPayloadDescriptor(
             partition_start=1, partition_id=0, picture_id=picture_id

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 
 @dataclass
@@ -10,7 +10,7 @@ class RTCIceServer:
     if any, to connect to the server.
     """
 
-    urls: Union[str, List[str]]
+    urls: Union[str, list[str]]
     """
     This required property is either a single string or a list of strings,
     each specifying a URL which can be used to connect to the server.
@@ -29,5 +29,5 @@ class RTCConfiguration:
     options for an :class:`RTCPeerConnection`.
     """
 
-    iceServers: Optional[List[RTCIceServer]] = None
+    iceServers: Optional[list[RTCIceServer]] = None
     "A list of :class:`RTCIceServer` objects to configure STUN / TURN servers."

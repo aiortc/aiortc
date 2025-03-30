@@ -6,7 +6,7 @@ import logging
 import os
 import traceback
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Protocol, Set, Type, TypeVar, Union
+from typing import Optional, Protocol, Type, TypeVar, Union
 
 import pylibsrtp
 from cryptography import x509
@@ -84,7 +84,7 @@ SRTP_AES128_CM_SHA1_80 = SRTPProtectionProfile(
 )
 
 # AES-GCM may not be available depending on how libsrtp2 was built.
-SRTP_PROFILES: List[SRTPProtectionProfile] = []
+SRTP_PROFILES: list[SRTPProtectionProfile] = []
 for srtp_profile in [
     SRTP_AEAD_AES_256_GCM,
     SRTP_AEAD_AES_128_GCM,
@@ -167,7 +167,7 @@ class RTCCertificate:
         """
         return self._cert.not_valid_after_utc
 
-    def getFingerprints(self) -> List[RTCDtlsFingerprint]:
+    def getFingerprints(self) -> list[RTCDtlsFingerprint]:
         """
         Returns the list of certificate fingerprints, one of which is computed
         with the digest algorithm used in the certificate signature.
@@ -192,7 +192,7 @@ class RTCCertificate:
         return cls(key=key, cert=cert)
 
     def _create_ssl_context(
-        self, srtp_profiles: List[SRTPProtectionProfile]
+        self, srtp_profiles: list[SRTPProtectionProfile]
     ) -> SSL.Context:
         ctx = SSL.Context(SSL.DTLS_METHOD)
         ctx.set_verify(
@@ -215,7 +215,7 @@ class RTCDtlsParameters:
     DTLS configuration.
     """
 
-    fingerprints: List[RTCDtlsFingerprint] = field(default_factory=list)
+    fingerprints: list[RTCDtlsFingerprint] = field(default_factory=list)
     "List of :class:`RTCDtlsFingerprint`, one fingerprint for each certificate."
 
     role: str = "auto"
@@ -242,17 +242,17 @@ class RtpRouter:
     """
 
     def __init__(self) -> None:
-        self.receivers: Set[RtpReceiver] = set()
-        self.senders: Dict[int, RtpSender] = {}
-        self.mid_table: Dict[str, RtpReceiver] = {}
-        self.ssrc_table: Dict[int, RtpReceiver] = {}
-        self.payload_type_table: Dict[int, Set[RtpReceiver]] = {}
+        self.receivers: set[RtpReceiver] = set()
+        self.senders: dict[int, RtpSender] = {}
+        self.mid_table: dict[str, RtpReceiver] = {}
+        self.ssrc_table: dict[int, RtpReceiver] = {}
+        self.payload_type_table: dict[int, set[RtpReceiver]] = {}
 
     def register_receiver(
         self,
         receiver: RtpReceiver,
-        ssrcs: List[int],
-        payload_types: List[int],
+        ssrcs: list[int],
+        payload_types: list[int],
         mid: Optional[str] = None,
     ):
         self.receivers.add(receiver)
@@ -268,8 +268,8 @@ class RtpRouter:
     def register_sender(self, sender, ssrc: int) -> None:
         self.senders[ssrc] = sender
 
-    def route_rtcp(self, packet: AnyRtcpPacket) -> Set[Union[RtpReceiver, RtpSender]]:
-        recipients: Set[Union[RtpReceiver, RtpSender]] = set()
+    def route_rtcp(self, packet: AnyRtcpPacket) -> set[Union[RtpReceiver, RtpSender]]:
+        recipients: set[Union[RtpReceiver, RtpSender]] = set()
 
         def add_recipient(recipient: Optional[Union[RtpReceiver, RtpSender]]) -> None:
             if recipient is not None:
@@ -343,7 +343,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
     """
 
     def __init__(
-        self, transport: RTCIceTransport, certificates: List[RTCCertificate]
+        self, transport: RTCIceTransport, certificates: list[RTCCertificate]
     ) -> None:
         assert len(certificates) == 1
         certificate = certificates[0]

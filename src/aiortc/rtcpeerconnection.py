@@ -2,7 +2,7 @@ import asyncio
 import copy
 import logging
 import uuid
-from typing import Dict, List, Optional, Set, Union
+from typing import Optional, Union
 
 from pyee.asyncio import AsyncIOEventEmitter
 
@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 
 
 def filter_preferred_codecs(
-    codecs: List[RTCRtpCodecParameters], preferred: List[RTCRtpCodecCapability]
-) -> List[RTCRtpCodecParameters]:
+    codecs: list[RTCRtpCodecParameters], preferred: list[RTCRtpCodecCapability]
+) -> list[RTCRtpCodecParameters]:
     if not preferred:
         return codecs
 
@@ -80,11 +80,11 @@ def filter_preferred_codecs(
 
 
 def find_common_codecs(
-    local_codecs: List[RTCRtpCodecParameters],
-    remote_codecs: List[RTCRtpCodecParameters],
-) -> List[RTCRtpCodecParameters]:
+    local_codecs: list[RTCRtpCodecParameters],
+    remote_codecs: list[RTCRtpCodecParameters],
+) -> list[RTCRtpCodecParameters]:
     common = []
-    common_base: Dict[int, RTCRtpCodecParameters] = {}
+    common_base: dict[int, RTCRtpCodecParameters] = {}
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
         if is_rtx(c):
@@ -111,9 +111,9 @@ def find_common_codecs(
 
 
 def find_common_header_extensions(
-    local_extensions: List[RTCRtpHeaderExtensionParameters],
-    remote_extensions: List[RTCRtpHeaderExtensionParameters],
-) -> List[RTCRtpHeaderExtensionParameters]:
+    local_extensions: list[RTCRtpHeaderExtensionParameters],
+    remote_extensions: list[RTCRtpHeaderExtensionParameters],
+) -> list[RTCRtpHeaderExtensionParameters]:
     common = []
     for rx in remote_extensions:
         for lx in local_extensions:
@@ -180,7 +180,7 @@ async def add_remote_candidates(
         await iceTransport.addRemoteCandidate(None)
 
 
-def allocate_mid(mids: Set[str]) -> str:
+def allocate_mid(mids: set[str]) -> str:
     """
     Allocate a MID which has not been used yet.
     """
@@ -295,22 +295,22 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
-        self.__dtlsTransports: Set[RTCDtlsTransport] = set()
-        self.__iceTransports: Set[RTCIceTransport] = set()
-        self.__remoteDtls: Dict[
+        self.__dtlsTransports: set[RTCDtlsTransport] = set()
+        self.__iceTransports: set[RTCIceTransport] = set()
+        self.__remoteDtls: dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCDtlsParameters
         ] = {}
-        self.__remoteIce: Dict[
+        self.__remoteIce: dict[
             Union[RTCRtpTransceiver, RTCSctpTransport], RTCIceParameters
         ] = {}
-        self.__seenMids: Set[str] = set()
+        self.__seenMids: set[str] = set()
         self.__sctp: Optional[RTCSctpTransport] = None
         self.__sctp_mline_index: Optional[int] = None
         self._sctpLegacySdp = True
         self.__sctpRemotePort: Optional[int] = None
         self.__sctpRemoteCaps = None
         self.__stream_id = str(uuid.uuid4())
-        self.__transceivers: List[RTCRtpTransceiver] = []
+        self.__transceivers: list[RTCRtpTransceiver] = []
 
         self.__closeTask: Optional[asyncio.Task] = None
         self.__connectionState = "new"
@@ -634,11 +634,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         def get_media(
             description: sdp.SessionDescription,
-        ) -> List[sdp.MediaDescription]:
+        ) -> list[sdp.MediaDescription]:
             return description.media if description else []
 
         def get_media_section(
-            media: List[sdp.MediaDescription], i: int
+            media: list[sdp.MediaDescription], i: int
         ) -> Optional[sdp.MediaDescription]:
             return media[i] if i < len(media) else None
 
@@ -700,14 +700,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         return wrap_session_description(description)
 
-    def getReceivers(self) -> List[RTCRtpReceiver]:
+    def getReceivers(self) -> list[RTCRtpReceiver]:
         """
         Returns the list of :class:`RTCRtpReceiver` objects that are currently
         attached to the connection.
         """
         return list(map(lambda x: x.receiver, self.__transceivers))
 
-    def getSenders(self) -> List[RTCRtpSender]:
+    def getSenders(self) -> list[RTCRtpSender]:
         """
         Returns the list of :class:`RTCRtpSender` objects that are currently
         attached to the connection.
@@ -728,7 +728,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             merged.update(report)
         return merged
 
-    def getTransceivers(self) -> List[RTCRtpTransceiver]:
+    def getTransceivers(self) -> list[RTCRtpTransceiver]:
         """
         Returns the list of :class:`RTCRtpTransceiver` objects that are currently
         attached to the connection.
@@ -832,7 +832,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__validate_description(description, is_local=False)
 
         # apply description
-        iceCandidates: Dict[RTCIceTransport, sdp.MediaDescription] = {}
+        iceCandidates: dict[RTCIceTransport, sdp.MediaDescription] = {}
         trackEvents = []
         for i, media in enumerate(description.media):
             dtlsTransport: Optional[RTCDtlsTransport] = None
@@ -1138,7 +1138,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
-            encodings: Dict[int, RTCRtpDecodingParameters] = {}
+            encodings: dict[int, RTCRtpDecodingParameters] = {}
             for codec in transceiver._codecs:
                 if is_rtx(codec):
                     apt = codec.parameters.get("apt")

@@ -3,7 +3,7 @@ import os
 import struct
 from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from av import AudioFrame
 
@@ -170,7 +170,7 @@ def pack_rtcp_packet(packet_type: int, count: int, payload: bytes) -> bytes:
     return pack("!BBH", (2 << 6) | count, packet_type, len(payload) // 4) + payload
 
 
-def pack_remb_fci(bitrate: int, ssrcs: List[int]) -> bytes:
+def pack_remb_fci(bitrate: int, ssrcs: list[int]) -> bytes:
     """
     Pack the FCI for a Receiver Estimated Maximum Bitrate report.
 
@@ -190,7 +190,7 @@ def pack_remb_fci(bitrate: int, ssrcs: List[int]) -> bytes:
     return data
 
 
-def unpack_remb_fci(data: bytes) -> Tuple[int, List[int]]:
+def unpack_remb_fci(data: bytes) -> tuple[int, list[int]]:
     """
     Unpack the FCI for a Receiver Estimated Maximum Bitrate report.
 
@@ -225,7 +225,7 @@ def padl(length: int) -> int:
 
 def unpack_header_extensions(
     extension_profile: int, extension_value: bytes
-) -> List[Tuple[int, bytes]]:
+) -> list[tuple[int, bytes]]:
     """
     Parse header extensions according to RFC 5285.
     """
@@ -271,7 +271,7 @@ def unpack_header_extensions(
     return extensions
 
 
-def pack_header_extensions(extensions: List[Tuple[int, bytes]]) -> Tuple[int, bytes]:
+def pack_header_extensions(extensions: list[tuple[int, bytes]]) -> tuple[int, bytes]:
     """
     Serialize header extensions according to RFC 5285.
     """
@@ -395,12 +395,12 @@ class RtcpSenderInfo:
 @dataclass
 class RtcpSourceInfo:
     ssrc: int
-    items: List[Tuple[Any, bytes]]
+    items: list[tuple[Any, bytes]]
 
 
 @dataclass
 class RtcpByePacket:
-    sources: List[int]
+    sources: list[int]
 
     def __bytes__(self) -> bytes:
         payload = b"".join([pack("!L", ssrc) for ssrc in self.sources])
@@ -445,7 +445,7 @@ class RtcpPsfbPacket:
 @dataclass
 class RtcpRrPacket:
     ssrc: int
-    reports: List[RtcpReceiverInfo] = field(default_factory=list)
+    reports: list[RtcpReceiverInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)
@@ -478,7 +478,7 @@ class RtcpRtpfbPacket:
     media_ssrc: int
 
     # generick NACK
-    lost: List[int] = field(default_factory=list)
+    lost: list[int] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!LL", self.ssrc, self.media_ssrc)
@@ -514,7 +514,7 @@ class RtcpRtpfbPacket:
 
 @dataclass
 class RtcpSdesPacket:
-    chunks: List[RtcpSourceInfo] = field(default_factory=list)
+    chunks: list[RtcpSourceInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = b""
@@ -558,7 +558,7 @@ class RtcpSdesPacket:
 class RtcpSrPacket:
     ssrc: int
     sender_info: RtcpSenderInfo
-    reports: List[RtcpReceiverInfo] = field(default_factory=list)
+    reports: list[RtcpReceiverInfo] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         payload = pack("!L", self.ssrc)
@@ -594,7 +594,7 @@ AnyRtcpPacket = Union[
 
 class RtcpPacket:
     @classmethod
-    def parse(cls, data: bytes) -> List[AnyRtcpPacket]:
+    def parse(cls, data: bytes) -> list[AnyRtcpPacket]:
         pos = 0
         packets = []
 
@@ -655,7 +655,7 @@ class RtpPacket:
         self.sequence_number = sequence_number
         self.timestamp = timestamp
         self.ssrc = ssrc
-        self.csrc: List[int] = []
+        self.csrc: list[int] = []
         self.extensions = HeaderExtensions()
         self.payload = payload
         self.padding_size = 0

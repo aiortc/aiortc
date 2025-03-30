@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from aiortc.utils import uint32_add, uint32_gt
 
@@ -348,7 +348,7 @@ class OveruseEstimator:
         self._offset = 0.0
         self.previous_offset = 0.0
         self.slope = 1 / 64
-        self.ts_delta_hist: List[float] = []
+        self.ts_delta_hist: list[float] = []
 
         self.avg_noise = 0.0
         self.var_noise = 50.0
@@ -517,11 +517,11 @@ class RemoteBitrateEstimator:
         self.detector = OveruseDetector()
         self.rate_control = AimdRateControl()
         self.last_update_ms: Optional[int] = None
-        self.ssrcs: Dict[int, int] = {}
+        self.ssrcs: dict[int, int] = {}
 
     def add(
         self, arrival_time_ms: int, abs_send_time: int, payload_size: int, ssrc: int
-    ) -> Optional[Tuple[int, List[int]]]:
+    ) -> Optional[tuple[int, list[int]]]:
         timestamp = abs_send_time << 8
         update_estimate = False
 
