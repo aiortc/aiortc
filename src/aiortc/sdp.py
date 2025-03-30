@@ -2,7 +2,7 @@ import enum
 import ipaddress
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
@@ -135,7 +135,7 @@ def candidate_to_sdp(candidate: RTCIceCandidate) -> str:
     return sdp
 
 
-def grouplines(sdp: str) -> Tuple[List[str], List[List[str]]]:
+def grouplines(sdp: str) -> tuple[list[str], list[list[str]]]:
     session = []
     media = []
     for line in sdp.splitlines():
@@ -183,7 +183,7 @@ def parameters_to_sdp(parameters: ParametersDict) -> str:
     return ";".join(params)
 
 
-def parse_attr(line: str) -> Tuple[str, Optional[str]]:
+def parse_attr(line: str) -> tuple[str, Optional[str]]:
     if ":" in line:
         bits = line[2:].split(":", 1)
         return bits[0], bits[1]
@@ -191,7 +191,7 @@ def parse_attr(line: str) -> Tuple[str, Optional[str]]:
         return line[2:], None
 
 
-def parse_h264_profile_level_id(profile_str: str) -> Tuple[H264Profile, H264Level]:
+def parse_h264_profile_level_id(profile_str: str) -> tuple[H264Profile, H264Level]:
     if not isinstance(profile_str, str) or not re.match(
         "[0-9a-f]{6}", profile_str, re.I
     ):
@@ -219,13 +219,13 @@ def parse_h264_profile_level_id(profile_str: str) -> Tuple[H264Profile, H264Leve
 @dataclass
 class GroupDescription:
     semantic: str
-    items: List[Union[int, str]]
+    items: list[Union[int, str]]
 
     def __str__(self) -> str:
         return f"{self.semantic} {' '.join(map(str, self.items))}"
 
 
-def parse_group(dest: List[GroupDescription], value: str, type=str) -> None:
+def parse_group(dest: list[GroupDescription], value: str, type=str) -> None:
     bits = value.split()
     if bits:
         dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
@@ -244,7 +244,7 @@ SSRC_INFO_ATTRS = ["cname", "msid", "mslabel", "label"]
 
 
 class MediaDescription:
-    def __init__(self, kind: str, port: int, profile: str, fmt: List[Any]) -> None:
+    def __init__(self, kind: str, port: int, profile: str, fmt: list[Any]) -> None:
         # rtp
         self.kind = kind
         self.port = port
@@ -259,8 +259,8 @@ class MediaDescription:
         self.rtcp_mux = False
 
         # ssrc
-        self.ssrc: List[SsrcDescription] = []
-        self.ssrc_group: List[GroupDescription] = []
+        self.ssrc: list[SsrcDescription] = []
+        self.ssrc_group: list[GroupDescription] = []
 
         # formats
         self.fmt = fmt
@@ -268,7 +268,7 @@ class MediaDescription:
 
         # SCTP
         self.sctpCapabilities: Optional[RTCSctpCapabilities] = None
-        self.sctpmap: Dict[int, str] = {}
+        self.sctpmap: dict[int, str] = {}
         self.sctp_port: Optional[int] = None
 
         # DTLS
@@ -276,7 +276,7 @@ class MediaDescription:
 
         # ICE
         self.ice: Optional[RTCIceParameters] = None
-        self.ice_candidates: List[RTCIceCandidate] = []
+        self.ice_candidates: list[RTCIceCandidate] = []
         self.ice_candidates_complete = False
         self.ice_options: Optional[str] = None
 
@@ -364,9 +364,9 @@ class SessionDescription:
         self.name = "-"
         self.time = "0 0"
         self.host: Optional[str] = None
-        self.group: List[GroupDescription] = []
-        self.msid_semantic: List[GroupDescription] = []
-        self.media: List[MediaDescription] = []
+        self.group: list[GroupDescription] = []
+        self.msid_semantic: list[GroupDescription] = []
+        self.media: list[MediaDescription] = []
         self.type: Optional[str] = None
 
     @classmethod
@@ -427,7 +427,7 @@ class SessionDescription:
             # check payload types are valid
             kind = m.group(1)
             fmt = m.group(4).split()
-            fmt_int: Optional[List[int]] = None
+            fmt_int: Optional[list[int]] = None
             if kind in ["audio", "video"]:
                 fmt_int = [int(x) for x in fmt]
                 for pt in fmt_int:

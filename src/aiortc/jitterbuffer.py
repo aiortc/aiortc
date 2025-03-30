@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from .rtp import RtpPacket
 from .utils import uint16_add
@@ -19,7 +19,7 @@ class JitterBuffer:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
         self._origin: Optional[int] = None
-        self._packets: List[Optional[RtpPacket]] = [None for i in range(capacity)]
+        self._packets: list[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
         self._is_video = is_video
 
@@ -27,7 +27,7 @@ class JitterBuffer:
     def capacity(self) -> int:
         return self._capacity
 
-    def add(self, packet: RtpPacket) -> Tuple[bool, Optional[JitterFrame]]:
+    def add(self, packet: RtpPacket) -> tuple[bool, Optional[JitterFrame]]:
         pli_flag = False
         if self._origin is None:
             self._origin = packet.sequence_number
@@ -63,7 +63,7 @@ class JitterBuffer:
     def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
         frame = None
         frames = 0
-        packets: List[RtpPacket] = []
+        packets: list[RtpPacket] = []
         remove = 0
         timestamp = None
 

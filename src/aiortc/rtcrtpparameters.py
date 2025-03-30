@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
-ParametersDict = Dict[str, Union[int, str, None]]
+ParametersDict = dict[str, Union[int, str, None]]
 
 
 @dataclass
@@ -40,7 +40,7 @@ class RTCRtpCodecParameters:
     "The number of channels supported (e.g. two for stereo)."
     payloadType: Optional[int] = None
     "The value that goes in the RTP Payload Type Field."
-    rtcpFeedback: List["RTCRtcpFeedback"] = field(default_factory=list)
+    rtcpFeedback: list["RTCRtcpFeedback"] = field(default_factory=list)
     "Transport layer and codec-specific feedback messages for this codec."
     parameters: ParametersDict = field(default_factory=dict)
     "Codec-specific parameters available for signaling."
@@ -108,9 +108,9 @@ class RTCRtpCapabilities:
     support codecs and header extensions.
     """
 
-    codecs: List[RTCRtpCodecCapability] = field(default_factory=list)
+    codecs: list[RTCRtpCodecCapability] = field(default_factory=list)
     "A list of :class:`RTCRtpCodecCapability`."
-    headerExtensions: List[RTCRtpHeaderExtensionCapability] = field(
+    headerExtensions: list[RTCRtpHeaderExtensionCapability] = field(
         default_factory=list
     )
     "A list of :class:`RTCRtpHeaderExtensionCapability`."
@@ -148,9 +148,9 @@ class RTCRtpParameters:
     an :class:`RTCRtpReceiver` or an :class:`RTCRtpSender`.
     """
 
-    codecs: List[RTCRtpCodecParameters] = field(default_factory=list)
+    codecs: list[RTCRtpCodecParameters] = field(default_factory=list)
     "A list of :class:`RTCRtpCodecParameters` to send or receive."
-    headerExtensions: List[RTCRtpHeaderExtensionParameters] = field(
+    headerExtensions: list[RTCRtpHeaderExtensionParameters] = field(
         default_factory=list
     )
     "A list of :class:`RTCRtpHeaderExtensionParameters`."
@@ -162,9 +162,9 @@ class RTCRtpParameters:
 
 @dataclass
 class RTCRtpReceiveParameters(RTCRtpParameters):
-    encodings: List[RTCRtpDecodingParameters] = field(default_factory=list)
+    encodings: list[RTCRtpDecodingParameters] = field(default_factory=list)
 
 
 @dataclass
 class RTCRtpSendParameters(RTCRtpParameters):
-    encodings: List[RTCRtpEncodingParameters] = field(default_factory=list)
+    encodings: list[RTCRtpEncodingParameters] = field(default_factory=list)

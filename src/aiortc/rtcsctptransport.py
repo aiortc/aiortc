@@ -12,12 +12,8 @@ from typing import (
     Any,
     Callable,
     Deque,
-    Dict,
     Iterator,
-    List,
     Optional,
-    Set,
-    Tuple,
     cast,
     no_type_check,
 )
@@ -88,7 +84,7 @@ def chunk_type(chunk) -> str:
     return chunk.__class__.__name__
 
 
-def decode_params(body: bytes) -> List[Tuple[int, bytes]]:
+def decode_params(body: bytes) -> list[tuple[int, bytes]]:
     params = []
     pos = 0
     while pos <= len(body) - 4:
@@ -98,7 +94,7 @@ def decode_params(body: bytes) -> List[Tuple[int, bytes]]:
     return params
 
 
-def encode_params(params: List[Tuple[int, bytes]]) -> bytes:
+def encode_params(params: list[tuple[int, bytes]]) -> bytes:
     body = b""
     padding = b""
     for param_type, param_value in params:
@@ -216,13 +212,13 @@ class ForwardTsnChunk(Chunk):
 
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
-        self.streams: List[Tuple[int, int]] = []
+        self.streams: list[tuple[int, int]] = []
         if body:
             self.cumulative_tsn = unpack_from("!L", body, 0)[0]
             pos = 4
             while pos < len(body):
                 self.streams.append(
-                    cast(Tuple[int, int], unpack_from("!HH", body, pos))
+                    cast(tuple[int, int], unpack_from("!HH", body, pos))
                 )
                 pos += 4
         else:
@@ -394,7 +390,7 @@ CHUNK_CLASSES = [
 CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 
-def parse_packet(data: bytes) -> Tuple[int, int, int, List[Any]]:
+def parse_packet(data: bytes) -> tuple[int, int, int, list[Any]]:
     length = len(data)
     if length < 12:
         raise ValueError("SCTP packet length is less than 12 bytes")
@@ -435,7 +431,7 @@ class StreamResetOutgoingParam:
     request_sequence: int
     response_sequence: int
     last_tsn: int
-    streams: List[bytes] = field(default_factory=list)
+    streams: list[bytes] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         data = pack(
@@ -497,7 +493,7 @@ RECONFIG_PARAM_TYPES = {
 
 class InboundStream:
     def __init__(self) -> None:
-        self.reassembly: List[DataChunk] = []
+        self.reassembly: list[DataChunk] = []
         self.sequence_number = 0
 
     def add_chunk(self, chunk: DataChunk) -> None:
@@ -514,7 +510,7 @@ class InboundStream:
                 self.reassembly.insert(i, chunk)
                 break
 
-    def pop_messages(self) -> Iterator[Tuple[int, int, bytes]]:
+    def pop_messages(self) -> Iterator[tuple[int, int, bytes]]:
         pos = 0
         start_pos = None
         while pos < len(self.reassembly):
@@ -613,19 +609,19 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._local_port = port
         self._local_verification_tag = random32()
 
-        self._remote_extensions: List[int] = []
+        self._remote_extensions: list[int] = []
         self._remote_partial_reliability = False
         self._remote_port: Optional[int] = None
         self._remote_verification_tag = 0
 
         # inbound
         self._advertised_rwnd = 1024 * 1024
-        self._inbound_streams: Dict[int, InboundStream] = {}
+        self._inbound_streams: dict[int, InboundStream] = {}
         self._inbound_streams_count = 0
         self._inbound_streams_max = MAX_STREAMS
         self._last_received_tsn: Optional[int] = None
-        self._sack_duplicates: List[int] = []
-        self._sack_misordered: Set[int] = set()
+        self._sack_duplicates: list[int] = []
+        self._sack_misordered: set[int] = set()
         self._sack_needed = False
 
         # outbound
@@ -638,13 +634,13 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
         self._advanced_peer_ack_tsn = tsn_minus_one(self._local_tsn)
         self._outbound_queue: Deque[DataChunk] = deque()
-        self._outbound_stream_seq: Dict[int, int] = {}
+        self._outbound_stream_seq: dict[int, int] = {}
         self._outbound_streams_count = MAX_STREAMS
         self._partial_bytes_acked = 0
         self._sent_queue: Deque[DataChunk] = deque()
 
         # reconfiguration
-        self._reconfig_queue: List[int] = []
+        self._reconfig_queue: list[int] = []
         self._reconfig_request = None
         self._reconfig_request_seq = self._local_tsn
         self._reconfig_response_seq = 0
@@ -665,8 +661,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         # data channels
         self._data_channel_id: Optional[int] = None
-        self._data_channel_queue: Deque[Tuple[RTCDataChannel, int, bytes]] = deque()
-        self._data_channels: Dict[int, RTCDataChannel] = {}
+        self._data_channel_queue: Deque[tuple[RTCDataChannel, int, bytes]] = deque()
+        self._data_channels: dict[int, RTCDataChannel] = {}
 
         # FIXME: this is only used by RTCPeerConnection
         self._bundled = False
@@ -787,7 +783,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
     def _flight_size_increase(self, chunk: DataChunk) -> None:
         self._flight_size += chunk._book_size  # type: ignore
 
-    def _get_extensions(self, params: List[Tuple[int, bytes]]) -> None:
+    def _get_extensions(self, params: list[tuple[int, bytes]]) -> None:
         """
         Gets what extensions are supported by the remote party.
         """
@@ -797,7 +793,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             elif k == SCTP_SUPPORTED_CHUNK_EXT:
                 self._remote_extensions = list(v)
 
-    def _set_extensions(self, params: List[Tuple[int, bytes]]) -> None:
+    def _set_extensions(self, params: list[tuple[int, bytes]]) -> None:
         """
         Sets what extensions are supported by the local party.
         """

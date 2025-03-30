@@ -4,7 +4,7 @@ import fractions
 import logging
 import threading
 import time
-from typing import Dict, Optional, Set, Union
+from typing import Optional, Union
 
 import av
 from av import AudioFrame, VideoFrame
@@ -54,7 +54,7 @@ class MediaBlackhole:
     """
 
     def __init__(self) -> None:
-        self.__tracks: Dict[MediaStreamTrack, asyncio.Future] = {}
+        self.__tracks: dict[MediaStreamTrack, asyncio.Future] = {}
 
     def addTrack(self, track):
         """
@@ -309,7 +309,7 @@ class MediaPlayer:
         self.__thread_quit: Optional[threading.Event] = None
 
         # examine streams
-        self.__started: Set[PlayerStreamTrack] = set()
+        self.__started: set[PlayerStreamTrack] = set()
         self.__streams = []
         self.__decode = decode
         self.__audio: Optional[PlayerStreamTrack] = None
@@ -543,8 +543,8 @@ class MediaRelay:
     """
 
     def __init__(self) -> None:
-        self.__proxies: Dict[MediaStreamTrack, Set[RelayStreamTrack]] = {}
-        self.__tasks: Dict[MediaStreamTrack, asyncio.Future[None]] = {}
+        self.__proxies: dict[MediaStreamTrack, set[RelayStreamTrack]] = {}
+        self.__tasks: dict[MediaStreamTrack, asyncio.Future[None]] = {}
 
     def subscribe(
         self, track: MediaStreamTrack, buffered: bool = True

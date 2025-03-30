@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ..rtcrtpparameters import (
     ParametersDict,
@@ -22,7 +22,7 @@ PCMA_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
 )
 
-CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
+CODECS: dict[str, list[RTCRtpCodecParameters]] = {
     "audio": [
         RTCRtpCodecParameters(
             mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -35,7 +35,7 @@ CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
 # Note, the id space for these extensions is shared across media types when BUNDLE
 # is negotiated. If you add a audio- or video-specific extension, make sure it has
 # a unique id.
-HEADER_EXTENSIONS: Dict[str, List[RTCRtpHeaderExtensionParameters]] = {
+HEADER_EXTENSIONS: dict[str, list[RTCRtpHeaderExtensionParameters]] = {
     "audio": [
         RTCRtpHeaderExtensionParameters(
             id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"

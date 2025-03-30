@@ -4,7 +4,7 @@ import random
 import time
 import traceback
 import uuid
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from av import AudioFrame
 from av.frame import Frame
@@ -59,7 +59,7 @@ def random_sequence_number() -> int:
 
 
 class RTCEncodedFrame:
-    def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
+    def __init__(self, payloads: list[bytes], timestamp: int, audio_level: int):
         self.payloads = payloads
         self.timestamp = timestamp
         self.audio_level = audio_level
@@ -100,7 +100,7 @@ class RTCRtpSender:
         self.__rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self.__rtp_started = asyncio.Event()
         self.__rtp_task: Optional[asyncio.Future[None]] = None
-        self.__rtp_history: Dict[int, RtpPacket] = {}
+        self.__rtp_history: dict[int, RtpPacket] = {}
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
@@ -422,7 +422,7 @@ class RTCRtpSender:
                 await asyncio.sleep(0.5 + random.random())
 
                 # RTCP SR
-                packets: List[AnyRtcpPacket] = [
+                packets: list[AnyRtcpPacket] = [
                     RtcpSrPacket(
                         ssrc=self._ssrc,
                         sender_info=RtcpSenderInfo(
@@ -460,7 +460,7 @@ class RTCRtpSender:
         self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
-    async def _send_rtcp(self, packets: List[AnyRtcpPacket]) -> None:
+    async def _send_rtcp(self, packets: list[AnyRtcpPacket]) -> None:
         payload = b""
         for packet in packets:
             self.__log_debug("> %s", packet)

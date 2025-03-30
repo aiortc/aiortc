@@ -1,7 +1,6 @@
 import asyncio
 import fractions
 import time
-from typing import Tuple
 from unittest import TestCase
 
 from aiortc.mediastreams import (
@@ -25,7 +24,7 @@ class VideoPacketStreamTrack(MediaStreamTrack):
     _start: float
     _timestamp: int
 
-    async def next_timestamp(self) -> Tuple[int, fractions.Fraction]:
+    async def next_timestamp(self) -> tuple[int, fractions.Fraction]:
         if hasattr(self, "_timestamp"):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)
             wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()

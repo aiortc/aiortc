@@ -1,5 +1,5 @@
 import fractions
-from typing import List, Tuple, cast
+from typing import cast
 
 from av import AudioFrame, AudioResampler, CodecContext
 from av.audio.codeccontext import AudioCodecContext
@@ -23,11 +23,11 @@ class PcmDecoder(Decoder):
         self.codec.layout = "mono"
         self.codec.sample_rate = SAMPLE_RATE
 
-    def decode(self, encoded_frame: JitterFrame) -> List[Frame]:
+    def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         packet = Packet(encoded_frame.data)
         packet.pts = encoded_frame.timestamp
         packet.time_base = TIME_BASE
-        return cast(List[Frame], self.codec.decode(packet))
+        return cast(list[Frame], self.codec.decode(packet))
 
 
 class PcmEncoder(Encoder):
@@ -48,7 +48,7 @@ class PcmEncoder(Encoder):
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
-    ) -> Tuple[List[bytes], int]:
+    ) -> tuple[list[bytes], int]:
         assert isinstance(frame, AudioFrame)
         assert frame.format.name == "s16"
         assert frame.layout.name in ["mono", "stereo"]
@@ -65,7 +65,7 @@ class PcmEncoder(Encoder):
             # No packets were returned due to buffering.
             return [], None
 
-    def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
+    def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
         return [bytes(packet)], timestamp
 
