@@ -8,8 +8,8 @@ import ssl
 import cv2
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiortc.sdp import candidate_from_sdp
 from av import VideoFrame
 
 ROOT = os.path.dirname(__file__)
@@ -169,6 +169,7 @@ async def offer(request):
         ),
     )
 
+
 async def add_candidate(request):
     params = await request.json()
 
@@ -181,7 +182,7 @@ async def add_candidate(request):
 
     await pc.addIceCandidate(candidate)
 
-    return web.Response(content_type="application/json", text=json.dumps({"status": "success"}))
+    return web.Response()
 
 
 async def on_shutdown(app):
