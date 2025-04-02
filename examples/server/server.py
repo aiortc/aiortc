@@ -4,18 +4,18 @@ import json
 import logging
 import os
 import ssl
-import uuid
 
 import cv2
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
 from av import VideoFrame
 
 ROOT = os.path.dirname(__file__)
 
 logger = logging.getLogger("pc")
-pcs = set()
+pcs = dict()
 relay = MediaRelay()
 
 
@@ -101,14 +101,14 @@ async def javascript(request):
 
 async def offer(request):
     params = await request.json()
+    pc_id = request.match_info["pc_id"]
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
     pc = RTCPeerConnection()
-    pc_id = "PeerConnection(%s)" % uuid.uuid4()
-    pcs.add(pc)
+    pcs[pc_id] = pc
 
     def log_info(msg, *args):
-        logger.info(pc_id + " " + msg, *args)
+        logger.info("PeerConnection(%s)" % pc_id + " " + msg, *args)
 
     log_info("Created for %s", request.remote)
 
@@ -131,7 +131,7 @@ async def offer(request):
         log_info("Connection state is %s", pc.connectionState)
         if pc.connectionState == "failed":
             await pc.close()
-            pcs.discard(pc)
+            del pcs[pc_id]
 
     @pc.on("track")
     def on_track(track):
@@ -168,6 +168,20 @@ async def offer(request):
             {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
         ),
     )
+
+async def add_candidate(request):
+    params = await request.json()
+
+    pc_id = request.match_info["pc_id"]
+    pc = pcs[pc_id]
+
+    candidate = candidate_from_sdp(params["candidate"])
+    candidate.sdpMid = params.get("sdpMid")
+    candidate.sdpMLineIndex = params.get("sdpMLineIndex")
+
+    await pc.addIceCandidate(candidate)
+
+    return web.Response(content_type="application/json", text=json.dumps({"status": "success"}))
 
 
 async def on_shutdown(app):
@@ -208,7 +222,8 @@ if __name__ == "__main__":
     app.on_shutdown.append(on_shutdown)
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
-    app.router.add_post("/offer", offer)
+    app.router.add_post("/offer/{pc_id}", offer)
+    app.router.add_post("/add_candidate/{pc_id}", add_candidate)
     web.run_app(
         app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
     )
