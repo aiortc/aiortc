@@ -3,11 +3,20 @@ import contextlib
 import functools
 import logging
 import os
+import sys
+from typing import Callable, Coroutine
+
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
 
 from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 
+P = ParamSpec("P")
 
-def lf2crlf(x):
+
+def lf2crlf(x: str) -> str:
     return x.replace("\n", "\r\n")
 
 
@@ -65,7 +74,9 @@ class DummyIceTransport:
         await self._connection.send(data)
 
 
-def asynctest(coro):
+def asynctest(
+    coro: Callable[P, Coroutine[None, None, None]],
+) -> Callable[P, None]:
     @functools.wraps(coro)
     def wrap(*args, **kwargs):
         asyncio.run(coro(*args, **kwargs))
