@@ -14,7 +14,11 @@ from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError, MediaStreamTrack
-from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
+from .rtcrtpparameters import (
+    RTCRtpCapabilities,
+    RTCRtpCodecParameters,
+    RTCRtpSendParameters,
+)
 from .rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
@@ -146,7 +150,7 @@ class RTCRtpSender:
         return self.__transport
 
     @classmethod
-    def getCapabilities(self, kind):
+    def getCapabilities(self, kind: str) -> RTCRtpCapabilities:
         """
         Returns the most optimistic view of the system's capabilities for
         sending media of the given `kind`.

@@ -4,7 +4,7 @@ import fractions
 import logging
 import threading
 import time
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import av
 from av import AudioFrame, VideoFrame
@@ -56,7 +56,7 @@ class MediaBlackhole:
     def __init__(self) -> None:
         self.__tracks: dict[MediaStreamTrack, asyncio.Future] = {}
 
-    def addTrack(self, track):
+    def addTrack(self, track: MediaStreamTrack) -> None:
         """
         Add a track whose media should be discarded.
 
@@ -396,7 +396,7 @@ class MediaRecorderContext:
     def __init__(self, stream) -> None:
         self.started = False
         self.stream = stream
-        self.task = None
+        self.task: Optional[asyncio.Task[None]] = None
 
 
 class MediaRecorder:
@@ -418,9 +418,9 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, options=None):
+    def __init__(self, file, format=None, options=None) -> None:
         self.__container = av.open(file=file, format=format, mode="w", options=options)
-        self.__tracks = {}
+        self.__tracks: dict[MediaStreamTrack, MediaRecorderContext] = {}
 
     def addTrack(self, track: MediaStreamTrack) -> None:
         """
@@ -443,7 +443,9 @@ class MediaRecorder:
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"
             else:
-                stream = self.__container.add_stream("libx264", rate=30)
+                stream = cast(
+                    VideoStream, self.__container.add_stream("libx264", rate=30)
+                )
                 stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
 
