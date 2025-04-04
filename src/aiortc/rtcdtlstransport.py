@@ -222,6 +222,10 @@ class RTCDtlsParameters:
     "The DTLS role, with a default of auto."
 
 
+class DataReceiver(Protocol):
+    async def _handle_data(self, data: bytes) -> None: ...
+
+
 class RtpReceiver(Protocol):
     def _handle_disconnect(self) -> None: ...
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None: ...
@@ -231,6 +235,8 @@ class RtpReceiver(Protocol):
 
 
 class RtpSender(Protocol):
+    _ssrc: int
+
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None: ...
 
 
@@ -265,7 +271,7 @@ class RtpRouter:
                 self.payload_type_table[payload_type] = set()
             self.payload_type_table[payload_type].add(receiver)
 
-    def register_sender(self, sender, ssrc: int) -> None:
+    def register_sender(self, sender: RtpSender, ssrc: int) -> None:
         self.senders[ssrc] = sender
 
     def route_rtcp(self, packet: AnyRtcpPacket) -> set[Union[RtpReceiver, RtpSender]]:
@@ -350,7 +356,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
 
         super().__init__()
         self.encrypted = False
-        self._data_receiver = None
+        self._data_receiver: Optional[DataReceiver] = None
         self._role = "auto"
         self._rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self._rtp_router = RtpRouter()
@@ -640,12 +646,12 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             except pylibsrtp.Error as exc:
                 self.__log_debug("x SRTP unprotect failed: %s", exc)
 
-    def _register_data_receiver(self, receiver) -> None:
+    def _register_data_receiver(self, receiver: DataReceiver) -> None:
         assert self._data_receiver is None
         self._data_receiver = receiver
 
     def _register_rtp_receiver(
-        self, receiver, parameters: RTCRtpReceiveParameters
+        self, receiver: RtpReceiver, parameters: RTCRtpReceiveParameters
     ) -> None:
         ssrcs = set()
         for encoding in parameters.encodings:
@@ -659,7 +665,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             mid=parameters.muxId,
         )
 
-    def _register_rtp_sender(self, sender, parameters: RTCRtpSendParameters) -> None:
+    def _register_rtp_sender(
+        self, sender: RtpSender, parameters: RTCRtpSendParameters
+    ) -> None:
         self._rtp_header_extensions_map.configure(parameters)
         self._rtp_router.register_sender(sender, ssrc=sender._ssrc)
 
@@ -691,14 +699,14 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._state = state
             self.emit("statechange")
 
-    def _unregister_data_receiver(self, receiver) -> None:
+    def _unregister_data_receiver(self, receiver: DataReceiver) -> None:
         if self._data_receiver == receiver:
             self._data_receiver = None
 
-    def _unregister_rtp_receiver(self, receiver) -> None:
+    def _unregister_rtp_receiver(self, receiver: RtpReceiver) -> None:
         self._rtp_router.unregister_receiver(receiver)
 
-    def _unregister_rtp_sender(self, sender) -> None:
+    def _unregister_rtp_sender(self, sender: RtpSender) -> None:
         self._rtp_router.unregister_sender(sender)
 
     async def _write_ssl(self) -> None:
