@@ -9,7 +9,9 @@ from av.packet import Packet
 
 
 class CodecTestCase(TestCase):
-    def create_audio_frame(self, samples, pts, layout="mono", sample_rate=48000):
+    def create_audio_frame(
+        self, samples: int, pts: int, layout="mono", sample_rate=48000
+    ) -> AudioFrame:
         frame = AudioFrame(format="s16", layout=layout, samples=samples)
         for p in frame.planes:
             p.update(bytes(p.buffer_size))
@@ -18,7 +20,9 @@ class CodecTestCase(TestCase):
         frame.time_base = fractions.Fraction(1, sample_rate)
         return frame
 
-    def create_audio_frames(self, layout, sample_rate, count):
+    def create_audio_frames(
+        self, layout: str, sample_rate: int, count: int
+    ) -> list[AudioFrame]:
         frames = []
         timestamp = 0
         samples_per_frame = int(AUDIO_PTIME * sample_rate)
@@ -45,8 +49,13 @@ class CodecTestCase(TestCase):
         return packet
 
     def create_video_frame(
-        self, width, height, pts, format="yuv420p", time_base=VIDEO_TIME_BASE
-    ):
+        self,
+        width: int,
+        height: int,
+        pts: int,
+        format="yuv420p",
+        time_base=VIDEO_TIME_BASE,
+    ) -> VideoFrame:
         """
         Create a single blank video frame.
         """
@@ -57,7 +66,9 @@ class CodecTestCase(TestCase):
         frame.time_base = time_base
         return frame
 
-    def create_video_frames(self, width, height, count, time_base=VIDEO_TIME_BASE):
+    def create_video_frames(
+        self, width: int, height: int, count: int, time_base=VIDEO_TIME_BASE
+    ) -> list[VideoFrame]:
         """
         Create consecutive blank video frames.
         """

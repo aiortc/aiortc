@@ -1,11 +1,13 @@
 import asyncio
 import re
+from typing import Callable, Optional
 from unittest import TestCase
 
 import aioice.ice
 import aioice.stun
 from aiortc import (
     RTCConfiguration,
+    RTCDataChannel,
     RTCIceCandidate,
     RTCPeerConnection,
     RTCSessionDescription,
@@ -17,7 +19,7 @@ from aiortc.exceptions import (
     InvalidStateError,
     OperationError,
 )
-from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, MediaStreamTrack, VideoStreamTrack
 from aiortc.rtcpeerconnection import (
     filter_preferred_codecs,
     find_common_codecs,
@@ -70,20 +72,20 @@ class BogusStreamTrack(AudioStreamTrack):
     kind = "bogus"
 
 
-def mids(pc):
+def mids(pc: RTCPeerConnection) -> list[Optional[str]]:
     mids = [x.mid for x in pc.getTransceivers()]
     if pc.sctp:
         mids.append(pc.sctp.mid)
     return sorted(mids)
 
 
-def strip_ice_candidates(description):
+def strip_ice_candidates(description: RTCSessionDescription) -> RTCSessionDescription:
     return RTCSessionDescription(
         sdp=STRIP_CANDIDATES_RE.sub("", description.sdp), type=description.type
     )
 
 
-def track_states(pc):
+def track_states(pc: RTCPeerConnection) -> dict[str, list[str]]:
     states = {
         "connectionState": [pc.connectionState],
         "iceConnectionState": [pc.iceConnectionState],
@@ -110,7 +112,7 @@ def track_states(pc):
     return states
 
 
-def track_remote_tracks(pc):
+def track_remote_tracks(pc: RTCPeerConnection) -> list[MediaStreamTrack]:
     tracks = []
 
     @pc.on("track")
@@ -121,7 +123,7 @@ def track_remote_tracks(pc):
 
 
 class RTCRtpCodecParametersTest(TestCase):
-    def test_find_common_codecs_static(self):
+    def test_find_common_codecs_static(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -154,7 +156,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def find_common_codecs_dynamic(self):
+    def find_common_codecs_dynamic(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -187,7 +189,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def find_common_codecs_feedback(self):
+    def find_common_codecs_feedback(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8",
@@ -217,7 +219,7 @@ class RTCRtpCodecParametersTest(TestCase):
         self.assertEqual(common[0].payloadType, 120)
         self.assertEqual(common[0].rtcpFeedback, [RTCRtcpFeedback(type="nack")])
 
-    def test_find_common_codecs_rtx(self):
+    def test_find_common_codecs_rtx(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8", clockRate=90000, payloadType=100
@@ -265,7 +267,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def test_filter_preferred_codecs(self):
+    def test_filter_preferred_codecs(self) -> None:
         codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8", clockRate=90000, payloadType=100
@@ -373,7 +375,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def test_is_codec_compatible(self):
+    def test_is_codec_compatible(self) -> None:
         # compatible: identical
         self.assertTrue(
             is_codec_compatible(
@@ -500,7 +502,7 @@ class RTCRtpCodecParametersTest(TestCase):
 
 
 class RTCPeerConnectionTest(TestCase):
-    def assertBundled(self, pc):
+    def assertBundled(self, pc: RTCPeerConnection) -> None:
         transceivers = pc.getTransceivers()
         self.assertEqual(
             transceivers[0].receiver.transport, transceivers[0].sender.transport
@@ -512,21 +514,23 @@ class RTCPeerConnectionTest(TestCase):
         if pc.sctp:
             self.assertEqual(pc.sctp.transport, transport)
 
-    def assertClosed(self, pc):
+    def assertClosed(self, pc: RTCPeerConnection) -> None:
         self.assertEqual(pc.connectionState, "closed")
         self.assertEqual(pc.iceConnectionState, "closed")
         self.assertEqual(pc.signalingState, "closed")
 
-    async def assertDataChannelOpen(self, dc):
+    async def assertDataChannelOpen(self, dc: RTCDataChannel) -> None:
         await self.sleepWhile(lambda: dc.readyState == "connecting")
         self.assertEqual(dc.readyState, "open")
 
-    async def assertIceChecking(self, pc):
+    async def assertIceChecking(self, pc: RTCPeerConnection) -> None:
         await self.sleepWhile(lambda: pc.iceConnectionState == "new")
         self.assertEqual(pc.iceConnectionState, "checking")
         self.assertEqual(pc.iceGatheringState, "complete")
 
-    async def assertIceCompleted(self, pc1, pc2):
+    async def assertIceCompleted(
+        self, pc1: RTCPeerConnection, pc2: RTCPeerConnection
+    ) -> None:
         await self.sleepWhile(
             lambda: pc1.iceConnectionState == "checking"
             or pc2.iceConnectionState == "checking"
@@ -534,29 +538,29 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc1.iceConnectionState, "completed")
         self.assertEqual(pc2.iceConnectionState, "completed")
 
-    def assertHasIceCandidates(self, description):
+    def assertHasIceCandidates(self, description: RTCSessionDescription) -> None:
         self.assertTrue("a=candidate:" in description.sdp)
         self.assertTrue("a=end-of-candidates" in description.sdp)
 
-    def assertHasDtls(self, description, setup):
+    def assertHasDtls(self, description: RTCSessionDescription, setup: str) -> None:
         self.assertTrue("a=fingerprint:sha-256" in description.sdp)
         self.assertEqual(
             set(re.findall("a=setup:(.*)\r$", description.sdp)), set([setup])
         )
 
-    async def closeDataChannel(self, dc):
+    async def closeDataChannel(self, dc: RTCDataChannel) -> None:
         dc.close()
         await self.sleepWhile(lambda: dc.readyState == "closing")
         self.assertEqual(dc.readyState, "closed")
 
-    async def sleepWhile(self, f, max_sleep=1.0):
+    async def sleepWhile(self, f: Callable[[], bool], max_sleep=1.0) -> None:
         sleep = 0.1
         total = 0.0
         while f() and total < max_sleep:
             await asyncio.sleep(sleep)
             total += sleep
 
-    def setUp(self):
+    def setUp(self) -> None:
         # save timers
         self.retry_max = aioice.stun.RETRY_MAX
         self.retry_rto = aioice.stun.RETRY_RTO
@@ -565,13 +569,13 @@ class RTCPeerConnectionTest(TestCase):
         aioice.stun.RETRY_MAX = 1
         aioice.stun.RETRY_RTO = 0.1
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         # restore timers
         aioice.stun.RETRY_MAX = self.retry_max
         aioice.stun.RETRY_RTO = self.retry_rto
 
     @asynctest
-    async def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self):
+    async def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
             await pc.addIceCandidate(
@@ -590,7 +594,7 @@ class RTCPeerConnectionTest(TestCase):
         )
 
     @asynctest
-    async def test_addTrack_audio(self):
+    async def test_addTrack_audio(self) -> None:
         pc = RTCPeerConnection()
 
         # add audio track
@@ -615,7 +619,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc.getTransceivers()), 2)
 
     @asynctest
-    async def test_addTrack_bogus(self):
+    async def test_addTrack_bogus(self) -> None:
         pc = RTCPeerConnection()
 
         # try adding a bogus track
@@ -624,7 +628,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
     @asynctest
-    async def test_addTrack_video(self):
+    async def test_addTrack_video(self) -> None:
         pc = RTCPeerConnection()
 
         # add video track
@@ -657,7 +661,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc.getTransceivers()), 3)
 
     @asynctest
-    async def test_addTrack_closed(self):
+    async def test_addTrack_closed(self) -> None:
         pc = RTCPeerConnection()
         await pc.close()
         with self.assertRaises(InvalidStateError) as cm:
@@ -665,7 +669,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), "RTCPeerConnection is closed")
 
     @asynctest
-    async def test_addTransceiver_audio_inactive(self):
+    async def test_addTransceiver_audio_inactive(self) -> None:
         pc = RTCPeerConnection()
 
         # add transceiver
@@ -695,7 +699,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(transceiver.stopped, True)
 
     @asynctest
-    async def test_addTransceiver_audio_sendrecv(self):
+    async def test_addTransceiver_audio_sendrecv(self) -> None:
         pc = RTCPeerConnection()
 
         # add transceiver
@@ -718,7 +722,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(len(pc.getTransceivers()), 1)
 
     @asynctest
-    async def test_addTransceiver_audio_track(self):
+    async def test_addTransceiver_audio_track(self) -> None:
         pc = RTCPeerConnection()
 
         # add audio track
@@ -748,7 +752,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc.getSenders(), [transceiver1.sender, transceiver2.sender])
         self.assertEqual(len(pc.getTransceivers()), 2)
 
-    def test_addTransceiver_bogus_direction(self):
+    def test_addTransceiver_bogus_direction(self) -> None:
         pc = RTCPeerConnection()
 
         # try adding a bogus kind
@@ -756,7 +760,7 @@ class RTCPeerConnectionTest(TestCase):
             pc.addTransceiver("audio", direction="bogus")
         self.assertEqual(str(cm.exception), 'Invalid direction "bogus"')
 
-    def test_addTransceiver_bogus_kind(self):
+    def test_addTransceiver_bogus_kind(self) -> None:
         pc = RTCPeerConnection()
 
         # try adding a bogus kind
@@ -764,7 +768,7 @@ class RTCPeerConnectionTest(TestCase):
             pc.addTransceiver("bogus")
         self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
-    def test_addTransceiver_bogus_track(self):
+    def test_addTransceiver_bogus_track(self) -> None:
         pc = RTCPeerConnection()
 
         # try adding a bogus track
@@ -773,7 +777,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), 'Invalid track kind "bogus"')
 
     @asynctest
-    async def test_close(self):
+    async def test_close(self) -> None:
         pc = RTCPeerConnection()
         pc_states = track_states(pc)
 
@@ -785,7 +789,9 @@ class RTCPeerConnectionTest(TestCase):
 
         self.assertEqual(pc_states["signalingState"], ["stable", "closed"])
 
-    async def _test_connect_audio_bidirectional(self, pc1, pc2):
+    async def _test_connect_audio_bidirectional(
+        self, pc1: RTCPeerConnection, pc2: RTCPeerConnection
+    ) -> None:
         pc1_states = track_states(pc1)
         pc1_tracks = track_remote_tracks(pc1)
         pc2_states = track_states(pc2)
@@ -934,19 +940,19 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
-    async def test_connect_audio_bidirectional(self):
+    async def test_connect_audio_bidirectional(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
         await self._test_connect_audio_bidirectional(pc1, pc2)
 
     @asynctest
-    async def test_connect_audio_bidirectional_with_empty_iceservers(self):
+    async def test_connect_audio_bidirectional_with_empty_iceservers(self) -> None:
         pc1 = RTCPeerConnection(RTCConfiguration(iceServers=[]))
         pc2 = RTCPeerConnection()
         await self._test_connect_audio_bidirectional(pc1, pc2)
 
     @asynctest
-    async def test_connect_audio_bidirectional_with_trickle(self):
+    async def test_connect_audio_bidirectional_with_trickle(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1065,7 +1071,7 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
-    async def test_connect_audio_bidirectional_and_close(self):
+    async def test_connect_audio_bidirectional_and_close(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1130,7 +1136,7 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
-    async def test_connect_audio_codec_preferences_offerer(self):
+    async def test_connect_audio_codec_preferences_offerer(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1275,7 +1281,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_mid_changes(self):
+    async def test_connect_audio_mid_changes(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1382,7 +1388,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_offer_recvonly_answer_recvonly(self):
+    async def test_connect_audio_offer_recvonly_answer_recvonly(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1486,7 +1492,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_offer_recvonly(self):
+    async def test_connect_audio_offer_recvonly(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1591,7 +1597,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_offer_sendonly(self):
+    async def test_connect_audio_offer_sendonly(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1695,7 +1701,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_offer_sendrecv_answer_recvonly(self):
+    async def test_connect_audio_offer_sendrecv_answer_recvonly(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1797,7 +1803,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_offer_sendrecv_answer_sendonly(self):
+    async def test_connect_audio_offer_sendrecv_answer_sendonly(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1900,7 +1906,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_two_tracks(self):
+    async def test_connect_audio_two_tracks(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2002,7 +2008,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_and_video(self):
+    async def test_connect_audio_and_video(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2101,7 +2107,9 @@ a=rtpmap:0 PCMU/8000
             ["stable", "have-remote-offer", "stable", "closed"],
         )
 
-    async def _test_connect_audio_and_video_mediaplayer(self, stop_tracks: bool):
+    async def _test_connect_audio_and_video_mediaplayer(
+        self, stop_tracks: bool
+    ) -> None:
         """
         Negotiate bidirectional audio + video, with one party reading media from a file.
 
@@ -2218,15 +2226,15 @@ a=rtpmap:0 PCMU/8000
         media_test.tearDown()
 
     @asynctest
-    async def test_connect_audio_and_video_mediaplayer(self):
+    async def test_connect_audio_and_video_mediaplayer(self) -> None:
         await self._test_connect_audio_and_video_mediaplayer(stop_tracks=False)
 
     @asynctest
-    async def test_connect_audio_and_video_mediaplayer_stop_tracks(self):
+    async def test_connect_audio_and_video_mediaplayer_stop_tracks(self) -> None:
         await self._test_connect_audio_and_video_mediaplayer(stop_tracks=True)
 
     @asynctest
-    async def test_connect_audio_and_video_and_data_channel(self):
+    async def test_connect_audio_and_video_and_data_channel(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2328,7 +2336,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_and_video_and_data_channel_ice_fail(self):
+    async def test_connect_audio_and_video_and_data_channel_ice_fail(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2429,7 +2437,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_audio_then_video(self):
+    async def test_connect_audio_then_video(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2594,7 +2602,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_video_bidirectional(self):
+    async def test_connect_video_bidirectional(self) -> None:
         VIDEO_SDP = VP8_SDP + H264_SDP
 
         pc1 = RTCPeerConnection()
@@ -2715,7 +2723,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_video_h264(self):
+    async def test_connect_video_h264(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2823,7 +2831,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_video_no_ssrc(self):
+    async def test_connect_video_no_ssrc(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -2929,7 +2937,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_video_codec_preferences_offerer(self):
+    async def test_connect_video_codec_preferences_offerer(self) -> None:
         VIDEO_SDP = H264_SDP + VP8_SDP
 
         pc1 = RTCPeerConnection()
@@ -3041,7 +3049,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_video_codec_preferences_offerer_only_h264(self):
+    async def test_connect_video_codec_preferences_offerer_only_h264(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -3150,7 +3158,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_and_close_immediately(self):
+    async def test_connect_datachannel_and_close_immediately(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -3183,7 +3191,7 @@ a=rtpmap:0 PCMU/8000
         self.assertClosed(pc2)
 
     @asynctest
-    async def test_connect_datachannel_negotiated_and_close_immediately(self):
+    async def test_connect_datachannel_negotiated_and_close_immediately(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -3216,7 +3224,7 @@ a=rtpmap:0 PCMU/8000
         self.assertClosed(pc2)
 
     @asynctest
-    async def test_connect_datachannel_legacy_sdp(self):
+    async def test_connect_datachannel_legacy_sdp(self) -> None:
         pc1 = RTCPeerConnection()
         pc1._sctpLegacySdp = True
         pc1_data_messages = []
@@ -3384,7 +3392,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_modern_sdp(self):
+    async def test_connect_datachannel_modern_sdp(self) -> None:
         pc1 = RTCPeerConnection()
         pc1._sctpLegacySdp = False
         pc1_data_messages = []
@@ -3546,7 +3554,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_modern_sdp_negotiated(self):
+    async def test_connect_datachannel_modern_sdp_negotiated(self) -> None:
         pc1 = RTCPeerConnection()
         pc1._sctpLegacySdp = False
         pc1_data_messages = []
@@ -3641,7 +3649,7 @@ a=rtpmap:0 PCMU/8000
         dc1.send(b"")
         dc1.send(LONG_DATA)
         with self.assertRaises(ValueError) as cm:
-            dc1.send(1234)
+            dc1.send(1234)  # type: ignore
         self.assertEqual(
             str(cm.exception), "Cannot send unsupported data type: <class 'int'>"
         )
@@ -3703,7 +3711,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_recycle_stream_id(self):
+    async def test_connect_datachannel_recycle_stream_id(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -3744,7 +3752,7 @@ a=rtpmap:0 PCMU/8000
         self.assertClosed(pc1)
         self.assertClosed(pc2)
 
-    def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self):
+    def test_create_datachannel_with_maxpacketlifetime_and_maxretransmits(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
             pc.createDataChannel("chat", maxPacketLifeTime=500, maxRetransmits=0)
@@ -3754,7 +3762,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_datachannel_bufferedamountlowthreshold(self):
+    async def test_datachannel_bufferedamountlowthreshold(self) -> None:
         pc = RTCPeerConnection()
         dc = pc.createDataChannel("chat")
         self.assertEqual(dc.bufferedAmountLowThreshold, 0)
@@ -3777,14 +3785,14 @@ a=rtpmap:0 PCMU/8000
             self.assertEqual(dc.bufferedAmountLowThreshold, 0)
 
     @asynctest
-    async def test_datachannel_send_invalid_state(self):
+    async def test_datachannel_send_invalid_state(self) -> None:
         pc = RTCPeerConnection()
         dc = pc.createDataChannel("chat")
         with self.assertRaises(InvalidStateError):
             dc.send("hello")
 
     @asynctest
-    async def test_connect_datachannel_then_audio(self):
+    async def test_connect_datachannel_then_audio(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4014,7 +4022,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_trickle(self):
+    async def test_connect_datachannel_trickle(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4187,7 +4195,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_max_packet_lifetime(self):
+    async def test_connect_datachannel_max_packet_lifetime(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4293,7 +4301,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_max_retransmits(self):
+    async def test_connect_datachannel_max_retransmits(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4399,7 +4407,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_connect_datachannel_unordered(self):
+    async def test_connect_datachannel_unordered(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4535,7 +4543,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_createAnswer_closed(self):
+    async def test_createAnswer_closed(self) -> None:
         pc = RTCPeerConnection()
         await pc.close()
         with self.assertRaises(InvalidStateError) as cm:
@@ -4543,7 +4551,7 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(str(cm.exception), "RTCPeerConnection is closed")
 
     @asynctest
-    async def test_createAnswer_without_offer(self):
+    async def test_createAnswer_without_offer(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(InvalidStateError) as cm:
             await pc.createAnswer()
@@ -4552,7 +4560,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_createOffer_closed(self):
+    async def test_createOffer_closed(self) -> None:
         pc = RTCPeerConnection()
         await pc.close()
         with self.assertRaises(InvalidStateError) as cm:
@@ -4560,7 +4568,7 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(str(cm.exception), "RTCPeerConnection is closed")
 
     @asynctest
-    async def test_createOffer_without_media(self):
+    async def test_createOffer_without_media(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(InternalError) as cm:
             await pc.createOffer()
@@ -4573,7 +4581,7 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
-    async def test_setLocalDescription_unexpected_answer(self):
+    async def test_setLocalDescription_unexpected_answer(self) -> None:
         pc = RTCPeerConnection()
         pc.addTrack(AudioStreamTrack())
         answer = await pc.createOffer()
@@ -4588,7 +4596,7 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
-    async def test_setLocalDescription_unexpected_offer(self):
+    async def test_setLocalDescription_unexpected_offer(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4612,7 +4620,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_no_common_audio(self):
+    async def test_setRemoteDescription_no_common_audio(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
         pc1.addTrack(AudioStreamTrack())
@@ -4637,7 +4645,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_no_common_video(self):
+    async def test_setRemoteDescription_no_common_video(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
         pc1.addTrack(VideoStreamTrack())
@@ -4658,7 +4666,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_media_mismatch(self):
+    async def test_setRemoteDescription_media_mismatch(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4686,7 +4694,9 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(self):
+    async def test_setRemoteDescription_with_invalid_dtls_setup_for_answer(
+        self,
+    ) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4715,7 +4725,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_without_ice_credentials(self):
+    async def test_setRemoteDescription_without_ice_credentials(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4743,7 +4753,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_without_rtcp_mux(self):
+    async def test_setRemoteDescription_without_rtcp_mux(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4764,7 +4774,7 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
 
     @asynctest
-    async def test_setRemoteDescription_unexpected_answer(self):
+    async def test_setRemoteDescription_unexpected_answer(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(InvalidStateError) as cm:
             await pc.setRemoteDescription(RTCSessionDescription(sdp="", type="answer"))
@@ -4776,7 +4786,7 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
-    async def test_setRemoteDescription_unexpected_offer(self):
+    async def test_setRemoteDescription_unexpected_offer(self) -> None:
         pc = RTCPeerConnection()
         pc.addTrack(AudioStreamTrack())
         offer = await pc.createOffer()
@@ -4792,7 +4802,7 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
-    async def test_setRemoteDescription_media_datachannel_bundled(self):
+    async def test_setRemoteDescription_media_datachannel_bundled(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -4954,7 +4964,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_dtls_role_offer_actpass(self):
+    async def test_dtls_role_offer_actpass(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -5014,7 +5024,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_dtls_role_offer_passive(self):
+    async def test_dtls_role_offer_passive(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -5079,7 +5089,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_dtls_role_offer_active(self):
+    async def test_dtls_role_offer_active(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 
@@ -5144,7 +5154,7 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
-    async def test_right_mid_order(self):
+    async def test_right_mid_order(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
 

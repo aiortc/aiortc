@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 import wave
+from typing import cast
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ from .utils import asynctest
 
 
 class VideoStreamTrackUhd(VideoStreamTrack):
-    async def recv(self):
+    async def recv(self) -> av.VideoFrame:
         pts, time_base = await self.next_timestamp()
 
         frame = av.VideoFrame(width=3840, height=2160)
@@ -28,13 +29,15 @@ class VideoStreamTrackUhd(VideoStreamTrack):
 
 
 class MediaTestCase(CodecTestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.directory.cleanup()
 
-    def create_audio_file(self, name, channels=1, sample_rate=8000, sample_width=2):
+    def create_audio_file(
+        self, name: str, channels=1, sample_rate=8000, sample_width=2
+    ) -> str:
         path = self.temporary_path(name)
 
         writer = wave.open(path, "wb")
@@ -48,15 +51,17 @@ class MediaTestCase(CodecTestCase):
         return path
 
     def create_audio_and_video_file(
-        self, name, width=640, height=480, video_rate=30, duration=1
-    ):
+        self, name: str, width=640, height=480, video_rate=30, duration=1
+    ) -> str:
         path = self.temporary_path(name)
         audio_pts = 0
         audio_rate = 48000
         audio_samples = audio_rate // video_rate
 
         container = av.open(path, "w")
-        audio_stream = container.add_stream("libopus", rate=audio_rate)
+        audio_stream = cast(
+            av.AudioStream, container.add_stream("libopus", rate=audio_rate)
+        )
         video_stream = container.add_stream("h264", rate=video_rate)
         for video_frame in self.create_video_frames(
             width=width, height=height, count=duration * video_rate
@@ -79,7 +84,9 @@ class MediaTestCase(CodecTestCase):
 
         return path
 
-    def create_video_file(self, name, width=640, height=480, rate=30, duration=1):
+    def create_video_file(
+        self, name: str, width=640, height=480, rate=30, duration=1
+    ) -> str:
         path = self.temporary_path(name)
 
         container = av.open(path, "w")
@@ -102,13 +109,13 @@ class MediaTestCase(CodecTestCase):
 
         return path
 
-    def temporary_path(self, name):
+    def temporary_path(self, name: str) -> str:
         return os.path.join(self.directory.name, name)
 
 
 class MediaBlackholeTest(TestCase):
     @asynctest
-    async def test_audio(self):
+    async def test_audio(self) -> None:
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
         await recorder.start()
@@ -116,7 +123,7 @@ class MediaBlackholeTest(TestCase):
         await recorder.stop()
 
     @asynctest
-    async def test_audio_ended(self):
+    async def test_audio_ended(self) -> None:
         track = AudioStreamTrack()
 
         recorder = MediaBlackhole()
@@ -129,7 +136,7 @@ class MediaBlackholeTest(TestCase):
         await recorder.stop()
 
     @asynctest
-    async def test_audio_and_video(self):
+    async def test_audio_and_video(self) -> None:
         recorder = MediaBlackhole()
         recorder.addTrack(AudioStreamTrack())
         recorder.addTrack(VideoStreamTrack())
@@ -138,7 +145,7 @@ class MediaBlackholeTest(TestCase):
         await recorder.stop()
 
     @asynctest
-    async def test_video(self):
+    async def test_video(self) -> None:
         recorder = MediaBlackhole()
         recorder.addTrack(VideoStreamTrack())
         await recorder.start()
@@ -146,7 +153,7 @@ class MediaBlackholeTest(TestCase):
         await recorder.stop()
 
     @asynctest
-    async def test_video_ended(self):
+    async def test_video_ended(self) -> None:
         track = VideoStreamTrack()
 
         recorder = MediaBlackhole()
