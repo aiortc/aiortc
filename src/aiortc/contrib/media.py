@@ -4,7 +4,7 @@ import fractions
 import logging
 import threading
 import time
-from typing import Optional, Union, cast
+from typing import Optional, Union
 
 import av
 from av import AudioFrame, VideoFrame
@@ -443,9 +443,7 @@ class MediaRecorder:
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"
             else:
-                stream = cast(
-                    VideoStream, self.__container.add_stream("libx264", rate=30)
-                )
+                stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
 

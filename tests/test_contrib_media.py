@@ -4,7 +4,6 @@ import os
 import tempfile
 import time
 import wave
-from typing import cast
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -59,9 +58,7 @@ class MediaTestCase(CodecTestCase):
         audio_samples = audio_rate // video_rate
 
         container = av.open(path, "w")
-        audio_stream = cast(
-            av.AudioStream, container.add_stream("libopus", rate=audio_rate)
-        )
+        audio_stream = container.add_stream("libopus", rate=audio_rate)
         video_stream = container.add_stream("h264", rate=video_rate)
         for video_frame in self.create_video_frames(
             width=width, height=height, count=duration * video_rate
