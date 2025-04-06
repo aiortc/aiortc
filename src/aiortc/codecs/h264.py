@@ -105,7 +105,7 @@ class H264PayloadDescriptor:
 
 class H264Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = cast(VideoCodecContext, av.CodecContext.create("h264", "r"))
+        self.codec = av.CodecContext.create("h264", "r")
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         try:
@@ -118,25 +118,6 @@ class H264Decoder(Decoder):
                 "H264Decoder() failed to decode, skipping package: " + str(e)
             )
             return []
-
-
-def create_encoder_context(
-    codec_name: str, width: int, height: int, bitrate: int
-) -> VideoCodecContext:
-    codec = cast(VideoCodecContext, av.CodecContext.create(codec_name, "w"))
-    codec.width = width
-    codec.height = height
-    codec.bit_rate = bitrate
-    codec.pix_fmt = "yuv420p"
-    codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
-    codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
-    codec.options = {
-        "level": "31",
-        "tune": "zerolatency",
-    }
-    codec.profile = "Baseline"
-    codec.open()
-    return codec
 
 
 class H264Encoder(Encoder):
@@ -285,12 +266,18 @@ class H264Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
-            self.codec = create_encoder_context(
-                "libx264",
-                frame.width,
-                frame.height,
-                bitrate=self.target_bitrate,
-            )
+            self.codec = av.CodecContext.create("libx264", "w")
+            self.codec.width = frame.width
+            self.codec.height = frame.height
+            self.codec.bit_rate = self.target_bitrate
+            self.codec.pix_fmt = "yuv420p"
+            self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
+            self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+            self.codec.options = {
+                "level": "31",
+                "tune": "zerolatency",
+            }
+            self.codec.profile = "Baseline"
 
         data_to_send = b""
         for package in self.codec.encode(frame):

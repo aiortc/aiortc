@@ -153,7 +153,7 @@ class VpxPayloadDescriptor:
 
 class Vp8Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = cast(VideoCodecContext, CodecContext.create("libvpx", "r"))
+        self.codec = CodecContext.create("libvpx", "r")
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         packet = Packet(encoded_frame.data)
@@ -189,7 +189,7 @@ class Vp8Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.I
 
         if self.codec is None:
-            self.codec = cast(VideoCodecContext, av.CodecContext.create("libvpx", "w"))
+            self.codec = av.CodecContext.create("libvpx", "w")
             self.codec.width = frame.width
             self.codec.height = frame.height
             self.codec.bit_rate = self.target_bitrate

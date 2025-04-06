@@ -2,7 +2,6 @@ import fractions
 from typing import Optional, cast
 
 from av import AudioFrame, AudioResampler, CodecContext
-from av.audio.codeccontext import AudioCodecContext
 from av.frame import Frame
 from av.packet import Packet
 
@@ -17,7 +16,7 @@ TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
 class OpusDecoder(Decoder):
     def __init__(self) -> None:
-        self.codec = cast(AudioCodecContext, CodecContext.create("libopus", "r"))
+        self.codec = CodecContext.create("libopus", "r")
         self.codec.format = "s16"
         self.codec.layout = "stereo"
         self.codec.sample_rate = SAMPLE_RATE
@@ -31,7 +30,7 @@ class OpusDecoder(Decoder):
 
 class OpusEncoder(Encoder):
     def __init__(self) -> None:
-        self.codec = cast(AudioCodecContext, CodecContext.create("libopus", "w"))
+        self.codec = CodecContext.create("libopus", "w")
         self.codec.bit_rate = 96000
         self.codec.format = "s16"
         self.codec.layout = "stereo"
