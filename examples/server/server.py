@@ -10,6 +10,8 @@ import cv2
 from aiohttp import web
 from aiortc import (
     MediaStreamTrack,
+    RTCConfiguration,
+    RTCIceServer,
     RTCPeerConnection,
     RTCSessionDescription,
 )
@@ -165,7 +167,9 @@ async def offer(request):
     pc_id = request.match_info["pc_id"]
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-    pc = RTCPeerConnection()
+    pc = RTCPeerConnection(
+        RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
+    )
 
     def log_info(msg, *args):
         logger.info("PeerConnection(%s)" % pc_id + " " + msg, *args)
