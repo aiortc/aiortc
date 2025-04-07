@@ -187,7 +187,7 @@ async def add_candidate(request):
 
 async def on_shutdown(app):
     # close peer connections
-    coros = [pc.close() for pc in pcs]
+    coros = [pc.close() for pc in pcs.values()]
     await asyncio.gather(*coros)
     pcs.clear()
 
