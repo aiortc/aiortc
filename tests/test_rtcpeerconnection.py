@@ -951,8 +951,7 @@ a=rtpmap:8 PCMA/8000
         pc2 = RTCPeerConnection()
         await self._test_connect_audio_bidirectional(pc1, pc2)
 
-    @asynctest
-    async def test_connect_audio_bidirectional_with_trickle(self) -> None:
+    async def _test_connect_audio_bidirectional_trickle(self, with_mid: bool) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
 
@@ -1024,12 +1023,18 @@ a=rtpmap:8 PCMA/8000
         for transceiver in pc2.getTransceivers():
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
-                candidate.sdpMid = transceiver.mid
+                if with_mid:
+                    candidate.sdpMid = transceiver.mid
+                else:
+                    candidate.sdpMLineIndex = transceiver._get_mline_index()
                 await pc1.addIceCandidate(candidate)
         for transceiver in pc1.getTransceivers():
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
-                candidate.sdpMid = transceiver.mid
+                if with_mid:
+                    candidate.sdpMid = transceiver.mid
+                else:
+                    candidate.sdpMLineIndex = transceiver._get_mline_index()
                 await pc2.addIceCandidate(candidate)
 
         # check outcome
@@ -1069,6 +1074,16 @@ a=rtpmap:8 PCMA/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_audio_bidirectional_trickle_with_mid(self) -> None:
+        await self._test_connect_audio_bidirectional_trickle(with_mid=True)
+
+    @asynctest
+    async def test_connect_audio_bidirectional_trickle_with_mline_index(
+        self,
+    ) -> None:
+        await self._test_connect_audio_bidirectional_trickle(with_mid=False)
 
     @asynctest
     async def test_connect_audio_bidirectional_and_close(self) -> None:
@@ -4021,8 +4036,7 @@ a=rtpmap:0 PCMU/8000
             ],
         )
 
-    @asynctest
-    async def test_connect_datachannel_trickle(self) -> None:
+    async def _test_connect_datachannel_trickle(self, with_mid: bool) -> None:
         pc1 = RTCPeerConnection()
         pc1_data_messages = []
         pc1_states = track_states(pc1)
@@ -4120,10 +4134,16 @@ a=rtpmap:0 PCMU/8000
 
         # trickle candidates
         for candidate in pc2.sctp.transport.transport.iceGatherer.getLocalCandidates():
-            candidate.sdpMid = pc2.sctp.mid
+            if with_mid:
+                candidate.sdpMid = pc2.sctp.mid
+            else:
+                candidate.sdpMLineIndex = 0
             await pc1.addIceCandidate(candidate)
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
-            candidate.sdpMid = pc1.sctp.mid
+            if with_mid:
+                candidate.sdpMid = pc1.sctp.mid
+            else:
+                candidate.sdpMLineIndex = 0
             await pc2.addIceCandidate(candidate)
 
         # check outcome
@@ -4193,6 +4213,14 @@ a=rtpmap:0 PCMU/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_datachannel_trickle_with_mid(self) -> None:
+        await self._test_connect_datachannel_trickle(with_mid=True)
+
+    @asynctest
+    async def test_connect_datachannel_trickle_with_mline_index(self) -> None:
+        await self._test_connect_datachannel_trickle(with_mid=False)
 
     @asynctest
     async def test_connect_datachannel_max_packet_lifetime(self) -> None:
