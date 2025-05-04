@@ -594,6 +594,31 @@ class RTCPeerConnectionTest(TestCase):
         )
 
     @asynctest
+    async def test_addIceCandidate_sdpMLineIndex(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        pc1.addTrack(VideoStreamTrack())
+
+        await pc1.setLocalDescription(await pc1.createOffer())
+        desc1 = strip_ice_candidates(pc1.localDescription)
+        await pc2.setRemoteDescription(desc1)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        desc2 = strip_ice_candidates(pc2.localDescription)
+        await pc1.setRemoteDescription(desc2)
+
+        for transceiver in pc2.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                candidate.sdpMLineIndex = transceiver._get_mline_index()
+                await pc1.addIceCandidate(candidate)
+
+        await self.assertIceCompleted(pc1, pc2)
+
+        await pc1.close()
+        await pc2.close()
+        
+    @asynctest
     async def test_addTrack_audio(self) -> None:
         pc = RTCPeerConnection()
 
@@ -5177,3 +5202,4 @@ a=rtpmap:0 PCMU/8000
         await pc2.close()
         self.assertClosed(pc1)
         self.assertClosed(pc2)
+
