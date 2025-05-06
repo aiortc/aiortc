@@ -44,4 +44,3 @@ class RTCConfiguration:
     "A list of :class:`RTCIceServer` objects to configure STUN / TURN servers."
 
     bundlePolicy: Optional[RTCBundlePolicy] = RTCBundlePolicy.BALANCED
-    "Note: only max-compat is implemented currently."

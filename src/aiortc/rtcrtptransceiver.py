@@ -130,6 +130,13 @@ class RTCRtpTransceiver:
         await self.__sender.stop()
         self.__stopped = True
 
+    @property
+    def transport(self) -> RTCDtlsTransport:
+        """
+        The underlying DTLS transport
+        """
+        return self._transport
+
     def _setCurrentDirection(self, direction: str) -> None:
         self.__currentDirection = direction
 

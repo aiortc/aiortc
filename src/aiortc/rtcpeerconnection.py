@@ -295,10 +295,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__certificates = [RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
-        if self.__configuration.bundlePolicy != RTCBundlePolicy.MAX_COMPAT:
-            logger.warning(
-                "Ignoring unsupported bundlePolicy", self.__configuration.bundlePolicy
-            )
         self.__dtlsTransports: set[RTCDtlsTransport] = set()
         self.__iceTransports: set[RTCIceTransport] = set()
         self.__remoteDtls: dict[
@@ -1059,8 +1055,15 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     def __createDtlsTransport(self) -> RTCDtlsTransport:
         # create ICE transport
-        if len(self.__transceivers) > 0:
-            parameters = self.__iceTransports[0].iceGatherer.getLocalParameters()
+        if len(self.__transceivers) > 0 or self.__sctp:
+            if len(self.__transceivers) > 0:
+                parameters = self.__transceivers[
+                    0
+                ].transport.transport.iceGatherer.getLocalParameters()
+            else:
+                parameters = (
+                    self.__sctp.transport.transport.iceGatherer.getLocalParameters()
+                )
             iceGatherer = RTCIceGatherer(
                 iceServers=self.__configuration.iceServers,
                 local_username=parameters.usernameFragment,
@@ -1068,6 +1071,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             )
         else:
             iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
+
         iceGatherer.on("statechange", self.__updateIceGatheringState)
 
         iceTransport = RTCIceTransport(iceGatherer)

@@ -174,7 +174,12 @@ class RTCIceGatherer(AsyncIOEventEmitter):
     exchanged in signaling.
     """
 
-    def __init__(self, iceServers: Optional[list[RTCIceServer]] = None) -> None:
+    def __init__(
+        self,
+        iceServers: Optional[list[RTCIceServer]] = None,
+        local_username: Optional[str] = None,
+        local_password: Optional[str] = None,
+    ) -> None:
         super().__init__()
 
         if iceServers is None:
