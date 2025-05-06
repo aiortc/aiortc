@@ -1073,7 +1073,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             iceGatherer = RTCIceGatherer(iceServers=self.__configuration.iceServers)
 
         iceGatherer.on("statechange", self.__updateIceGatheringState)
-
         iceTransport = RTCIceTransport(iceGatherer)
         iceTransport.on("statechange", self.__updateIceConnectionState)
         iceTransport.on("statechange", self.__updateConnectionState)
