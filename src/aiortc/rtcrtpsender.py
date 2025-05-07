@@ -432,8 +432,8 @@ class RTCRtpSender:
                         sender_info=RtcpSenderInfo(
                             ntp_timestamp=self.__ntp_timestamp,
                             rtp_timestamp=self.__rtp_timestamp,
-                            packet_count=self.__packet_count,
-                            octet_count=self.__octet_count,
+                            packet_count=self.__packet_count & 0xFFFFFFFF,
+                            octet_count=self.__octet_count & 0xFFFFFFFF,
                         ),
                     )
                 ]
