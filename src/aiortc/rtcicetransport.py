@@ -10,12 +10,13 @@ from pyee.asyncio import AsyncIOEventEmitter
 from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer
 
+# See https://datatracker.ietf.org/doc/html/rfc7064
+# transport is not defined by RFC 7064 and rejected by browsers.
 STUN_REGEX = re.compile(
     r"(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?"
-    # RFC 7064 does not define a "transport" option but some providers
-    # include it, so just ignore it
-    r"(\?transport=.*)?"
+    r"(\?transport=(?P<transport>.*))?"
 )
+# See https://datatracker.ietf.org/doc/html/rfc7065
 TURN_REGEX = re.compile(
     r"(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?"
     r"(\?transport=(?P<transport>.*))?"
@@ -162,6 +163,12 @@ def parse_stun_turn_uri(uri: str) -> dict[str, Any]:
         parsed["transport"] = "udp"
     elif parsed["scheme"] == "turns" and not parsed["transport"]:
         parsed["transport"] = "tcp"
+    elif parsed["scheme"] in ["stun", "stuns"]:
+        if parsed["transport"] is not None:
+            raise ValueError(
+                "malformed uri: " + parsed["scheme"] + " must not contain transport"
+            )
+        del parsed["transport"]
 
     return parsed
 

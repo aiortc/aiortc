@@ -37,12 +37,11 @@ class ConnectionKwargsTest(TestCase):
             {"stun_server": ("stun.l.google.com", 19302)},
         )
 
-    def test_stun_with_suffix(self) -> None:
+    def test_stun_with_transport(self) -> None:
+        with self.assertRaises(ValueError) as cm:
+            parse_stun_turn_uri("stun:global.stun.twilio.com:3478?transport=udp")
         self.assertEqual(
-            connection_kwargs(
-                [RTCIceServer("stun:global.stun.twilio.com:3478?transport=udp")]
-            ),
-            {"stun_server": ("global.stun.twilio.com", 3478)},
+            str(cm.exception), "malformed uri: stun must not contain transport"
         )
 
     def test_stun_multiple_servers(self) -> None:
