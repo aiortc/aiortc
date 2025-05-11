@@ -3,6 +3,22 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.12.0
+------
+
+ * Use PyAV to perform Opus + VP8 encoding and decoding. This means `aiortc`
+   is now pure Python.
+ * Allow configuring the media-bundling policy using
+   :attr:`RTCConfiguration.bundlePolicy`.
+ * Fix reversed track negotiated media ID (`mid`) when using multiple
+   transceivers of the same kind.
+ * Fix the :attr:`RTCIceServer.urls` typing to accept `List[str]` in addition
+   to `str`.
+ * Fix octet count and packet count overflow in :class:`RTCRtpSender` when
+   sending RTCP sender reports.
+ * Fix :meth:`RTCPeerConnection.addIceCandidate` when handling candidates
+   with and m-line index and no media ID.
+
 1.11.0
 ------
 
