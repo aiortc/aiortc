@@ -251,7 +251,7 @@ def create_media_description_for_transceiver(
             )
         ]
 
-    add_transport_description(media, transceiver._transport)
+    add_transport_description(media, transceiver.receiver.transport)
 
     return media
 
@@ -410,7 +410,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 candidate.sdpMid == transceiver.mid
                 or candidate.sdpMLineIndex == transceiver._get_mline_index()
             ) and not transceiver._bundled:
-                iceTransport = transceiver._transport.transport
+                iceTransport = transceiver.receiver.transport.transport
                 await iceTransport.addRemoteCandidate(candidate)
                 return
 
@@ -500,8 +500,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         # stop transports
         for transceiver in self.__transceivers:
-            await transceiver._transport.stop()
-            await transceiver._transport.transport.stop()
+            await transceiver.receiver.transport.stop()
+            await transceiver.receiver.transport.transport.stop()
         if self.__sctp:
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
@@ -551,7 +551,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     ),
                     mid=transceiver.mid,
                 )
-                dtlsTransport = transceiver._transport
+                dtlsTransport = transceiver.receiver.transport
             else:
                 media = create_media_description_for_sctp(
                     self.__sctp, legacy=self._sctpLegacySdp, mid=self.__sctp.mid
@@ -789,7 +789,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             for i, media in enumerate(description.media):
                 if media.kind in ["audio", "video"]:
                     transceiver = self.__getTransceiverByMLineIndex(i)
-                    transceiver._transport._set_role(media.dtls.role)
+                    transceiver.receiver.transport._set_role(media.dtls.role)
                 elif media.kind == "application":
                     self.__sctp.transport._set_role(media.dtls.role)
 
@@ -803,7 +803,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for i, media in enumerate(description.media):
             if media.kind in ["audio", "video"]:
                 transceiver = self.__getTransceiverByMLineIndex(i)
-                add_transport_description(media, transceiver._transport)
+                add_transport_description(media, transceiver.receiver.transport)
             elif media.kind == "application":
                 add_transport_description(media, self.__sctp.transport)
 
@@ -900,7 +900,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     )
 
                 # memorise transport parameters
-                dtlsTransport = transceiver._transport
+                dtlsTransport = transceiver.receiver.transport
                 self.__remoteDtls[transceiver] = media.dtls
                 self.__remoteIce[transceiver] = media.ice
 
@@ -947,32 +947,31 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         bundle = next((x for x in description.group if x.semantic == "BUNDLE"), None)
         if bundle and bundle.items:
             # find main media stream
-            masterMid = bundle.items[0]
-            masterTransport = None
+            primaryMid = bundle.items[0]
+            primaryTransport = None
             for transceiver in self.__transceivers:
-                if transceiver.mid == masterMid:
-                    masterTransport = transceiver._transport
+                if transceiver.mid == primaryMid:
+                    primaryTransport = transceiver.receiver.transport
                     break
-            if self.__sctp and self.__sctp.mid == masterMid:
-                masterTransport = self.__sctp.transport
+            if self.__sctp and self.__sctp.mid == primaryMid:
+                primaryTransport = self.__sctp.transport
 
             # replace transport for bundled media
             oldTransports = set()
             slaveMids = bundle.items[1:]
             for transceiver in self.__transceivers:
                 if transceiver.mid in slaveMids and not transceiver._bundled:
-                    oldTransports.add(transceiver._transport)
-                    transceiver.receiver.setTransport(masterTransport)
-                    transceiver.sender.setTransport(masterTransport)
+                    oldTransports.add(transceiver.receiver.transport)
+                    transceiver.receiver.setTransport(primaryTransport)
+                    transceiver.sender.setTransport(primaryTransport)
                     transceiver._bundled = True
-                    transceiver._transport = masterTransport
             if (
                 self.__sctp
                 and self.__sctp.mid in slaveMids
                 and not self.__sctp._bundled
             ):
                 oldTransports.add(self.__sctp.transport)
-                self.__sctp.setTransport(masterTransport)
+                self.__sctp.setTransport(primaryTransport)
                 self.__sctp._bundled = True
 
             # stop and discard old ICE transports
@@ -1015,7 +1014,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     async def __connect(self) -> None:
         for transceiver in self.__transceivers:
-            dtlsTransport = transceiver._transport
+            dtlsTransport = transceiver.receiver.transport
             iceTransport = dtlsTransport.transport
             if (
                 iceTransport.iceGatherer.getLocalCandidates()
@@ -1065,7 +1064,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if len(self.__transceivers) > 0:
                 parameters = self.__transceivers[
                     0
-                ].transport.transport.iceGatherer.getLocalParameters()
+                ].receiver.transport.transport.iceGatherer.getLocalParameters()
             else:
                 parameters = (
                     self.__sctp.transport.transport.iceGatherer.getLocalParameters()
@@ -1103,7 +1102,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             and len(self.__transceivers) > 0
         )
         if bundled:
-            dtlsTransport = self.__transceivers[0].transport
+            dtlsTransport = self.__transceivers[0].receiver.transport
         else:
             dtlsTransport = self.__createDtlsTransport()
         self.__sctp = RTCSctpTransport(dtlsTransport)
@@ -1121,7 +1120,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         bundled = False
         if self.__configuration.bundlePolicy == RTCBundlePolicy.MAX_BUNDLE:
             if len(self.__transceivers) > 0:
-                dtlsTransport = self.__transceivers[0].transport
+                dtlsTransport = self.__transceivers[0].receiver.transport
                 bundled = True
             elif self.__sctp:
                 dtlsTransport = self.__sctp.transport
@@ -1131,7 +1130,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 filter(lambda t: t.kind == kind, self.__transceivers), None
             )
             if transceiver:
-                dtlsTransport = transceiver.transport
+                dtlsTransport = transceiver.receiver.transport
                 bundled = True
 
         if not dtlsTransport:
@@ -1146,7 +1145,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
         transceiver.sender._stream_id = self.__stream_id
         transceiver._bundled = bundled
-        transceiver._transport = dtlsTransport
         self.__transceivers.append(transceiver)
         return transceiver
 

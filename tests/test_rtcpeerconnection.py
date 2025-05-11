@@ -5254,11 +5254,17 @@ a=rtpmap:0 PCMU/8000
         transceiver2 = pc.addTransceiver("video")
 
         await pc.createOffer()
-        param1 = transceiver1.transport.transport.iceGatherer.getLocalParameters()
-        param2 = transceiver2.transport.transport.iceGatherer.getLocalParameters()
+        param1 = (
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters()
+        )
+        param2 = (
+            transceiver2.receiver.transport.transport.iceGatherer.getLocalParameters()
+        )
         self.assertEqual(param1.usernameFragment, param2.usernameFragment)
         self.assertEqual(param1.password, param2.password)
-        self.assertEqual(transceiver1.transport, transceiver2.transport)
+        self.assertEqual(
+            transceiver1.receiver.transport, transceiver2.receiver.transport
+        )
 
     @asynctest
     async def test_bundlepolicy_max_bundle_ufrag_and_pwd_datachannel(self) -> None:
@@ -5269,11 +5275,13 @@ a=rtpmap:0 PCMU/8000
         transceiver = pc.addTransceiver("audio")
 
         await pc.createOffer()
-        param1 = transceiver.transport.transport.iceGatherer.getLocalParameters()
+        param1 = (
+            transceiver.receiver.transport.transport.iceGatherer.getLocalParameters()
+        )
         param2 = pc.sctp.transport.transport.iceGatherer.getLocalParameters()
         self.assertEqual(param1.usernameFragment, param2.usernameFragment)
         self.assertEqual(param1.password, param2.password)
-        self.assertEqual(transceiver.transport, pc.sctp.transport)
+        self.assertEqual(transceiver.receiver.transport, pc.sctp.transport)
 
     @asynctest
     async def test_bundlepolicy_transports_balanced(self) -> None:
@@ -5282,10 +5290,14 @@ a=rtpmap:0 PCMU/8000
         transceiver2 = pc.addTransceiver("video")
         transceiver3 = pc.addTransceiver("audio")
         pc.createDataChannel("somechannel")
-        self.assertNotEqual(transceiver1.transport, transceiver2.transport)
-        self.assertEqual(transceiver1.transport, transceiver3.transport)
-        self.assertNotEqual(transceiver1.transport, pc.sctp.transport)
-        self.assertNotEqual(transceiver2.transport, pc.sctp.transport)
+        self.assertNotEqual(
+            transceiver1.receiver.transport, transceiver2.receiver.transport
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport, transceiver3.receiver.transport
+        )
+        self.assertNotEqual(transceiver1.receiver.transport, pc.sctp.transport)
+        self.assertNotEqual(transceiver2.receiver.transport, pc.sctp.transport)
 
     @asynctest
     async def test_bundlepolicy_transports_max_compat(self) -> None:
@@ -5296,10 +5308,14 @@ a=rtpmap:0 PCMU/8000
         transceiver2 = pc.addTransceiver("video")
         transceiver3 = pc.addTransceiver("audio")
         pc.createDataChannel("somechannel")
-        self.assertNotEqual(transceiver1.transport, transceiver2.transport)
-        self.assertNotEqual(transceiver1.transport, transceiver3.transport)
-        self.assertNotEqual(transceiver1.transport, pc.sctp.transport)
-        self.assertNotEqual(transceiver2.transport, pc.sctp.transport)
+        self.assertNotEqual(
+            transceiver1.receiver.transport, transceiver2.receiver.transport
+        )
+        self.assertNotEqual(
+            transceiver1.receiver.transport, transceiver3.receiver.transport
+        )
+        self.assertNotEqual(transceiver1.receiver.transport, pc.sctp.transport)
+        self.assertNotEqual(transceiver2.receiver.transport, pc.sctp.transport)
 
     @asynctest
     async def test_bundlepolicy_transports_max_bundle(self) -> None:
@@ -5310,6 +5326,10 @@ a=rtpmap:0 PCMU/8000
         transceiver2 = pc.addTransceiver("video")
         transceiver3 = pc.addTransceiver("audio")
         pc.createDataChannel("somechannel")
-        self.assertEqual(transceiver1.transport, transceiver2.transport)
-        self.assertEqual(transceiver1.transport, transceiver3.transport)
-        self.assertEqual(transceiver1.transport, pc.sctp.transport)
+        self.assertEqual(
+            transceiver1.receiver.transport, transceiver2.receiver.transport
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport, transceiver3.receiver.transport
+        )
+        self.assertEqual(transceiver1.receiver.transport, pc.sctp.transport)
