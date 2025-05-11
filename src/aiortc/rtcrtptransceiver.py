@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 from .codecs import get_capabilities
-from .rtcdtlstransport import RTCDtlsTransport
 from .rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
@@ -40,7 +39,6 @@ class RTCRtpTransceiver:
 
         self._offerDirection: Optional[str] = None
         self._preferred_codecs: list[RTCRtpCodecCapability] = []
-        self._transport: RTCDtlsTransport = None
 
         # FIXME: this is only used by RTCPeerConnection
         self._bundled = False
@@ -129,13 +127,6 @@ class RTCRtpTransceiver:
         await self.__receiver.stop()
         await self.__sender.stop()
         self.__stopped = True
-
-    @property
-    def transport(self) -> RTCDtlsTransport:
-        """
-        The :class:`RTCDtlsTransport` over which media are transmitted.
-        """
-        return self._transport
 
     def _setCurrentDirection(self, direction: str) -> None:
         self.__currentDirection = direction
