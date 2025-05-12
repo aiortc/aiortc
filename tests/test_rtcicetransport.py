@@ -1,6 +1,7 @@
 import asyncio
-from unittest import TestCase
+from typing import Optional
 
+import aioice.ice
 import aioice.stun
 from aioice import ConnectionClosed
 from aiortc.exceptions import InvalidStateError
@@ -14,14 +15,14 @@ from aiortc.rtcicetransport import (
     parse_stun_turn_uri,
 )
 
-from .utils import asynctest
+from .utils import TestCase, asynctest
 
 
-async def mock_connect():
+async def mock_connect() -> None:
     pass
 
 
-async def mock_get_event():
+async def mock_get_event() -> Optional[aioice.ice.ConnectionEvent]:
     await asyncio.sleep(0.5)
     return ConnectionClosed()
 

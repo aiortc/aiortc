@@ -25,12 +25,12 @@ DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
 class VpxPayloadDescriptor:
     def __init__(
         self,
-        partition_start,
-        partition_id,
-        picture_id=None,
-        tl0picidx=None,
-        tid=None,
-        keyidx=None,
+        partition_start: int,
+        partition_id: int,
+        picture_id: Optional[int] = None,
+        tl0picidx: Optional[int] = None,
+        tid: Optional[tuple[int, int]] = None,
+        keyidx: Optional[int] = None,
     ) -> None:
         self.partition_start = partition_start
         self.partition_id = partition_id

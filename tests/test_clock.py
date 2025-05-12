@@ -1,13 +1,13 @@
 import datetime
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from aiortc import clock
 
 
 class ClockTest(TestCase):
     @patch("aiortc.clock.current_datetime")
-    def test_current_ms(self, mock_now):
+    def test_current_ms(self, mock_now: MagicMock) -> None:
         mock_now.return_value = datetime.datetime(
             2018, 9, 11, tzinfo=datetime.timezone.utc
         )
@@ -18,13 +18,13 @@ class ClockTest(TestCase):
         )
         self.assertEqual(clock.current_ms(), 3745612801000)
 
-    def test_datetime_from_ntp(self):
+    def test_datetime_from_ntp(self) -> None:
         dt = datetime.datetime(
             2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc
         )
         self.assertEqual(clock.datetime_from_ntp(16059593044731306503), dt)
 
-    def test_datetime_to_ntp(self):
+    def test_datetime_to_ntp(self) -> None:
         dt = datetime.datetime(
             2018, 6, 28, 9, 3, 5, 423998, tzinfo=datetime.timezone.utc
         )

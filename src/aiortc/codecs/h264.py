@@ -1,9 +1,10 @@
 import fractions
 import logging
 import math
+from collections.abc import Iterable, Iterator, Sequence
 from itertools import tee
 from struct import pack, unpack_from
-from typing import Iterator, Optional, Sequence, Type, TypeVar, cast
+from typing import Optional, Type, TypeVar, cast
 
 import av
 from av.frame import Frame
@@ -42,10 +43,10 @@ def pairwise(iterable: Sequence[T]) -> Iterator[tuple[T, T]]:
 
 
 class H264PayloadDescriptor:
-    def __init__(self, first_fragment):
+    def __init__(self, first_fragment: bool) -> None:
         self.first_fragment = first_fragment
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"H264PayloadDescriptor(FF={self.first_fragment})"
 
     @classmethod
@@ -229,7 +230,7 @@ class H264Encoder(Encoder):
                 yield buf[nal_start:i]
 
     @classmethod
-    def _packetize(cls, packages: Iterator[bytes]) -> list[bytes]:
+    def _packetize(cls, packages: Iterable[bytes]) -> list[bytes]:
         packetized_packages = []
 
         packages_iterator = iter(packages)

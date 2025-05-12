@@ -9,10 +9,10 @@ BOGUS_CODEC = RTCRtpCodecParameters(
 
 
 class CodecsTest(TestCase):
-    def test_get_decoder(self):
+    def test_get_decoder(self) -> None:
         with self.assertRaises(ValueError):
             get_decoder(BOGUS_CODEC)
 
-    def test_get_encoder(self):
+    def test_get_encoder(self) -> None:
         with self.assertRaises(ValueError):
             get_encoder(BOGUS_CODEC)

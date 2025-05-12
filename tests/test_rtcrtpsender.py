@@ -1,7 +1,7 @@
 import asyncio
 from struct import pack
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from aiortc import MediaStreamTrack
 from aiortc.codecs import PCMU_CODEC
@@ -134,7 +134,7 @@ class RTCRtpSenderTest(TestCase):
     def test_construct_invalid_dtls_transport_state(self) -> None:
         dtlsTransport = ClosedDtlsTransport()
         with self.assertRaises(InvalidStateError):
-            RTCRtpSender("audio", dtlsTransport)
+            RTCRtpSender("audio", dtlsTransport)  # type: ignore
 
     @asynctest
     async def test_connection_error(self) -> None:
@@ -248,7 +248,7 @@ class RTCRtpSenderTest(TestCase):
 
     @patch("aiortc.rtcrtpsender.logger.isEnabledFor")
     @asynctest
-    async def test_log_debug(self, mock_is_enabled_for):
+    async def test_log_debug(self, mock_is_enabled_for: MagicMock) -> None:
         mock_is_enabled_for.return_value = True
 
         async with dummy_dtls_transport_pair() as (local_transport, _):
@@ -265,12 +265,12 @@ class RTCRtpSenderTest(TestCase):
         """
         queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
 
-        async def mock_send_rtp(data):
+        async def mock_send_rtp(data: bytes) -> None:
             if not is_rtcp(data):
                 await queue.put(RtpPacket.parse(data))
 
         async with dummy_dtls_transport_pair() as (local_transport, _):
-            local_transport._send_rtp = mock_send_rtp
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
 
             sender = RTCRtpSender(VideoStreamTrack(), local_transport)
             self.assertEqual(sender.kind, "video")
@@ -304,12 +304,12 @@ class RTCRtpSenderTest(TestCase):
         """
         queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
 
-        async def mock_send_rtp(data):
+        async def mock_send_rtp(data: bytes) -> None:
             if not is_rtcp(data):
                 await queue.put(RtpPacket.parse(data))
 
         async with dummy_dtls_transport_pair() as (local_transport, _):
-            local_transport._send_rtp = mock_send_rtp
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
 
             sender = RTCRtpSender(VideoStreamTrack(), local_transport)
             sender._ssrc = 1234
@@ -343,12 +343,12 @@ class RTCRtpSenderTest(TestCase):
         """
         queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
 
-        async def mock_send_rtp(data):
+        async def mock_send_rtp(data: bytes) -> None:
             if not is_rtcp(data):
                 await queue.put(RtpPacket.parse(data))
 
         async with dummy_dtls_transport_pair() as (local_transport, _):
-            local_transport._send_rtp = mock_send_rtp
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
 
             sender = RTCRtpSender(VideoStreamTrack(), local_transport)
             sender._ssrc = 1234

@@ -4,7 +4,7 @@ from aiortc import RTCSessionDescription
 
 
 class RTCSessionDescriptionTest(TestCase):
-    def test_bad_type(self):
+    def test_bad_type(self) -> None:
         with self.assertRaises(ValueError) as cm:
             RTCSessionDescription(sdp="v=0\r\n", type="bogus")
         self.assertEqual(
@@ -13,7 +13,7 @@ class RTCSessionDescriptionTest(TestCase):
             "(got 'bogus')",
         )
 
-    def test_good_type(self):
+    def test_good_type(self) -> None:
         desc = RTCSessionDescription(sdp="v=0\r\n", type="answer")
         self.assertEqual(desc.sdp, "v=0\r\n")
         self.assertEqual(desc.type, "answer")

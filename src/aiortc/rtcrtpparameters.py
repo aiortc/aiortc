@@ -21,7 +21,7 @@ class RTCRtpCodecCapability:
     "Codec-specific parameters available for signaling."
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.mimeType.split("/")[1]
 
 
@@ -46,10 +46,10 @@ class RTCRtpCodecParameters:
     "Codec-specific parameters available for signaling."
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.mimeType.split("/")[1]
 
-    def __str__(self):
+    def __str__(self) -> str:
         s = f"{self.name}/{self.clockRate}"
         if self.channels == 2:
             s += "/2"

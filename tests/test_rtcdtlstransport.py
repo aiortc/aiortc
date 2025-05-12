@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from aiortc.rtcdtlstransport import (
     SRTP_AEAD_AES_256_GCM,
@@ -21,6 +21,7 @@ from aiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    AnyRtcpPacket,
     RtcpByePacket,
     RtcpPsfbPacket,
     RtcpReceiverInfo,
@@ -33,45 +34,49 @@ from aiortc.rtp import (
 )
 from OpenSSL import SSL
 
-from .utils import asynctest, dummy_ice_transport_pair, load
+from .utils import asynctest, dummy_ice_transport_pair, load, set_loss_pattern
 
 RTP = load("rtp.bin")
 RTCP = load("rtcp_sr.bin")
 
 
 class BrokenDataReceiver:
-    def __init__(self):
-        self.data = []
-
-    async def _handle_data(self, data):
+    async def _handle_data(self, data: bytes) -> None:
         raise Exception("some error")
 
 
 class DummyDataReceiver:
-    def __init__(self):
-        self.data = []
+    def __init__(self) -> None:
+        self.data: list[bytes] = []
 
-    async def _handle_data(self, data):
+    async def _handle_data(self, data: bytes) -> None:
         self.data.append(data)
 
 
 class DummyRtpReceiver:
-    def __init__(self):
-        self.rtp_packets = []
-        self.rtcp_packets = []
+    def __init__(self) -> None:
+        self.rtp_packets: list[RtpPacket] = []
+        self.rtcp_packets: list[AnyRtcpPacket] = []
 
-    def _handle_disconnect(self):
+    def _handle_disconnect(self) -> None:
         pass
 
-    async def _handle_rtp_packet(self, packet, arrival_time_ms):
+    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int) -> None:
         self.rtp_packets.append(packet)
 
-    async def _handle_rtcp_packet(self, packet):
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
         self.rtcp_packets.append(packet)
 
 
+class DummyRtpSender:
+    _ssrc = 0
+
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
+        pass
+
+
 class RTCCertificateTest(TestCase):
-    def test_generate(self):
+    def test_generate(self) -> None:
         certificate = RTCCertificate.generateCertificate()
         self.assertIsNotNone(certificate)
 
@@ -90,7 +95,13 @@ class RTCCertificateTest(TestCase):
 
 
 class RTCDtlsTransportTest(TestCase):
-    def assertCounters(self, transport_a, transport_b, packets_sent_a, packets_sent_b):
+    def assertCounters(
+        self,
+        transport_a: RTCDtlsTransport,
+        transport_b: RTCDtlsTransport,
+        packets_sent_a: int,
+        packets_sent_b: int,
+    ) -> None:
         stats_a = transport_a._get_stats()[transport_a._stats_id]
         stats_b = transport_b._get_stats()[transport_b._stats_id]
 
@@ -108,7 +119,7 @@ class RTCDtlsTransportTest(TestCase):
         self.assertEqual(stats_b.bytesSent, stats_a.bytesReceived)
 
     @asynctest
-    async def test_data(self):
+    async def test_data(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -150,7 +161,7 @@ class RTCDtlsTransportTest(TestCase):
             await session1._send_data(b"foo")
 
     @asynctest
-    async def test_data_handler_error(self):
+    async def test_data_handler_error(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -176,7 +187,7 @@ class RTCDtlsTransportTest(TestCase):
         await session2.stop()
 
     @asynctest
-    async def test_rtp(self):
+    async def test_rtp(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -245,7 +256,7 @@ class RTCDtlsTransportTest(TestCase):
             await session1._send_rtp(RTP)
 
     @asynctest
-    async def test_rtp_malformed(self):
+    async def test_rtp_malformed(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -258,7 +269,7 @@ class RTCDtlsTransportTest(TestCase):
         await session1._handle_rtcp_data(RTCP[0:8])
 
     @asynctest
-    async def test_srtp_unprotect_error(self):
+    async def test_srtp_unprotect_error(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -309,7 +320,7 @@ class RTCDtlsTransportTest(TestCase):
         await session2.stop()
 
     @asynctest
-    async def test_abrupt_disconnect(self):
+    async def test_abrupt_disconnect(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -337,7 +348,7 @@ class RTCDtlsTransportTest(TestCase):
         self.assertEqual(session2.state, "closed")
 
     @asynctest
-    async def test_abrupt_disconnect_2(self):
+    async def test_abrupt_disconnect_2(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -351,10 +362,10 @@ class RTCDtlsTransportTest(TestCase):
             session2.start(session1.getLocalParameters()),
         )
 
-        def fake_write_ssl():
+        def fake_write_ssl() -> None:
             raise ConnectionError
 
-        session1._write_ssl = fake_write_ssl
+        session1._write_ssl = fake_write_ssl  # type: ignore
 
         # close DTLS -> ConnectionError
         await session1.stop()
@@ -366,7 +377,7 @@ class RTCDtlsTransportTest(TestCase):
         self.assertEqual(session2.state, "closed")
 
     @asynctest
-    async def test_bad_client_fingerprint(self):
+    async def test_bad_client_fingerprint(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -392,7 +403,7 @@ class RTCDtlsTransportTest(TestCase):
 
     @patch("aiortc.rtcdtlstransport.SSL.Connection.do_handshake")
     @asynctest
-    async def test_handshake_error(self, mock_do_handshake):
+    async def test_handshake_error(self, mock_do_handshake: MagicMock) -> None:
         mock_do_handshake.side_effect = SSL.Error(
             [("SSL routines", "", "decryption failed or bad record mac")]
         )
@@ -416,7 +427,7 @@ class RTCDtlsTransportTest(TestCase):
         await session2.stop()
 
     @asynctest
-    async def test_handshake_error_no_common_srtp_profile(self):
+    async def test_handshake_error_no_common_srtp_profile(self) -> None:
         transport1, transport2 = dummy_ice_transport_pair()
 
         certificate1 = RTCCertificate.generateCertificate()
@@ -438,14 +449,14 @@ class RTCDtlsTransportTest(TestCase):
         await session2.stop()
 
     @asynctest
-    async def test_lossy_channel(self):
+    async def test_lossy_channel(self) -> None:
         """
         Transport with 25% loss eventually connects.
         """
         transport1, transport2 = dummy_ice_transport_pair()
         loss_pattern = [True, False, False, False]
-        transport1._connection.loss_pattern = loss_pattern
-        transport2._connection.loss_pattern = loss_pattern
+        set_loss_pattern(transport1, loss_pattern)
+        set_loss_pattern(transport2, loss_pattern)
 
         certificate1 = RTCCertificate.generateCertificate()
         session1 = RTCDtlsTransport(transport1, [certificate1])
@@ -463,16 +474,16 @@ class RTCDtlsTransportTest(TestCase):
 
 
 class RtpRouterTest(TestCase):
-    def test_route_rtcp(self):
-        receiver = object()
-        sender = object()
+    def test_route_rtcp(self) -> None:
+        receiver = DummyRtpReceiver()
+        sender = DummyRtpSender()
 
         router = RtpRouter()
         router.register_receiver(receiver, ssrcs=[1234, 2345], payload_types=[96, 97])
         router.register_sender(sender, ssrc=3456)
 
         # BYE
-        packet = RtcpByePacket(sources=[1234, 2345])
+        packet: AnyRtcpPacket = RtcpByePacket(sources=[1234, 2345])
         self.assertEqual(router.route_rtcp(packet), set([receiver]))
 
         # RR
@@ -533,9 +544,9 @@ class RtpRouterTest(TestCase):
         packet = RtcpRtpfbPacket(fmt=RTCP_RTPFB_NACK, ssrc=1234, media_ssrc=3456)
         self.assertEqual(router.route_rtcp(packet), set([sender]))
 
-    def test_route_rtp(self):
-        receiver1 = object()
-        receiver2 = object()
+    def test_route_rtp(self) -> None:
+        receiver1 = DummyRtpReceiver()
+        receiver2 = DummyRtpReceiver()
 
         router = RtpRouter()
         router.register_receiver(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])
@@ -564,9 +575,9 @@ class RtpRouterTest(TestCase):
         # unknown SSRC and payload type
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=6789, payload_type=100)), None)
 
-    def test_route_rtp_ambiguous_payload_type(self):
-        receiver1 = object()
-        receiver2 = object()
+    def test_route_rtp_ambiguous_payload_type(self) -> None:
+        receiver1 = DummyRtpReceiver()
+        receiver2 = DummyRtpReceiver()
 
         router = RtpRouter()
         router.register_receiver(receiver1, ssrcs=[1234, 2345], payload_types=[96, 97])

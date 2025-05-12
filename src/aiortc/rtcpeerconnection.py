@@ -38,7 +38,7 @@ from .rtcrtpparameters import (
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
 from .rtcrtpsender import RTCRtpSender
 from .rtcrtptransceiver import RTCRtpTransceiver
-from .rtcsctptransport import RTCSctpTransport
+from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 from .stats import RTCStatsReport
 
@@ -128,10 +128,10 @@ def is_codec_compatible(a: RTCRtpCodecParameters, b: RTCRtpCodecParameters) -> b
 
     if a.mimeType.lower() == "video/h264":
 
-        def packetization(c: RTCRtpCodecParameters):
-            return c.parameters.get("packetization-mode", "0")
+        def packetization(c: RTCRtpCodecParameters) -> int:
+            return int(c.parameters.get("packetization-mode", "0"))
 
-        def profile(c: RTCRtpCodecParameters):
+        def profile(c: RTCRtpCodecParameters) -> sdp.H264Profile:
             # for backwards compatibility with older versions of WebRTC,
             # consider the absence of a profile-level-id parameter to mean
             # "constrained baseline level 3.1"
@@ -308,7 +308,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__sctp_mline_index: Optional[int] = None
         self._sctpLegacySdp = True
         self.__sctpRemotePort: Optional[int] = None
-        self.__sctpRemoteCaps = None
+        self.__sctpRemoteCaps: Optional[RTCSctpCapabilities] = None
         self.__stream_id = str(uuid.uuid4())
         self.__transceivers: list[RTCRtpTransceiver] = []
 
@@ -382,7 +382,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return self.__sctp
 
     @property
-    def signalingState(self):
+    def signalingState(self) -> str:
         """
         The current signaling state.
 
@@ -575,13 +575,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
     def createDataChannel(
         self,
-        label,
-        maxPacketLifeTime=None,
-        maxRetransmits=None,
-        ordered=True,
-        protocol="",
-        negotiated=False,
-        id=None,
+        label: str,
+        maxPacketLifeTime: Optional[int] = None,
+        maxRetransmits: Optional[int] = None,
+        ordered: bool = True,
+        protocol: str = "",
+        negotiated: bool = False,
+        id: Optional[int] = None,
     ) -> RTCDataChannel:
         """
         Create a data channel with the given label.
@@ -1111,11 +1111,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__sctp.mid = None
 
         @self.__sctp.on("datachannel")
-        def on_datachannel(channel):
+        def on_datachannel(channel: RTCDataChannel) -> None:
             self.emit("datachannel", channel)
 
     def __createTransceiver(
-        self, direction: str, kind: str, sender_track=None
+        self, direction: str, kind: str, sender_track: Optional[MediaStreamTrack] = None
     ) -> RTCRtpTransceiver:
         dtlsTransport = None
         bundled = False
@@ -1172,7 +1172,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         rtp.rtcp.mux = True
         return rtp
 
-    def __log_debug(self, msg: str, *args) -> None:
+    def __log_debug(self, msg: str, *args: object) -> None:
         logger.debug(f"RTCPeerConnection() {msg}", *args)
 
     def __remoteDescription(self) -> Optional[sdp.SessionDescription]:

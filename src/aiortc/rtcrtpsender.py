@@ -4,7 +4,8 @@ import random
 import time
 import traceback
 import uuid
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 from av import AudioFrame
 from av.frame import Frame
@@ -14,6 +15,7 @@ from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError, MediaStreamTrack
+from .rtcdtlstransport import RTCDtlsTransport
 from .rtcrtpparameters import (
     RTCRtpCapabilities,
     RTCRtpCodecParameters,
@@ -80,7 +82,9 @@ class RTCRtpSender:
     :param transport: An :class:`RTCDtlsTransport`.
     """
 
-    def __init__(self, trackOrKind: Union[MediaStreamTrack, str], transport) -> None:
+    def __init__(
+        self, trackOrKind: Union[MediaStreamTrack, str], transport: RTCDtlsTransport
+    ) -> None:
         if transport.state == "closed":
             raise InvalidStateError
 
@@ -131,7 +135,7 @@ class RTCRtpSender:
             )
 
     @property
-    def kind(self):
+    def kind(self) -> str:
         return self.__kind
 
     @property
@@ -142,7 +146,7 @@ class RTCRtpSender:
         return self.__track
 
     @property
-    def transport(self):
+    def transport(self) -> RTCDtlsTransport:
         """
         The :class:`RTCDtlsTransport` over which media data for the track is
         transmitted.
@@ -193,7 +197,7 @@ class RTCRtpSender:
         else:
             self._track_id = str(uuid.uuid4())
 
-    def setTransport(self, transport) -> None:
+    def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
     async def send(self, parameters: RTCRtpSendParameters) -> None:
@@ -236,7 +240,7 @@ class RTCRtpSender:
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
-    async def _handle_rtcp_packet(self, packet) -> None:
+    async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
@@ -475,5 +479,5 @@ class RTCRtpSender:
         except ConnectionError:
             pass
 
-    def __log_warning(self, msg: str, *args) -> None:
+    def __log_warning(self, msg: str, *args: object) -> None:
         logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)

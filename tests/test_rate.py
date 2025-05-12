@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from unittest import TestCase
 
 from aiortc.rate import (
@@ -22,20 +23,20 @@ START_RTP_TIMESTAMP_WRAP_US = 47721858827
 START_ABS_SEND_TIME_WRAP_US = 63999995
 
 
-def abs_send_time(us):
+def abs_send_time(us: int) -> int:
     absolute_send_time = (((us << 18) + 500000) // 1000000) & 0xFFFFFF
     return absolute_send_time << 8
 
 
-def rtp_timestamp(us):
+def rtp_timestamp(us: int) -> int:
     return ((us * 90 + 500) // 1000) & 0xFFFFFFFF
 
 
 class AimdRateControlTest(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.rate_control = AimdRateControl()
 
-    def test_update_normal(self):
+    def test_update_normal(self) -> None:
         bitrate = 300000
         now_ms = 0
         self.rate_control.set_estimate(bitrate, now_ms)
@@ -46,14 +47,14 @@ class AimdRateControlTest(TestCase):
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
         self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
 
-    def test_update_normal_no_estimated_throughput(self):
+    def test_update_normal_no_estimated_throughput(self) -> None:
         bitrate = 300000
         now_ms = 0
         self.rate_control.set_estimate(bitrate, now_ms)
         estimate = self.rate_control.update(BandwidthUsage.NORMAL, None, now_ms)
         self.assertEqual(estimate, 301000)
 
-    def test_update_overuse(self):
+    def test_update_overuse(self) -> None:
         bitrate = 300000
         now_ms = 0
         self.rate_control.set_estimate(bitrate, now_ms)
@@ -64,7 +65,7 @@ class AimdRateControlTest(TestCase):
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 300.0)
         self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
 
-    def test_update_underuse(self):
+    def test_update_underuse(self) -> None:
         bitrate = 300000
         now_ms = 0
         self.rate_control.set_estimate(bitrate, now_ms)
@@ -75,7 +76,7 @@ class AimdRateControlTest(TestCase):
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, None)
         self.assertEqual(self.rate_control.var_max_bitrate_kbps, 0.4)
 
-    def test_additive_rate_increase(self):
+    def test_additive_rate_increase(self) -> None:
         acked_bitrate = 100000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
@@ -117,7 +118,7 @@ class AimdRateControlTest(TestCase):
         self.assertEqual(self.rate_control.near_max, True)
         now_ms += 1000
 
-    def test_clear_max_throughput(self):
+    def test_clear_max_throughput(self) -> None:
         normal_bitrate = 100000
         high_bitrate = 150000
         now_ms = 0
@@ -150,7 +151,7 @@ class AimdRateControlTest(TestCase):
         self.assertEqual(self.rate_control.avg_max_bitrate_kbps, 100.0)
         now_ms += 1000
 
-    def test_bwe_limited_by_acked_bitrate(self):
+    def test_bwe_limited_by_acked_bitrate(self) -> None:
         acked_bitrate = 10000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
@@ -159,7 +160,7 @@ class AimdRateControlTest(TestCase):
             )
         self.assertEqual(estimate, 25000)
 
-    def test_bwe_not_limited_by_decreasing_acked_bitrate(self):
+    def test_bwe_not_limited_by_decreasing_acked_bitrate(self) -> None:
         acked_bitrate = 100000
         self.rate_control.set_estimate(acked_bitrate, 0)
         for now_ms in range(0, 20000, 100):
@@ -176,7 +177,7 @@ class AimdRateControlTest(TestCase):
 
 
 class InterArrivalTest(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.inter_arrival_ast = InterArrival(
             abs_send_time(TIMESTAMP_GROUP_LENGTH_US), 1000 / (1 << 26)
         )
@@ -186,14 +187,14 @@ class InterArrivalTest(TestCase):
 
     def assertComputed(
         self,
-        timestamp_us,
-        arrival_time_ms,
-        packet_size,
-        timestamp_delta_us,
-        arrival_time_delta_ms,
-        packet_size_delta,
-        timestamp_near=0,
-    ):
+        timestamp_us: int,
+        arrival_time_ms: int,
+        packet_size: int,
+        timestamp_delta_us: int,
+        arrival_time_delta_ms: int,
+        packet_size_delta: int,
+        timestamp_near: int = 0,
+    ) -> None:
         # AbsSendTime
         deltas = self.inter_arrival_ast.compute_deltas(
             abs_send_time(timestamp_us), arrival_time_ms, packet_size
@@ -218,7 +219,9 @@ class InterArrivalTest(TestCase):
         self.assertEqual(deltas.arrival_time, arrival_time_delta_ms)
         self.assertEqual(deltas.size, packet_size_delta)
 
-    def assertNotComputed(self, timestamp_us, arrival_time_ms, packet_size):
+    def assertNotComputed(
+        self, timestamp_us: int, arrival_time_ms: int, packet_size: int
+    ) -> None:
         self.assertIsNone(
             self.inter_arrival_ast.compute_deltas(
                 abs_send_time(timestamp_us), arrival_time_ms, packet_size
@@ -230,7 +233,7 @@ class InterArrivalTest(TestCase):
             )
         )
 
-    def wrapTest(self, wrap_start_us, unorderly_within_group):
+    def wrapTest(self, wrap_start_us: int, unorderly_within_group: bool) -> None:
         timestamp_near = 1
 
         # G1
@@ -310,10 +313,10 @@ class InterArrivalTest(TestCase):
             timestamp_near,
         )
 
-    def test_first_packet(self):
+    def test_first_packet(self) -> None:
         self.assertNotComputed(0, 17, 1)
 
-    def test_first_group(self):
+    def test_first_group(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -338,7 +341,7 @@ class InterArrivalTest(TestCase):
             1,
         )
 
-    def test_second_group(self):
+    def test_second_group(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -376,7 +379,7 @@ class InterArrivalTest(TestCase):
             -1,
         )
 
-    def test_accumulated_group(self):
+    def test_accumulated_group(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -407,7 +410,7 @@ class InterArrivalTest(TestCase):
             11,
         )
 
-    def test_out_of_order_packet(self):
+    def test_out_of_order_packet(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -442,7 +445,7 @@ class InterArrivalTest(TestCase):
             11,
         )
 
-    def test_out_of_order_within_group(self):
+    def test_out_of_order_within_group(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -478,7 +481,7 @@ class InterArrivalTest(TestCase):
             11,
         )
 
-    def test_two_bursts(self):
+    def test_two_bursts(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -508,7 +511,7 @@ class InterArrivalTest(TestCase):
             9,
         )
 
-    def test_no_bursts(self):
+    def test_no_bursts(self) -> None:
         # G1
         timestamp = 0
         arrival_time = 17
@@ -535,21 +538,21 @@ class InterArrivalTest(TestCase):
             1,
         )
 
-    def test_wrap_abs_send_time(self):
+    def test_wrap_abs_send_time(self) -> None:
         self.wrapTest(START_ABS_SEND_TIME_WRAP_US, False)
 
-    def test_wrap_abs_send_time_out_of_order_within_group(self):
+    def test_wrap_abs_send_time_out_of_order_within_group(self) -> None:
         self.wrapTest(START_ABS_SEND_TIME_WRAP_US, True)
 
-    def test_wrap_rtp_timestamp(self):
+    def test_wrap_rtp_timestamp(self) -> None:
         self.wrapTest(START_RTP_TIMESTAMP_WRAP_US, False)
 
-    def test_wrap_rtp_timestamp_out_of_order_within_group(self):
+    def test_wrap_rtp_timestamp_out_of_order_within_group(self) -> None:
         self.wrapTest(START_RTP_TIMESTAMP_WRAP_US, True)
 
 
 class OveruseDetectorTest(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.timestamp_to_ms = 1 / 90
         self.detector = OveruseDetector()
         self.estimator = OveruseEstimator()
@@ -562,7 +565,7 @@ class OveruseDetectorTest(TestCase):
 
         random.seed(21)
 
-    def test_simple_non_overuse_30fps(self):
+    def test_simple_non_overuse_30fps(self) -> None:
         frame_duration_ms = 33
 
         for i in range(1000):
@@ -571,7 +574,7 @@ class OveruseDetectorTest(TestCase):
             self.rtp_timestamp += frame_duration_ms * 90
         self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
 
-    def test_simple_non_overuse_with_receive_variance(self):
+    def test_simple_non_overuse_with_receive_variance(self) -> None:
         frame_duration_ms = 10
 
         for i in range(1000):
@@ -583,7 +586,7 @@ class OveruseDetectorTest(TestCase):
                 self.now_ms += frame_duration_ms + 5
             self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
 
-    def test_simple_non_overuse_with_rtp_timestamp_variance(self):
+    def test_simple_non_overuse_with_rtp_timestamp_variance(self) -> None:
         frame_duration_ms = 10
 
         for i in range(1000):
@@ -595,7 +598,7 @@ class OveruseDetectorTest(TestCase):
                 self.rtp_timestamp += (frame_duration_ms + 5) * 90
             self.assertEqual(self.detector.state(), BandwidthUsage.NORMAL)
 
-    def test_simple_overuse_2000Kbit_30fps(self):
+    def test_simple_overuse_2000Kbit_30fps(self) -> None:
         packets_per_frame = 6
         frame_duration_ms = 33
         drift_per_frame_ms = 1
@@ -611,7 +614,7 @@ class OveruseDetectorTest(TestCase):
         )
         self.assertEqual(frames_until_overuse, 7)
 
-    def test_simple_overuse_100Kbit_10fps(self):
+    def test_simple_overuse_100Kbit_10fps(self) -> None:
         packets_per_frame = 1
         frame_duration_ms = 100
         drift_per_frame_ms = 1
@@ -627,7 +630,7 @@ class OveruseDetectorTest(TestCase):
         )
         self.assertEqual(frames_until_overuse, 7)
 
-    def test_overuse_with_low_variance_2000Kbit_30fps(self):
+    def test_overuse_with_low_variance_2000Kbit_30fps(self) -> None:
         frame_duration_ms = 33
         drift_per_frame_ms = 1
         self.rtp_timestamp = frame_duration_ms * 90
@@ -656,7 +659,7 @@ class OveruseDetectorTest(TestCase):
         self.update_detector(self.rtp_timestamp, self.now_ms)
         self.assertEqual(self.detector.state(), BandwidthUsage.OVERUSING)
 
-    def test_low_gaussian_variance_fast_drift_30Kbit_3fps(self):
+    def test_low_gaussian_variance_fast_drift_30Kbit_3fps(self) -> None:
         packets_per_frame = 1
         frame_duration_ms = 333
         drift_per_frame_ms = 100
@@ -672,7 +675,7 @@ class OveruseDetectorTest(TestCase):
         )
         self.assertEqual(frames_until_overuse, 4)
 
-    def test_high_haussian_variance_30Kbit_3fps(self):
+    def test_high_haussian_variance_30Kbit_3fps(self) -> None:
         packets_per_frame = 1
         frame_duration_ms = 333
         drift_per_frame_ms = 1
@@ -688,7 +691,9 @@ class OveruseDetectorTest(TestCase):
         )
         self.assertEqual(frames_until_overuse, 44)
 
-    def run_100000_samples(self, packets_per_frame, mean_ms, standard_deviation_ms):
+    def run_100000_samples(
+        self, packets_per_frame: int, mean_ms: int, standard_deviation_ms: int
+    ) -> int:
         unique_overuse = 0
         last_overuse = -1
 
@@ -710,8 +715,12 @@ class OveruseDetectorTest(TestCase):
         return unique_overuse
 
     def run_until_overuse(
-        self, packets_per_frame, mean_ms, standard_deviation_ms, drift_per_frame_ms
-    ):
+        self,
+        packets_per_frame: int,
+        mean_ms: int,
+        standard_deviation_ms: int,
+        drift_per_frame_ms: int,
+    ) -> int:
         for i in range(100000):
             for j in range(packets_per_frame):
                 self.update_detector(self.rtp_timestamp, self.receive_time_ms)
@@ -726,7 +735,7 @@ class OveruseDetectorTest(TestCase):
                 return i + 1
         return -1
 
-    def update_detector(self, timestamp, receive_time_ms):
+    def update_detector(self, timestamp: int, receive_time_ms: int) -> None:
         deltas = self.inter_arrival.compute_deltas(
             timestamp, receive_time_ms, self.packet_size
         )
@@ -748,7 +757,7 @@ class OveruseDetectorTest(TestCase):
 
 
 class RateCounterTest(TestCase):
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         counter = RateCounter(10)
         self.assertEqual(
             counter._buckets,
@@ -770,7 +779,7 @@ class RateCounterTest(TestCase):
         self.assertEqual(counter._total, RateBucket())
         self.assertIsNone(counter.rate(0))
 
-    def test_add(self):
+    def test_add(self) -> None:
         counter = RateCounter(10)
 
         counter.add(500, 123)
@@ -922,7 +931,7 @@ class RateCounterTest(TestCase):
 
 
 class Stream:
-    def __init__(self, capacity):
+    def __init__(self, capacity: int) -> None:
         self.capacity = capacity
         self.framerate = 30
         self.payload_size = 1500
@@ -930,7 +939,7 @@ class Stream:
         self.send_time_us = 0
         self.arrival_time_us = 0
 
-    def generate_frames(self, count):
+    def generate_frames(self, count: int) -> Iterator[tuple[int, int, int]]:
         for i in range(count):
             abs_send_time = self.send_time_us * (1 << 18) // 1000000
             self.arrival_time_us = max(self.arrival_time_us, self.send_time_us) + round(
@@ -941,7 +950,7 @@ class Stream:
 
 
 class RemoteBitrateEstimatorTest(TestCase):
-    def test_capacity_drop(self):
+    def test_capacity_drop(self) -> None:
         estimator = RemoteBitrateEstimator()
         stream = Stream(capacity=500000)
         target_bitrate = None

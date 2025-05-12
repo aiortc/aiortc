@@ -11,7 +11,7 @@ from aiortc.utils import (
 
 
 class UtilsTest(TestCase):
-    def test_uint16_add(self):
+    def test_uint16_add(self) -> None:
         self.assertEqual(uint16_add(0, 1), 1)
         self.assertEqual(uint16_add(1, 1), 2)
         self.assertEqual(uint16_add(1, 2), 3)
@@ -19,7 +19,7 @@ class UtilsTest(TestCase):
         self.assertEqual(uint16_add(65535, 1), 0)
         self.assertEqual(uint16_add(65535, 3), 2)
 
-    def test_uint16_gt(self):
+    def test_uint16_gt(self) -> None:
         self.assertFalse(uint16_gt(0, 1))
         self.assertFalse(uint16_gt(1, 1))
         self.assertTrue(uint16_gt(2, 1))
@@ -27,7 +27,7 @@ class UtilsTest(TestCase):
         self.assertFalse(uint16_gt(32769, 1))
         self.assertFalse(uint16_gt(65535, 1))
 
-    def test_uint16_gte(self):
+    def test_uint16_gte(self) -> None:
         self.assertFalse(uint16_gte(0, 1))
         self.assertTrue(uint16_gte(1, 1))
         self.assertTrue(uint16_gte(2, 1))
@@ -35,7 +35,7 @@ class UtilsTest(TestCase):
         self.assertFalse(uint16_gte(32769, 1))
         self.assertFalse(uint16_gte(65535, 1))
 
-    def test_uint32_add(self):
+    def test_uint32_add(self) -> None:
         self.assertEqual(uint32_add(0, 1), 1)
         self.assertEqual(uint32_add(1, 1), 2)
         self.assertEqual(uint32_add(1, 2), 3)
@@ -43,7 +43,7 @@ class UtilsTest(TestCase):
         self.assertEqual(uint32_add(4294967295, 1), 0)
         self.assertEqual(uint32_add(4294967295, 3), 2)
 
-    def test_uint32_gt(self):
+    def test_uint32_gt(self) -> None:
         self.assertFalse(uint32_gt(0, 1))
         self.assertFalse(uint32_gt(1, 1))
         self.assertTrue(uint32_gt(2, 1))
@@ -51,7 +51,7 @@ class UtilsTest(TestCase):
         self.assertFalse(uint32_gt(2147483649, 1))
         self.assertFalse(uint32_gt(4294967295, 1))
 
-    def test_uint32_gte(self):
+    def test_uint32_gte(self) -> None:
         self.assertFalse(uint32_gte(0, 1))
         self.assertTrue(uint32_gte(1, 1))
         self.assertTrue(uint32_gte(2, 1))
