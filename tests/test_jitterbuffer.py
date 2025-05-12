@@ -1,3 +1,4 @@
+from typing import Optional
 from unittest import TestCase
 
 from aiortc.jitterbuffer import JitterBuffer
@@ -5,11 +6,13 @@ from aiortc.rtp import RtpPacket
 
 
 class JitterBufferTest(TestCase):
-    def assertPackets(self, jbuffer, expected):
+    def assertPackets(
+        self, jbuffer: JitterBuffer, expected: list[Optional[int]]
+    ) -> None:
         found = [x.sequence_number if x else None for x in jbuffer._packets]
         self.assertEqual(found, expected)
 
-    def test_create(self):
+    def test_create(self) -> None:
         jbuffer = JitterBuffer(capacity=2)
         self.assertEqual(jbuffer._packets, [None, None])
         self.assertEqual(jbuffer._origin, None)
@@ -18,7 +21,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._packets, [None, None, None, None])
         self.assertEqual(jbuffer._origin, None)
 
-    def test_add_ordered(self):
+    def test_add_ordered(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -45,7 +48,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 0)
         self.assertFalse(pli_flag)
 
-    def test_add_unordered(self):
+    def test_add_unordered(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
@@ -66,7 +69,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 1)
         self.assertFalse(pli_flag)
 
-    def test_add_seq_too_low_drop(self):
+    def test_add_seq_too_low_drop(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
@@ -81,7 +84,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 2)
         self.assertFalse(pli_flag)
 
-    def test_add_seq_too_low_reset(self):
+    def test_add_seq_too_low_reset(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
@@ -96,7 +99,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 1)
         self.assertFalse(pli_flag)
 
-    def test_add_seq_too_high_discard_one(self):
+    def test_add_seq_too_high_discard_one(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -116,7 +119,7 @@ class JitterBufferTest(TestCase):
 
         self.assertPackets(jbuffer, [4, None, None, None])
 
-    def test_add_seq_too_high_discard_one_v2(self):
+    def test_add_seq_too_high_discard_one_v2(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -133,7 +136,7 @@ class JitterBufferTest(TestCase):
 
         self.assertPackets(jbuffer, [4, None, None, 3])
 
-    def test_add_seq_too_high_discard_four(self):
+    def test_add_seq_too_high_discard_four(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -150,7 +153,7 @@ class JitterBufferTest(TestCase):
 
         self.assertPackets(jbuffer, [None, None, None, 7])
 
-    def test_add_seq_too_high_discard_more(self):
+    def test_add_seq_too_high_discard_more(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -170,7 +173,7 @@ class JitterBufferTest(TestCase):
 
         self.assertPackets(jbuffer, [8, None, None, None])
 
-    def test_add_seq_too_high_reset(self):
+    def test_add_seq_too_high_reset(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -181,7 +184,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 3000)
         self.assertPackets(jbuffer, [3000, None, None, None])
 
-    def test_remove(self):
+    def test_remove(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -201,7 +204,7 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 3)
         self.assertPackets(jbuffer, [None, None, None, 3])
 
-    def test_smart_remove(self):
+    def test_smart_remove(self) -> None:
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
@@ -215,75 +218,75 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._origin, 3)
         self.assertPackets(jbuffer, [None, None, None, 3])
 
-    def test_remove_audio_frame(self):
+    def test_remove_audio_frame(self) -> None:
         """
         Audio jitter buffer.
         """
         jbuffer = JitterBuffer(capacity=16, prefetch=4)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
-        packet._data = b"0000"
+        packet._data = b"0000"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=1, timestamp=1235)
-        packet._data = b"0001"
+        packet._data = b"0001"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=2, timestamp=1236)
-        packet._data = b"0002"
+        packet._data = b"0002"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=3, timestamp=1237)
-        packet._data = b"0003"
+        packet._data = b"0003"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=4, timestamp=1238)
-        packet._data = b"0003"
+        packet._data = b"0003"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"0000")
         self.assertEqual(frame.timestamp, 1234)
 
         packet = RtpPacket(sequence_number=5, timestamp=1239)
-        packet._data = b"0004"
+        packet._data = b"0004"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"0001")
         self.assertEqual(frame.timestamp, 1235)
 
-    def test_remove_video_frame(self):
+    def test_remove_video_frame(self) -> None:
         """
         Video jitter buffer.
         """
         jbuffer = JitterBuffer(capacity=128, is_video=True)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
-        packet._data = b"0000"
+        packet._data = b"0000"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=1, timestamp=1234)
-        packet._data = b"0001"
+        packet._data = b"0001"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=2, timestamp=1234)
-        packet._data = b"0002"
+        packet._data = b"0002"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=3, timestamp=1235)
-        packet._data = b"0003"
+        packet._data = b"0003"  # type: ignore
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"000000010002")
         self.assertEqual(frame.timestamp, 1234)
 
-    def test_pli_flag(self):
+    def test_pli_flag(self) -> None:
         """
         Video jitter buffer.
         """

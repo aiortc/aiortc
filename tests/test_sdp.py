@@ -1,5 +1,6 @@
 # ruff: noqa: E501
 
+from typing import Any
 from unittest import TestCase
 
 from aiortc.rtcrtpparameters import (
@@ -22,7 +23,7 @@ from .utils import lf2crlf
 class SdpTest(TestCase):
     maxDiff = None
 
-    def test_audio_chrome(self):
+    def test_audio_chrome(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -254,7 +255,7 @@ a=setup:actpass
             ),
         )
 
-    def test_audio_firefox(self):
+    def test_audio_firefox(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -457,7 +458,7 @@ a=setup:actpass
             ),
         )
 
-    def test_audio_freeswitch(self):
+    def test_audio_freeswitch(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -591,7 +592,7 @@ a=setup:active
             ),
         )
 
-    def test_audio_freeswitch_no_dtls(self):
+    def test_audio_freeswitch_no_dtls(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -715,7 +716,7 @@ a=ice-pwd:5dvb9SbfooWc49814CupdeTS
             ),
         )
 
-    def test_audio_dtls_session_level(self):
+    def test_audio_dtls_session_level(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -822,7 +823,7 @@ a=setup:actpass
             ),
         )
 
-    def test_audio_ice_lite(self):
+    def test_audio_ice_lite(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -931,7 +932,7 @@ a=setup:actpass
             ),
         )
 
-    def test_audio_ice_session_level_credentials(self):
+    def test_audio_ice_session_level_credentials(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1038,7 +1039,7 @@ a=setup:actpass
             ),
         )
 
-    def test_datachannel_firefox(self):
+    def test_datachannel_firefox(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1142,7 +1143,7 @@ a=setup:actpass
             ),
         )
 
-    def test_datachannel_firefox_63(self):
+    def test_datachannel_firefox_63(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1246,7 +1247,7 @@ a=setup:actpass
             ),
         )
 
-    def test_video_chrome(self):
+    def test_video_chrome(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1530,7 +1531,7 @@ a=setup:actpass
             ),
         )
 
-    def test_video_firefox(self):
+    def test_video_firefox(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1723,7 +1724,7 @@ a=setup:actpass
             ),
         )
 
-    def test_video_session_star_rtcp_fb(self):
+    def test_video_session_star_rtcp_fb(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """v=0
@@ -1791,7 +1792,7 @@ a=setup:actpass
             ],
         )
 
-    def test_safari(self):
+    def test_safari(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
                 """
@@ -1955,12 +1956,12 @@ a=sctpmap:5000 webrtc-datachannel 1024
 
 
 class H264SdpTest(TestCase):
-    def assertParseFails(self, v, msg):
+    def assertParseFails(self, v: Any, msg: str) -> None:
         with self.assertRaises(ValueError) as cm:
             parse_h264_profile_level_id(v)
         self.assertEqual(str(cm.exception), msg)
 
-    def test_parse_invalid(self):
+    def test_parse_invalid(self) -> None:
         # invalid hexadecimal
         self.assertParseFails(None, "Expected a 6 character hexadecimal string")
         self.assertParseFails("", "Expected a 6 character hexadecimal string")
@@ -1982,7 +1983,7 @@ class H264SdpTest(TestCase):
             "64E01F", "Unrecognized profile_iop = 224, profile_idc = 100"
         )
 
-    def test_parse_constrained_baseline(self):
+    def test_parse_constrained_baseline(self) -> None:
         self.assertEqual(
             parse_h264_profile_level_id("42E01F"),
             (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL3_1),
@@ -2004,7 +2005,7 @@ class H264SdpTest(TestCase):
             (H264Profile.PROFILE_CONSTRAINED_BASELINE, H264Level.LEVEL3_1),
         )
 
-    def test_parse_baseline(self):
+    def test_parse_baseline(self) -> None:
         self.assertEqual(
             parse_h264_profile_level_id("42001F"),
             (H264Profile.PROFILE_BASELINE, H264Level.LEVEL3_1),
@@ -2018,19 +2019,19 @@ class H264SdpTest(TestCase):
             (H264Profile.PROFILE_BASELINE, H264Level.LEVEL3_1),
         )
 
-    def test_parse_main(self):
+    def test_parse_main(self) -> None:
         self.assertEqual(
             parse_h264_profile_level_id("4D401F"),
             (H264Profile.PROFILE_MAIN, H264Level.LEVEL3_1),
         )
 
-    def test_parse_high(self):
+    def test_parse_high(self) -> None:
         self.assertEqual(
             parse_h264_profile_level_id("64001F"),
             (H264Profile.PROFILE_HIGH, H264Level.LEVEL3_1),
         )
 
-    def test_parse_constrained_high(self):
+    def test_parse_constrained_high(self) -> None:
         self.assertEqual(
             parse_h264_profile_level_id("640C1F"),
             (H264Profile.PROFILE_CONSTRAINED_HIGH, H264Level.LEVEL3_1),

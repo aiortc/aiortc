@@ -260,7 +260,7 @@ class RtpRouter:
         ssrcs: list[int],
         payload_types: list[int],
         mid: Optional[str] = None,
-    ):
+    ) -> None:
         self.receivers.add(receiver)
         if mid is not None:
             self.mid_table[mid] = receiver
@@ -390,7 +390,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         return str(self._state)[6:].lower()
 
     @property
-    def transport(self):
+    def transport(self) -> RTCIceTransport:
         """
         The associated :class:`RTCIceTransport` instance.
         """
@@ -722,8 +722,8 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self.__tx_bytes += len(data)
             self.__tx_packets += 1
 
-    def __log_debug(self, msg: str, *args) -> None:
+    def __log_debug(self, msg: str, *args: object) -> None:
         logger.debug(f"RTCDtlsTransport(%s) {msg}", self._role, *args)
 
-    def __log_warning(self, msg: str, *args) -> None:
+    def __log_warning(self, msg: str, *args: object) -> None:
         logger.warning(f"RTCDtlsTransport(%s) {msg}", self._role, *args)

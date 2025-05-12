@@ -225,7 +225,9 @@ class GroupDescription:
         return f"{self.semantic} {' '.join(map(str, self.items))}"
 
 
-def parse_group(dest: list[GroupDescription], value: str, type=str) -> None:
+def parse_group(
+    dest: list[GroupDescription], value: str, type: Union[type[str], type[int]] = str
+) -> None:
     bits = value.split()
     if bits:
         dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
@@ -370,7 +372,7 @@ class SessionDescription:
         self.type: Optional[str] = None
 
     @classmethod
-    def parse(cls, sdp: str):
+    def parse(cls, sdp: str) -> "SessionDescription":
         current_media: Optional[MediaDescription] = None
         dtls_fingerprints = []
         dtls_role = None

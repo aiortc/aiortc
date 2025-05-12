@@ -4,9 +4,10 @@ import fractions
 import logging
 import threading
 import time
-from typing import Optional, Union
+from typing import Any, Optional, Union, cast
 
 import av
+import av.container
 from av import AudioFrame, VideoFrame
 from av.audio import AudioStream
 from av.frame import Frame
@@ -39,6 +40,8 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
+_AudioOrVideoStream = Union[AudioStream, VideoStream]
+
 
 async def blackhole_consume(track: MediaStreamTrack) -> None:
     while True:
@@ -54,7 +57,7 @@ class MediaBlackhole:
     """
 
     def __init__(self) -> None:
-        self.__tracks: dict[MediaStreamTrack, asyncio.Future] = {}
+        self.__tracks: dict[MediaStreamTrack, Optional[asyncio.Future]] = {}
 
     def addTrack(self, track: MediaStreamTrack) -> None:
         """
@@ -84,15 +87,15 @@ class MediaBlackhole:
 
 
 def player_worker_decode(
-    loop,
-    container,
-    streams,
-    audio_track,
-    video_track,
-    quit_event,
-    throttle_playback,
-    loop_playback,
-):
+    loop: asyncio.AbstractEventLoop,
+    container: av.container.InputContainer,
+    streams: list[_AudioOrVideoStream],
+    audio_track: "PlayerStreamTrack",
+    video_track: "PlayerStreamTrack",
+    quit_event: threading.Event,
+    throttle_playback: bool,
+    loop_playback: bool,
+) -> None:
     audio_sample_rate = 48000
     audio_samples = 0
     audio_time_base = fractions.Fraction(1, audio_sample_rate)
@@ -156,15 +159,15 @@ def player_worker_decode(
 
 
 def player_worker_demux(
-    loop,
-    container,
-    streams,
-    audio_track,
-    video_track,
-    quit_event,
-    throttle_playback,
-    loop_playback,
-):
+    loop: asyncio.AbstractEventLoop,
+    container: av.container.InputContainer,
+    streams: list[_AudioOrVideoStream],
+    audio_track: "PlayerStreamTrack",
+    video_track: "PlayerStreamTrack",
+    quit_event: threading.Event,
+    throttle_playback: bool,
+    loop_playback: bool,
+) -> None:
     video_first_pts = None
     frame_time = None
     start_time = time.time()
@@ -222,7 +225,7 @@ class PlayerStreamTrack(MediaStreamTrack):
     def __init__(self, player: "MediaPlayer", kind: str) -> None:
         super().__init__()
         self.kind = kind
-        self._player = player
+        self._player: Optional[MediaPlayer] = player
         self._queue: asyncio.Queue[Union[Frame, Packet]] = asyncio.Queue()
         self._start: Optional[float] = None
 
@@ -300,7 +303,13 @@ class MediaPlayer:
     """
 
     def __init__(
-        self, file, format=None, options=None, timeout=None, loop=False, decode=True
+        self,
+        file: Any,
+        format: Optional[str] = None,
+        options: Optional[dict[str, str]] = None,
+        timeout: Optional[int] = None,
+        loop: bool = False,
+        decode: bool = True,
     ) -> None:
         self.__container = av.open(
             file=file, format=format, mode="r", options=options, timeout=timeout
@@ -310,7 +319,7 @@ class MediaPlayer:
 
         # examine streams
         self.__started: set[PlayerStreamTrack] = set()
-        self.__streams = []
+        self.__streams: list[_AudioOrVideoStream] = []
         self.__decode = decode
         self.__audio: Optional[PlayerStreamTrack] = None
         self.__video: Optional[PlayerStreamTrack] = None
@@ -341,14 +350,14 @@ class MediaPlayer:
         self._loop_playback = loop
 
     @property
-    def audio(self) -> MediaStreamTrack:
+    def audio(self) -> Optional[MediaStreamTrack]:
         """
         A :class:`aiortc.MediaStreamTrack` instance if the file contains audio.
         """
         return self.__audio
 
     @property
-    def video(self) -> MediaStreamTrack:
+    def video(self) -> Optional[MediaStreamTrack]:
         """
         A :class:`aiortc.MediaStreamTrack` instance if the file contains video.
         """
@@ -388,12 +397,12 @@ class MediaPlayer:
             self.__container.close()
             self.__container = None
 
-    def __log_debug(self, msg: str, *args) -> None:
+    def __log_debug(self, msg: str, *args: object) -> None:
         logger.debug(f"MediaPlayer(%s) {msg}", self.__container.name, *args)
 
 
 class MediaRecorderContext:
-    def __init__(self, stream) -> None:
+    def __init__(self, stream: _AudioOrVideoStream) -> None:
         self.started = False
         self.stream = stream
         self.task: Optional[asyncio.Task[None]] = None
@@ -418,8 +427,15 @@ class MediaRecorder:
     :param options: Additional options to pass to FFmpeg.
     """
 
-    def __init__(self, file, format=None, options=None) -> None:
-        self.__container = av.open(file=file, format=format, mode="w", options=options)
+    def __init__(
+        self,
+        file: Any,
+        format: Optional[str] = None,
+        options: Optional[dict[str, str]] = None,
+    ) -> None:
+        self.__container: Optional[av.container.OutputContainer] = av.open(
+            file=file, format=format, mode="w", options=options
+        )
         self.__tracks: dict[MediaStreamTrack, MediaRecorderContext] = {}
 
     def addTrack(self, track: MediaStreamTrack) -> None:
@@ -428,6 +444,7 @@ class MediaRecorder:
 
         :param track: A :class:`aiortc.MediaStreamTrack`.
         """
+        stream: Union[AudioStream, VideoStream]
         if track.kind == "audio":
             if self.__container.format.name in ("wav", "alsa", "pulse"):
                 codec_name = "pcm_s16le"
@@ -437,7 +454,7 @@ class MediaRecorder:
                 codec_name = "libopus"
             else:
                 codec_name = "aac"
-            stream = self.__container.add_stream(codec_name)
+            stream = cast(AudioStream, self.__container.add_stream(codec_name))
         else:
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
@@ -459,7 +476,7 @@ class MediaRecorder:
         """
         Stop recording.
         """
-        if self.__container:
+        if self.__container is not None:
             for track, context in self.__tracks.items():
                 if context.task is not None:
                     context.task.cancel()
@@ -468,9 +485,8 @@ class MediaRecorder:
                         self.__container.mux(packet)
             self.__tracks = {}
 
-            if self.__container:
-                self.__container.close()
-                self.__container = None
+            self.__container.close()
+            self.__container = None
 
     async def __run_track(
         self, track: MediaStreamTrack, context: MediaRecorderContext
@@ -480,20 +496,30 @@ class MediaRecorder:
                 frame = await track.recv()
             except MediaStreamError:
                 return
+            assert isinstance(frame, (AudioFrame, VideoFrame)), (
+                "Only audio or video frames can be recorded"
+            )
 
             if not context.started:
-                # adjust the output size to match the first frame
-                if isinstance(frame, VideoFrame):
+                # Adjust the output size to match the first frame.
+                if isinstance(context.stream, VideoStream) and isinstance(
+                    frame, VideoFrame
+                ):
                     context.stream.width = frame.width
                     context.stream.height = frame.height
                 context.started = True
 
-            for packet in context.stream.encode(frame):
+            for packet in context.stream.encode(frame):  # type: ignore
                 self.__container.mux(packet)
 
 
 class RelayStreamTrack(MediaStreamTrack):
-    def __init__(self, relay, source: MediaStreamTrack, buffered: bool) -> None:
+    def __init__(
+        self,
+        relay: "MediaRelay",
+        source: MediaStreamTrack,
+        buffered: bool,
+    ) -> None:
         super().__init__()
         self.kind = source.kind
         self._relay = relay
@@ -583,7 +609,7 @@ class MediaRelay:
             self.__log_debug("Stop proxy %s", id(proxy))
             self.__proxies[track].discard(proxy)
 
-    def __log_debug(self, msg: str, *args) -> None:
+    def __log_debug(self, msg: str, *args: object) -> None:
         logger.debug(f"MediaRelay(%s) {msg}", id(self), *args)
 
     async def __run_track(self, track: MediaStreamTrack) -> None:

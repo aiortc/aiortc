@@ -5,8 +5,9 @@ import queue
 import random
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 from av.frame import Frame
 
@@ -49,7 +50,9 @@ from .utils import uint16_add, uint16_gt
 logger = logging.getLogger(__name__)
 
 
-def decoder_worker(loop, input_q, output_q):
+def decoder_worker(
+    loop: asyncio.AbstractEventLoop, input_q: queue.Queue, output_q: asyncio.Queue
+) -> None:
     codec_name = None
     decoder = None
 
@@ -316,7 +319,7 @@ class RTCRtpReceiver:
         return self.__transport
 
     @classmethod
-    def getCapabilities(self, kind) -> Optional[RTCRtpCapabilities]:
+    def getCapabilities(self, kind: str) -> Optional[RTCRtpCapabilities]:
         """
         Returns the most optimistic view of the system's capabilities for
         receiving media of the given `kind`.
@@ -580,7 +583,7 @@ class RTCRtpReceiver:
         self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
-    async def _send_rtcp(self, packet) -> None:
+    async def _send_rtcp(self, packet: AnyRtcpPacket) -> None:
         self.__log_debug("> %s", packet)
         try:
             await self.transport._send_rtp(bytes(packet))

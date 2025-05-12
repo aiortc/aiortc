@@ -96,7 +96,7 @@ class HeaderExtensionsMap:
                 values.transport_sequence_number = unpack("!H", x_value)[0]
         return values
 
-    def set(self, values: HeaderExtensions):
+    def set(self, values: HeaderExtensions) -> tuple[int, bytes]:
         extensions = []
         if values.mid is not None and self.__ids.mid:
             extensions.append((self.__ids.mid, values.mid.encode("utf8")))
@@ -350,7 +350,7 @@ class RtcpReceiverInfo:
         return data
 
     @classmethod
-    def parse(cls, data: bytes):
+    def parse(cls, data: bytes) -> "RtcpReceiverInfo":
         ssrc, fraction_lost = unpack("!LB", data[0:5])
         packets_lost = unpack_packets_lost(data[5:8])
         highest_sequence, jitter, lsr, dlsr = unpack("!LLLL", data[8:])
@@ -382,7 +382,7 @@ class RtcpSenderInfo:
         )
 
     @classmethod
-    def parse(cls, data: bytes):
+    def parse(cls, data: bytes) -> "RtcpSenderInfo":
         ntp_timestamp, rtp_timestamp, packet_count, octet_count = unpack("!QLLL", data)
         return cls(
             ntp_timestamp=ntp_timestamp,
@@ -407,7 +407,7 @@ class RtcpByePacket:
         return pack_rtcp_packet(RTCP_BYE, len(self.sources), payload)
 
     @classmethod
-    def parse(cls, data: bytes, count: int):
+    def parse(cls, data: bytes, count: int) -> "RtcpByePacket":
         if len(data) < 4 * count:
             raise ValueError("RTCP bye length is invalid")
         if count > 0:
@@ -433,7 +433,7 @@ class RtcpPsfbPacket:
         return pack_rtcp_packet(RTCP_PSFB, self.fmt, payload)
 
     @classmethod
-    def parse(cls, data: bytes, fmt: int):
+    def parse(cls, data: bytes, fmt: int) -> "RtcpPsfbPacket":
         if len(data) < 8:
             raise ValueError("RTCP payload-specific feedback length is invalid")
 
@@ -454,7 +454,7 @@ class RtcpRrPacket:
         return pack_rtcp_packet(RTCP_RR, len(self.reports), payload)
 
     @classmethod
-    def parse(cls, data: bytes, count: int):
+    def parse(cls, data: bytes, count: int) -> "RtcpRrPacket":
         if len(data) != 4 + 24 * count:
             raise ValueError("RTCP receiver report length is invalid")
 
@@ -497,7 +497,7 @@ class RtcpRtpfbPacket:
         return pack_rtcp_packet(RTCP_RTPFB, self.fmt, payload)
 
     @classmethod
-    def parse(cls, data: bytes, fmt: int):
+    def parse(cls, data: bytes, fmt: int) -> "RtcpRtpfbPacket":
         if len(data) < 8 or len(data) % 4:
             raise ValueError("RTCP RTP feedback length is invalid")
 
@@ -528,7 +528,7 @@ class RtcpSdesPacket:
         return pack_rtcp_packet(RTCP_SDES, len(self.chunks), payload)
 
     @classmethod
-    def parse(cls, data: bytes, count: int):
+    def parse(cls, data: bytes, count: int) -> "RtcpSdesPacket":
         pos = 0
         chunks = []
         for r in range(count):
@@ -568,7 +568,7 @@ class RtcpSrPacket:
         return pack_rtcp_packet(RTCP_SR, len(self.reports), payload)
 
     @classmethod
-    def parse(cls, data: bytes, count: int):
+    def parse(cls, data: bytes, count: int) -> "RtcpSrPacket":
         if len(data) != 24 + 24 * count:
             raise ValueError("RTCP sender report length is invalid")
 
@@ -596,7 +596,7 @@ class RtcpPacket:
     @classmethod
     def parse(cls, data: bytes) -> list[AnyRtcpPacket]:
         pos = 0
-        packets = []
+        packets: list[AnyRtcpPacket] = []
 
         while pos < len(data):
             if len(data) < pos + RTCP_HEADER_LENGTH:
@@ -668,7 +668,9 @@ class RtpPacket:
         )
 
     @classmethod
-    def parse(cls, data: bytes, extensions_map=HeaderExtensionsMap()):
+    def parse(
+        cls, data: bytes, extensions_map: HeaderExtensionsMap = HeaderExtensionsMap()
+    ) -> "RtpPacket":
         if len(data) < RTP_HEADER_LENGTH:
             raise ValueError(
                 f"RTP packet length is less than {RTP_HEADER_LENGTH} bytes"
@@ -721,7 +723,9 @@ class RtpPacket:
 
         return packet
 
-    def serialize(self, extensions_map=HeaderExtensionsMap()) -> bytes:
+    def serialize(
+        self, extensions_map: HeaderExtensionsMap = HeaderExtensionsMap()
+    ) -> bytes:
         extension_profile, extension_value = extensions_map.set(self.extensions)
         has_extension = bool(extension_value)
 

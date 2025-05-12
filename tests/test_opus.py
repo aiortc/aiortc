@@ -1,5 +1,3 @@
-import fractions
-
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.opus import OpusDecoder, OpusEncoder
 from aiortc.jitterbuffer import JitterFrame
@@ -14,24 +12,23 @@ OPUS_PAYLOAD = b"\xfc\xff\xfe"
 
 
 class OpusTest(CodecTestCase):
-    def test_decoder(self):
+    def test_decoder(self) -> None:
         decoder = get_decoder(OPUS_CODEC)
         self.assertIsInstance(decoder, OpusDecoder)
 
         frames = decoder.decode(JitterFrame(data=OPUS_PAYLOAD, timestamp=0))
         self.assertEqual(len(frames), 1)
         frame = frames[0]
-        self.assertEqual(frame.format.name, "s16")
-        self.assertEqual(frame.layout.name, "stereo")
-        self.assertEqual(frame.pts, 0)
-        self.assertEqual(frame.samples, 960)
-        self.assertEqual(frame.sample_rate, 48000)
-        self.assertEqual(frame.time_base, fractions.Fraction(1, 48000))
+        self.assertAudioFrame(
+            frame,
+            data=b"\x00" * 4 * 960,
+            layout="stereo",
+            pts=0,
+            samples=960,
+            sample_rate=48000,
+        )
 
-        # Note: the frame may be padded so only check the actual samples.
-        self.assertEqual(bytes(frame.planes[0])[0 : 4 * 960], b"\x00" * 4 * 960)
-
-    def test_encoder_mono_8khz(self):
+    def test_encoder_mono_8khz(self) -> None:
         encoder = get_encoder(OPUS_CODEC)
         self.assertIsInstance(encoder, OpusEncoder)
 
@@ -50,7 +47,7 @@ class OpusTest(CodecTestCase):
             ],
         )
 
-    def test_encoder_stereo_8khz(self):
+    def test_encoder_stereo_8khz(self) -> None:
         encoder = get_encoder(OPUS_CODEC)
         self.assertIsInstance(encoder, OpusEncoder)
 
@@ -69,7 +66,7 @@ class OpusTest(CodecTestCase):
             ],
         )
 
-    def test_encoder_stereo_48khz(self):
+    def test_encoder_stereo_48khz(self) -> None:
         encoder = get_encoder(OPUS_CODEC)
         self.assertIsInstance(encoder, OpusEncoder)
 
@@ -84,7 +81,7 @@ class OpusTest(CodecTestCase):
         payloads, timestamp = encoder.encode(frames[1])
         self.assertEqual(timestamp, 960)
 
-    def test_encoder_pack(self):
+    def test_encoder_pack(self) -> None:
         encoder = get_encoder(OPUS_CODEC)
         self.assertTrue(isinstance(encoder, OpusEncoder))
 
@@ -93,7 +90,7 @@ class OpusTest(CodecTestCase):
         self.assertEqual(payloads, [OPUS_PAYLOAD])
         self.assertEqual(timestamp, 48)
 
-    def test_roundtrip(self):
+    def test_roundtrip(self) -> None:
         self.roundtrip_audio(
             OPUS_CODEC,
             input_layout="stereo",
@@ -102,7 +99,7 @@ class OpusTest(CodecTestCase):
             output_sample_rate=48000,
         )
 
-    def test_roundtrip_with_loss(self):
+    def test_roundtrip_with_loss(self) -> None:
         self.roundtrip_audio(
             OPUS_CODEC,
             input_layout="stereo",

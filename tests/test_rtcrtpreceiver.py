@@ -1,9 +1,11 @@
 import asyncio
 import contextlib
 import fractions
+from collections.abc import AsyncGenerator
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import av
 from aiortc.codecs import PCMU_CODEC, get_encoder
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import MediaStreamError
@@ -11,7 +13,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpCapabilities,
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
-    RTCRtpEncodingParameters,
+    RTCRtpDecodingParameters,
     RTCRtpHeaderExtensionCapability,
     RTCRtpReceiveParameters,
     RTCRtpRtxParameters,
@@ -37,7 +39,7 @@ VP8_CODEC = RTCRtpCodecParameters(
 
 
 @contextlib.asynccontextmanager
-async def create_receiver(kind):
+async def create_receiver(kind: str) -> AsyncGenerator[RTCRtpReceiver, None]:
     async with dummy_dtls_transport_pair() as (local_transport, _):
         receiver = RTCRtpReceiver(kind, local_transport)
         assert receiver.transport == local_transport
@@ -48,7 +50,7 @@ async def create_receiver(kind):
             await receiver.stop()
 
 
-def create_rtp_packets(count, seq=0):
+def create_rtp_packets(count: int, seq: int = 0) -> list[RtpPacket]:
     packets = []
     for i in range(count):
         packets.append(
@@ -62,7 +64,9 @@ def create_rtp_packets(count, seq=0):
     return packets
 
 
-def create_rtp_video_packets(self, codec, frames, seq=0):
+def create_rtp_video_packets(
+    self: CodecTestCase, codec: RTCRtpCodecParameters, frames: int, seq: int = 0
+) -> list[RtpPacket]:
     encoder = get_encoder(codec)
     packets = []
     for frame in self.create_video_frames(width=640, height=480, count=frames):
@@ -83,7 +87,7 @@ def create_rtp_video_packets(self, codec, frames, seq=0):
 
 
 class NackGeneratorTest(TestCase):
-    def test_no_loss(self):
+    def test_no_loss(self) -> None:
         generator = NackGenerator()
 
         for packet in create_rtp_packets(20, 0):
@@ -92,7 +96,7 @@ class NackGeneratorTest(TestCase):
 
         self.assertEqual(generator.missing, set())
 
-    def test_with_loss(self):
+    def test_with_loss(self) -> None:
         generator = NackGenerator()
 
         # receive packets: 0, <1 missing>, 2
@@ -109,7 +113,7 @@ class NackGeneratorTest(TestCase):
         self.assertEqual(missed, False)
         self.assertEqual(generator.missing, set())
 
-    def test_with_loss_truncate(self):
+    def test_with_loss_truncate(self) -> None:
         generator = NackGenerator()
         packets = create_rtp_packets(259, 0)
 
@@ -122,10 +126,10 @@ class NackGeneratorTest(TestCase):
 
 
 class StreamStatisticsTest(TestCase):
-    def create_counter(self):
+    def create_counter(self) -> StreamStatistics:
         return StreamStatistics(clockrate=8000)
 
-    def test_no_loss(self):
+    def test_no_loss(self) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(20, 0)
 
@@ -147,7 +151,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.packets_lost, 0)
         self.assertEqual(counter.fraction_lost, 0)
 
-    def test_no_loss_cycle(self):
+    def test_no_loss_cycle(self) -> None:
         counter = self.create_counter()
 
         # receive 10 packets (with sequence cycle)
@@ -159,7 +163,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.packets_lost, 0)
         self.assertEqual(counter.fraction_lost, 0)
 
-    def test_with_loss(self):
+    def test_with_loss(self) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(20, 0)
         packets.pop(1)
@@ -183,7 +187,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.fraction_lost, 0)
 
     @patch("time.time")
-    def test_no_jitter(self, mock_time):
+    def test_no_jitter(self, mock_time: MagicMock) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
 
@@ -203,7 +207,7 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.jitter, 0)
 
     @patch("time.time")
-    def test_with_jitter(self, mock_time):
+    def test_with_jitter(self, mock_time: MagicMock) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
 
@@ -224,7 +228,7 @@ class StreamStatisticsTest(TestCase):
 
 
 class RTCRtpReceiverTest(CodecTestCase):
-    def test_capabilities(self):
+    def test_capabilities(self) -> None:
         # audio
         capabilities = RTCRtpReceiver.getCapabilities("audio")
         self.assertIsInstance(capabilities, RTCRtpCapabilities)
@@ -299,7 +303,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             RTCRtpReceiver.getCapabilities("bogus")
 
     @asynctest
-    async def test_connection_error(self):
+    async def test_connection_error(self) -> None:
         """
         Close the underlying transport before the receiver.
         """
@@ -321,14 +325,14 @@ class RTCRtpReceiverTest(CodecTestCase):
 
     @patch("aiortc.rtcrtpreceiver.logger.isEnabledFor")
     @asynctest
-    async def test_log_debug(self, mock_is_enabled_for):
+    async def test_log_debug(self, mock_is_enabled_for: MagicMock) -> None:
         mock_is_enabled_for.return_value = True
 
         async with create_receiver("audio"):
             pass
 
     @asynctest
-    async def test_rtp_and_rtcp(self):
+    async def test_rtp_and_rtcp(self) -> None:
         async with create_receiver("audio") as receiver:
             receiver._track = RemoteStreamTrack(kind="audio")
             self.assertEqual(receiver.track.readyState, "live")
@@ -343,8 +347,8 @@ class RTCRtpReceiverTest(CodecTestCase):
                 await receiver._handle_rtp_packet(packet, arrival_time_ms=i * 20)
 
             # receive RTCP SR
-            for packet in RtcpPacket.parse(load("rtcp_sr.bin")):
-                await receiver._handle_rtcp_packet(packet)
+            for rtcp_packet in RtcpPacket.parse(load("rtcp_sr.bin")):
+                await receiver._handle_rtcp_packet(rtcp_packet)
 
             # check stats
             report = await receiver.getStats()
@@ -361,12 +365,12 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(sources[0].source, 4028317929)
 
             # check remote track
-            frame = await receiver.track.recv()
+            frame = self.ensureIsInstance(await receiver.track.recv(), av.AudioFrame)
             self.assertEqual(frame.pts, 0)
             self.assertEqual(frame.sample_rate, 8000)
             self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
 
-            frame = await receiver.track.recv()
+            frame = self.ensureIsInstance(await receiver.track.recv(), av.AudioFrame)
             self.assertEqual(frame.pts, 160)
             self.assertEqual(frame.sample_rate, 8000)
             self.assertEqual(frame.time_base, fractions.Fraction(1, 8000))
@@ -385,19 +389,19 @@ class RTCRtpReceiverTest(CodecTestCase):
                 await receiver.track.recv()
 
     @asynctest
-    async def test_rtp_missing_video_packet(self):
+    async def test_rtp_missing_video_packet(self) -> None:
         nacks = []
         pli = []
 
-        async def mock_send_rtcp_nack(*args):
-            nacks.append(args)
+        async def mock_send_rtcp_nack(media_ssrc: int, lost: list[int]) -> None:
+            nacks.append((media_ssrc, lost))
 
-        async def mock_send_rtcp_pli(*args):
-            pli.append(args[0])
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
 
         async with create_receiver("video") as receiver:
-            receiver._send_rtcp_nack = mock_send_rtcp_nack
-            receiver._send_rtcp_pli = mock_send_rtcp_pli
+            receiver._send_rtcp_nack = mock_send_rtcp_nack  # type: ignore
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
             receiver._track = RemoteStreamTrack(kind="video")
 
             await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
@@ -417,7 +421,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(pli, [1234])
 
     @asynctest
-    async def test_rtp_empty_video_packet(self):
+    async def test_rtp_empty_video_packet(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
 
@@ -428,7 +432,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
-    async def test_rtp_invalid_payload(self):
+    async def test_rtp_invalid_payload(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
 
@@ -439,7 +443,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
-    async def test_rtp_unknown_payload_type(self):
+    async def test_rtp_unknown_payload_type(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
 
@@ -450,7 +454,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
-    async def test_rtp_disabled(self):
+    async def test_rtp_disabled(self) -> None:
         async with create_receiver("audio") as receiver:
             self.assertEqual(receiver._enabled, True)
             receiver._track = RemoteStreamTrack(kind="audio")
@@ -472,7 +476,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             )
 
     @asynctest
-    async def test_rtp_rtx(self):
+    async def test_rtp_rtx(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
 
@@ -488,7 +492,7 @@ class RTCRtpReceiverTest(CodecTestCase):
                         ),
                     ],
                     encodings=[
-                        RTCRtpEncodingParameters(
+                        RTCRtpDecodingParameters(
                             ssrc=1234,
                             payloadType=100,
                             rtx=RTCRtpRtxParameters(ssrc=2345),
@@ -506,7 +510,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
-    async def test_rtp_rtx_unknown_ssrc(self):
+    async def test_rtp_rtx_unknown_ssrc(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
 
@@ -529,7 +533,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
-    async def test_send_rtcp_nack(self):
+    async def test_send_rtcp_nack(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._set_rtcp_ssrc(1234)
             receiver._track = RemoteStreamTrack(kind="video")
@@ -540,7 +544,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._send_rtcp_nack(5678, [7654])
 
     @asynctest
-    async def test_send_rtcp_pli(self):
+    async def test_send_rtcp_pli(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._set_rtcp_ssrc(1234)
             receiver._track = RemoteStreamTrack(kind="video")
@@ -550,14 +554,14 @@ class RTCRtpReceiverTest(CodecTestCase):
             # send RTCP feedback PLI
             await receiver._send_rtcp_pli(5678)
 
-    def test_invalid_dtls_transport_state(self):
+    def test_invalid_dtls_transport_state(self) -> None:
         dtlsTransport = ClosedDtlsTransport()
         with self.assertRaises(InvalidStateError):
-            RTCRtpReceiver("audio", dtlsTransport)
+            RTCRtpReceiver("audio", dtlsTransport)  # type: ignore
 
 
 class TimestampMapperTest(TestCase):
-    def test_simple(self):
+    def test_simple(self) -> None:
         mapper = TimestampMapper()
         self.assertEqual(mapper.map(1000), 0)
         self.assertEqual(mapper.map(1001), 1)
@@ -565,7 +569,7 @@ class TimestampMapperTest(TestCase):
         self.assertEqual(mapper.map(1004), 4)
         self.assertEqual(mapper.map(1010), 10)
 
-    def test_wrap(self):
+    def test_wrap(self) -> None:
         mapper = TimestampMapper()
         self.assertEqual(mapper.map(4294967293), 0)
         self.assertEqual(mapper.map(4294967294), 1)

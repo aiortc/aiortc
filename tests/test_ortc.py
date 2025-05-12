@@ -12,7 +12,9 @@ from aiortc import (
 from .utils import asynctest
 
 
-async def start_dtls_pair(ice_a, ice_b):
+async def start_dtls_pair(
+    ice_a: RTCIceTransport, ice_b: RTCIceTransport
+) -> tuple[RTCDtlsTransport, RTCDtlsTransport]:
     dtls_a = RTCDtlsTransport(ice_a, [RTCCertificate.generateCertificate()])
     dtls_b = RTCDtlsTransport(ice_b, [RTCCertificate.generateCertificate()])
 
@@ -24,7 +26,7 @@ async def start_dtls_pair(ice_a, ice_b):
     return dtls_a, dtls_b
 
 
-async def start_ice_pair():
+async def start_ice_pair() -> tuple[RTCIceTransport, RTCIceTransport]:
     ice_a = RTCIceTransport(gatherer=RTCIceGatherer())
     ice_b = RTCIceTransport(gatherer=RTCIceGatherer())
 
@@ -42,7 +44,9 @@ async def start_ice_pair():
     return ice_a, ice_b
 
 
-async def start_sctp_pair(dtls_a, dtls_b):
+async def start_sctp_pair(
+    dtls_a: RTCDtlsTransport, dtls_b: RTCDtlsTransport
+) -> tuple[RTCSctpTransport, RTCSctpTransport]:
     sctp_a = RTCSctpTransport(dtls_a)
     sctp_b = RTCSctpTransport(dtls_b)
 
@@ -56,7 +60,7 @@ async def start_sctp_pair(dtls_a, dtls_b):
 
 class OrtcTest(TestCase):
     @asynctest
-    async def test_sctp(self):
+    async def test_sctp(self) -> None:
         # start ICE transports
         ice_a, ice_b = await start_ice_pair()
 

@@ -6,17 +6,10 @@ import math
 import os
 import time
 from collections import deque
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from struct import pack, unpack_from
-from typing import (
-    Any,
-    Callable,
-    Deque,
-    Iterator,
-    Optional,
-    cast,
-    no_type_check,
-)
+from typing import Deque, Optional, Union, cast
 
 from google_crc32c import value as crc32c
 from pyee.asyncio import AsyncIOEventEmitter
@@ -79,8 +72,10 @@ WEBRTC_BINARY = 53
 WEBRTC_STRING_EMPTY = 56
 WEBRTC_BINARY_EMPTY = 57
 
+DataChannelQueue = Deque[tuple[RTCDataChannel, int, bytes]]
 
-def chunk_type(chunk) -> str:
+
+def chunk_type(chunk: "Chunk") -> str:
     return chunk.__class__.__name__
 
 
@@ -162,6 +157,16 @@ class CookieEchoChunk(Chunk):
 
 class DataChunk(Chunk):
     type = 0
+
+    _acked: bool
+    _abandoned: bool
+    _book_size: int
+    _expiry: Optional[float]
+    _max_retransmits: Optional[int]
+    _misses: int
+    _retransmit: bool
+    _sent_count: int
+    _sent_time: Optional[float]
 
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
@@ -295,7 +300,7 @@ class ReconfigChunk(BaseParamsChunk):
 class SackChunk(Chunk):
     type = 3
 
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
         self.gaps = []
         self.duplicates = []
@@ -345,7 +350,7 @@ class SackChunk(Chunk):
 class ShutdownChunk(Chunk):
     type = 7
 
-    def __init__(self, flags=0, body=None):
+    def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
         if body:
             self.cumulative_tsn = unpack_from("!L", body)[0]
@@ -390,7 +395,7 @@ CHUNK_CLASSES = [
 CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 
-def parse_packet(data: bytes) -> tuple[int, int, int, list[Any]]:
+def parse_packet(data: bytes) -> tuple[int, int, int, list[Chunk]]:
     length = len(data)
     if length < 12:
         raise ValueError("SCTP packet length is less than 12 bytes")
@@ -402,7 +407,7 @@ def parse_packet(data: bytes) -> tuple[int, int, int, list[Any]]:
     if checksum != crc32c(data[0:8] + b"\x00\x00\x00\x00" + data[12:]):
         raise ValueError("SCTP packet has invalid checksum")
 
-    chunks = []
+    chunks: list[Chunk] = []
     pos = 12
     while pos <= length - 4:
         chunk_type, chunk_flags, chunk_length = unpack_from("!BBH", data, pos)
@@ -431,7 +436,7 @@ class StreamResetOutgoingParam:
     request_sequence: int
     response_sequence: int
     last_tsn: int
-    streams: list[bytes] = field(default_factory=list)
+    streams: list[int] = field(default_factory=list)
 
     def __bytes__(self) -> bytes:
         data = pack(
@@ -442,7 +447,7 @@ class StreamResetOutgoingParam:
         return data
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes) -> "StreamResetOutgoingParam":
         request_sequence, response_sequence, last_tsn = unpack_from("!LLL", data)
         streams = []
         for pos in range(12, len(data), 2):
@@ -465,7 +470,7 @@ class StreamAddOutgoingParam:
         return data
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes) -> "StreamAddOutgoingParam":
         request_sequence, new_streams, reserved = unpack_from("!LHH", data)
         return cls(request_sequence=request_sequence, new_streams=new_streams)
 
@@ -479,12 +484,19 @@ class StreamResetResponseParam:
         return pack("!LL", self.response_sequence, self.result)
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes) -> "StreamResetResponseParam":
         response_sequence, result = unpack_from("!LL", data)
         return cls(response_sequence=response_sequence, result=result)
 
 
-RECONFIG_PARAM_TYPES = {
+RECONFIG_PARAM_TYPES: dict[
+    int,
+    Union[
+        type[StreamResetOutgoingParam],
+        type[StreamResetResponseParam],
+        type[StreamAddOutgoingParam],
+    ],
+] = {
     13: StreamResetOutgoingParam,
     16: StreamResetResponseParam,
     17: StreamAddOutgoingParam,
@@ -641,7 +653,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         # reconfiguration
         self._reconfig_queue: list[int] = []
-        self._reconfig_request = None
+        self._reconfig_request: Optional[StreamResetOutgoingParam] = None
         self._reconfig_request_seq = self._local_tsn
         self._reconfig_response_seq = 0
 
@@ -661,7 +673,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         # data channels
         self._data_channel_id: Optional[int] = None
-        self._data_channel_queue: Deque[tuple[RTCDataChannel, int, bytes]] = deque()
+        self._data_channel_queue: DataChannelQueue = deque()
         self._data_channels: dict[int, RTCDataChannel] = {}
 
         # FIXME: this is only used by RTCPeerConnection
@@ -696,7 +708,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         return self.__state
 
     @property
-    def transport(self):
+    def transport(self) -> RTCDtlsTransport:
         """
         The :class:`RTCDtlsTransport` over which SCTP data is transmitted.
         """
@@ -711,7 +723,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         return RTCSctpCapabilities(maxMessageSize=65536)
 
-    def setTransport(self, transport) -> None:
+    def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
     async def start(self, remoteCaps: RTCSctpCapabilities, remotePort: int) -> None:
@@ -778,10 +790,10 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._set_state(self.State.COOKIE_WAIT)
 
     def _flight_size_decrease(self, chunk: DataChunk) -> None:
-        self._flight_size = max(0, self._flight_size - chunk._book_size)  # type: ignore
+        self._flight_size = max(0, self._flight_size - chunk._book_size)
 
     def _flight_size_increase(self, chunk: DataChunk) -> None:
-        self._flight_size += chunk._book_size  # type: ignore
+        self._flight_size += chunk._book_size
 
     def _get_extensions(self, params: list[tuple[int, bytes]]) -> None:
         """
@@ -816,7 +828,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
     def _get_timestamp(self) -> int:
         return int(time.time())
 
-    async def _handle_data(self, data):
+    async def _handle_data(self, data: bytes) -> None:
         """
         Handle data received from the network.
         """
@@ -848,7 +860,6 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if self._sack_needed:
             await self._send_sack()
 
-    @no_type_check
     def _maybe_abandon(self, chunk: DataChunk) -> bool:
         """
         Determine if a chunk needs to be marked as abandoned.
@@ -900,7 +911,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 break
 
         # filter out obsolete entries
-        def is_obsolete(x):
+        def is_obsolete(x: int) -> bool:
             return uint32_gt(x, self._last_received_tsn)
 
         self._sack_duplicates = list(filter(is_obsolete, self._sack_duplicates))
@@ -913,7 +924,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         await self._data_channel_receive(stream_id, pp_id, data)
 
-    async def _receive_chunk(self, chunk):
+    async def _receive_chunk(self, chunk: Chunk) -> None:
         """
         Handle an incoming chunk.
         """
@@ -927,18 +938,18 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         elif isinstance(chunk, ForwardTsnChunk):
             await self._receive_forward_tsn_chunk(chunk)
         elif isinstance(chunk, HeartbeatChunk):
-            ack = HeartbeatAckChunk()
-            ack.params = chunk.params
-            await self._send_chunk(ack)
+            heartbeat_ack = HeartbeatAckChunk()
+            heartbeat_ack.params = chunk.params
+            await self._send_chunk(heartbeat_ack)
         elif isinstance(chunk, AbortChunk):
             self.__log_debug("x Association was aborted by remote party")
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
             self._t2_cancel()
             self._set_state(self.State.SHUTDOWN_RECEIVED)
-            ack = ShutdownAckChunk()
-            await self._send_chunk(ack)
-            self._t2_start(ack)
+            shutdown_ack = ShutdownAckChunk()
+            await self._send_chunk(shutdown_ack)
+            self._t2_start(shutdown_ack)
             self._set_state(self.State.SHUTDOWN_ACK_SENT)
         elif (
             isinstance(chunk, ShutdownCompleteChunk)
@@ -952,7 +963,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         ):
             for param in chunk.params:
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
-                if cls:
+                if cls is not None:
                     await self._receive_reconfig_param(cls.parse(param[1]))
 
         # server
@@ -975,19 +986,19 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._outbound_streams_count, chunk.inbound_streams
             )
 
-            ack = InitAckChunk()
-            ack.initiate_tag = self._local_verification_tag
-            ack.advertised_rwnd = self._advertised_rwnd
-            ack.outbound_streams = self._outbound_streams_count
-            ack.inbound_streams = self._inbound_streams_max
-            ack.initial_tsn = self._local_tsn
-            self._set_extensions(ack.params)
+            init_ack = InitAckChunk()
+            init_ack.initiate_tag = self._local_verification_tag
+            init_ack.advertised_rwnd = self._advertised_rwnd
+            init_ack.outbound_streams = self._outbound_streams_count
+            init_ack.inbound_streams = self._inbound_streams_max
+            init_ack.initial_tsn = self._local_tsn
+            self._set_extensions(init_ack.params)
 
             # generate state cookie
             cookie = pack("!L", self._get_timestamp())
             cookie += hmac.new(self._hmac_key, cookie, "sha1").digest()
-            ack.params.append((SCTP_STATE_COOKIE, cookie))
-            await self._send_chunk(ack)
+            init_ack.params.append((SCTP_STATE_COOKIE, cookie))
+            await self._send_chunk(init_ack)
         elif isinstance(chunk, CookieEchoChunk) and self.is_server:
             # check state cookie MAC
             cookie = chunk.body
@@ -1008,8 +1019,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 await self._send_chunk(error)
                 return
 
-            ack = CookieAckChunk()
-            await self._send_chunk(ack)
+            cookie_ack = CookieAckChunk()
+            await self._send_chunk(cookie_ack)
             self._set_state(self.State.ESTABLISHED)
 
         # client
@@ -1093,7 +1104,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if uint32_gte(self._last_received_tsn, chunk.cumulative_tsn):
             return
 
-        def is_obsolete(x):
+        def is_obsolete(x: int) -> bool:
             return uint32_gt(x, self._last_received_tsn)
 
         # advance cumulative TSN
@@ -1125,7 +1136,6 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._last_received_tsn
             )
 
-    @no_type_check
     async def _receive_sack_chunk(self, chunk: SackChunk) -> None:
         """
         Handle a SACK chunk.
@@ -1221,7 +1231,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         await self._data_channel_flush()
         await self._transmit()
 
-    async def _receive_reconfig_param(self, param):
+    async def _receive_reconfig_param(
+        self,
+        param: Union[
+            StreamAddOutgoingParam, StreamResetOutgoingParam, StreamResetResponseParam
+        ],
+    ) -> None:
         """
         Handle a RE-CONFIG parameter.
         """
@@ -1268,7 +1283,6 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._reconfig_request = None
                 await self._transmit_reconfig()
 
-    @no_type_check
     async def _send(
         self,
         stream_id: int,
@@ -1339,7 +1353,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             )
         )
 
-    async def _send_reconfig_param(self, param):
+    async def _send_reconfig_param(
+        self,
+        param: Union[
+            StreamAddOutgoingParam, StreamResetOutgoingParam, StreamResetResponseParam
+        ],
+    ) -> None:
         chunk = ReconfigChunk()
         for k, cls in RECONFIG_PARAM_TYPES.items():
             if isinstance(param, cls):
@@ -1350,11 +1369,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self.__log_debug(">> %s", param)
         await self._send_chunk(chunk)
 
-    async def _send_sack(self):
+    async def _send_sack(self) -> None:
         """
         Build and send a selective acknowledgement (SACK) chunk.
         """
-        gaps = []
+        gaps: list[list[int]] = []
         gap_next = None
         for tsn in sorted(self._sack_misordered):
             pos = (tsn - self._last_received_tsn) % SCTP_TSN_MODULO
@@ -1375,7 +1394,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._sack_duplicates.clear()
         self._sack_needed = False
 
-    def _set_state(self, state) -> None:
+    def _set_state(self, state: "RTCSctpTransport.State") -> None:
         """
         Transition the SCTP association to a new state.
         """
@@ -1450,14 +1469,13 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             asyncio.ensure_future(self._send_chunk(self._t2_chunk))
             self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
-    def _t2_start(self, chunk) -> None:
+    def _t2_start(self, chunk: ShutdownAckChunk) -> None:
         assert self._t2_handle is None
         self._t2_chunk = chunk
         self._t2_failures = 0
         self.__log_debug("- T2(%s) start", chunk_type(self._t2_chunk))
         self._t2_handle = self._loop.call_later(self._rto, self._t2_expired)
 
-    @no_type_check
     def _t3_expired(self) -> None:
         self._t3_handle = None
         self.__log_debug("x T3 expired")
@@ -1496,7 +1514,6 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._t3_handle.cancel()
             self._t3_handle = None
 
-    @no_type_check
     async def _transmit(self) -> None:
         """
         Transmit outbound data.
@@ -1550,7 +1567,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             if not self._t3_handle:
                 self._t3_start()
 
-    async def _transmit_reconfig(self):
+    async def _transmit_reconfig(self) -> None:
         if (
             self._association_state == self.State.ESTABLISHED
             and self._reconfig_queue
@@ -1569,7 +1586,6 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             await self._send_reconfig_param(param)
 
-    @no_type_check
     def _update_advanced_peer_ack_point(self) -> None:
         """
         Try to advance "Advanced.Peer.Ack.Point" according to RFC 3758.
@@ -1606,7 +1622,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._srtt = (1 - SCTP_RTO_ALPHA) * self._srtt + SCTP_RTO_ALPHA * R
         self._rto = max(SCTP_RTO_MIN, min(self._srtt + 4 * self._rttvar, SCTP_RTO_MAX))
 
-    def _data_channel_close(self, channel, transmit=True):
+    def _data_channel_close(self, channel: RTCDataChannel) -> None:
         """
         Request closing the datachannel by sending an Outgoing Stream Reset Request.
         """
@@ -1620,7 +1636,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     asyncio.ensure_future(self._transmit_reconfig())
             else:
                 # remove any queued messages for the datachannel
-                new_queue = deque()
+                new_queue: DataChannelQueue = deque()
                 for queue_item in self._data_channel_queue:
                     if queue_item[0] != channel:
                         new_queue.append(queue_item)
@@ -1789,7 +1805,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             # emit message
             self._data_channels[stream_id].emit("message", b"")
 
-    def _data_channel_send(self, channel: RTCDataChannel, data: bytes) -> None:
+    def _data_channel_send(
+        self, channel: RTCDataChannel, data: Union[bytes, str]
+    ) -> None:
         if data == "":
             pp_id, user_data = WEBRTC_STRING_EMPTY, b"\x00"
         elif isinstance(data, str):

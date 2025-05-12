@@ -354,7 +354,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
                     self.__setState("failed")
                 return
 
-    def __log_debug(self, msg: str, *args) -> None:
+    def __log_debug(self, msg: str, *args: object) -> None:
         logger.debug(f"RTCIceTransport(%s) {msg}", self.role, *args)
 
     def __setState(self, state: str) -> None:

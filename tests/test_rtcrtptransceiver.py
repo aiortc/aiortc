@@ -5,7 +5,7 @@ from aiortc.rtcrtptransceiver import RTCRtpTransceiver
 
 
 class RTCRtpTransceiverTest(TestCase):
-    def test_codec_preferences(self):
+    def test_codec_preferences(self) -> None:
         transceiver = RTCRtpTransceiver("audio", None, None)
         self.assertEqual(transceiver._preferred_codecs, [])
 
