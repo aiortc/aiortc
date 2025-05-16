@@ -406,38 +406,10 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             fingerprints=self.__local_certificate.getFingerprints()
         )
 
-    async def start(self, remoteParameters: RTCDtlsParameters) -> None:
+    async def _do_handshake(self) -> None:
         """
-        Start DTLS transport negotiation with the parameters of the remote
-        DTLS transport.
-
-        :param remoteParameters: An :class:`RTCDtlsParameters`.
+        Attempt to complete the DTLS handshake.
         """
-        assert self._state == State.NEW
-        assert len(remoteParameters.fingerprints)
-
-        # For WebRTC, the DTLS role is explicitly determined as part of the
-        # offer / answer exchange.
-        #
-        # For ORTC however, we determine the DTLS role based on the ICE role.
-        if self._role == "auto":
-            if self.transport.role == "controlling":
-                self._set_role("server")
-            else:
-                self._set_role("client")
-
-        # Initialise SSL.
-        self._ssl = SSL.Connection(
-            self.__local_certificate._create_ssl_context(
-                srtp_profiles=self._srtp_profiles
-            )
-        )
-        if self._role == "server":
-            self._ssl.set_accept_state()
-        else:
-            self._ssl.set_connect_state()
-
-        self._set_state(State.CONNECTING)
         try:
             while not self.encrypted:
                 try:
@@ -456,9 +428,12 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._set_state(State.FAILED)
             return
 
-        # Check remote fingerprints. There must be at least one fingerprint
-        # with a supported algorithm, and all supported fingerprints must
-        # match.
+    def _validate_peer_identity(self, remoteParameters: RTCDtlsParameters) -> None:
+        """
+        Check remote fingerprints. There must be at least one fingerprint
+        with a supported algorithm, and all supported fingerprints must
+        match.
+        """
         certificate = self._ssl.get_peer_certificate(as_cryptography=True)
         fingerprint_supported = 0
         fingerprint_valid = 0
@@ -473,7 +448,10 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._set_state(State.FAILED)
             return
 
-        # generate keying material
+    def _setup_srtp(self) -> None:
+        """
+        Extract the SRTP keying material and setup the SRTP sessions.
+        """
         openssl_profile = self._ssl.get_selected_srtp_profile()
         for srtp_profile in self._srtp_profiles:
             if srtp_profile.openssl_profile == openssl_profile:
@@ -514,6 +492,53 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         tx_policy.allow_repeat_tx = True
         tx_policy.window_size = 1024
         self._tx_srtp = Session(tx_policy)
+
+    async def start(self, remoteParameters: RTCDtlsParameters) -> None:
+        """
+        Start DTLS transport negotiation with the parameters of the remote
+        DTLS transport.
+
+        :param remoteParameters: An :class:`RTCDtlsParameters`.
+        """
+        assert self._state == State.NEW
+        assert len(remoteParameters.fingerprints)
+
+        # For WebRTC, the DTLS role is explicitly determined as part of the
+        # offer / answer exchange.
+        #
+        # For ORTC however, we determine the DTLS role based on the ICE role.
+        if self._role == "auto":
+            if self.transport.role == "controlling":
+                self._set_role("server")
+            else:
+                self._set_role("client")
+
+        # Initialise SSL.
+        self._ssl = SSL.Connection(
+            self.__local_certificate._create_ssl_context(
+                srtp_profiles=self._srtp_profiles
+            )
+        )
+        if self._role == "server":
+            self._ssl.set_accept_state()
+        else:
+            self._ssl.set_connect_state()
+
+        # Start the DTLS handshake.
+        self._set_state(State.CONNECTING)
+        await self._do_handshake()
+        if self._state == State.FAILED:
+            return
+
+        # Validate the peer identity.
+        self._validate_peer_identity(remoteParameters)
+        if self._state == State.FAILED:
+            return
+
+        # Generate keying material.
+        self._setup_srtp()
+        if self._state == State.FAILED:
+            return
 
         # start data pump
         self.__log_debug("- DTLS handshake complete")
