@@ -1,3 +1,4 @@
+import multiprocessing
 import random
 from struct import pack, unpack_from
 from typing import Optional, Type, TypeVar, cast
@@ -20,6 +21,17 @@ MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
 
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
+
+
+def number_of_threads(pixels: int, cpus: int) -> int:
+    if pixels >= 1920 * 1080 and cpus > 8:
+        return 8
+    elif pixels > 1280 * 960 and cpus >= 6:
+        return 3
+    elif pixels > 640 * 480 and cpus >= 3:
+        return 2
+    else:
+        return 1
 
 
 class VpxPayloadDescriptor:
@@ -213,6 +225,9 @@ class Vp8Encoder(Encoder):
                 "static-thresh": "1",
                 "undershoot-pct": "100",
             }
+            self.codec.thread_count = number_of_threads(
+                frame.width * frame.height, multiprocessing.cpu_count()
+            )
 
         data_to_send = b""
         for package in self.codec.encode(frame):
