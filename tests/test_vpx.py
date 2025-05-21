@@ -2,7 +2,12 @@ import fractions
 from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
-from aiortc.codecs.vpx import Vp8Decoder, Vp8Encoder, VpxPayloadDescriptor
+from aiortc.codecs.vpx import (
+    Vp8Decoder,
+    Vp8Encoder,
+    VpxPayloadDescriptor,
+    number_of_threads,
+)
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
@@ -233,6 +238,12 @@ class Vp8Test(CodecTestCase):
         self.assertEqual(len(payloads), 1)
         self.assertTrue(len(payloads[0]) < 1300)
         self.assertAlmostEqual(timestamp, 3000, delta=1)
+
+    def test_number_of_threads(self) -> None:
+        self.assertEqual(number_of_threads(1920 * 1080, 16), 8)
+        self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
+        self.assertEqual(number_of_threads(1920 * 1080, 4), 2)
+        self.assertEqual(number_of_threads(1920 * 1080, 2), 1)
 
     def test_roundtrip_1280_720(self) -> None:
         self.roundtrip_video(VP8_CODEC, 1280, 720)
