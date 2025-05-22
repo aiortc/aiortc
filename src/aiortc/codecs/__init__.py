@@ -11,10 +11,16 @@ from ..rtcrtpparameters import (
 )
 from .base import Decoder, Encoder
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
+from .g722 import G722Decoder, G722Encoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
 from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
 
+# The clockrate for G.722 is 8kHz even though the sampling rate is 16kHz.
+# See https://datatracker.ietf.org/doc/html/rfc3551
+G722_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/G722", clockRate=8000, channels=1, payloadType=9
+)
 PCMU_CODEC = RTCRtpCodecParameters(
     mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
 )
@@ -27,6 +33,7 @@ CODECS: dict[str, list[RTCRtpCodecParameters]] = {
         RTCRtpCodecParameters(
             mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
         ),
+        G722_CODEC,
         PCMU_CODEC,
         PCMA_CODEC,
     ],
@@ -141,7 +148,9 @@ def get_capabilities(kind: str) -> RTCRtpCapabilities:
 def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
     mimeType = codec.mimeType.lower()
 
-    if mimeType == "audio/opus":
+    if mimeType == "audio/g722":
+        return G722Decoder()
+    elif mimeType == "audio/opus":
         return OpusDecoder()
     elif mimeType == "audio/pcma":
         return PcmaDecoder()
@@ -158,7 +167,9 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
 def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
     mimeType = codec.mimeType.lower()
 
-    if mimeType == "audio/opus":
+    if mimeType == "audio/g722":
+        return G722Encoder()
+    elif mimeType == "audio/opus":
         return OpusEncoder()
     elif mimeType == "audio/pcma":
         return PcmaEncoder()

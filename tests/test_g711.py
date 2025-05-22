@@ -28,7 +28,7 @@ class PcmaTest(CodecTestCase):
             sample_rate=8000,
         )
 
-    def test_encoder_mono_8hz(self) -> None:
+    def test_encoder_mono_8khz(self) -> None:
         encoder = get_encoder(PCMA_CODEC)
         self.assertIsInstance(encoder, PcmaEncoder)
 
@@ -86,12 +86,10 @@ class PcmaTest(CodecTestCase):
         self.assertEqual(timestamp, 8)
 
     def test_roundtrip(self) -> None:
-        self.roundtrip_audio(PCMA_CODEC, output_layout="mono", output_sample_rate=8000)
+        self.roundtrip_audio(PCMA_CODEC, layout="mono", sample_rate=8000)
 
     def test_roundtrip_with_loss(self) -> None:
-        self.roundtrip_audio(
-            PCMA_CODEC, output_layout="mono", output_sample_rate=8000, drop=[1]
-        )
+        self.roundtrip_audio(PCMA_CODEC, layout="mono", sample_rate=8000, drop=[1])
 
 
 class PcmuTest(CodecTestCase):
@@ -111,7 +109,7 @@ class PcmuTest(CodecTestCase):
             sample_rate=8000,
         )
 
-    def test_encoder_mono_8hz(self) -> None:
+    def test_encoder_mono_8khz(self) -> None:
         encoder = get_encoder(PCMU_CODEC)
         self.assertIsInstance(encoder, PcmuEncoder)
 
@@ -160,9 +158,7 @@ class PcmuTest(CodecTestCase):
         )
 
     def test_roundtrip(self) -> None:
-        self.roundtrip_audio(PCMU_CODEC, output_layout="mono", output_sample_rate=8000)
+        self.roundtrip_audio(PCMU_CODEC, layout="mono", sample_rate=8000)
 
     def test_roundtrip_with_loss(self) -> None:
-        self.roundtrip_audio(
-            PCMU_CODEC, output_layout="mono", output_sample_rate=8000, drop=[1]
-        )
+        self.roundtrip_audio(PCMU_CODEC, layout="mono", sample_rate=8000, drop=[1])

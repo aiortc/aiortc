@@ -825,6 +825,7 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue(
             lf2crlf(
                 """a=rtpmap:96 opus/48000/2
+a=rtpmap:9 G722/8000
 a=rtpmap:0 PCMU/8000
 a=rtpmap:8 PCMA/8000
 """
@@ -863,6 +864,7 @@ a=rtpmap:8 PCMA/8000
         self.assertTrue(
             lf2crlf(
                 """a=rtpmap:96 opus/48000/2
+a=rtpmap:9 G722/8000
 a=rtpmap:0 PCMU/8000
 a=rtpmap:8 PCMA/8000
 """

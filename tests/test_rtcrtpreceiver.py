@@ -239,6 +239,9 @@ class RTCRtpReceiverTest(CodecTestCase):
                     mimeType="audio/opus", clockRate=48000, channels=2
                 ),
                 RTCRtpCodecCapability(
+                    mimeType="audio/G722", clockRate=8000, channels=1
+                ),
+                RTCRtpCodecCapability(
                     mimeType="audio/PCMU", clockRate=8000, channels=1
                 ),
                 RTCRtpCodecCapability(
