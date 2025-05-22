@@ -1,4 +1,5 @@
 import fractions
+from typing import Optional
 
 from aiortc.codecs import depayload, get_decoder, get_encoder
 from aiortc.jitterbuffer import JitterFrame
@@ -20,7 +21,7 @@ class CodecTestCase(TestCase):
         pts: int,
         samples: int,
         sample_rate: int,
-        data: bytes,
+        data: Optional[bytes],
     ) -> None:
         assert isinstance(frame, AudioFrame)
         self.assertEqual(frame.format.name, "s16")
@@ -30,8 +31,9 @@ class CodecTestCase(TestCase):
         self.assertEqual(frame.sample_rate, sample_rate)
         self.assertEqual(frame.time_base, fractions.Fraction(1, sample_rate))
 
-        plane_data = bytes(frame.planes[0])
-        self.assertEqual(plane_data[: len(data)], data)
+        if data is not None:
+            plane_data = bytes(frame.planes[0])
+            self.assertEqual(plane_data[: len(data)], data)
 
     def create_audio_frame(
         self, samples: int, pts: int, layout: str = "mono", sample_rate: int = 48000
@@ -115,10 +117,8 @@ class CodecTestCase(TestCase):
     def roundtrip_audio(
         self,
         codec: RTCRtpCodecParameters,
-        output_layout: str,
-        output_sample_rate: int,
-        input_layout: str = "mono",
-        input_sample_rate: int = 8000,
+        layout: str,
+        sample_rate: int,
         drop: list[int] = [],
     ) -> None:
         """
@@ -127,15 +127,16 @@ class CodecTestCase(TestCase):
         encoder = get_encoder(codec)
         decoder = get_decoder(codec)
 
+        samples = int(sample_rate * AUDIO_PTIME)
+        time_base = fractions.Fraction(1, sample_rate)
+
         input_frames = self.create_audio_frames(
-            layout=input_layout, sample_rate=input_sample_rate, count=10
+            layout=layout, sample_rate=sample_rate, count=10
         )
-
-        output_sample_count = int(output_sample_rate * AUDIO_PTIME)
-
         for i, frame in enumerate(input_frames):
             # encode
             packages, timestamp = encoder.encode(frame)
+            self.assertEqual(timestamp, i * codec.clockRate * AUDIO_PTIME)
 
             if i not in drop:
                 # depacketize
@@ -148,13 +149,11 @@ class CodecTestCase(TestCase):
                 self.assertEqual(len(frames), 1)
                 assert isinstance(frames[0], AudioFrame)
                 self.assertEqual(frames[0].format.name, "s16")
-                self.assertEqual(frames[0].layout.name, output_layout)
-                self.assertEqual(frames[0].samples, output_sample_rate * AUDIO_PTIME)
-                self.assertEqual(frames[0].sample_rate, output_sample_rate)
-                self.assertEqual(frames[0].pts, i * output_sample_count)
-                self.assertEqual(
-                    frames[0].time_base, fractions.Fraction(1, output_sample_rate)
-                )
+                self.assertEqual(frames[0].layout.name, layout)
+                self.assertEqual(frames[0].samples, samples)
+                self.assertEqual(frames[0].sample_rate, sample_rate)
+                self.assertEqual(frames[0].pts, i * samples)
+                self.assertEqual(frames[0].time_base, time_base)
 
     def roundtrip_video(
         self,

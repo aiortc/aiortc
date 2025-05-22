@@ -91,20 +91,7 @@ class OpusTest(CodecTestCase):
         self.assertEqual(timestamp, 48)
 
     def test_roundtrip(self) -> None:
-        self.roundtrip_audio(
-            OPUS_CODEC,
-            input_layout="stereo",
-            input_sample_rate=48000,
-            output_layout="stereo",
-            output_sample_rate=48000,
-        )
+        self.roundtrip_audio(OPUS_CODEC, layout="stereo", sample_rate=48000)
 
     def test_roundtrip_with_loss(self) -> None:
-        self.roundtrip_audio(
-            OPUS_CODEC,
-            input_layout="stereo",
-            input_sample_rate=48000,
-            output_layout="stereo",
-            output_sample_rate=48000,
-            drop=[1],
-        )
+        self.roundtrip_audio(OPUS_CODEC, layout="stereo", sample_rate=48000, drop=[1])
