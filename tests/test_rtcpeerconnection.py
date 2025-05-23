@@ -4650,6 +4650,24 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
+    async def test_setLocalDescription_implicit(self) -> None:
+        pc = RTCPeerConnection()
+        pc.addTrack(AudioStreamTrack())
+        offer = await pc.createOffer()
+        await pc.setRemoteDescription(offer)
+
+        await pc.setLocalDescription()
+        self.assertEqual(pc.localDescription.type, "answer")
+
+        await pc.setLocalDescription()
+        self.assertEqual(pc.localDescription.type, "offer")
+
+        await pc.close()
+        with self.assertRaises(InvalidStateError) as cm:
+            await pc.setLocalDescription()
+        self.assertEqual(str(cm.exception), "RTCPeerConnection is closed")
+
+    @asynctest
     async def test_setLocalDescription_unexpected_answer(self) -> None:
         pc = RTCPeerConnection()
         pc.addTrack(AudioStreamTrack())
