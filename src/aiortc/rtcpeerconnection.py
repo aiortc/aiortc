@@ -393,30 +393,38 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         """
         return self.__signalingState
 
-    async def addIceCandidate(self, candidate: RTCIceCandidate) -> None:
+    async def addIceCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
 
         The specified candidate must have a value for either `sdpMid` or
         `sdpMLineIndex`.
 
-        :param candidate: The new remote candidate.
+        :param candidate: The new remote candidate or `None` to signal
+                            end-of-candidates.
         """
-        if candidate.sdpMid is None and candidate.sdpMLineIndex is None:
+        if (
+            candidate is not None
+            and candidate.sdpMid is None
+            and candidate.sdpMLineIndex is None
+        ):
             raise ValueError("Candidate must have either sdpMid or sdpMLineIndex")
 
         for transceiver in self.__transceivers:
             if (
-                candidate.sdpMid == transceiver.mid
-                or candidate.sdpMLineIndex == transceiver._get_mline_index()
-            ) and not transceiver._bundled:
+                candidate is None
+                or (
+                    candidate.sdpMid == transceiver.mid
+                    or candidate.sdpMLineIndex == transceiver._get_mline_index()
+                )
+                and not transceiver._bundled
+            ):
                 iceTransport = transceiver.receiver.transport.transport
                 await iceTransport.addRemoteCandidate(candidate)
-                return
 
-        if (
-            self.__sctp
-            and (
+        if self.__sctp and (
+            candidate is None
+            or (
                 candidate.sdpMid == self.__sctp.mid
                 or candidate.sdpMLineIndex == self.__sctp_mline_index
             )
@@ -424,6 +432,17 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         ):
             iceTransport = self.__sctp.transport.transport
             await iceTransport.addRemoteCandidate(candidate)
+
+        # Update the remote description.
+        media = self.__remoteDescription().media
+        for sdp_m_line_index in range(0, len(media)):
+            if candidate is None:
+                media[sdp_m_line_index].ice_candidates_complete = True
+            elif (
+                candidate.sdpMLineIndex == sdp_m_line_index
+                or candidate.sdpMid == media[sdp_m_line_index].rtp.muxId
+            ):
+                media[sdp_m_line_index].ice_candidates.append(candidate)
 
     def addTrack(self, track: MediaStreamTrack) -> RTCRtpSender:
         """

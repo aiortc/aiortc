@@ -576,6 +576,39 @@ class RTCPeerConnectionTest(TestCase):
         aioice.stun.RETRY_RTO = self.retry_rto
 
     @asynctest
+    async def test_addIceCandidate(self) -> None:
+        pc = RTCPeerConnection()
+        pc.createDataChannel("test")
+        offer = await pc.createOffer()
+        await pc.setRemoteDescription(offer)
+        self.assertFalse("a=candidate:" in pc.remoteDescription.sdp)
+        candidate_with_index = RTCIceCandidate(
+            component=1,
+            foundation="0",
+            ip="192.168.99.7",
+            port=33543,
+            priority=2122252543,
+            protocol="UDP",
+            type="host",
+            sdpMLineIndex=0,
+        )
+        await pc.addIceCandidate(candidate_with_index)
+        self.assertTrue("a=candidate:" in pc.remoteDescription.sdp)
+
+        candidate_with_mid = RTCIceCandidate(
+            component=1,
+            foundation="0",
+            ip="192.168.99.7",
+            port=33544,
+            priority=2122252543,
+            protocol="UDP",
+            type="host",
+            sdpMid=pc.sctp.mid,
+        )
+        await pc.addIceCandidate(candidate_with_mid)
+        self.assertEqual(pc.remoteDescription.sdp.count("a=candidate:"), 2)
+
+    @asynctest
     async def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
@@ -593,6 +626,18 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(
             str(cm.exception), "Candidate must have either sdpMid or sdpMLineIndex"
         )
+
+    @asynctest
+    async def test_addIceCandidate_null(self) -> None:
+        pc = RTCPeerConnection()
+        pc.createDataChannel("test")
+        pc.addTransceiver("audio")
+        pc.addTransceiver("video")
+        offer = await pc.createOffer()
+        await pc.setRemoteDescription(offer)
+        self.assertFalse("a=end-of-candidates" in pc.remoteDescription.sdp)
+        await pc.addIceCandidate(None)
+        self.assertTrue("a=end-of-candidates" in pc.remoteDescription.sdp)
 
     @asynctest
     async def test_addTrack_audio(self) -> None:
