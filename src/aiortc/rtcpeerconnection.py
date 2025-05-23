@@ -742,19 +742,38 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return list(self.__transceivers)
 
     async def setLocalDescription(
-        self, sessionDescription: RTCSessionDescription
+        self, sessionDescription: Optional[RTCSessionDescription] = None
     ) -> None:
         """
         Change the local description associated with the connection.
 
         :param sessionDescription: An :class:`RTCSessionDescription` generated
-                                    by :meth:`createOffer` or :meth:`createAnswer()`.
+                                    by :meth:`createOffer` or :meth:`createAnswer()`
+                                    or None to implicitly create an offer or create
+                                    an answer, as needed.
         """
-        self.__log_debug(
-            "setLocalDescription(%s)\n%s",
-            sessionDescription.type,
-            sessionDescription.sdp,
-        )
+        # check state is valid
+        self.__assertNotClosed()
+
+        if sessionDescription is None:
+            # https://w3c.github.io/webrtc-pc/#dom-peerconnection-setlocaldescription
+            # If left out, then setLocalDescription will implicitly create an offer
+            # or create an answer, as needed.
+            if self.signalingState == "have-remote-offer":
+                sessionDescription = await self.createAnswer()
+            else:
+                sessionDescription = await self.createOffer()
+            self.__log_debug(
+                "setLocalDescription(%s, implicit)\n%s",
+                sessionDescription.type,
+                sessionDescription.sdp,
+            )
+        else:
+            self.__log_debug(
+                "setLocalDescription(%s)\n%s",
+                sessionDescription.type,
+                sessionDescription.sdp,
+            )
 
         # parse and validate description
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
