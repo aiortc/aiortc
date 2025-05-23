@@ -4638,16 +4638,19 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_createOffer_without_media(self) -> None:
-        pc = RTCPeerConnection()
-        with self.assertRaises(InternalError) as cm:
-            await pc.createOffer()
-        self.assertEqual(
-            str(cm.exception),
-            "Cannot create an offer with no media and no data channels",
-        )
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
 
-        # close
-        await pc.close()
+        offer = await pc1.createOffer()
+        await pc1.setLocalDescription(offer)
+        await pc2.setRemoteDescription(offer)
+
+        answer = await pc2.createAnswer()
+        await pc2.setLocalDescription(answer)
+        await pc1.setRemoteDescription(answer)
+
+        await pc1.close()
+        await pc2.close()
 
     @asynctest
     async def test_setLocalDescription_implicit(self) -> None:

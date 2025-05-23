@@ -615,11 +615,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # check state is valid
         self.__assertNotClosed()
 
-        if not self.__sctp and not self.__transceivers:
-            raise InternalError(
-                "Cannot create an offer with no media and no data channels"
-            )
-
         # offer codecs
         for transceiver in self.__transceivers:
             transceiver._codecs = filter_preferred_codecs(
