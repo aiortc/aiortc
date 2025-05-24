@@ -1,4 +1,6 @@
 import fractions
+import io
+from contextlib import redirect_stderr
 from unittest import TestCase
 
 from aiortc.codecs import get_decoder, get_encoder
@@ -8,6 +10,7 @@ from aiortc.codecs.vpx import (
     VpxPayloadDescriptor,
     number_of_threads,
 )
+from aiortc.jitterbuffer import JitterFrame
 from aiortc.rtcrtpparameters import RTCRtpCodecParameters
 
 from .codecs import CodecTestCase
@@ -160,6 +163,11 @@ class Vp8Test(CodecTestCase):
     def test_decoder(self) -> None:
         decoder = get_decoder(VP8_CODEC)
         self.assertIsInstance(decoder, Vp8Decoder)
+
+        # decode junk
+        with redirect_stderr(io.StringIO()):
+            frames = decoder.decode(JitterFrame(data=b"123", timestamp=0))
+        self.assertEqual(frames, [])
 
     def test_encoder(self) -> None:
         encoder = self.ensureIsInstance(get_encoder(VP8_CODEC), Vp8Encoder)
