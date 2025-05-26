@@ -5,25 +5,39 @@ import logging
 import os
 import platform
 import ssl
+from typing import Optional
 
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCRtpSender, RTCSessionDescription
+from aiortc import (
+    MediaStreamTrack,
+    RTCPeerConnection,
+    RTCRtpSender,
+    RTCSessionDescription,
+)
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 
 ROOT = os.path.dirname(__file__)
 
-
+pcs = set()
 relay = None
 webcam = None
 
 
-def create_local_tracks(play_from, decode):
+def create_local_tracks(
+    play_from: str, decode: bool
+) -> tuple[Optional[MediaStreamTrack], Optional[MediaStreamTrack]]:
     global relay, webcam
 
     if play_from:
+        # If a file name was given, play from that file.
         player = MediaPlayer(play_from, decode=decode)
         return player.audio, player.video
     else:
+        # Otherwise, play from the system's default webcam.
+        #
+        # In order to serve the same webcam to multiple users we make use of
+        # a `MediaRelay`. The webcam will stay open, so it is our responsability
+        # to stop the webcam when the application shuts down in `on_shutdown`.
         options = {"framerate": "30", "video_size": "640x480"}
         if relay is None:
             if platform.system() == "Darwin":
@@ -40,7 +54,7 @@ def create_local_tracks(play_from, decode):
         return None, relay.subscribe(webcam.video)
 
 
-def force_codec(pc, sender, forced_codec):
+def force_codec(pc: RTCPeerConnection, sender: RTCRtpSender, forced_codec: str) -> None:
     kind = forced_codec.split("/")[0]
     codecs = RTCRtpSender.getCapabilities(kind).codecs
     transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
@@ -49,17 +63,17 @@ def force_codec(pc, sender, forced_codec):
     )
 
 
-async def index(request):
+async def index(request: web.Request) -> web.Response:
     content = open(os.path.join(ROOT, "index.html"), "r").read()
     return web.Response(content_type="text/html", text=content)
 
 
-async def javascript(request):
+async def javascript(request: web.Request) -> web.Response:
     content = open(os.path.join(ROOT, "client.js"), "r").read()
     return web.Response(content_type="application/javascript", text=content)
 
 
-async def offer(request):
+async def offer(request: web.Request) -> web.Response:
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
@@ -67,7 +81,7 @@ async def offer(request):
     pcs.add(pc)
 
     @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
+    async def on_connectionstatechange() -> None:
         print("Connection state is %s" % pc.connectionState)
         if pc.connectionState == "failed":
             await pc.close()
@@ -105,14 +119,15 @@ async def offer(request):
     )
 
 
-pcs = set()
-
-
-async def on_shutdown(app):
-    # close peer connections
+async def on_shutdown(app: web.Application) -> None:
+    # Close peer connections.
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
     pcs.clear()
+
+    # If a shared webcam was opened, stop it.
+    if webcam is not None:
+        webcam.video.stop()
 
 
 if __name__ == "__main__":
