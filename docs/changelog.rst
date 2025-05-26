@@ -3,6 +3,21 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.13.0
+------
+
+ * Add support for `G.722` audio codec.
+ * Handle undecodable VP8 packages as was done prior to release 1.12.0.
+ * Limit the number of threads used for VP8 encoding as was done prior to
+   release 1.12.0.
+ * Allow calling :meth:`RTCPeerConnection.setLocalDescription` with no argument
+   to implicitly create an offer or answer as needed.
+ * Allow calling :meth:`RTCPeerConnection.addIceCandidate` with `None` argument
+   to signal remote end-of-candidates.
+ * Support creating offers without media or data channels.
+ * Reject STUN URLs containing a "transport" query parameter.
+ * Ensure the `webcam` example shuts down cleanly on `KeyboardInterrupt`.
+
 1.12.0
 ------
 
