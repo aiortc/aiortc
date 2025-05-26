@@ -763,7 +763,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         :param sessionDescription: An :class:`RTCSessionDescription` generated
                                     by :meth:`createOffer` or :meth:`createAnswer()`
-                                    or None to implicitly create an offer or create
+                                    or `None` to implicitly create an offer or create
                                     an answer, as needed.
         """
         # check state is valid
