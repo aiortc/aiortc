@@ -27,7 +27,6 @@ classifiers = [
 dependencies = [
     "aioice>=0.10.1,<1.0.0",
     "av>=14.0.0,<15.0.0",
-    "cffi>=1.0.0",
     "cryptography>=44.0.0",
     "google-crc32c>=1.1",
     "pyee>=13.0.0",
@@ -79,5 +78,4 @@ known-third-party = ["aiortc"]
 version = {attr = "aiortc.__version__"}
 
 [tool.setuptools.packages.find]
-exclude = ["_cffi_src"]
 where = ["src"]
