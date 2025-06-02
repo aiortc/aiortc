@@ -23,6 +23,24 @@ class RTCIceServer:
     credentialType: str = "password"
 
 
+@dataclass
+class RTCSocks5Proxy:
+    """
+    The :class:`RTCSocks5Proxy` dictionary defines how to connect to a
+    SOCKS5 proxy server. It includes the server address and the necessary 
+    credentials, if any, to authenticate with the server.
+    """
+
+    host: str
+    "The hostname or IP address of the SOCKS5 proxy server."
+    port: int
+    "The port of the SOCKS5 proxy server."
+    username: Optional[str] = None
+    "The username to use during authentication (if required)."
+    password: Optional[str] = None
+    "The password to use during authentication (if required)."
+
+
 class RTCBundlePolicy(enum.Enum):
     """
     The :class:`RTCBundlePolicy` affects which media tracks are negotiated if
@@ -64,3 +82,6 @@ class RTCConfiguration:
 
     bundlePolicy: RTCBundlePolicy = RTCBundlePolicy.BALANCED
     "The media-bundling policy to use when gathering ICE candidates."
+    
+    socks5Proxy: Optional[RTCSocks5Proxy] = None
+    "A :class:`RTCSocks5Proxy` object to configure a SOCKS5 proxy for all UDP traffic."
