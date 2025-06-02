@@ -9,7 +9,7 @@ from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer, RTCSocks5Proxy
-from .socks5 import enable_socks5_support, create_socks5_proxy_config
+from .socks5 import create_socks5_proxy_config, enable_socks5_support, log_socks5_configuration
 
 # See https://datatracker.ietf.org/doc/html/rfc7064
 # transport is not defined by RFC 7064 and rejected by browsers.
@@ -136,12 +136,7 @@ def connection_kwargs(servers: list[RTCIceServer], socks5_proxy: Optional[RTCSoc
 
     # Add SOCKS5 proxy configuration if provided
     if socks5_proxy is not None:
-        kwargs["socks5_proxy"] = create_socks5_proxy_config(
-            host=socks5_proxy.host,
-            port=socks5_proxy.port,
-            username=socks5_proxy.username,
-            password=socks5_proxy.password,
-        )
+        kwargs["socks5_proxy"] = create_socks5_proxy_config(socks5_proxy)
 
     return kwargs
 
@@ -204,6 +199,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
         # Enable SOCKS5 support if a proxy is configured
         if socks5Proxy is not None:
             enable_socks5_support()
+            log_socks5_configuration(socks5Proxy)
             
         ice_kwargs = connection_kwargs(iceServers, socks5Proxy)
 
