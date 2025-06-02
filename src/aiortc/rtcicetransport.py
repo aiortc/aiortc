@@ -8,18 +8,17 @@ from aioice import Candidate, Connection, ConnectionClosed
 from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
-from .rtcconfiguration import RTCIceServer
+from .rtcconfiguration import RTCIceServer, RTCSocks5Proxy
+from .socks5 import enable_socks5_support, create_socks5_proxy_config
 
 # See https://datatracker.ietf.org/doc/html/rfc7064
 # transport is not defined by RFC 7064 and rejected by browsers.
 STUN_REGEX = re.compile(
-    r"(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?"
-    r"(\?transport=(?P<transport>.*))?"
+    r"(?P<scheme>stun|stuns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?(\?transport=(?P<transport>.*))?"
 )
 # See https://datatracker.ietf.org/doc/html/rfc7065
 TURN_REGEX = re.compile(
-    r"(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?"
-    r"(\?transport=(?P<transport>.*))?"
+    r"(?P<scheme>turn|turns)\:(?P<host>[^?:]+)(\:(?P<port>[0-9]+?))?(\?transport=(?P<transport>.*))?"
 )
 
 logger = logging.getLogger(__name__)
@@ -93,7 +92,7 @@ def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
     )
 
 
-def connection_kwargs(servers: list[RTCIceServer]) -> dict[str, Any]:
+def connection_kwargs(servers: list[RTCIceServer], socks5_proxy: Optional[RTCSocks5Proxy] = None) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
 
     for server in servers:
@@ -134,6 +133,15 @@ def connection_kwargs(servers: list[RTCIceServer]) -> dict[str, Any]:
                 kwargs["turn_transport"] = parsed["transport"]
                 kwargs["turn_username"] = server.username
                 kwargs["turn_password"] = server.credential
+
+    # Add SOCKS5 proxy configuration if provided
+    if socks5_proxy is not None:
+        kwargs["socks5_proxy"] = create_socks5_proxy_config(
+            host=socks5_proxy.host,
+            port=socks5_proxy.port,
+            username=socks5_proxy.username,
+            password=socks5_proxy.password,
+        )
 
     return kwargs
 
@@ -186,12 +194,18 @@ class RTCIceGatherer(AsyncIOEventEmitter):
         iceServers: Optional[list[RTCIceServer]] = None,
         local_username: Optional[str] = None,
         local_password: Optional[str] = None,
+        socks5Proxy: Optional[RTCSocks5Proxy] = None,
     ) -> None:
         super().__init__()
 
         if iceServers is None:
             iceServers = self.getDefaultIceServers()
-        ice_kwargs = connection_kwargs(iceServers)
+        
+        # Enable SOCKS5 support if a proxy is configured
+        if socks5Proxy is not None:
+            enable_socks5_support()
+            
+        ice_kwargs = connection_kwargs(iceServers, socks5Proxy)
 
         self._connection = Connection(ice_controlling=False, **ice_kwargs)
         self._remote_candidates_end = False
