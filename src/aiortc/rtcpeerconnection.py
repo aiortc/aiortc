@@ -434,15 +434,16 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             await iceTransport.addRemoteCandidate(candidate)
 
         # Update the remote description.
-        media = self.__remoteDescription().media
-        for sdp_m_line_index in range(0, len(media)):
-            if candidate is None:
-                media[sdp_m_line_index].ice_candidates_complete = True
-            elif (
-                candidate.sdpMLineIndex == sdp_m_line_index
-                or candidate.sdpMid == media[sdp_m_line_index].rtp.muxId
-            ):
-                media[sdp_m_line_index].ice_candidates.append(candidate)
+        if self.__remoteDescription():
+            media = self.__remoteDescription().media
+            for sdp_m_line_index in range(0, len(media)):
+                if candidate is None:
+                    media[sdp_m_line_index].ice_candidates_complete = True
+                elif (
+                    candidate.sdpMLineIndex == sdp_m_line_index
+                    or candidate.sdpMid == media[sdp_m_line_index].rtp.muxId
+                ):
+                    media[sdp_m_line_index].ice_candidates.append(candidate)
 
     def addTrack(self, track: MediaStreamTrack) -> RTCRtpSender:
         """
