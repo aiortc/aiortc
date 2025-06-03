@@ -433,16 +433,23 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             iceTransport = self.__sctp.transport.transport
             await iceTransport.addRemoteCandidate(candidate)
 
-        # Update the remote description.
-        media = self.__remoteDescription().media
-        for sdp_m_line_index in range(0, len(media)):
-            if candidate is None:
-                media[sdp_m_line_index].ice_candidates_complete = True
-            elif (
-                candidate.sdpMLineIndex == sdp_m_line_index
-                or candidate.sdpMid == media[sdp_m_line_index].rtp.muxId
-            ):
-                media[sdp_m_line_index].ice_candidates.append(candidate)
+        # Update the remote description if it exists.
+        # The spec forbids adding candidates prior to setRemoteDescription
+        # but this used to work in previous versions.
+        if remote_description := self.__remoteDescription():
+            media = remote_description.media
+            for sdp_m_line_index in range(0, len(media)):
+                if candidate is None:
+                    media[sdp_m_line_index].ice_candidates_complete = True
+                elif (
+                    candidate.sdpMLineIndex == sdp_m_line_index
+                    or candidate.sdpMid == media[sdp_m_line_index].rtp.muxId
+                ):
+                    media[sdp_m_line_index].ice_candidates.append(candidate)
+        else:
+            logger.warning(
+                "RTCPeerConnection addIceCandidate called without remote description"
+            )
 
     def addTrack(self, track: MediaStreamTrack) -> RTCRtpSender:
         """
