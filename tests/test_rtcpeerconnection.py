@@ -640,6 +640,32 @@ class RTCPeerConnectionTest(TestCase):
         self.assertTrue("a=end-of-candidates" in pc.remoteDescription.sdp)
 
     @asynctest
+    async def test_addIceCandidate_before_setremotedescription(self) -> None:
+        pc = RTCPeerConnection()
+        pc.createDataChannel("test")
+        offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        candidate_with_index = RTCIceCandidate(
+            component=1,
+            foundation="0",
+            ip="192.168.99.7",
+            port=33543,
+            priority=2122252543,
+            protocol="UDP",
+            type="host",
+            sdpMLineIndex=0,
+        )
+        with self.assertLogs("aiortc.rtcpeerconnection", level="WARN") as logger:
+            await pc.addIceCandidate(candidate_with_index)
+            self.assertEqual(
+                logger.output,
+                [
+                    "WARNING:aiortc.rtcpeerconnection:RTCPeerConnection "
+                    "addIceCandidate called without remote description"
+                ],
+            )
+
+    @asynctest
     async def test_addTrack_audio(self) -> None:
         pc = RTCPeerConnection()
 
