@@ -49,7 +49,7 @@ from .utils import uint16_add, uint16_gt
 logger = logging.getLogger(__name__)
 
 
-def decoder_worker(loop, input_q, output_q, current_frame_queue:asyncio.Queue):
+def decoder_worker(loop, input_q, output_q, current_frame_queue: asyncio.Queue):
     codec_name = None
     decoder = None
 
@@ -69,7 +69,9 @@ def decoder_worker(loop, input_q, output_q, current_frame_queue:asyncio.Queue):
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
             if current_frame_queue.qsize() >= current_frame_queue.maxsize:
-                asyncio.run_coroutine_threadsafe(current_frame_queue.get(), loop).result()
+                asyncio.run_coroutine_threadsafe(
+                    current_frame_queue.get(), loop
+                ).result()
                 current_frame_queue.task_done()
             asyncio.run_coroutine_threadsafe(current_frame_queue.put(frame), loop)
 
@@ -190,7 +192,9 @@ class StreamStatistics:
 
 
 class RemoteStreamTrack(MediaStreamTrack):
-    def __init__(self, kind: str, id: Optional[str] = None, track_buffer_size: Optional[int] = 5) -> None:
+    def __init__(
+        self, kind: str, id: Optional[str] = None, track_buffer_size: Optional[int] = 5
+    ) -> None:
         super().__init__()
         self.kind = kind
         track_buffer_size = track_buffer_size if track_buffer_size is not None else 5
@@ -214,6 +218,7 @@ class RemoteStreamTrack(MediaStreamTrack):
 
     async def current_frame(self):
         return await self._current_frame_queue.get()
+
 
 class TimestampMapper:
     def __init__(self) -> None:
@@ -396,7 +401,7 @@ class RTCRtpReceiver:
                     asyncio.get_event_loop(),
                     self.__decoder_queue,
                     self._track._queue,
-                    self._track._current_frame_queue
+                    self._track._current_frame_queue,
                 ),
             )
             self.__decoder_thread.start()
@@ -515,6 +520,7 @@ class RTCRtpReceiver:
                 return
 
             packet = unwrap_rtx(packet, payload_type=apt, ssrc=original_ssrc)
+            codec = self.__codecs[apt]
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
