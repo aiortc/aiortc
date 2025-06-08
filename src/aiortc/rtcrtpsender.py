@@ -299,6 +299,9 @@ class RTCRtpSender:
         if not self._enabled:
             return None
 
+        if not data:
+            return None
+
         audio_level = None
 
         if self.__encoder is None:

@@ -231,13 +231,13 @@ class PlayerStreamTrack(MediaStreamTrack):
 
     async def recv(self) -> Union[Frame, Packet]:
         if self.readyState != "live":
-            raise MediaStreamError
+            raise MediaStreamError("PlayerStreamTrack is not in 'live' state")
 
         self._player._start(self)
         data = await self._queue.get()
         if data is None:
             self.stop()
-            raise MediaStreamError
+            raise MediaStreamError("PlayerStreamTrack received end of stream")
         if isinstance(data, Frame):
             data_time = data.time
         elif isinstance(data, Packet):
@@ -537,7 +537,7 @@ class RelayStreamTrack(MediaStreamTrack):
 
     async def recv(self) -> Union[Frame, Packet]:
         if self.readyState != "live":
-            raise MediaStreamError
+            raise MediaStreamError("RelayStreamTrack is not in 'live' state")
 
         self._relay._start(self)
 
@@ -549,7 +549,7 @@ class RelayStreamTrack(MediaStreamTrack):
 
         if self._frame is None:
             self.stop()
-            raise MediaStreamError
+            raise MediaStreamError("RelayStreamTrack received end of stream")
         return self._frame
 
     def stop(self) -> None:

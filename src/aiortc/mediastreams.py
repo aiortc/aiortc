@@ -86,7 +86,7 @@ class AudioStreamTrack(MediaStreamTrack):
         :class:`AudioStreamTrack` to provide a useful implementation.
         """
         if self.readyState != "live":
-            raise MediaStreamError
+            raise MediaStreamError("AudioStreamTrack is not in 'live' state")
 
         sample_rate = 8000
         samples = int(AUDIO_PTIME * sample_rate)
@@ -120,7 +120,7 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def next_timestamp(self) -> tuple[int, fractions.Fraction]:
         if self.readyState != "live":
-            raise MediaStreamError
+            raise MediaStreamError("VideoStreamTrack is not in 'live' state")
 
         if hasattr(self, "_timestamp"):
             self._timestamp += int(VIDEO_PTIME * VIDEO_CLOCK_RATE)

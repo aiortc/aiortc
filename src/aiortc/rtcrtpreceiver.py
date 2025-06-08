@@ -201,12 +201,12 @@ class RemoteStreamTrack(MediaStreamTrack):
         Receive the next frame.
         """
         if self.readyState != "live":
-            raise MediaStreamError
+            raise MediaStreamError("RemoteStreamTrack is not in 'live' state")
 
         frame = await self._queue.get()
         if frame is None:
             self.stop()
-            raise MediaStreamError
+            raise MediaStreamError("RemoteStreamTrack is not in 'live' state")
         return frame
 
 
