@@ -450,7 +450,7 @@ class MediaRecorder:
                 codec_name = "pcm_s16le"
             elif self.__container.format.name == "mp3":
                 codec_name = "mp3"
-            elif self.__container.format.name == "ogg":
+            elif self.__container.format.name in ("ogg", "opus", "webm"):
                 codec_name = "libopus"
             else:
                 codec_name = "aac"
@@ -459,6 +459,9 @@ class MediaRecorder:
             if self.__container.format.name == "image2":
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"
+            elif self.__container.format.name == "webm":
+                stream = self.__container.add_stream("libvpx", rate=30)
+                stream.pix_fmt = "yuv420p"
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
