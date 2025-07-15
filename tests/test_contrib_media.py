@@ -19,6 +19,24 @@ from .codecs import CodecTestCase
 from .utils import asynctest
 
 
+def get_stream_duration(stream: av.stream.Stream) -> float:
+    """
+    Return the stream's duration is seconds.
+    """
+    # For WebM containers, the duration is not set on the stream,
+    # we need to check the metadata instead.
+    if stream.duration is None:
+        duration_str = stream.metadata.get("DURATION", "0")
+        # Parse 'HH:MM:SS.sssssssss' format to seconds.
+        try:
+            h, m, s = duration_str.split(":")
+            return float(h) * 3600 + float(m) * 60 + float(s)
+        except Exception:
+            return 0.0
+    else:
+        return float(stream.duration * stream.time_base)
+
+
 class VideoStreamTrackUhd(VideoStreamTrack):
     async def recv(self) -> av.VideoFrame:
         pts, time_base = await self.next_timestamp()
@@ -110,6 +128,9 @@ class MediaTestCase(CodecTestCase):
             stream.pix_fmt = "rgb24"
         elif name.endswith(".ts"):
             stream = container.add_stream("h264", rate=rate)
+        elif name.endswith(".webm"):
+            stream = container.add_stream("libvpx", rate=rate)
+            stream.pix_fmt = "yuv420p"
         else:
             assert name.endswith(".mp4")
             stream = container.add_stream("mpeg4", rate=rate)
@@ -628,6 +649,24 @@ class MediaPlayerTest(MediaTestCase):
                 await player.video.recv()
             self.assertEqual(player.video.readyState, "ended")
 
+    @asynctest
+    async def test_video_file_webm(self) -> None:
+        path = self.create_video_file("test.webm", duration=3)
+        player = self.createMediaPlayer(path)
+
+        # check tracks
+        self.assertIsNone(player.audio)
+        self.assertIsNotNone(player.video)
+
+        # read all frames
+        self.assertEqual(player.video.readyState, "live")
+        for i in range(90):
+            frame = await player.video.recv()
+            self.assertVideo(frame)
+        with self.assertRaises(MediaStreamError):
+            await player.video.recv()
+        self.assertEqual(player.video.readyState, "ended")
+
 
 class MediaPlayerNoDecodeTest(MediaPlayerTest):
     def assertAudio(self, packet: Any) -> None:
@@ -645,6 +684,12 @@ class MediaPlayerNoDecodeTest(MediaPlayerTest):
 
 
 class MediaRecorderTest(MediaTestCase):
+    def assertAudioStream(self, stream: av.stream.Stream, codec_name: str) -> None:
+        assert isinstance(stream, av.AudioStream)
+        self.assertEqual(stream.codec.name, codec_name)
+
+        self.assertGreater(get_stream_duration(stream), 0)
+
     def assertVideoStream(
         self,
         stream: av.stream.Stream,
@@ -654,7 +699,9 @@ class MediaRecorderTest(MediaTestCase):
     ) -> None:
         assert isinstance(stream, av.VideoStream)
         self.assertEqual(stream.codec.name, codec_name)
-        self.assertGreater(float(stream.duration * stream.time_base), 0)
+
+        self.assertGreater(get_stream_duration(stream), 0)
+
         self.assertEqual(stream.width, width)
         self.assertEqual(stream.height, height)
 
@@ -668,12 +715,10 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
         # Check audio recording.
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 1)
-        self.assertIn(container.streams[0].codec.name, codec_names)
-        self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 0
-        )
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 1)
+            self.assertIn(container.streams[0].codec.name, codec_names)
+            self.assertGreater(get_stream_duration(container.streams[0]), 0)
 
     @asynctest
     async def test_audio_mp3(self) -> None:
@@ -701,7 +746,11 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
     @asynctest
-    async def test_audio_and_video(self) -> None:
+    async def test_audio_webm(self) -> None:
+        await self.check_audio_recording("test.webm", {"opus"})
+
+    @asynctest
+    async def test_audio_and_video_mp4(self) -> None:
         path = self.temporary_path("test.mp4")
         recorder = MediaRecorder(path)
         recorder.addTrack(AudioStreamTrack())
@@ -711,15 +760,28 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
         # check output media
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 2)
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 2)
 
-        self.assertEqual(container.streams[0].codec.name, "aac")
-        self.assertGreater(
-            float(container.streams[0].duration * container.streams[0].time_base), 0
-        )
+            self.assertAudioStream(container.streams[0], "aac")
+            self.assertVideoStream(container.streams[1], "h264")
 
-        self.assertVideoStream(container.streams[1], "h264")
+    @asynctest
+    async def test_audio_and_video_webm(self) -> None:
+        path = self.temporary_path("test.webm")
+        recorder = MediaRecorder(path)
+        recorder.addTrack(AudioStreamTrack())
+        recorder.addTrack(VideoStreamTrack())
+        await recorder.start()
+        await asyncio.sleep(2)
+        await recorder.stop()
+
+        # check output media
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 2)
+
+            self.assertAudioStream(container.streams[0], "opus")
+            self.assertVideoStream(container.streams[1], "vp8")
 
     @asynctest
     async def test_video_png(self) -> None:
@@ -731,9 +793,9 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
         # check output media
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 1)
-        self.assertVideoStream(container.streams[0], "png")
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 1)
+            self.assertVideoStream(container.streams[0], "png")
 
     @asynctest
     async def test_video_mp4(self) -> None:
@@ -745,9 +807,9 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
         # check output media
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 1)
-        self.assertVideoStream(container.streams[0], "h264")
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 1)
+            self.assertVideoStream(container.streams[0], "h264")
 
     @asynctest
     async def test_video_mp4_uhd(self) -> None:
@@ -759,6 +821,22 @@ class MediaRecorderTest(MediaTestCase):
         await recorder.stop()
 
         # check output media
-        container = av.open(path, "r")
-        self.assertEqual(len(container.streams), 1)
-        self.assertVideoStream(container.streams[0], "h264", width=3840, height=2160)
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 1)
+            self.assertVideoStream(
+                container.streams[0], "h264", width=3840, height=2160
+            )
+
+    @asynctest
+    async def test_video_webm(self) -> None:
+        path = self.temporary_path("test.webm")
+        recorder = MediaRecorder(path)
+        recorder.addTrack(VideoStreamTrack())
+        await recorder.start()
+        await asyncio.sleep(2)
+        await recorder.stop()
+
+        # check output media
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 1)
+            self.assertVideoStream(container.streams[0], "vp8")
