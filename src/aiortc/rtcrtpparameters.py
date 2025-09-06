@@ -46,6 +46,8 @@ class RTCRtpCodecParameters:
     "Transport layer and codec-specific feedback messages for this codec."
     parameters: ParametersDict = field(default_factory=dict)
     "Codec-specific parameters available for signaling."
+    codec_options: ParametersDict = field(default_factory=dict)
+    "Internal encoder configuration options (not signaled to remote peer)."
 
     @property
     def name(self) -> str:
