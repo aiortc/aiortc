@@ -7,6 +7,8 @@ from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.vpx import (
     Vp8Decoder,
     Vp8Encoder,
+    Vp9Decoder,
+    Vp9Encoder,
     VpxPayloadDescriptor,
     number_of_threads,
 )
@@ -17,6 +19,10 @@ from .codecs import CodecTestCase
 
 VP8_CODEC = RTCRtpCodecParameters(
     mimeType="video/VP8", clockRate=90000, payloadType=100
+)
+
+VP9_CODEC = RTCRtpCodecParameters(
+    mimeType="video/VP9", clockRate=90000, payloadType=101
 )
 
 
@@ -267,3 +273,107 @@ class Vp8Test(CodecTestCase):
 
     def test_roundtrip_320_240(self) -> None:
         self.roundtrip_video(VP8_CODEC, 320, 240)
+
+
+class Vp9Test(CodecTestCase):
+    def test_decoder(self) -> None:
+        decoder = get_decoder(VP9_CODEC)
+        self.assertIsInstance(decoder, Vp9Decoder)
+
+        # decode junk
+        with redirect_stderr(io.StringIO()):
+            frames = decoder.decode(JitterFrame(data=b"123", timestamp=0))
+        self.assertEqual(frames, [])
+
+    def test_encoder(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+        # change resolution
+        frame = self.create_video_frame(width=320, height=240, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
+
+    def test_encoder_rgb(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0, format="rgb24")
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+    def test_encoder_pack(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+        encoder.picture_id = 0
+
+        packet = self.create_packet(payload=b"\x00", pts=1)
+        payloads, timestamp = encoder.pack(packet)
+        self.assertEqual(payloads, [b"\x90\x80\x00\x00"])
+        self.assertEqual(timestamp, 90)
+
+    def test_encoder_large(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+
+        # first keyframe
+        frame = self.create_video_frame(width=2560, height=1920, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)  # VP9 compresses blank frames very efficiently
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+        # delta frame
+        frame = self.create_video_frame(width=2560, height=1920, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
+
+        # force keyframe
+        frame = self.create_video_frame(width=2560, height=1920, pts=6000)
+        payloads, timestamp = encoder.encode(frame, force_keyframe=True)
+        self.assertEqual(len(payloads), 1)  # VP9 compresses blank frames very efficiently
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertAlmostEqual(timestamp, 6000, delta=1)
+
+    def test_encoder_target_bitrate(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+        self.assertEqual(encoder.target_bitrate, 500000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertEqual(timestamp, 0)
+
+        # change target bitrate
+        encoder.target_bitrate = 600000
+        self.assertEqual(encoder.target_bitrate, 600000)
+
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+        self.assertTrue(len(payloads[0]) < 1300)
+        self.assertAlmostEqual(timestamp, 3000, delta=1)
+
+    def test_roundtrip_1280_720(self) -> None:
+        self.roundtrip_video(VP9_CODEC, 1280, 720)
+
+    def test_roundtrip_960_540(self) -> None:
+        self.roundtrip_video(VP9_CODEC, 960, 540)
+
+    def test_roundtrip_640_480(self) -> None:
+        self.roundtrip_video(VP9_CODEC, 640, 480)
+
+    def test_roundtrip_640_480_time_base(self) -> None:
+        self.roundtrip_video(VP9_CODEC, 640, 480, time_base=fractions.Fraction(1, 9000))
+
+    def test_roundtrip_320_240(self) -> None:
+        self.roundtrip_video(VP9_CODEC, 320, 240)
