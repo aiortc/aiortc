@@ -65,6 +65,9 @@ def filter_preferred_codecs(
                 codec.mimeType.lower() == pref.mimeType.lower()
                 and codec.parameters == pref.parameters
             ):
+                # Copy codec_options from capability to parameters
+                if hasattr(pref, 'codec_options') and pref.codec_options:
+                    codec.codec_options = pref.codec_options.copy()
                 filtered.append(codec)
 
                 # add corresponding RTX

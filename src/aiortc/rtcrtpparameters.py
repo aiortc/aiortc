@@ -19,6 +19,8 @@ class RTCRtpCodecCapability:
     "The number of channels supported (e.g. two for stereo)."
     parameters: ParametersDict = field(default_factory=dict)
     "Codec-specific parameters available for signaling."
+    codec_options: ParametersDict = field(default_factory=dict)
+    "Internal encoder configuration options (not signaled to remote peer)."
 
     @property
     def name(self) -> str:

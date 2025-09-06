@@ -182,10 +182,11 @@ class Vp8Decoder(Decoder):
 
 
 class Vp8Encoder(Encoder):
-    def __init__(self) -> None:
+    def __init__(self, *, codec_params: Optional[dict] = None) -> None:
         self.codec: Optional[VideoCodecContext] = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
         self.__target_bitrate = DEFAULT_BITRATE
+        self.codec_params = codec_params or {}
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -208,14 +209,18 @@ class Vp8Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.I
 
         if self.codec is None:
-            self.codec = av.CodecContext.create("libvpx", "w")
+            self.codec = av.CodecContext.create(
+                self.codec_params.get("codec", "libvpx"),
+                "w",
+            )
             self.codec.width = frame.width
             self.codec.height = frame.height
             self.codec.bit_rate = self.target_bitrate
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.gop_size = 3000  # kf_max_dist
-            self.codec.qmin = 2  # rc_min_quantizer
-            self.codec.qmax = 56  # rc_max_quantizer
+            self.codec.pix_fmt = self.codec_params.get("pix_fmt", "yuv420p")
+            self.codec.gop_size = self.codec_params.get("gop_size", 3000)  # kf_max_dist
+            self.codec.qmin = self.codec_params.get("qmin", 2)  # rc_min_quantizer
+            self.codec.qmax = self.codec_params.get("qmax", 56)  # rc_max_quantizer
+
             self.codec.options = {
                 # We want rc_buf_sz = 1000 and FFmpeg sets:
                 #   rc_buf_sz =  bufsize * 1000 / bit_rate
@@ -231,9 +236,17 @@ class Vp8Encoder(Encoder):
                 "partitions": "0",  # VP8_ONE_TOKENPARTITION
                 "static-thresh": "1",
                 "undershoot-pct": "100",
+            } | {
+                key: value
+                for key, value in self.codec_params.items()
+                if key not in [
+                    "codec", "pix_fmt", "gop_size", "qmin", "qmax", "number_of_threads",
+                ]
             }
-            self.codec.thread_count = number_of_threads(
-                frame.width * frame.height, multiprocessing.cpu_count()
+            self.codec.thread_count = self.codec_params.get("number_of_threads",
+                number_of_threads(
+                    frame.width * frame.height, multiprocessing.cpu_count()
+                )
             )
 
         data_to_send = b""
@@ -297,10 +310,11 @@ class Vp9Decoder(Decoder):
 
 
 class Vp9Encoder(Encoder):
-    def __init__(self) -> None:
+    def __init__(self, *, codec_params: Optional[dict] = None) -> None:
         self.codec: Optional[VideoCodecContext] = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
         self.__target_bitrate = DEFAULT_BITRATE
+        self.codec_params = codec_params or {}
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -323,14 +337,18 @@ class Vp9Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.I
 
         if self.codec is None:
-            self.codec = av.CodecContext.create("libvpx-vp9", "w")
+            self.codec = av.CodecContext.create(
+                self.codec_params.get("codec", "libvpx-vp9"),
+                "w",
+            )
             self.codec.width = frame.width
             self.codec.height = frame.height
             self.codec.bit_rate = self.target_bitrate
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.gop_size = 3000  # kf_max_dist
-            self.codec.qmin = 0  # rc_min_quantizer
-            self.codec.qmax = 63  # rc_max_quantizer
+            self.codec.pix_fmt = self.codec_params.get("pix_fmt", "yuv420p")
+            self.codec.gop_size = self.codec_params.get("gop_size", 3000)  # kf_max_dist
+            self.codec.qmin = self.codec_params.get("qmin", 0)  # rc_min_quantizer
+            self.codec.qmax = self.codec_params.get("qmax", 63)  # rc_max_quantizer
+
             self.codec.options = {
                 # We want rc_buf_sz = 1000 and FFmpeg sets:
                 #   rc_buf_sz =  bufsize * 1000 / bit_rate
@@ -345,9 +363,17 @@ class Vp9Encoder(Encoder):
                 "tile-rows": "0",     # log2 of number of tile rows (0 = 1 tile)
                 "frame-parallel": "1",
                 "aq-mode": "0",       # adaptive quantization mode (0 = none)
+            } | {
+                key: value
+                for key, value in self.codec_params.items()
+                if key not in [
+                    "codec", "pix_fmt", "gop_size", "qmin", "qmax", "number_of_threads",
+                ]
             }
-            self.codec.thread_count = number_of_threads(
-                frame.width * frame.height, multiprocessing.cpu_count()
+            self.codec.thread_count = self.codec_params.get("number_of_threads",
+                number_of_threads(
+                    frame.width * frame.height, multiprocessing.cpu_count()
+                )
             )
 
         data_to_send = b""

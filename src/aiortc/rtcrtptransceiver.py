@@ -114,9 +114,12 @@ class RTCRtpTransceiver:
         capabilities = get_capabilities(self.kind).codecs
         unique: list[RTCRtpCodecCapability] = []
         for codec in reversed(codecs):
-            if codec not in capabilities:
-                raise ValueError("Codec is not in capabilities")
-            if codec not in unique:
+            from copy import deepcopy
+            codec_no_options = deepcopy(codec)
+            codec_no_options.codec_options = {}
+            if codec_no_options not in capabilities:
+                raise ValueError(f"Codec {codec_no_options} is not in capabilities {capabilities}")
+            if codec_no_options not in unique:
                 unique.insert(0, codec)
         self._preferred_codecs = unique
 
