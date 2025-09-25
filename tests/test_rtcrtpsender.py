@@ -17,6 +17,7 @@ from aiortc.rtcrtpparameters import (
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.rtp import (
     RTCP_PSFB_APP,
+    RTCP_PSFB_FIR,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
     RtcpPsfbPacket,
@@ -178,9 +179,26 @@ class RTCRtpSenderTest(TestCase):
 
             await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
 
-            # receive RTCP feedback NACK
+            # receive RTCP feedback PLI
             packet = RtcpPsfbPacket(
                 fmt=RTCP_PSFB_PLI, ssrc=1234, media_ssrc=sender._ssrc
+            )
+            await sender._handle_rtcp_packet(packet)
+
+            # clean shutdown
+            await sender.stop()
+
+    @asynctest
+    async def test_handle_rtcp_fir(self) -> None:
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            self.assertEqual(sender.kind, "video")
+
+            await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
+
+            # receive RTCP feedback FIR
+            packet = RtcpPsfbPacket(
+                fmt=RTCP_PSFB_FIR, ssrc=1234, media_ssrc=sender._ssrc
             )
             await sender._handle_rtcp_packet(packet)
 
