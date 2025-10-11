@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from struct import pack, unpack, unpack_from
 from typing import Any, Optional, Union
 
-from av import AudioFrame
+# from av import AudioFrame
 
 from .rtcrtpparameters import RTCRtpParameters
 
