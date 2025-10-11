@@ -1,5 +1,6 @@
 
 from ..rtcrtpparameters import (
+    RTCRtpCapabilities,
     RTCRtpCodecParameters,
     RTCRtpHeaderExtensionParameters,
     RTCRtpCodecCapability,
