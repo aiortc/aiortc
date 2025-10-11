@@ -1,3 +1,4 @@
+from typing import Union
 
 from ..rtcrtpparameters import (
     RTCRtpCapabilities,
@@ -84,7 +85,7 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
         return Vp8Encoder()
     else:
         raise ValueError(f"No encoder found for MIME type `{mimeType}`")
-        
+
 # The clockrate for G.722 is 8kHz even though the sampling rate is 16kHz.
 # See https://datatracker.ietf.org/doc/html/rfc3551
 G722_CODEC = RTCRtpCodecParameters(
