@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Union
 
 # from av import AudioFrame, VideoFrame
-from av.frame import Frame
+# from av.frame import Frame
 from av.packet import Packet
 from pyee.asyncio import AsyncIOEventEmitter
 
@@ -52,7 +52,7 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
         return "ended" if self.__ended else "live"
 
     @abstractmethod
-    async def recv(self) -> Union[Frame, Packet]:
+    async def recv(self) -> Union["Frame", Packet]:
         """
         Receive the next :class:`~av.audio.frame.AudioFrame`,
         :class:`~av.video.frame.VideoFrame` or :class:`~av.packet.Packet`
@@ -77,7 +77,7 @@ class AudioStreamTrack(MediaStreamTrack):
     _start: float
     _timestamp: int
 
-    async def recv(self) -> Frame:
+    async def recv(self) -> "Frame":
         """
         Receive the next :class:`~av.audio.frame.AudioFrame`.
 
@@ -131,7 +131,7 @@ class VideoStreamTrack(MediaStreamTrack):
             self._timestamp = 0
         return self._timestamp, VIDEO_TIME_BASE
 
-    async def recv(self) -> Frame:
+    async def recv(self) -> "Frame":
         """
         Receive the next :class:`~av.video.frame.VideoFrame`.
 
