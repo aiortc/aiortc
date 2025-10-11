@@ -7,8 +7,8 @@ import uuid
 from collections.abc import Callable
 from typing import Optional, Union
 
-from av import AudioFrame
-from av.frame import Frame
+# from av import AudioFrame
+# from av.frame import Frame
 
 from . import clock, rtp
 # from .codecs import get_capabilities, get_encoder, is_rtx
