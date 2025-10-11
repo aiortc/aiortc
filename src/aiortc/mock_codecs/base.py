@@ -5,7 +5,7 @@ from ..jitterbuffer import JitterFrame
 
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
-    def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
+    def decode(self, encoded_frame: JitterFrame) -> list["Frame"]:
         pass  # pragma: no cover
 
 class Encoder(metaclass=ABCMeta):
