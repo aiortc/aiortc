@@ -26,6 +26,31 @@
    :target: https://aiortc.readthedocs.io/
    :alt: Documentation
 
+
+James' aiortc fork for Beaglebone Boards
+----------------------------------------
+
+
+```
+sudo apt install libffi-dev
+```
+
+To build Pylibsrtp, I also had to first:
+
+```
+sudo apt install libsrtp2-dev
+``` 
+
+as in its docs, and also:
+
+```
+sudo apt install libssl-dev
+```
+
+
+
+
+
 What is ``aiortc``?
 -------------------
 
