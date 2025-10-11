@@ -84,6 +84,18 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
         return Vp8Encoder()
     else:
         raise ValueError(f"No encoder found for MIME type `{mimeType}`")
+        
+# The clockrate for G.722 is 8kHz even though the sampling rate is 16kHz.
+# See https://datatracker.ietf.org/doc/html/rfc3551
+G722_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/G722", clockRate=8000, channels=1, payloadType=9
+)
+PCMU_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
+)
+PCMA_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/PCMA", clockRate=8000, channels=1, payloadType=8
+)
 
 CODECS: dict[str, list[RTCRtpCodecParameters]] = {
     "audio": [
