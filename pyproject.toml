@@ -36,6 +36,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+av = [
+    "av>=14.0.0,<15.0.0",
+]
 dev = [
     "aiohttp>=3.7.0",
     "coverage[toml]>=7.2.2",

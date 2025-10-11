@@ -310,7 +310,7 @@ def pack_header_extensions(extensions: list[tuple[int, bytes]]) -> tuple[int, by
     return extension_profile, extension_value
 
 
-def compute_audio_level_dbov(frame: AudioFrame) -> int:
+def compute_audio_level_dbov(frame: "AudioFrame") -> int:
     """
     Compute the energy level as spelled out in RFC 6465, Appendix A.
     """

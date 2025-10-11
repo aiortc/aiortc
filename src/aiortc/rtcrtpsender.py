@@ -290,40 +290,41 @@ class RTCRtpSender:
     async def _next_encoded_frame(
         self, codec: RTCRtpCodecParameters
     ) -> Optional[RTCEncodedFrame]:
-        # Get [Frame|Packet].
-        data = await self.__track.recv()
+        raise NotImplemented("This fork is an experiment in disabling av!  Use the main aiortc.")
+        # # Get [Frame|Packet].
+        # data = await self.__track.recv()
 
-        # If the sender is disabled, drop the frame instead of encoding it.
-        # We still want to read from the track in order to avoid frames
-        # accumulating in memory.
-        if not self._enabled:
-            return None
+        # # If the sender is disabled, drop the frame instead of encoding it.
+        # # We still want to read from the track in order to avoid frames
+        # # accumulating in memory.
+        # if not self._enabled:
+        #     return None
 
-        audio_level = None
+        # audio_level = None
 
-        if self.__encoder is None:
-            self.__encoder = get_encoder(codec)
+        # if self.__encoder is None:
+        #     self.__encoder = get_encoder(codec)
 
-        if isinstance(data, Frame):
-            # Encode the frame.
-            if isinstance(data, AudioFrame):
-                audio_level = rtp.compute_audio_level_dbov(data)
+        # if isinstance(data, Frame):
+        #     # Encode the frame.
+        #     if isinstance(data, AudioFrame):
+        #         audio_level = rtp.compute_audio_level_dbov(data)
 
-            force_keyframe = self.__force_keyframe
-            self.__force_keyframe = False
-            payloads, timestamp = await self.__loop.run_in_executor(
-                None, self.__encoder.encode, data, force_keyframe
-            )
-        else:
-            # Pack the pre-encoded data.
-            payloads, timestamp = self.__encoder.pack(data)
+        #     force_keyframe = self.__force_keyframe
+        #     self.__force_keyframe = False
+        #     payloads, timestamp = await self.__loop.run_in_executor(
+        #         None, self.__encoder.encode, data, force_keyframe
+        #     )
+        # else:
+        #     # Pack the pre-encoded data.
+        #     payloads, timestamp = self.__encoder.pack(data)
 
-        # If the encoder did not return any payloads, return `None`.
-        # This may be due to a delay caused by resampling.
-        if not payloads:
-            return None
+        # # If the encoder did not return any payloads, return `None`.
+        # # This may be due to a delay caused by resampling.
+        # if not payloads:
+        #     return None
 
-        return RTCEncodedFrame(payloads, timestamp, audio_level)
+        # return RTCEncodedFrame(payloads, timestamp, audio_level)
 
     async def _retransmit(self, sequence_number: int) -> None:
         """

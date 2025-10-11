@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
-from av.frame import Frame
+# from av.frame import Frame
 
 from . import clock
 from .codecs import depayload, get_capabilities, get_decoder, is_rtx
@@ -196,7 +196,7 @@ class RemoteStreamTrack(MediaStreamTrack):
             self._id = id
         self._queue: asyncio.Queue = asyncio.Queue()
 
-    async def recv(self) -> Frame:
+    async def recv(self) -> "Frame":
         """
         Receive the next frame.
         """
