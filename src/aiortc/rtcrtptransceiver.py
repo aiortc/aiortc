@@ -1,7 +1,8 @@
 import logging
 from typing import Optional
 
-from .codecs import get_capabilities
+# from .codecs import get_capabilities
+from .mock_codecs import get_capabilities
 from .rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,

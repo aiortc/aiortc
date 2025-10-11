@@ -11,8 +11,10 @@ from av import AudioFrame
 from av.frame import Frame
 
 from . import clock, rtp
-from .codecs import get_capabilities, get_encoder, is_rtx
-from .codecs.base import Encoder
+# from .codecs import get_capabilities, get_encoder, is_rtx
+# from .codecs.base import Encoder
+from .mock_codecs import get_capabilities, get_encoder, is_rtx
+from .mock_codecs.base import Encoder
 from .exceptions import InvalidStateError
 from .mediastreams import MediaStreamError, MediaStreamTrack
 from .rtcdtlstransport import RTCDtlsTransport

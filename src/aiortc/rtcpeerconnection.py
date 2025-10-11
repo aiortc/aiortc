@@ -7,7 +7,8 @@ from typing import Optional, Union
 from pyee.asyncio import AsyncIOEventEmitter
 
 from . import clock, rtp, sdp
-from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
+# from .codecs import CODECS, HEADER_EXTENSIONS, is_rtx
+from .mock_codecs import CODECS, HEADER_EXTENSIONS, is_rtx
 from .events import RTCTrackEvent
 from .exceptions import (
     InternalError,
