@@ -45,7 +45,7 @@ def get_capabilities(kind: str) -> RTCRtpCapabilities:
     headerExtensions = []
     for extension in HEADER_EXTENSIONS[kind]:
         headerExtensions.append(RTCRtpHeaderExtensionCapability(uri=extension.uri))
-    return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)get_decoder
+    return RTCRtpCapabilities(codecs=codecs, headerExtensions=headerExtensions)
 
 def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
     mimeType = codec.mimeType.lower()
