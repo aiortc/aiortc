@@ -7,7 +7,7 @@ from typing import Union
 
 # from av import AudioFrame, VideoFrame
 # from av.frame import Frame
-from av.packet import Packet
+# from av.packet import Packet
 from pyee.asyncio import AsyncIOEventEmitter
 
 AUDIO_PTIME = 0.020  # 20ms audio packetization
@@ -52,7 +52,7 @@ class MediaStreamTrack(AsyncIOEventEmitter, metaclass=ABCMeta):
         return "ended" if self.__ended else "live"
 
     @abstractmethod
-    async def recv(self) -> Union["Frame", Packet]:
+    async def recv(self) -> Union["Frame", "Packet"]:
         """
         Receive the next :class:`~av.audio.frame.AudioFrame`,
         :class:`~av.video.frame.VideoFrame` or :class:`~av.packet.Packet`
