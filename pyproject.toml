@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "aioice>=0.10.1,<1.0.0",
-    "av>=14.0.0,<15.0.0",
+    "av>=14.0.0,<17.0.0",
     "cryptography>=44.0.0",
     "google-crc32c>=1.1",
     "pyee>=13.0.0",
