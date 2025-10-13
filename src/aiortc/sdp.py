@@ -301,8 +301,11 @@ class MediaDescription:
         if self.msid:
             lines.append(f"a=msid:{self.msid}")
 
-        if self.rtcp_port is not None and self.rtcp_host is not None:
-            lines.append(f"a=rtcp:{self.rtcp_port} {ipaddress_to_sdp(self.rtcp_host)}")
+        if self.rtcp_port is not None:
+            line = f"a=rtcp:{self.rtcp_port}"
+            if self.rtcp_host is not None:
+                line += f" {ipaddress_to_sdp(self.rtcp_host)}"
+            lines.append(line)
             if self.rtcp_mux:
                 lines.append("a=rtcp-mux")
 
@@ -487,9 +490,10 @@ class SessionDescription:
                     elif attr == "msid":
                         current_media.msid = value
                     elif attr == "rtcp":
-                        port, rest = value.split(" ", 1)
-                        current_media.rtcp_port = int(port)
-                        current_media.rtcp_host = ipaddress_from_sdp(rest)
+                        bits = value.split(" ", 1)
+                        current_media.rtcp_port = int(bits[0])
+                        if len(bits) > 1:
+                            current_media.rtcp_host = ipaddress_from_sdp(bits[1])
                     elif attr == "rtcp-mux":
                         current_media.rtcp_mux = True
                     elif attr == "setup":

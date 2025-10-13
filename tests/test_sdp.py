@@ -1039,6 +1039,82 @@ a=setup:actpass
             ),
         )
 
+    def test_audio_rtcp_without_port(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 43580 RTP/AVP 0
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=rtcp:9
+a=rtpmap:0 PCMU/8000
+"""
+            )
+        )
+
+        self.assertEqual(d.group, [])
+        self.assertEqual(d.msid_semantic, [])
+        self.assertEqual(d.host, None)
+        self.assertEqual(d.name, "-")
+        self.assertEqual(d.origin, "- 863426017819471768 2 IN IP4 127.0.0.1")
+        self.assertEqual(d.time, "0 0")
+        self.assertEqual(d.version, 0)
+
+        self.assertEqual(len(d.media), 1)
+        self.assertEqual(d.media[0].kind, "audio")
+        self.assertEqual(d.media[0].host, "192.168.99.58")
+        self.assertEqual(d.media[0].port, 43580)
+        self.assertEqual(d.media[0].profile, "RTP/AVP")
+        self.assertEqual(d.media[0].direction, "sendrecv")
+        self.assertEqual(d.media[0].msid, None)
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="audio/PCMU", clockRate=8000, channels=1, payloadType=0
+                ),
+            ],
+        )
+        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].rtp.muxId, "")
+        self.assertEqual(d.media[0].rtcp_host, None)
+        self.assertEqual(d.media[0].rtcp_port, 9)
+        self.assertEqual(d.media[0].rtcp_mux, False)
+
+        # ssrc
+        self.assertEqual(d.media[0].ssrc, [])
+        self.assertEqual(d.media[0].ssrc_group, [])
+
+        # formats
+        self.assertEqual(d.media[0].fmt, [0])
+        self.assertEqual(d.media[0].sctpmap, {})
+        self.assertEqual(d.media[0].sctp_port, None)
+
+        # ice
+        self.assertEqual(len(d.media[0].ice_candidates), 0)
+
+        # dtls
+        self.assertEqual(d.media[0].dtls, None)
+
+        self.assertEqual(
+            str(d),
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 43580 RTP/AVP 0
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=rtcp:9
+a=rtpmap:0 PCMU/8000
+"""
+            ),
+        )
+
     def test_datachannel_firefox(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
