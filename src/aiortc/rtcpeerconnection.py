@@ -306,7 +306,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__seenMids: set[str] = set()
         self.__sctp: Optional[RTCSctpTransport] = None
         self.__sctp_mline_index: Optional[int] = None
-        self._sctpLegacySdp = True
+        # By default we use "UDP/DTLS/SCTP" in our SDP, but we also
+        # accept "DTLS/SCTP" from older browsers.
+        self._sctpLegacySdp = False
         self.__sctpRemotePort: Optional[int] = None
         self.__sctpRemoteCaps: Optional[RTCSctpCapabilities] = None
         self.__stream_id = str(uuid.uuid4())
