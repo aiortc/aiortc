@@ -3,6 +3,21 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.14.0
+------
+
+ * Allow :class:`~aiortc.contrib.media.MediaRecorder` to record audio and / or
+   video to a WebM container.
+ * Restore support for calling :meth:`RTCPeerConnection.addIceCandidate` before
+   :meth:`RTCPeerConnection.setRemoteDescription`.
+ * Send a keyframe if an RTCP Full Instantaneous Resolution (FIR) feedback is
+   received.
+ * Support parsing SDP `rtcp` attribute without a host.
+ * Use the "modern" SDP form "UDP/DTLS/SCTP" in offers to negotiate data
+   channels.
+ * Relax versioned dependency on PyAV to allow version 15.x and 16.x.
+ * Add support for Python 3.14, drop end-of-life Python 3.9.
+
 1.13.0
 ------
 
