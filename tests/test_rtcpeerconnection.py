@@ -5471,3 +5471,33 @@ a=rtpmap:0 PCMU/8000
             transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
             pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
         )
+
+    @asynctest
+    async def test_always_negotiate_datachannels(self) -> None:
+        pc = RTCPeerConnection(RTCConfiguration(alwaysNegotiateDataChannels=True))
+        pc.addTransceiver("audio")
+        offer = await pc.createOffer()
+        parsed = SessionDescription.parse(offer.sdp)
+        self.assertEqual(len(parsed.media), 2)
+        self.assertEqual("application", parsed.media[0].kind)
+        self.assertEqual("audio", parsed.media[1].kind)
+
+    @asynctest
+    async def test_always_negotiate_datachannels_subsequent(self) -> None:
+        pc1 = RTCPeerConnection(RTCConfiguration(alwaysNegotiateDataChannels=True))
+        pc2 = RTCPeerConnection()
+
+        pc1.addTransceiver("audio")
+        await pc1.setLocalDescription()
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription()
+        await pc1.setRemoteDescription(pc2.localDescription)
+
+        for pc in [pc1, pc2]:
+            parsed = SessionDescription.parse(pc.localDescription.sdp)
+            self.assertEqual(len(parsed.media), 2)
+
+            pc.createDataChannel("test")
+            offer = await pc.createOffer()
+            parsed = SessionDescription.parse(offer.sdp)
+            self.assertEqual(len(parsed.media), 2)

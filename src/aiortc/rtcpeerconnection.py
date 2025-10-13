@@ -702,6 +702,22 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         def next_mline_index() -> int:
             return len(description.media)
 
+        def add_datachannel_section() -> None:
+            self.__sctp_mline_index = next_mline_index()
+            description.media.append(
+                create_media_description_for_sctp(
+                    self.__sctp, legacy=self._sctpLegacySdp, mid=allocate_mid(mids)
+                )
+            )
+
+        # JSEP specifies that it should only be added after audio/video m-sections
+        # but the `alwaysNegotiateDataChannels` option overrides that:
+        # https://w3c.github.io/webrtc-extensions/#always-negotiating-datachannels
+        # This implies that it will be used for negotiating BUNDLE.
+        if not self.__sctp and self.__configuration.alwaysNegotiateDataChannels:
+            self.__createSctpTransport()
+            add_datachannel_section()
+
         for transceiver in filter(
             lambda x: x.mid is None and not x.stopped, self.__transceivers
         ):
@@ -714,13 +730,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     mid=allocate_mid(mids),
                 )
             )
-        if self.__sctp and self.__sctp.mid is None:
-            self.__sctp_mline_index = next_mline_index()
-            description.media.append(
-                create_media_description_for_sctp(
-                    self.__sctp, legacy=self._sctpLegacySdp, mid=allocate_mid(mids)
-                )
-            )
+        if (
+            self.__sctp
+            and self.__sctp.mid is None
+            and not self.__configuration.alwaysNegotiateDataChannels
+        ):
+            add_datachannel_section()
 
         bundle = sdp.GroupDescription(semantic="BUNDLE", items=[])
         for media in description.media:

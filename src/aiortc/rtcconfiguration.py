@@ -64,3 +64,6 @@ class RTCConfiguration:
 
     bundlePolicy: RTCBundlePolicy = RTCBundlePolicy.BALANCED
     "The media-bundling policy to use when gathering ICE candidates."
+
+    alwaysNegotiateDataChannels: bool = False
+    "Whether to always negotiate data channels in the SDP."
