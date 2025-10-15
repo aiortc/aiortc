@@ -395,6 +395,144 @@ class Vp9PayloadDescriptorTest(TestCase):
             Vp9PayloadDescriptor.parse(b"\xA0\x2A")  # I=1, L=1 but no layer byte
         self.assertEqual(str(cm.exception), "VP9 descriptor has truncated Layer Indices")
 
+    def test_pion_compat_non_flexible(self) -> None:
+        """Test compatibility with Pion test case: NonFlexible"""
+        # From Pion: []byte{0x00, 0xAA}
+        data = bytes([0x00, 0xAA])
+        descr, payload = Vp9PayloadDescriptor.parse(data)
+
+        self.assertFalse(descr.I)
+        self.assertFalse(descr.P)
+        self.assertFalse(descr.L)
+        self.assertFalse(descr.F)
+        self.assertEqual(payload, b"\xAA")
+
+    def test_pion_compat_non_flexible_picture_id(self) -> None:
+        """Test compatibility with Pion test case: NonFlexiblePictureID"""
+        # From Pion: []byte{0x80, 0x02, 0xAA}
+        data = bytes([0x80, 0x02, 0xAA])
+        descr, payload = Vp9PayloadDescriptor.parse(data)
+
+        self.assertTrue(descr.I)
+        self.assertEqual(descr.picture_id, 0x02)
+        self.assertEqual(payload, b"\xAA")
+
+    def test_pion_compat_non_flexible_picture_id_ext(self) -> None:
+        """Test compatibility with Pion test case: NonFlexiblePictureIDExt"""
+        # From Pion: []byte{0x80, 0x81, 0xFF, 0xAA}
+        # Expected: PictureID = 0x01FF
+        data = bytes([0x80, 0x81, 0xFF, 0xAA])
+        descr, payload = Vp9PayloadDescriptor.parse(data)
+
+        self.assertTrue(descr.I)
+        self.assertEqual(descr.picture_id, 0x01FF)
+        self.assertEqual(payload, b"\xAA")
+
+    def test_pion_compat_non_flexible_layer_indice_picture_id(self) -> None:
+        """Test compatibility with Pion test case: NonFlexibleLayerIndicePictureID"""
+        # From Pion: []byte{0xA0, 0x02, 0x23, 0x01, 0xAA}
+        # Expected: I=true, L=true, PictureID=0x02, TID=0x01, SID=0x01, D=true, TL0PICIDX=0x01
+        data = bytes([0xA0, 0x02, 0x23, 0x01, 0xAA])
+        descr, payload = Vp9PayloadDescriptor.parse(data)
+
+        self.assertTrue(descr.I)
+        self.assertTrue(descr.L)
+        self.assertFalse(descr.F)  # Non-flexible
+        self.assertEqual(descr.picture_id, 0x02)
+        self.assertEqual(descr.tid, 0x01)  # TID bits 7-5 = 001
+        self.assertEqual(descr.sid, 0x01)  # SID bits 3-1 = 001
+        self.assertTrue(descr.d)
+        self.assertEqual(descr.tl0picidx, 0x01)
+        self.assertEqual(payload, b"\xAA")
+
+    def test_pion_compat_flexible_layer_indice_picture_id(self) -> None:
+        """Test compatibility with Pion test case: FlexibleLayerIndicePictureID"""
+        # From Pion: []byte{0xB0, 0x02, 0x23, 0x01, 0xAA}
+        # Expected: F=true, I=true, L=true, PictureID=0x02, TID=0x01, SID=0x01, D=true
+        # Note: In flexible mode, there's no TL0PICIDX, payload starts after layer byte
+        data = bytes([0xB0, 0x02, 0x23, 0x01, 0xAA])
+        descr, payload = Vp9PayloadDescriptor.parse(data)
+
+        self.assertTrue(descr.F)  # Flexible mode
+        self.assertTrue(descr.I)
+        self.assertTrue(descr.L)
+        self.assertEqual(descr.picture_id, 0x02)
+        self.assertEqual(descr.tid, 0x01)
+        self.assertEqual(descr.sid, 0x01)
+        self.assertTrue(descr.d)
+        self.assertIsNone(descr.tl0picidx)  # Not present in flexible mode without P flag
+        # In flexible mode without P flag, payload starts right after layer byte
+        self.assertEqual(payload, b"\x01\xAA")
+
+    def test_picture_id_wraparound(self) -> None:
+        """Test Picture ID wraparound at 15-bit boundary"""
+        # Test that picture ID wraps from 0x7FFF to 0
+        descr1 = Vp9PayloadDescriptor(
+            picture_id_present=True,
+            picture_id=0x7FFF,
+            start_of_frame=True,
+            end_of_frame=True,
+        )
+
+        # Serialize and parse
+        data1 = bytes(descr1)
+        parsed1, _ = Vp9PayloadDescriptor.parse(data1)
+        self.assertEqual(parsed1.picture_id, 0x7FFF)
+
+        # Next picture ID should wrap to 0
+        next_pic_id = (0x7FFF + 1) & 0x7FFF
+        self.assertEqual(next_pic_id, 0)
+
+    def test_marker_bits_b_and_e(self) -> None:
+        """Test B (begin) and E (end) marker bits for fragmentation"""
+        # Single packet: B=1, E=1
+        descr_single = Vp9PayloadDescriptor(
+            picture_id_present=True,
+            picture_id=10,
+            start_of_frame=True,
+            end_of_frame=True,
+        )
+        data = bytes(descr_single)
+        parsed, _ = Vp9PayloadDescriptor.parse(data)
+        self.assertTrue(parsed.B)
+        self.assertTrue(parsed.E)
+
+        # First packet: B=1, E=0
+        descr_first = Vp9PayloadDescriptor(
+            picture_id_present=True,
+            picture_id=10,
+            start_of_frame=True,
+            end_of_frame=False,
+        )
+        data = bytes(descr_first)
+        parsed, _ = Vp9PayloadDescriptor.parse(data)
+        self.assertTrue(parsed.B)
+        self.assertFalse(parsed.E)
+
+        # Middle packet: B=0, E=0
+        descr_middle = Vp9PayloadDescriptor(
+            picture_id_present=True,
+            picture_id=10,
+            start_of_frame=False,
+            end_of_frame=False,
+        )
+        data = bytes(descr_middle)
+        parsed, _ = Vp9PayloadDescriptor.parse(data)
+        self.assertFalse(parsed.B)
+        self.assertFalse(parsed.E)
+
+        # Last packet: B=0, E=1
+        descr_last = Vp9PayloadDescriptor(
+            picture_id_present=True,
+            picture_id=10,
+            start_of_frame=False,
+            end_of_frame=True,
+        )
+        data = bytes(descr_last)
+        parsed, _ = Vp9PayloadDescriptor.parse(data)
+        self.assertFalse(parsed.B)
+        self.assertTrue(parsed.E)
+
 
 class Vp9Test(CodecTestCase):
     def test_decoder(self) -> None:
