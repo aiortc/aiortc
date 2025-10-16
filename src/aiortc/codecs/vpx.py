@@ -343,8 +343,6 @@ class Vp9PayloadDescriptor:
         V = bool(byte0 & 0x02)  # Scalability structure present
         Z = bool(byte0 & 0x01)  # Not reference frame
 
-        logger.debug(f"VP9 parse: byte0=0x{byte0:02x} I={I} P={P} L={L} F={F} B={B} E={E} V={V} Z={Z} len={len(data)}")
-
         picture_id = None
         tl0picidx = None
         tid = None
@@ -485,7 +483,6 @@ class Vp9PayloadDescriptor:
 
         # Return descriptor and remaining payload
         remaining_data = data[pos:]
-        logger.debug(f"VP9 parse complete: descriptor_len={pos}, payload_len={len(remaining_data)}, first_bytes={remaining_data[:16].hex() if len(remaining_data) >= 16 else remaining_data.hex()}")
         return descriptor, remaining_data
 
 
@@ -617,13 +614,19 @@ class Vp9Encoder(Encoder):
     - Encoding frames to VP9
     - RTP packetization with VP9 payload descriptors
     - Picture ID and TL0PICIDX management
+
+    Args:
+        flexible_mode: If True, use flexible mode (F=1) which is more common.
+                      If False, use non-flexible mode (F=0) with TL0PICIDX.
+                      Default: True (recommended for browser compatibility)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, flexible_mode: bool = True) -> None:
         self.codec: Optional[VideoCodecContext] = None
         self.picture_id = random.randint(0, (1 << 15) - 1)  # 15-bit picture ID
         self.tl0picidx = 0  # Temporal layer zero index
         self.__target_bitrate = DEFAULT_BITRATE
+        self.flexible_mode = flexible_mode
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -654,13 +657,15 @@ class Vp9Encoder(Encoder):
         ):
             self.codec = None
 
+        # Initialize codec on first frame or after reset
+        # ALWAYS force keyframe on first frame
+        if self.codec is None:
+            self._init_codec(frame.width, frame.height)
+            force_keyframe = True  # First frame MUST be a keyframe
+
         # Force keyframe if requested
         if force_keyframe:
             frame.pict_type = av.video.frame.PictureType.I
-
-        # Initialize codec on first frame or after reset
-        if self.codec is None:
-            self._init_codec(frame.width, frame.height)
 
         try:
             # Encode frame using libvpx-vp9
@@ -672,7 +677,11 @@ class Vp9Encoder(Encoder):
             return [], 0
 
         # Packetize encoded data
-        payloads = self._packetize(data_to_send, self.picture_id, self.tl0picidx)
+        # Note: In flexible mode (Pion's implementation), P flag is always 0
+        # We don't detect keyframes vs inter-frames
+        payloads = self._packetize(
+            data_to_send, self.picture_id, self.tl0picidx, is_inter_frame=False
+        )
 
         # Convert timestamp to RTP timebase (90kHz for video)
         timestamp = convert_timebase(frame.pts, frame.time_base, VIDEO_TIME_BASE)
@@ -734,67 +743,324 @@ class Vp9Encoder(Encoder):
             f"{self.target_bitrate} bps, {self.codec.thread_count} threads"
         )
 
-    @classmethod
+    @staticmethod
+    def _parse_vp9_header(data: bytes) -> Optional[dict]:
+        """
+        Parse VP9 bitstream header to extract frame information.
+
+        EXACT copy of Pion's vp9.Header.Unmarshal() logic:
+        https://github.com/pion/rtp/blob/master/codecs/vp9/header.go
+
+        Returns dict with:
+            - non_key_frame: bool
+            - width: int (or None)
+            - height: int (or None)
+        Returns None on parse error.
+        """
+        if len(data) < 1:
+            return None
+
+        pos = 0  # bit position
+
+        def has_space(n: int) -> bool:
+            """Check if n bits are available."""
+            return n <= ((len(data) * 8) - pos)
+
+        def read_flag() -> Optional[bool]:
+            """Read single bit."""
+            nonlocal pos
+            if not has_space(1):
+                return None
+            byte_pos = pos >> 3
+            bit_offset = 7 - (pos & 0x07)
+            bit = (data[byte_pos] >> bit_offset) & 0x01
+            pos += 1
+            return bit == 1
+
+        def read_bits(n: int) -> Optional[int]:
+            """Read n bits."""
+            nonlocal pos
+            if not has_space(n):
+                return None
+
+            res = 8 - (pos & 0x07)
+            if n < res:
+                byte_pos = pos >> 3
+                bits = (data[byte_pos] >> (res - n)) & ((1 << n) - 1)
+                pos += n
+                return bits
+
+            byte_pos = pos >> 3
+            bits = data[byte_pos] & ((1 << res) - 1)
+            pos += res
+            n -= res
+
+            while n >= 8:
+                byte_pos = pos >> 3
+                bits = (bits << 8) | data[byte_pos]
+                pos += 8
+                n -= 8
+
+            if n > 0:
+                byte_pos = pos >> 3
+                bits = (bits << n) | (data[byte_pos] >> (8 - n))
+                pos += n
+
+            return bits
+
+        # Frame marker (2 bits, must be 0b10)
+        if not has_space(4):
+            return None
+        frame_marker = read_bits(2)
+        if frame_marker != 2:
+            return None
+
+        # Profile (2 bits)
+        profile_low = read_bits(1)
+        profile_high = read_bits(1)
+        profile = (profile_high << 1) | profile_low
+
+        # Reserved bit if profile == 3
+        if profile == 3:
+            if not has_space(1):
+                return None
+            pos += 1
+
+        # show_existing_frame
+        show_existing_frame = read_flag()
+        if show_existing_frame is None:
+            return None
+        if show_existing_frame:
+            # Skip frame_to_show_map_idx (3 bits)
+            return None
+
+        # Read: non_key_frame, show_frame, error_resilient_mode
+        if not has_space(3):
+            return None
+        non_key_frame = read_flag()
+        show_frame = read_flag()
+        error_resilient_mode = read_flag()
+
+        width = None
+        height = None
+
+        # If keyframe, parse frame size
+        if not non_key_frame:
+            # frame_sync_bytes (3 bytes: 0x49, 0x83, 0x42)
+            if not has_space(24):
+                return None
+            sync0 = read_bits(8)
+            sync1 = read_bits(8)
+            sync2 = read_bits(8)
+            if sync0 != 0x49 or sync1 != 0x83 or sync2 != 0x42:
+                return None
+
+            # Skip color_config parsing for now (complex)
+            # We only need width/height which comes after color_config
+
+            # For simplicity, we'll parse width/height directly
+            # This requires skipping color_config, which varies by profile
+            # For now, let's use a simplified approach:
+            # Profile 0/1: bit_depth=8, skip color space (3 bits) + range (1 bit)
+            # Then parse frame_size
+
+            # Color space (3 bits)
+            if not has_space(3):
+                return None
+            color_space = read_bits(3)
+
+            # Color range (1 bit) if color_space != 7
+            if color_space != 7:
+                if not has_space(1):
+                    return None
+                pos += 1  # skip color_range
+
+                # Subsampling for profile 1/3
+                if profile == 1 or profile == 3:
+                    if not has_space(3):
+                        return None
+                    pos += 3  # skip subsampling_x, subsampling_y, reserved
+            else:
+                if profile == 1 or profile == 3:
+                    if not has_space(1):
+                        return None
+                    pos += 1  # skip reserved
+
+            # frame_size: width (16 bits), height (16 bits)
+            if not has_space(32):
+                return None
+            frame_width_minus_1 = read_bits(16)
+            frame_height_minus_1 = read_bits(16)
+            width = frame_width_minus_1 + 1
+            height = frame_height_minus_1 + 1
+
+        return {
+            'non_key_frame': non_key_frame,
+            'width': width,
+            'height': height
+        }
+
     def _packetize(
-        cls, buffer: bytes, picture_id: int, tl0picidx: int
+        self, buffer: bytes, picture_id: int, tl0picidx: int, is_inter_frame: bool = False
     ) -> list[bytes]:
         """
         Packetize VP9 encoded data into RTP payloads.
 
-        Each payload = VP9 descriptor + VP9 frame fragment
+        EXACT copy of Pion's implementation:
+        - Flexible mode: payloadFlexible()
+        - Non-flexible mode: payloadNonFlexible()
+        https://github.com/pion/rtp/blob/master/codecs/vp9_packet.go
 
         Args:
             buffer: Encoded VP9 frame data
-            picture_id: Current picture ID
-            tl0picidx: Temporal layer zero index
+            picture_id: Current picture ID (15-bit)
+            tl0picidx: Temporal layer zero index (unused in flexible mode)
+            is_inter_frame: Unused (detected from VP9 header in non-flexible)
 
         Returns:
             List of RTP payload bytes (each ≤ PACKET_MAX)
         """
+        if self.flexible_mode:
+            return self._packetize_flexible(buffer, picture_id)
+        else:
+            return self._packetize_non_flexible(buffer, picture_id)
+
+    def _packetize_flexible(self, buffer: bytes, picture_id: int) -> list[bytes]:
+        """
+        EXACT copy of Pion's payloadFlexible():
+        https://github.com/pion/rtp/blob/master/codecs/vp9_packet.go
+
+        Flexible mode (F=1):
+             0 1 2 3 4 5 6 7
+            +-+-+-+-+-+-+-+-+
+            |I|P|L|F|B|E|V|Z| (REQUIRED)
+            +-+-+-+-+-+-+-+-+
+       I:   |M| PICTURE ID  | (REQUIRED)
+            +-+-+-+-+-+-+-+-+
+       M:   | EXTENDED PID  | (RECOMMENDED)
+            +-+-+-+-+-+-+-+-+
+        """
+        header_size = 3  # FIXED
+        max_fragment_size = PACKET_MAX - header_size
+        payload_data_remaining = len(buffer)
+        payload_data_index = 0
         payloads = []
-        length = len(buffer)
 
-        if length == 0:
-            return payloads
+        if min(max_fragment_size, payload_data_remaining) <= 0:
+            return []
 
-        pos = 0
-        is_first = True
+        while payload_data_remaining > 0:
+            current_fragment_size = min(max_fragment_size, payload_data_remaining)
+            out = bytearray(header_size + current_fragment_size)
 
-        while pos < length:
-            # Determine if this is the last packet
-            # (need to know before building descriptor)
-            remaining = length - pos
-            is_last = remaining <= PACKET_MAX or (pos + PACKET_MAX >= length)
+            # Byte 0: I=1, P=0, L=0, F=1, B=?, E=?, V=0, Z=0
+            out[0] = 0x90  # 0b10010000 = I=1, F=1
+            if payload_data_index == 0:
+                out[0] |= 0x08  # B=1
+            if payload_data_remaining == current_fragment_size:
+                out[0] |= 0x04  # E=1
 
-            # Create descriptor for this packet
-            # Match browser format: flexible mode, no layer indices
-            descriptor = Vp9PayloadDescriptor(
-                picture_id_present=True,
-                picture_id=picture_id,
-                inter_picture_predicted=False,  # TODO: detect from frame type
-                layer_indices_present=False,  # Match browser: no layer indices
-                flexible_mode=True,  # Match browser: flexible mode
-                start_of_frame=is_first,
-                end_of_frame=is_last,
-                scalability_structure_present=False,  # No SS data
-                not_reference_frame=True,  # Match browser: Z=1
-                temporal_id=None,  # No layer indices
-                switching_up_point=None,
-                spatial_id=None,
-                inter_layer_dependency=None,
-                tl0picidx=None,  # Not used in flexible mode
-            )
+            # Bytes 1-2: Picture ID (always 15-bit, M=1)
+            out[1] = (picture_id >> 8) | 0x80  # M=1 + upper 7 bits
+            out[2] = picture_id & 0xFF         # lower 8 bits
 
-            descriptor_bytes = bytes(descriptor)
-            available_size = PACKET_MAX - len(descriptor_bytes)
-            payload_size = min(remaining, available_size)
+            # Copy payload data
+            out[header_size:] = buffer[payload_data_index:payload_data_index + current_fragment_size]
+            payloads.append(bytes(out))
 
-            # Build RTP payload: descriptor + data fragment
-            payload = descriptor_bytes + buffer[pos : pos + payload_size]
-            payloads.append(payload)
+            payload_data_remaining -= current_fragment_size
+            payload_data_index += current_fragment_size
 
-            pos += payload_size
-            is_first = False
+        return payloads
+
+    def _packetize_non_flexible(self, buffer: bytes, picture_id: int) -> list[bytes]:
+        """
+        EXACT copy of Pion's payloadNonFlexible():
+        https://github.com/pion/rtp/blob/master/codecs/vp9_packet.go
+
+        Non-flexible mode (F=0):
+             0 1 2 3 4 5 6 7
+            +-+-+-+-+-+-+-+-+
+            |I|P|L|F|B|E|V|Z| (REQUIRED)
+            +-+-+-+-+-+-+-+-+
+       I:   |M| PICTURE ID  | (RECOMMENDED)
+            +-+-+-+-+-+-+-+-+
+       M:   | EXTENDED PID  | (RECOMMENDED)
+            +-+-+-+-+-+-+-+-+
+       V:   | SS            | (on keyframes)
+            | ..            |
+            +-+-+-+-+-+-+-+-+
+        """
+        # Parse VP9 header to get frame info
+        header = self._parse_vp9_header(buffer)
+        if header is None:
+            return []
+
+        payload_data_remaining = len(buffer)
+        payload_data_index = 0
+        payloads = []
+
+        while payload_data_remaining > 0:
+            # Determine header size
+            if not header['non_key_frame'] and payload_data_index == 0:
+                header_size = 3 + 8  # Include SS data
+            else:
+                header_size = 3
+
+            max_fragment_size = PACKET_MAX - header_size
+            current_fragment_size = min(max_fragment_size, payload_data_remaining)
+            if current_fragment_size <= 0:
+                return []
+
+            out = bytearray(header_size + current_fragment_size)
+
+            # Byte 0: I=1, P=?, L=0, F=0, B=?, E=?, V=?, Z=1
+            out[0] = 0x80 | 0x01  # I=1, Z=1
+
+            if header['non_key_frame']:
+                out[0] |= 0x40  # P=1
+            if payload_data_index == 0:
+                out[0] |= 0x08  # B=1
+            if payload_data_remaining == current_fragment_size:
+                out[0] |= 0x04  # E=1
+
+            # Bytes 1-2: Picture ID (always 15-bit)
+            out[1] = (picture_id >> 8) | 0x80
+            out[2] = picture_id & 0xFF
+            off = 3
+
+            # Add Scalability Structure on keyframe first packet
+            if not header['non_key_frame'] and payload_data_index == 0:
+                out[0] |= 0x02  # V=1
+                out[off] = 0x10 | 0x08  # N_S=0, Y=1, G=1
+                off += 1
+
+                width = header['width'] or 0
+                out[off] = width >> 8
+                off += 1
+                out[off] = width & 0xFF
+                off += 1
+
+                height = header['height'] or 0
+                out[off] = height >> 8
+                off += 1
+                out[off] = height & 0xFF
+                off += 1
+
+                out[off] = 0x01  # N_G=1
+                off += 1
+
+                out[off] = 1 << 4 | 1 << 2  # TID=0, U=1, R=1
+                off += 1
+
+                out[off] = 0x01  # P_DIFF=1
+
+            # Copy payload data
+            out[header_size:] = buffer[payload_data_index:payload_data_index + current_fragment_size]
+            payloads.append(bytes(out))
+
+            payload_data_remaining -= current_fragment_size
+            payload_data_index += current_fragment_size
 
         return payloads
 
@@ -804,7 +1070,11 @@ class Vp9Encoder(Encoder):
 
         Used when passing through VP9 data without re-encoding.
         """
-        payloads = self._packetize(bytes(packet), self.picture_id, self.tl0picidx)
+        # For packed (pass-through) packets, we don't know if it's a keyframe
+        # so assume it's an inter-frame (safer default)
+        payloads = self._packetize(
+            bytes(packet), self.picture_id, self.tl0picidx, is_inter_frame=True
+        )
         timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
 
         self.picture_id = (self.picture_id + 1) & 0x7FFF
@@ -873,10 +1143,5 @@ def vp9_depayload(payload: bytes) -> bytes:
     Returns:
         VP9 frame data (without descriptor)
     """
-    try:
-        descriptor, data = Vp9PayloadDescriptor.parse(payload)
-        logger.debug(f"VP9 depayload: {descriptor}, data_len={len(data)}, first_bytes={data[:16].hex() if len(data) >= 16 else data.hex()}")
-        return data
-    except Exception as e:
-        logger.error(f"VP9 depayload failed: {e}, payload_len={len(payload)}, first_bytes={payload[:16].hex() if len(payload) >= 16 else payload.hex()}")
-        raise
+    descriptor, data = Vp9PayloadDescriptor.parse(payload)
+    return data

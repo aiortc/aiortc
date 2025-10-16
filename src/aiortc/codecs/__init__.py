@@ -192,7 +192,7 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
     elif mimeType == "video/vp8":
         return Vp8Encoder()
     elif mimeType == "video/vp9":
-        return Vp9Encoder()
+        return Vp9Encoder()  # Defaults to flexible_mode=True
     else:
         raise ValueError(f"No encoder found for MIME type `{mimeType}`")
 
