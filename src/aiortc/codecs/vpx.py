@@ -343,6 +343,8 @@ class Vp9PayloadDescriptor:
         V = bool(byte0 & 0x02)  # Scalability structure present
         Z = bool(byte0 & 0x01)  # Not reference frame
 
+        logger.debug(f"VP9 parse: byte0=0x{byte0:02x} I={I} P={P} L={L} F={F} B={B} E={E} V={V} Z={Z} len={len(data)}")
+
         picture_id = None
         tl0picidx = None
         tid = None
@@ -387,15 +389,81 @@ class Vp9PayloadDescriptor:
             tl0picidx = data[pos]
             pos += 1
 
-        # === FLEXIBLE MODE: Reference indices (Phase 2 - TODO) ===
-        # if F and P:
-        #     # Parse P_DIFF
-        #     pass
+        # === FLEXIBLE MODE: Reference indices (if F=1 and P=1) ===
+        # Reference indices: P_DIFF (up to 3 times)
+        # +-+-+-+-+-+-+-+-+
+        # | P_DIFF      |N|  N=1 means another P_DIFF follows
+        # +-+-+-+-+-+-+-+-+
+        if F and P:
+            max_ref_pics = 3
+            pdiff_count = 0
+            while True:
+                if len(data) <= pos:
+                    raise ValueError("VP9 descriptor has truncated P_DIFF")
 
-        # === SCALABILITY STRUCTURE (if V=1) (Phase 2 - TODO) ===
-        # if V:
-        #     # Parse SS data
-        #     pass
+                # P_DIFF is in bits 7-1, N flag is bit 0
+                # pdiff_value = data[pos] >> 1  # We don't store these for now
+                n_flag = data[pos] & 0x01  # N=1 means more P_DIFF follows
+                pos += 1
+                pdiff_count += 1
+
+                if n_flag == 0:  # No more P_DIFF
+                    break
+
+                if pdiff_count >= max_ref_pics:
+                    raise ValueError("VP9 descriptor has too many P_DIFF entries")
+
+        # === SCALABILITY STRUCTURE (if V=1) ===
+        # Scalability structure format:
+        # +-+-+-+-+-+-+-+-+
+        # | N_S |Y|G|-|-|-|
+        # +-+-+-+-+-+-+-+-+
+        # Then optionally WIDTH/HEIGHT for N_S+1 layers (if Y=1)
+        # Then optionally N_G and picture group data (if G=1)
+        if V:
+            if len(data) <= pos:
+                raise ValueError("VP9 descriptor has truncated SS")
+
+            ss_byte = data[pos]
+            pos += 1
+
+            n_s = (ss_byte >> 5) & 0x07  # Number of spatial layers - 1 (bits 7-5)
+            y_flag = bool(ss_byte & 0x10)  # Y bit (bit 4)
+            g_flag = bool(ss_byte & 0x08)  # G bit (bit 3)
+
+            num_spatial_layers = n_s + 1
+
+            # Parse WIDTH and HEIGHT for each spatial layer (if Y=1)
+            if y_flag:
+                for _ in range(num_spatial_layers):
+                    if len(data) <= pos + 3:
+                        raise ValueError("VP9 descriptor has truncated SS layer resolution")
+                    # WIDTH (2 bytes) + HEIGHT (2 bytes)
+                    # width = (data[pos] << 8) | data[pos + 1]
+                    # height = (data[pos + 2] << 8) | data[pos + 3]
+                    pos += 4
+
+            # Parse picture group info (if G=1)
+            if g_flag:
+                if len(data) <= pos:
+                    raise ValueError("VP9 descriptor has truncated N_G")
+
+                n_g = data[pos]  # Number of pictures in Picture Group
+                pos += 1
+
+                for _ in range(n_g):
+                    if len(data) <= pos:
+                        raise ValueError("VP9 descriptor has truncated PG entry")
+
+                    pg_byte = data[pos]
+                    # TID (bits 7-5), U (bit 4), R (bits 3-2)
+                    r_count = (pg_byte >> 2) & 0x03  # Number of reference diffs for this picture
+                    pos += 1
+
+                    # Skip R P_DIFF bytes
+                    if len(data) <= pos + r_count - 1:
+                        raise ValueError("VP9 descriptor has truncated PG P_DIFF")
+                    pos += r_count
 
         # Create descriptor object
         descriptor = cls(
@@ -416,7 +484,9 @@ class Vp9PayloadDescriptor:
         )
 
         # Return descriptor and remaining payload
-        return descriptor, data[pos:]
+        remaining_data = data[pos:]
+        logger.debug(f"VP9 parse complete: descriptor_len={pos}, payload_len={len(remaining_data)}, first_bytes={remaining_data[:16].hex() if len(remaining_data) >= 16 else remaining_data.hex()}")
+        return descriptor, remaining_data
 
 
 class Vp8Decoder(Decoder):
@@ -697,21 +767,22 @@ class Vp9Encoder(Encoder):
             is_last = remaining <= PACKET_MAX or (pos + PACKET_MAX >= length)
 
             # Create descriptor for this packet
+            # Match browser format: flexible mode, no layer indices
             descriptor = Vp9PayloadDescriptor(
                 picture_id_present=True,
                 picture_id=picture_id,
                 inter_picture_predicted=False,  # TODO: detect from frame type
-                layer_indices_present=True,  # Phase 1: always include layer info
-                flexible_mode=False,  # Phase 1: non-flexible mode
+                layer_indices_present=False,  # Match browser: no layer indices
+                flexible_mode=True,  # Match browser: flexible mode
                 start_of_frame=is_first,
                 end_of_frame=is_last,
-                scalability_structure_present=False,  # Phase 1: no SS data
-                not_reference_frame=False,  # Assume all frames are references
-                temporal_id=0,  # Phase 1: single temporal layer
-                switching_up_point=False,
-                spatial_id=0,  # Phase 1: single spatial layer
-                inter_layer_dependency=False,
-                tl0picidx=tl0picidx,
+                scalability_structure_present=False,  # No SS data
+                not_reference_frame=True,  # Match browser: Z=1
+                temporal_id=None,  # No layer indices
+                switching_up_point=None,
+                spatial_id=None,
+                inter_layer_dependency=None,
+                tl0picidx=None,  # Not used in flexible mode
             )
 
             descriptor_bytes = bytes(descriptor)
@@ -802,5 +873,10 @@ def vp9_depayload(payload: bytes) -> bytes:
     Returns:
         VP9 frame data (without descriptor)
     """
-    descriptor, data = Vp9PayloadDescriptor.parse(payload)
-    return data
+    try:
+        descriptor, data = Vp9PayloadDescriptor.parse(payload)
+        logger.debug(f"VP9 depayload: {descriptor}, data_len={len(data)}, first_bytes={data[:16].hex() if len(data) >= 16 else data.hex()}")
+        return data
+    except Exception as e:
+        logger.error(f"VP9 depayload failed: {e}, payload_len={len(payload)}, first_bytes={payload[:16].hex() if len(payload) >= 16 else payload.hex()}")
+        raise
