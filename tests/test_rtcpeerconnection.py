@@ -2955,6 +2955,130 @@ a=rtpmap:0 PCMU/8000
         )
 
     @asynctest
+    async def test_connect_video_vp9(self) -> None:
+        """
+        Test VP9 video codec end-to-end transmission.
+
+        Similar to test_connect_video_h264, but for VP9 codec.
+        Strips out VP8 and H264 to force VP9 negotiation.
+        """
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(VideoStreamTrack())
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+        self.assertTrue("m=video " in offer.sdp)
+        self.assertFalse("a=candidate:" in offer.sdp)
+        self.assertFalse("a=end-of-candidates" in offer.sdp)
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0"])
+        self.assertTrue("m=video " in pc1.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, "actpass")
+
+        # strip out VP8 and H264 to force VP9
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        # Remove VP8 and H264, keep VP9 and RTX codecs
+        vp9_codecs = []
+        for codec in parsed.media[0].rtp.codecs:
+            if codec.name in ("VP9", "rtx"):
+                vp9_codecs.append(codec)
+        parsed.media[0].rtp.codecs = vp9_codecs
+
+        # Update fmt list to match
+        vp9_fmt = [str(c.payloadType) for c in vp9_codecs]
+        parsed.media[0].fmt = vp9_fmt
+
+        desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
+        self.assertFalse("VP8" in desc1.sdp)
+        self.assertFalse("H264" in desc1.sdp)
+        self.assertTrue("VP9" in desc1.sdp)
+
+        # handle offer
+        await pc2.setRemoteDescription(desc1)
+        self.assertEqual(pc2.remoteDescription, desc1)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0"])
+
+        # create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = await pc2.createAnswer()
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("m=video " in answer.sdp)
+        self.assertFalse("a=candidate:" in answer.sdp)
+        self.assertFalse("a=end-of-candidates" in answer.sdp)
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+        self.assertTrue("m=video " in pc2.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, "active")
+
+        # handle answer
+        await pc1.setRemoteDescription(pc2.localDescription)
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
+    @asynctest
     async def test_connect_video_no_ssrc(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
