@@ -217,8 +217,12 @@ class Vp9E2ETest(TestCase):
             await asyncio.wait_for(receiver_track_received.wait(), timeout=10.0)
             self.assertIsNotNone(received_track, "No track received")
 
-            # Start recording
-            recorder = MediaRecorder(output_video, format="webm")
+            # Start recording with VP9 codec
+            recorder = MediaRecorder(
+                output_video,
+                format="webm",
+                options={"video_codec": "libvpx-vp9"}
+            )
             recorder.addTrack(received_track)
             await recorder.start()
 
@@ -228,10 +232,8 @@ class Vp9E2ETest(TestCase):
             # Stop recording
             await recorder.stop()
 
-            # Verify the output file exists and has valid video
-            # Note: MediaRecorder may re-encode to VP8 for WebM container
-            # The important thing is that VP9 was used for RTP transmission (verified via SDP above)
-            props = self.verify_video_file(output_video, expected_codec="vp8")
+            # Verify the output file exists and has valid VP9 video
+            props = self.verify_video_file(output_video, expected_codec="vp9")
             self.assertEqual(props["width"], 640)
             self.assertEqual(props["height"], 480)
             self.assertGreater(props["frame_count"], 0)
