@@ -621,6 +621,12 @@ class Vp9Test(CodecTestCase):
         self.assertTrue(len(payloads[0]) < 1300)
         self.assertAlmostEqual(timestamp, 3000, delta=1)
 
+    def test_number_of_threads(self) -> None:
+        self.assertEqual(number_of_threads(1920 * 1080, 16), 8)
+        self.assertEqual(number_of_threads(1920 * 1080, 8), 3)
+        self.assertEqual(number_of_threads(1920 * 1080, 4), 2)
+        self.assertEqual(number_of_threads(1920 * 1080, 2), 1)
+
     def test_roundtrip_1280_720(self) -> None:
         self.roundtrip_video(VP9_CODEC, 1280, 720)
 
