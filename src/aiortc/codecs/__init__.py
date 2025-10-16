@@ -100,7 +100,6 @@ def init_codecs() -> None:
         dynamic_pt += 2
 
     add_video_codec("video/VP8")
-    add_video_codec("video/VP9")
     for profile_level_id in ("42001f", "42e01f"):
         add_video_codec(
             "video/H264",
@@ -110,6 +109,7 @@ def init_codecs() -> None:
                 "profile-level-id": profile_level_id,
             },
         )
+    add_video_codec("video/VP9")
 
 
 def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:

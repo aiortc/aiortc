@@ -67,6 +67,15 @@ a=rtpmap:98 rtx/90000
 a=fmtp:98 apt=97
 """
 )
+VP9_SDP = lf2crlf(
+    """a=rtpmap:103 VP9/90000
+a=rtcp-fb:103 nack
+a=rtcp-fb:103 nack pli
+a=rtcp-fb:103 goog-remb
+a=rtpmap:104 rtx/90000
+a=fmtp:104 apt=103
+"""
+)
 
 
 class BogusStreamTrack(AudioStreamTrack):
@@ -2727,7 +2736,7 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_connect_video_bidirectional(self) -> None:
-        VIDEO_SDP = VP8_SDP + H264_SDP
+        VIDEO_SDP = VP8_SDP + H264_SDP + VP9_SDP
 
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -3186,7 +3195,7 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_connect_video_codec_preferences_offerer(self) -> None:
-        VIDEO_SDP = H264_SDP + VP8_SDP
+        VIDEO_SDP = H264_SDP + VP8_SDP  # VP9 not included (filtered out by codec preferences)
 
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
