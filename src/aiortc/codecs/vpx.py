@@ -670,17 +670,20 @@ class Vp9Encoder(Encoder):
         try:
             # Encode frame using libvpx-vp9
             data_to_send = b""
+            is_keyframe = False
             for packet in self.codec.encode(frame):
+                # Detect if this packet is a keyframe
+                if packet.is_keyframe:
+                    is_keyframe = True
                 data_to_send += bytes(packet)
         except Exception as e:
             logger.warning("Vp9Encoder() failed to encode: " + str(e))
             return [], 0
 
         # Packetize encoded data
-        # Note: In flexible mode (Pion's implementation), P flag is always 0
-        # We don't detect keyframes vs inter-frames
+        # is_inter_frame is the opposite of is_keyframe
         payloads = self._packetize(
-            data_to_send, self.picture_id, self.tl0picidx, is_inter_frame=False
+            data_to_send, self.picture_id, self.tl0picidx, is_inter_frame=(not is_keyframe)
         )
 
         # Convert timestamp to RTP timebase (90kHz for video)
