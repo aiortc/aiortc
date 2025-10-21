@@ -641,3 +641,53 @@ class Vp9Test(CodecTestCase):
 
     def test_roundtrip_320_240(self) -> None:
         self.roundtrip_video(VP9_CODEC, 320, 240)
+
+    def test_p_flag_keyframe_and_interframe(self) -> None:
+        """
+        Test that VP9 RTP payload descriptor P flag is set correctly.
+
+        P=0 for keyframes (not inter-picture predicted)
+        P=1 for inter-frames (inter-picture predicted)
+
+        RFC 9628 Section 4.2
+        """
+        encoder = self.ensureIsInstance(get_encoder(VP9_CODEC), Vp9Encoder)
+
+        # First frame - should be keyframe with P=0
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+
+        # Parse payload descriptor (byte 0)
+        byte0 = payloads[0][0]
+        p_flag = bool(byte0 & 0x40)  # Bit 6 is P flag
+        self.assertFalse(p_flag, "First frame should have P=0 (keyframe)")
+
+        # Second frame - should be inter-frame with P=1
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+
+        # Parse payload descriptor (byte 0)
+        byte0 = payloads[0][0]
+        p_flag = bool(byte0 & 0x40)  # Bit 6 is P flag
+        self.assertTrue(p_flag, "Second frame should have P=1 (inter-frame)")
+
+        # Third frame - should also be inter-frame with P=1
+        frame = self.create_video_frame(width=640, height=480, pts=6000)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertEqual(len(payloads), 1)
+
+        byte0 = payloads[0][0]
+        p_flag = bool(byte0 & 0x40)
+        self.assertTrue(p_flag, "Third frame should have P=1 (inter-frame)")
+
+        # Force keyframe - should have P=0
+        frame = self.create_video_frame(width=640, height=480, pts=9000)
+        payloads, timestamp = encoder.encode(frame, force_keyframe=True)
+        self.assertGreaterEqual(len(payloads), 1)
+
+        byte0 = payloads[0][0]
+        p_flag = bool(byte0 & 0x40)
+        self.assertFalse(p_flag, "Forced keyframe should have P=0")
+

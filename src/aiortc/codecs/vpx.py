@@ -918,19 +918,21 @@ class Vp9Encoder(Encoder):
             buffer: Encoded VP9 frame data
             picture_id: Current picture ID (15-bit)
             tl0picidx: Temporal layer zero index (unused in flexible mode)
-            is_inter_frame: Unused (detected from VP9 header in non-flexible)
+            is_inter_frame: Whether this is an inter-frame (True) or keyframe (False)
 
         Returns:
             List of RTP payload bytes (each ≤ PACKET_MAX)
         """
         if self.flexible_mode:
-            return self._packetize_flexible(buffer, picture_id)
+            return self._packetize_flexible(buffer, picture_id, is_inter_frame)
         else:
             return self._packetize_non_flexible(buffer, picture_id)
 
-    def _packetize_flexible(self, buffer: bytes, picture_id: int) -> list[bytes]:
+    def _packetize_flexible(self, buffer: bytes, picture_id: int, is_inter_frame: bool) -> list[bytes]:
         """
-        EXACT copy of Pion's payloadFlexible():
+        VP9 RTP packetization in flexible mode (F=1).
+
+        Based on Pion's payloadFlexible() with FIX for P flag:
         https://github.com/pion/rtp/blob/master/codecs/vp9_packet.go
 
         Flexible mode (F=1):
@@ -942,6 +944,11 @@ class Vp9Encoder(Encoder):
             +-+-+-+-+-+-+-+-+
        M:   | EXTENDED PID  | (RECOMMENDED)
             +-+-+-+-+-+-+-+-+
+
+        Args:
+            buffer: Encoded VP9 frame data
+            picture_id: Picture ID (15-bit)
+            is_inter_frame: True if inter-frame (P=1), False if keyframe (P=0)
         """
         header_size = 3  # FIXED
         max_fragment_size = PACKET_MAX - header_size
@@ -956,8 +963,14 @@ class Vp9Encoder(Encoder):
             current_fragment_size = min(max_fragment_size, payload_data_remaining)
             out = bytearray(header_size + current_fragment_size)
 
-            # Byte 0: I=1, P=0, L=0, F=1, B=?, E=?, V=0, Z=0
+            # Byte 0: I=1, P=?, L=0, F=1, B=?, E=?, V=0, Z=0
             out[0] = 0x90  # 0b10010000 = I=1, F=1
+
+            # FIX: Set P flag based on frame type
+            if is_inter_frame:
+                out[0] |= 0x40  # P=1 for inter-frames (0xD0)
+            # else: P=0 for keyframes (0x90) - already set above
+
             if payload_data_index == 0:
                 out[0] |= 0x08  # B=1
             if payload_data_remaining == current_fragment_size:
@@ -1017,8 +1030,9 @@ class Vp9Encoder(Encoder):
 
             out = bytearray(header_size + current_fragment_size)
 
-            # Byte 0: I=1, P=?, L=0, F=0, B=?, E=?, V=?, Z=1
-            out[0] = 0x80 | 0x01  # I=1, Z=1
+            # Byte 0: I=1, P=?, L=0, F=0, B=?, E=?, V=?, Z=0
+            # Note: Z=0 means frames ARE reference frames (correct for single-layer)
+            out[0] = 0x80  # I=1, Z=0
 
             if header['non_key_frame']:
                 out[0] |= 0x40  # P=1
@@ -1073,10 +1087,17 @@ class Vp9Encoder(Encoder):
 
         Used when passing through VP9 data without re-encoding.
         """
-        # For packed (pass-through) packets, we don't know if it's a keyframe
-        # so assume it's an inter-frame (safer default)
+        # Detect frame type from VP9 bitstream header
+        is_inter_frame = True  # Default assumption
+        if self.flexible_mode:
+            # For flexible mode, parse VP9 header to detect actual frame type
+            header = self._parse_vp9_header(bytes(packet))
+            if header:
+                is_inter_frame = header['non_key_frame']
+        # Non-flexible mode will parse header in _packetize_non_flexible anyway
+
         payloads = self._packetize(
-            bytes(packet), self.picture_id, self.tl0picidx, is_inter_frame=True
+            bytes(packet), self.picture_id, self.tl0picidx, is_inter_frame=is_inter_frame
         )
         timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
 
