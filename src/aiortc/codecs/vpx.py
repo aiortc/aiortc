@@ -932,7 +932,7 @@ class Vp9Encoder(Encoder):
         """
         VP9 RTP packetization in flexible mode (F=1).
 
-        Based on Pion's payloadFlexible() with FIX for P flag:
+        Based on Pion's payloadFlexible() with FIX for P flag and P_DIFF:
         https://github.com/pion/rtp/blob/master/codecs/vp9_packet.go
 
         Flexible mode (F=1):
@@ -944,13 +944,15 @@ class Vp9Encoder(Encoder):
             +-+-+-+-+-+-+-+-+
        M:   | EXTENDED PID  | (RECOMMENDED)
             +-+-+-+-+-+-+-+-+
+       P,F: |N|  P_DIFF    | (REQUIRED when P=1 and F=1, RFC 9628)
+            +-+-+-+-+-+-+-+-+
 
         Args:
             buffer: Encoded VP9 frame data
             picture_id: Picture ID (15-bit)
             is_inter_frame: True if inter-frame (P=1), False if keyframe (P=0)
         """
-        header_size = 3  # FIXED
+        header_size = 4 if is_inter_frame else 3
         max_fragment_size = PACKET_MAX - header_size
         payload_data_remaining = len(buffer)
         payload_data_index = 0
@@ -979,6 +981,13 @@ class Vp9Encoder(Encoder):
             # Bytes 1-2: Picture ID (always 15-bit, M=1)
             out[1] = (picture_id >> 8) | 0x80  # M=1 + upper 7 bits
             out[2] = picture_id & 0xFF         # lower 8 bits
+
+            # Byte 3 (if inter-frame): P_DIFF reference index
+            # RFC 9628: When P=1 and F=1, at least one P_DIFF MUST be present
+            # Format: |N(1bit)|P_DIFF(7bits)| where N=0 means no more refs
+            # P_DIFF=1 means reference the immediately previous frame
+            if is_inter_frame:
+                out[3] = (1 << 1) | 0  # N=0, P_DIFF=1
 
             # Copy payload data
             out[header_size:] = buffer[payload_data_index:payload_data_index + current_fragment_size]
