@@ -5,13 +5,16 @@ import logging
 import math
 import os
 import time
+import warnings
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from struct import pack, unpack_from
 from typing import Deque, Optional, Union, cast
 
-from google_crc32c import value as crc32c
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    from google_crc32c import value as crc32c
 from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
