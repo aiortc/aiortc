@@ -1152,8 +1152,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__sctp.mid = None
 
         @self.__sctp.on("datachannel")
-        def on_datachannel(channel: RTCDataChannel) -> None:
+        async def on_datachannel(channel: RTCDataChannel) -> None:
             self.emit("datachannel", channel)
+            await self.wait_for_complete()
 
     def __createTransceiver(
         self, direction: str, kind: str, sender_track: Optional[MediaStreamTrack] = None

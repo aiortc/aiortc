@@ -1788,6 +1788,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
                 # emit channel
                 self.emit("datachannel", channel)
+                await self.wait_for_complete()
             elif msg_type == DATA_CHANNEL_ACK:
                 assert stream_id in self._data_channels
                 channel = self._data_channels[stream_id]
