@@ -2873,8 +2873,17 @@ a=rtpmap:0 PCMU/8000
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
 
+        # add track and set H264 codec preference for pc1
+        sender1 = pc1.addTrack(VideoStreamTrack())
+        h264_codecs = [
+            codec
+            for codec in RTCRtpSender.getCapabilities("video").codecs
+            if codec.mimeType == "video/H264"
+        ]
+        transceiver1 = next(t for t in pc1.getTransceivers() if t.sender == sender1)
+        transceiver1.setCodecPreferences(h264_codecs)
+
         # create offer
-        pc1.addTrack(VideoStreamTrack())
         offer = await pc1.createOffer()
         self.assertEqual(offer.type, "offer")
         self.assertTrue("m=video " in offer.sdp)
@@ -2890,17 +2899,14 @@ a=rtpmap:0 PCMU/8000
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
 
-        # strip out vp8
-        parsed = SessionDescription.parse(pc1.localDescription.sdp)
-        parsed.media[0].rtp.codecs.pop(0)
-        parsed.media[0].fmt.pop(0)
-        desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
-        self.assertFalse("VP8" in desc1.sdp)
-        self.assertTrue("H264" in desc1.sdp)
+        # verify H264 is the only video codec in offer (VP8 and VP9 excluded)
+        self.assertFalse("VP8" in pc1.localDescription.sdp)
+        self.assertTrue("H264" in pc1.localDescription.sdp)
+        self.assertFalse("VP9" in pc1.localDescription.sdp)
 
         # handle offer
-        await pc2.setRemoteDescription(desc1)
-        self.assertEqual(pc2.remoteDescription, desc1)
+        await pc2.setRemoteDescription(pc1.localDescription)
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
@@ -2969,7 +2975,7 @@ a=rtpmap:0 PCMU/8000
         Test VP9 video codec end-to-end transmission.
 
         Similar to test_connect_video_h264, but for VP9 codec.
-        Strips out VP8 and H264 to force VP9 negotiation.
+        Uses setCodecPreferences() to force VP9 negotiation.
         """
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -2987,8 +2993,17 @@ a=rtpmap:0 PCMU/8000
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
 
+        # add track and set VP9 codec preference for pc1
+        sender1 = pc1.addTrack(VideoStreamTrack())
+        vp9_codecs = [
+            codec
+            for codec in RTCRtpSender.getCapabilities("video").codecs
+            if codec.mimeType == "video/VP9"
+        ]
+        transceiver1 = next(t for t in pc1.getTransceivers() if t.sender == sender1)
+        transceiver1.setCodecPreferences(vp9_codecs)
+
         # create offer
-        pc1.addTrack(VideoStreamTrack())
         offer = await pc1.createOffer()
         self.assertEqual(offer.type, "offer")
         self.assertTrue("m=video " in offer.sdp)
@@ -3004,33 +3019,20 @@ a=rtpmap:0 PCMU/8000
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
 
-        # strip out VP8 and H264 to force VP9
-        parsed = SessionDescription.parse(pc1.localDescription.sdp)
-        # Remove VP8 and H264, keep VP9 and RTX codecs
-        vp9_codecs = []
-        for codec in parsed.media[0].rtp.codecs:
-            if codec.name in ("VP9", "rtx"):
-                vp9_codecs.append(codec)
-        parsed.media[0].rtp.codecs = vp9_codecs
-
-        # Update fmt list to match
-        vp9_fmt = [str(c.payloadType) for c in vp9_codecs]
-        parsed.media[0].fmt = vp9_fmt
-
-        desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
-        self.assertFalse("VP8" in desc1.sdp)
-        self.assertFalse("H264" in desc1.sdp)
-        self.assertTrue("VP9" in desc1.sdp)
+        # verify VP9 is the only video codec in offer (VP8 and H264 excluded)
+        self.assertTrue("VP9" in pc1.localDescription.sdp)
+        self.assertFalse("VP8" in pc1.localDescription.sdp)
+        self.assertFalse("H264" in pc1.localDescription.sdp)
 
         # handle offer
-        await pc2.setRemoteDescription(desc1)
-        self.assertEqual(pc2.remoteDescription, desc1)
+        await pc2.setRemoteDescription(pc1.localDescription)
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
         self.assertEqual(mids(pc2), ["0"])
 
-        # create answer
+        # add track and create answer
         pc2.addTrack(VideoStreamTrack())
         answer = await pc2.createAnswer()
         self.assertEqual(answer.type, "answer")
@@ -3044,6 +3046,11 @@ a=rtpmap:0 PCMU/8000
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
+
+        # verify VP9 is the only video codec in answer (VP8 and H264 excluded)
+        self.assertTrue("VP9" in pc2.localDescription.sdp)
+        self.assertFalse("VP8" in pc2.localDescription.sdp)
+        self.assertFalse("H264" in pc2.localDescription.sdp)
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)
