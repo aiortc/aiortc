@@ -567,7 +567,11 @@ class SessionDescription:
         assert media in self.media
         if media.msid is not None and " " in media.msid:
             bits = media.msid.split()
-            for group in self.msid_semantic:
+            msid_semantic = self.msid_semantic
+            if not msid_semantic:
+                # assume "WMS *" for backward compat.
+                msid_semantic = [GroupDescription(semantic="WMS", items=["*"])]
+            for group in msid_semantic:
                 if group.semantic == "WMS" and (
                     bits[0] in group.items or "*" in group.items
                 ):
