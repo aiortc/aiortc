@@ -592,6 +592,32 @@ a=setup:active
             ),
         )
 
+    def test_no_msid_semantic(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0
+m=audio 16628 UDP/TLS/RTP/SAVPF 8
+a=rtpmap:8 PCMA/8000
+a=fingerprint:sha-256 35:5A:BC:8E:CD:F8:CD:EB:36:00:BB:C4:C3:33:54:B5:9B:70:3C:E9:C4:33:8F:39:3C:4B:5B:5C:AD:88:12:2B
+a=setup:active
+a=rtcp-mux
+a=rtcp:16628 IN IP4 1.2.3.4
+a=ice-ufrag:75EDuLTEOkEUd3cu
+a=ice-pwd:5dvb9SbfooWc49814CupdeTS
+a=candidate:0560693492 1 udp 659136 1.2.3.4 16628 typ host generation 0
+a=end-of-candidates
+a=msid:stream deprecatedtrack
+"""
+            )
+        )
+
+        self.assertEqual(d.media[0].msid, "stream deprecatedtrack")
+        self.assertEqual(d.webrtc_track_id(d.media[0]), "deprecatedtrack")
+
     def test_audio_freeswitch_no_dtls(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
