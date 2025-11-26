@@ -5377,6 +5377,11 @@ a=rtpmap:0 PCMU/8000
         self.assertEqual(param1.password, param2.password)
         self.assertEqual(transceiver.receiver.transport, pc.sctp.transport)
 
+        self.assertEqual(
+            transceiver.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
+        )
+
     @asynctest
     async def test_bundlepolicy_transports_balanced(self) -> None:
         pc = RTCPeerConnection(RTCConfiguration(bundlePolicy=RTCBundlePolicy.BALANCED))
@@ -5392,6 +5397,19 @@ a=rtpmap:0 PCMU/8000
         )
         self.assertNotEqual(transceiver1.receiver.transport, pc.sctp.transport)
         self.assertNotEqual(transceiver2.receiver.transport, pc.sctp.transport)
+
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver2.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver3.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
+        )
 
     @asynctest
     async def test_bundlepolicy_transports_max_compat(self) -> None:
@@ -5411,6 +5429,19 @@ a=rtpmap:0 PCMU/8000
         self.assertNotEqual(transceiver1.receiver.transport, pc.sctp.transport)
         self.assertNotEqual(transceiver2.receiver.transport, pc.sctp.transport)
 
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver2.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver3.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
+        )
+
     @asynctest
     async def test_bundlepolicy_transports_max_bundle(self) -> None:
         pc = RTCPeerConnection(
@@ -5427,3 +5458,16 @@ a=rtpmap:0 PCMU/8000
             transceiver1.receiver.transport, transceiver3.receiver.transport
         )
         self.assertEqual(transceiver1.receiver.transport, pc.sctp.transport)
+
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver2.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            transceiver3.receiver.transport.transport.iceGatherer.getLocalParameters(),
+        )
+        self.assertEqual(
+            transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
+            pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
+        )

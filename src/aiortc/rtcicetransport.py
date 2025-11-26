@@ -193,7 +193,12 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             iceServers = self.getDefaultIceServers()
         ice_kwargs = connection_kwargs(iceServers)
 
-        self._connection = Connection(ice_controlling=False, **ice_kwargs)
+        self._connection = Connection(
+            ice_controlling=False,
+            local_username=local_username,
+            local_password=local_password,
+            **ice_kwargs,
+        )
         self._remote_candidates_end = False
         self.__state = "new"
 

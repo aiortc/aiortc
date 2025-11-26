@@ -25,7 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "aioice>=0.10.1,<1.0.0",
+    "aioice>=0.10.2,<1.0.0",
     "av>=14.0.0,<17.0.0",
     "cryptography>=44.0.0",
     "google-crc32c>=1.1",
