@@ -82,30 +82,71 @@ def filter_preferred_codecs(
 def find_common_codecs(
     local_codecs: list[RTCRtpCodecParameters],
     remote_codecs: list[RTCRtpCodecParameters],
+    used_payload_types: Optional[set[int]] = None,
 ) -> list[RTCRtpCodecParameters]:
+    """
+    Find common codecs between local and remote, negotiating payload types.
+
+    Implements libwebrtc's PT collision resolution algorithm. When used_payload_types
+    is provided, maintains session-wide PT namespace for BUNDLE (RFC 8834).
+    """
     common = []
-    common_base: dict[int, RTCRtpCodecParameters] = {}
+    common_base: dict[int, tuple[RTCRtpCodecParameters, int]] = {}
+
+    if used_payload_types is None:
+        used_payload_types = set()
+    used_pts: set[int] = used_payload_types
+
+    def find_unused_id() -> int | None:
+        """Find unused PT in range [96, 127], searching descending from 127."""
+        for pt in range(rtp.DYNAMIC_PAYLOAD_TYPES.stop - 1,
+                        rtp.DYNAMIC_PAYLOAD_TYPES.start - 1, -1):
+            if pt not in used_pts:
+                return pt
+        return None
+
+    def find_and_set_id_used(codec: RTCRtpCodecParameters, preferred_id: int) -> bool:
+        """Assign PT to codec, handling collisions per libwebrtc algorithm."""
+        if preferred_id not in used_pts:
+            codec.payloadType = preferred_id
+            used_pts.add(preferred_id)
+            return True
+
+        # collision - only reassign dynamic PTs
+        if preferred_id in rtp.DYNAMIC_PAYLOAD_TYPES:
+            unused_id = find_unused_id()
+            if unused_id is not None:
+                codec.payloadType = unused_id
+                used_pts.add(unused_id)
+                return True
+
+        return False
+
     for c in remote_codecs:
         # for RTX, check we accepted the base codec
         if is_rtx(c):
             apt = c.parameters.get("apt")
             if isinstance(apt, int) and apt in common_base:
-                base = common_base[apt]
-                if c.clockRate == base.clockRate:
-                    common.append(copy.deepcopy(c))
+                base_codec, base_assigned_pt = common_base[apt]
+                if c.clockRate == base_codec.clockRate:
+                    rtx_codec = copy.deepcopy(c)
+                    if not find_and_set_id_used(rtx_codec, c.payloadType):
+                        continue
+                    rtx_codec.parameters["apt"] = base_assigned_pt
+                    common.append(rtx_codec)
             continue
 
         # handle other codecs
         for codec in local_codecs:
             if is_codec_compatible(codec, c):
                 codec = copy.deepcopy(codec)
-                if c.payloadType in rtp.DYNAMIC_PAYLOAD_TYPES:
-                    codec.payloadType = c.payloadType
+                if not find_and_set_id_used(codec, c.payloadType):
+                    continue
                 codec.rtcpFeedback = list(
                     filter(lambda x: x in c.rtcpFeedback, codec.rtcpFeedback)
                 )
                 common.append(codec)
-                common_base[codec.payloadType] = codec
+                common_base[c.payloadType] = (codec, codec.payloadType)
                 break
     return common
 
@@ -882,6 +923,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # apply description
         iceCandidates: dict[RTCIceTransport, sdp.MediaDescription] = {}
         trackEvents = []
+
+        # share PT namespace across media for BUNDLE
+        bundle = next((x for x in description.group if x.semantic == "BUNDLE"), None)
+        if bundle and bundle.items:
+            used_payload_types: Optional[set[int]] = set()
+        else:
+            used_payload_types = None
+
         for i, media in enumerate(description.media):
             dtlsTransport: Optional[RTCDtlsTransport] = None
             self.__seenMids.add(media.rtp.muxId)
@@ -902,7 +951,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
                 # negotiate codecs
                 common = filter_preferred_codecs(
-                    find_common_codecs(CODECS[media.kind], media.rtp.codecs),
+                    find_common_codecs(
+                        CODECS[media.kind], media.rtp.codecs, used_payload_types
+                    ),
                     transceiver._preferred_codecs,
                 )
 

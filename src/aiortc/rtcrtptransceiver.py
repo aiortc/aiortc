@@ -105,11 +105,12 @@ class RTCRtpTransceiver:
         See :meth:`RTCRtpSender.getCapabilities` and
         :meth:`RTCRtpReceiver.getCapabilities` for the supported codecs.
 
-        :param codecs: A list of :class:`RTCRtpCodecCapability`, in decreasing order
-                        of preference. If empty, restores the default preferences.
+        :param codecs: A list of :class:`RTCRtpCodecCapability` in decreasing order
+                       of preference. If empty, restores the default preferences.
         """
         if not codecs:
             self._preferred_codecs = []
+            return
 
         capabilities = get_capabilities(self.kind).codecs
         unique: list[RTCRtpCodecCapability] = []
