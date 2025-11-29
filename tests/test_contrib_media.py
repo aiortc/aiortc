@@ -376,7 +376,7 @@ class MediaRelayTest(MediaTestCase):
 
         # skip some frames
         timestamp = 5 * samples_per_frame
-        await asyncio.sleep(source._start + (timestamp / 8000) - time.time())
+        await asyncio.sleep(source._start + (timestamp / 8000) - time.monotonic())
 
         frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
 
