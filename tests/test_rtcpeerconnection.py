@@ -67,6 +67,15 @@ a=rtpmap:98 rtx/90000
 a=fmtp:98 apt=97
 """
 )
+VP9_SDP = lf2crlf(
+    """a=rtpmap:103 VP9/90000
+a=rtcp-fb:103 nack
+a=rtcp-fb:103 nack pli
+a=rtcp-fb:103 goog-remb
+a=rtpmap:104 rtx/90000
+a=fmtp:104 apt=103
+"""
+)
 
 
 class BogusStreamTrack(AudioStreamTrack):
@@ -500,6 +509,193 @@ class RTCRtpCodecParametersTest(TestCase):
                 ),
             )
         )
+
+    def test_find_common_codecs_pt_collision_pr1390(self) -> None:
+        """
+        Test PT collision fix for PR #1390.
+        Remote has H264 RTX at PT 103, then VP9 main also at PT 103.
+        """
+        local_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=101,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=102,
+                parameters={"apt": 101},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=104,
+                parameters={"apt": 103},
+            ),
+        ]
+
+        # Remote has collision: H264 RTX and VP9 main both at PT 103
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=102,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=103,  # RTX for H264 at 102
+                parameters={"apt": 102},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103  # COLLISION!
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=104,
+                parameters={"apt": 103},
+            ),
+        ]
+
+        common = find_common_codecs(local_codecs, remote_codecs)
+
+        # Should have 4 codecs with all unique PTs
+        self.assertEqual(len(common), 4)
+        pts = [c.payloadType for c in common]
+        self.assertEqual(len(pts), len(set(pts)), f"PT collision detected! PTs: {pts}")
+
+        # Verify each codec
+        h264 = next(c for c in common if c.mimeType == "video/H264")
+        self.assertEqual(h264.payloadType, 102)
+
+        h264_rtx = next(
+            c for c in common if c.mimeType == "video/rtx" and c.parameters["apt"] == 102
+        )
+        self.assertEqual(h264_rtx.payloadType, 103)
+
+        vp9 = next(c for c in common if c.mimeType == "video/VP9")
+        self.assertNotEqual(vp9.payloadType, 103, "VP9 should not use PT 103")
+        self.assertIn(vp9.payloadType, range(96, 128))
+
+        # VP9 RTX apt should reference VP9's assigned PT
+        vp9_rtx = next(
+            c
+            for c in common
+            if c.mimeType == "video/rtx" and c.parameters["apt"] == vp9.payloadType
+        )
+        self.assertIsNotNone(vp9_rtx)
+
+    def test_find_common_codecs_pt_collision_descending(self) -> None:
+        """
+        Test libwebrtc collision resolution uses descending search.
+        Multiple collisions should allocate from 127 downward.
+        """
+        local_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=97
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=99,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+        ]
+
+        # Remote uses same PT (100) for all codecs
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=100
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=100
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=100,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+        ]
+
+        common = find_common_codecs(local_codecs, remote_codecs)
+
+        self.assertEqual(len(common), 3)
+        pts = [c.payloadType for c in common]
+        self.assertEqual(len(set(pts)), 3)
+
+        # First uses preferred PT 100
+        self.assertEqual(pts[0], 100)
+        # Subsequent use descending search: 127, 126
+        self.assertEqual(pts[1], 127)
+        self.assertEqual(pts[2], 126)
+
+    def test_find_common_codecs_bundle_collision(self) -> None:
+        """
+        Test BUNDLE PT collision prevention across media types.
+        When BUNDLE is active, PTs must be unique across audio and video.
+        """
+        # Shared PT namespace for BUNDLE (session-level)
+        used_payload_types: set[int] = set()
+
+        # Audio codecs
+        local_audio = [
+            RTCRtpCodecParameters(
+                mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
+            ),
+        ]
+        remote_audio = [
+            RTCRtpCodecParameters(
+                mimeType="audio/opus", clockRate=48000, channels=2, payloadType=97
+            ),
+        ]
+
+        # Video codecs - remote tries to use same PT 97!
+        local_video = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=100
+            ),
+        ]
+        remote_video = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=97  # COLLISION!
+            ),
+        ]
+
+        # Negotiate audio first (uses PT 97)
+        common_audio = find_common_codecs(
+            local_audio, remote_audio, used_payload_types
+        )
+        self.assertEqual(len(common_audio), 1)
+        self.assertEqual(common_audio[0].payloadType, 97)
+        self.assertIn(97, used_payload_types)
+
+        # Negotiate video second (PT 97 already used by audio!)
+        common_video = find_common_codecs(
+            local_video, remote_video, used_payload_types
+        )
+        self.assertEqual(len(common_video), 1)
+
+        # Video should NOT use PT 97 (collision with audio)
+        self.assertNotEqual(common_video[0].payloadType, 97)
+
+        # Video should use descending search: PT 127
+        self.assertEqual(common_video[0].payloadType, 127)
+
+        # Both PTs must be in the shared set and unique
+        self.assertIn(97, used_payload_types)  # audio
+        self.assertIn(127, used_payload_types)  # video
+        self.assertEqual(len(used_payload_types), 2)
 
 
 class RTCPeerConnectionTest(TestCase):
@@ -2727,7 +2923,7 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_connect_video_bidirectional(self) -> None:
-        VIDEO_SDP = VP8_SDP + H264_SDP
+        VIDEO_SDP = VP8_SDP + H264_SDP + VP9_SDP
 
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -2864,8 +3060,17 @@ a=rtpmap:0 PCMU/8000
         self.assertIsNone(pc2.localDescription)
         self.assertIsNone(pc2.remoteDescription)
 
+        # add track and set H264 codec preference for pc1
+        sender1 = pc1.addTrack(VideoStreamTrack())
+        h264_codecs = [
+            codec
+            for codec in RTCRtpSender.getCapabilities("video").codecs
+            if codec.mimeType == "video/H264"
+        ]
+        transceiver1 = next(t for t in pc1.getTransceivers() if t.sender == sender1)
+        transceiver1.setCodecPreferences(h264_codecs)
+
         # create offer
-        pc1.addTrack(VideoStreamTrack())
         offer = await pc1.createOffer()
         self.assertEqual(offer.type, "offer")
         self.assertTrue("m=video " in offer.sdp)
@@ -2881,17 +3086,14 @@ a=rtpmap:0 PCMU/8000
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
 
-        # strip out vp8
-        parsed = SessionDescription.parse(pc1.localDescription.sdp)
-        parsed.media[0].rtp.codecs.pop(0)
-        parsed.media[0].fmt.pop(0)
-        desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
-        self.assertFalse("VP8" in desc1.sdp)
-        self.assertTrue("H264" in desc1.sdp)
+        # verify H264 is the only video codec in offer (VP8 and VP9 excluded)
+        self.assertFalse("VP8" in pc1.localDescription.sdp)
+        self.assertTrue("H264" in pc1.localDescription.sdp)
+        self.assertFalse("VP9" in pc1.localDescription.sdp)
 
         # handle offer
-        await pc2.setRemoteDescription(desc1)
-        self.assertEqual(pc2.remoteDescription, desc1)
+        await pc2.setRemoteDescription(pc1.localDescription)
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
         self.assertEqual(len(pc2.getReceivers()), 1)
         self.assertEqual(len(pc2.getSenders()), 1)
         self.assertEqual(len(pc2.getTransceivers()), 1)
@@ -2911,6 +3113,131 @@ a=rtpmap:0 PCMU/8000
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
+
+        # handle answer
+        await pc1.setRemoteDescription(pc2.localDescription)
+        self.assertEqual(pc1.remoteDescription, pc2.localDescription)
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
+    @asynctest
+    async def test_connect_video_vp9(self) -> None:
+        """
+        Test VP9 video codec end-to-end transmission.
+
+        Similar to test_connect_video_h264, but for VP9 codec.
+        Uses setCodecPreferences() to force VP9 negotiation.
+        """
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # add track and set VP9 codec preference for pc1
+        sender1 = pc1.addTrack(VideoStreamTrack())
+        vp9_codecs = [
+            codec
+            for codec in RTCRtpSender.getCapabilities("video").codecs
+            if codec.mimeType == "video/VP9"
+        ]
+        transceiver1 = next(t for t in pc1.getTransceivers() if t.sender == sender1)
+        transceiver1.setCodecPreferences(vp9_codecs)
+
+        # create offer
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+        self.assertTrue("m=video " in offer.sdp)
+        self.assertFalse("a=candidate:" in offer.sdp)
+        self.assertFalse("a=end-of-candidates" in offer.sdp)
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0"])
+        self.assertTrue("m=video " in pc1.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, "actpass")
+
+        # verify VP9 is the only video codec in offer (VP8 and H264 excluded)
+        self.assertTrue("VP9" in pc1.localDescription.sdp)
+        self.assertFalse("VP8" in pc1.localDescription.sdp)
+        self.assertFalse("H264" in pc1.localDescription.sdp)
+
+        # handle offer
+        await pc2.setRemoteDescription(pc1.localDescription)
+        self.assertEqual(pc2.remoteDescription, pc1.localDescription)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0"])
+
+        # add track and create answer
+        pc2.addTrack(VideoStreamTrack())
+        answer = await pc2.createAnswer()
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("m=video " in answer.sdp)
+        self.assertFalse("a=candidate:" in answer.sdp)
+        self.assertFalse("a=end-of-candidates" in answer.sdp)
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+        self.assertTrue("m=video " in pc2.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, "active")
+
+        # verify VP9 is the only video codec in answer (VP8 and H264 excluded)
+        self.assertTrue("VP9" in pc2.localDescription.sdp)
+        self.assertFalse("VP8" in pc2.localDescription.sdp)
+        self.assertFalse("H264" in pc2.localDescription.sdp)
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)
@@ -3062,7 +3389,7 @@ a=rtpmap:0 PCMU/8000
 
     @asynctest
     async def test_connect_video_codec_preferences_offerer(self) -> None:
-        VIDEO_SDP = H264_SDP + VP8_SDP
+        VIDEO_SDP = H264_SDP + VP8_SDP  # VP9 not included (filtered out by codec preferences)
 
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
