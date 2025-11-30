@@ -1,6 +1,7 @@
 import logging
 import multiprocessing
 import random
+from dataclasses import dataclass
 from struct import pack, unpack_from
 from typing import Optional, Type, TypeVar, cast
 
@@ -167,55 +168,52 @@ class VpxPayloadDescriptor:
         return obj, data[pos:]
 
 
+@dataclass
 class Vp9PayloadDescriptor:
     """
     VP9 RTP Payload Descriptor (RFC 9628)
 
-    This implementation supports BASIC mode:
-    - Non-flexible mode (F=0)
-    - Single layer (no spatial/temporal scalability in Phase 1)
+    This implementation supports:
+    - Non-flexible mode (F=0) with TL0PICIDX
+    - Flexible mode (F=1) with P_DIFF reference indices
     - Picture ID (7 or 15 bits)
-    - Layer indices and TL0PICIDX for non-flexible mode
+    - Layer indices (TID, SID)
+    - Scalability structure parsing
+
+    Field name mapping (RFC 9628 single-letter -> descriptive):
+        I -> picture_id_present
+        P -> inter_picture_predicted
+        L -> layer_indices_present
+        F -> flexible_mode
+        B -> start_of_frame
+        E -> end_of_frame
+        V -> scalability_structure_present
+        Z -> not_reference_frame
+        TID -> temporal_id
+        U -> switching_up_point
+        SID -> spatial_id
+        D -> inter_layer_dependency
     """
 
-    def __init__(
-        self,
-        # Required flags (first byte)
-        picture_id_present: bool = False,
-        inter_picture_predicted: bool = False,
-        layer_indices_present: bool = False,
-        flexible_mode: bool = False,
-        start_of_frame: bool = False,
-        end_of_frame: bool = False,
-        scalability_structure_present: bool = False,
-        not_reference_frame: bool = False,
-        # Optional fields
-        picture_id: Optional[int] = None,
-        tl0picidx: Optional[int] = None,
-        # Layer indices (basic support)
-        temporal_id: Optional[int] = None,
-        switching_up_point: Optional[bool] = None,
-        spatial_id: Optional[int] = None,
-        inter_layer_dependency: Optional[bool] = None,
-    ) -> None:
-        # Store all fields using RFC 9628 naming convention
-        self.I = picture_id_present
-        self.P = inter_picture_predicted
-        self.L = layer_indices_present
-        self.F = flexible_mode
-        self.B = start_of_frame
-        self.E = end_of_frame
-        self.V = scalability_structure_present
-        self.Z = not_reference_frame
+    # Required flags (first byte: I|P|L|F|B|E|V|Z)
+    picture_id_present: bool = False  # I
+    inter_picture_predicted: bool = False  # P
+    layer_indices_present: bool = False  # L
+    flexible_mode: bool = False  # F
+    start_of_frame: bool = False  # B
+    end_of_frame: bool = False  # E
+    scalability_structure_present: bool = False  # V
+    not_reference_frame: bool = False  # Z
 
-        self.picture_id = picture_id
-        self.tl0picidx = tl0picidx
+    # Optional fields
+    picture_id: Optional[int] = None
+    tl0picidx: Optional[int] = None  # TL0PICIDX
 
-        # Layer info
-        self.tid = temporal_id
-        self.u = switching_up_point
-        self.sid = spatial_id
-        self.d = inter_layer_dependency
+    # Layer indices
+    temporal_id: Optional[int] = None  # TID
+    switching_up_point: Optional[bool] = None  # U
+    spatial_id: Optional[int] = None  # SID
+    inter_layer_dependency: Optional[bool] = None  # D
 
     def __bytes__(self) -> bytes:
         """
@@ -229,27 +227,27 @@ class Vp9PayloadDescriptor:
 
         # === BYTE 0: Required flags ===
         byte0 = 0
-        if self.I:
-            byte0 |= 0x80  # 0b10000000
-        if self.P:
-            byte0 |= 0x40  # 0b01000000
-        if self.L:
-            byte0 |= 0x20  # 0b00100000
-        if self.F:
-            byte0 |= 0x10  # 0b00010000
-        if self.B:
-            byte0 |= 0x08  # 0b00001000
-        if self.E:
-            byte0 |= 0x04  # 0b00000100
-        if self.V:
-            byte0 |= 0x02  # 0b00000010
-        if self.Z:
-            byte0 |= 0x01  # 0b00000001
+        if self.picture_id_present:
+            byte0 |= 0x80  # I bit
+        if self.inter_picture_predicted:
+            byte0 |= 0x40  # P bit
+        if self.layer_indices_present:
+            byte0 |= 0x20  # L bit
+        if self.flexible_mode:
+            byte0 |= 0x10  # F bit
+        if self.start_of_frame:
+            byte0 |= 0x08  # B bit
+        if self.end_of_frame:
+            byte0 |= 0x04  # E bit
+        if self.scalability_structure_present:
+            byte0 |= 0x02  # V bit
+        if self.not_reference_frame:
+            byte0 |= 0x01  # Z bit
 
         data.append(byte0)
 
         # === PICTURE ID (if I=1) ===
-        if self.I and self.picture_id is not None:
+        if self.picture_id_present and self.picture_id is not None:
             if self.picture_id < 128:
                 # 7-bit picture ID: M=0
                 data.append(self.picture_id & 0x7F)
@@ -261,53 +259,23 @@ class Vp9PayloadDescriptor:
                 data.append(self.picture_id & 0xFF)
 
         # === LAYER INDICES (if L=1) ===
-        if self.L:
+        if self.layer_indices_present:
             layer_byte = 0
-            if self.tid is not None:
-                layer_byte |= (self.tid & 0x07) << 5  # TID: bits 7-5
-            if self.u:
+            if self.temporal_id is not None:
+                layer_byte |= (self.temporal_id & 0x07) << 5  # TID: bits 7-5
+            if self.switching_up_point:
                 layer_byte |= 0x10  # U: bit 4
-            if self.sid is not None:
-                layer_byte |= (self.sid & 0x07) << 1  # SID: bits 3-1
-            if self.d:
+            if self.spatial_id is not None:
+                layer_byte |= (self.spatial_id & 0x07) << 1  # SID: bits 3-1
+            if self.inter_layer_dependency:
                 layer_byte |= 0x01  # D: bit 0
             data.append(layer_byte)
 
         # === NON-FLEXIBLE MODE: TL0PICIDX (if F=0 and L=1) ===
-        if not self.F and self.L and self.tl0picidx is not None:
+        if not self.flexible_mode and self.layer_indices_present and self.tl0picidx is not None:
             data.append(self.tl0picidx & 0xFF)
 
-        # === FLEXIBLE MODE: Reference indices (Phase 2 - TODO) ===
-        # if self.F and self.P:
-        #     # P_DIFF implementation
-        #     pass
-
-        # === SCALABILITY STRUCTURE (if V=1) (Phase 2 - TODO) ===
-        # if self.V:
-        #     # SS data implementation
-        #     pass
-
         return bytes(data)
-
-    def __repr__(self) -> str:
-        """Debug string representation."""
-        flags = []
-        if self.I:
-            flags.append(f"pic_id={self.picture_id}")
-        if self.P:
-            flags.append("P")
-        if self.B:
-            flags.append("B")
-        if self.E:
-            flags.append("E")
-        if self.F:
-            flags.append("F")
-        if self.L:
-            flags.append(f"TID={self.tid},SID={self.sid}")
-        if not self.F and self.tl0picidx is not None:
-            flags.append(f"TL0={self.tl0picidx}")
-
-        return f"Vp9PayloadDescriptor({', '.join(flags)})"
 
     @classmethod
     def parse(
@@ -334,24 +302,24 @@ class Vp9PayloadDescriptor:
         byte0 = data[pos]
         pos += 1
 
-        I = bool(byte0 & 0x80)  # Picture ID present
-        P = bool(byte0 & 0x40)  # Inter-picture predicted
-        L = bool(byte0 & 0x20)  # Layer indices present
-        F = bool(byte0 & 0x10)  # Flexible mode
-        B = bool(byte0 & 0x08)  # Start of frame
-        E = bool(byte0 & 0x04)  # End of frame
-        V = bool(byte0 & 0x02)  # Scalability structure present
-        Z = bool(byte0 & 0x01)  # Not reference frame
+        picture_id_present = bool(byte0 & 0x80)  # I bit
+        inter_picture_predicted = bool(byte0 & 0x40)  # P bit
+        layer_indices_present = bool(byte0 & 0x20)  # L bit
+        flexible_mode = bool(byte0 & 0x10)  # F bit
+        start_of_frame = bool(byte0 & 0x08)  # B bit
+        end_of_frame = bool(byte0 & 0x04)  # E bit
+        scalability_structure_present = bool(byte0 & 0x02)  # V bit
+        not_reference_frame = bool(byte0 & 0x01)  # Z bit
 
         picture_id = None
         tl0picidx = None
-        tid = None
-        u = None
-        sid = None
-        d = None
+        temporal_id = None
+        switching_up_point = None
+        spatial_id = None
+        inter_layer_dependency = None
 
         # === PICTURE ID (if I=1) ===
-        if I:
+        if picture_id_present:
             if len(data) < pos + 1:
                 raise ValueError("VP9 descriptor has truncated Picture ID")
 
@@ -368,20 +336,20 @@ class Vp9PayloadDescriptor:
                 pos += 1
 
         # === LAYER INDICES (if L=1) ===
-        if L:
+        if layer_indices_present:
             if len(data) < pos + 1:
                 raise ValueError("VP9 descriptor has truncated Layer Indices")
 
             layer_byte = data[pos]
             pos += 1
 
-            tid = (layer_byte >> 5) & 0x07  # Bits 7-5
-            u = bool(layer_byte & 0x10)  # Bit 4
-            sid = (layer_byte >> 1) & 0x07  # Bits 3-1
-            d = bool(layer_byte & 0x01)  # Bit 0
+            temporal_id = (layer_byte >> 5) & 0x07  # TID: bits 7-5
+            switching_up_point = bool(layer_byte & 0x10)  # U: bit 4
+            spatial_id = (layer_byte >> 1) & 0x07  # SID: bits 3-1
+            inter_layer_dependency = bool(layer_byte & 0x01)  # D: bit 0
 
         # === NON-FLEXIBLE MODE: TL0PICIDX (if F=0 and L=1) ===
-        if not F and L:
+        if not flexible_mode and layer_indices_present:
             if len(data) < pos + 1:
                 raise ValueError("VP9 descriptor has truncated TL0PICIDX")
             tl0picidx = data[pos]
@@ -392,7 +360,7 @@ class Vp9PayloadDescriptor:
         # +-+-+-+-+-+-+-+-+
         # | P_DIFF      |N|  N=1 means another P_DIFF follows
         # +-+-+-+-+-+-+-+-+
-        if F and P:
+        if flexible_mode and inter_picture_predicted:
             max_ref_pics = 3
             pdiff_count = 0
             while True:
@@ -400,7 +368,6 @@ class Vp9PayloadDescriptor:
                     raise ValueError("VP9 descriptor has truncated P_DIFF")
 
                 # P_DIFF is in bits 7-1, N flag is bit 0
-                # pdiff_value = data[pos] >> 1  # We don't store these for now
                 n_flag = data[pos] & 0x01  # N=1 means more P_DIFF follows
                 pos += 1
                 pdiff_count += 1
@@ -412,13 +379,7 @@ class Vp9PayloadDescriptor:
                     raise ValueError("VP9 descriptor has too many P_DIFF entries")
 
         # === SCALABILITY STRUCTURE (if V=1) ===
-        # Scalability structure format:
-        # +-+-+-+-+-+-+-+-+
-        # | N_S |Y|G|-|-|-|
-        # +-+-+-+-+-+-+-+-+
-        # Then optionally WIDTH/HEIGHT for N_S+1 layers (if Y=1)
-        # Then optionally N_G and picture group data (if G=1)
-        if V:
+        if scalability_structure_present:
             if len(data) <= pos:
                 raise ValueError("VP9 descriptor has truncated SS")
 
@@ -436,9 +397,6 @@ class Vp9PayloadDescriptor:
                 for _ in range(num_spatial_layers):
                     if len(data) <= pos + 3:
                         raise ValueError("VP9 descriptor has truncated SS layer resolution")
-                    # WIDTH (2 bytes) + HEIGHT (2 bytes)
-                    # width = (data[pos] << 8) | data[pos + 1]
-                    # height = (data[pos + 2] << 8) | data[pos + 3]
                     pos += 4
 
             # Parse picture group info (if G=1)
@@ -454,8 +412,7 @@ class Vp9PayloadDescriptor:
                         raise ValueError("VP9 descriptor has truncated PG entry")
 
                     pg_byte = data[pos]
-                    # TID (bits 7-5), U (bit 4), R (bits 3-2)
-                    r_count = (pg_byte >> 2) & 0x03  # Number of reference diffs for this picture
+                    r_count = (pg_byte >> 2) & 0x03  # R: number of reference diffs
                     pos += 1
 
                     # Skip R P_DIFF bytes
@@ -465,20 +422,20 @@ class Vp9PayloadDescriptor:
 
         # Create descriptor object
         descriptor = cls(
-            picture_id_present=I,
-            inter_picture_predicted=P,
-            layer_indices_present=L,
-            flexible_mode=F,
-            start_of_frame=B,
-            end_of_frame=E,
-            scalability_structure_present=V,
-            not_reference_frame=Z,
+            picture_id_present=picture_id_present,
+            inter_picture_predicted=inter_picture_predicted,
+            layer_indices_present=layer_indices_present,
+            flexible_mode=flexible_mode,
+            start_of_frame=start_of_frame,
+            end_of_frame=end_of_frame,
+            scalability_structure_present=scalability_structure_present,
+            not_reference_frame=not_reference_frame,
             picture_id=picture_id,
             tl0picidx=tl0picidx,
-            temporal_id=tid,
-            switching_up_point=u,
-            spatial_id=sid,
-            inter_layer_dependency=d,
+            temporal_id=temporal_id,
+            switching_up_point=switching_up_point,
+            spatial_id=spatial_id,
+            inter_layer_dependency=inter_layer_dependency,
         )
 
         # Return descriptor and remaining payload
@@ -667,18 +624,14 @@ class Vp9Encoder(Encoder):
         if force_keyframe:
             frame.pict_type = av.video.frame.PictureType.I
 
-        try:
-            # Encode frame using libvpx-vp9
-            data_to_send = b""
-            is_keyframe = False
-            for packet in self.codec.encode(frame):
-                # Detect if this packet is a keyframe
-                if packet.is_keyframe:
-                    is_keyframe = True
-                data_to_send += bytes(packet)
-        except Exception as e:
-            logger.warning("Vp9Encoder() failed to encode: " + str(e))
-            return [], 0
+        # Encode frame using libvpx-vp9
+        data_to_send = b""
+        is_keyframe = False
+        for packet in self.codec.encode(frame):
+            # Detect if this packet is a keyframe
+            if packet.is_keyframe:
+                is_keyframe = True
+            data_to_send += bytes(packet)
 
         # Packetize encoded data
         # is_inter_frame is the opposite of is_keyframe
