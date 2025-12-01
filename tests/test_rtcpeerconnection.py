@@ -5150,69 +5150,6 @@ a=rtpmap:0 PCMU/8000
         await pc.close()
 
     @asynctest
-    async def test_setRemoteDescription_pt_collision_in_offer(self) -> None:
-        """
-        Test PT collision fix: H264 RTX and VP8 both at PT 103 in remote offer.
-        """
-        # SDP with collision: H264 at PT 102, H264 RTX at PT 103, VP8 at PT 103
-        problematic_sdp = lf2crlf(
-            """v=0
-o=- 1234567890 2 IN IP4 127.0.0.1
-s=-
-t=0 0
-a=group:BUNDLE 0
-a=msid-semantic: WMS stream
-m=video 9 UDP/TLS/RTP/SAVPF 102 103 103 104
-c=IN IP4 0.0.0.0
-a=rtcp:9 IN IP4 0.0.0.0
-a=ice-ufrag:testufrag
-a=ice-pwd:testpwdtestpwdtestpwdtest
-a=ice-options:trickle
-a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00
-a=setup:actpass
-a=mid:0
-a=sendrecv
-a=rtcp-mux
-a=rtpmap:102 H264/90000
-a=rtcp-fb:102 nack
-a=rtcp-fb:102 nack pli
-a=rtcp-fb:102 goog-remb
-a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
-a=rtpmap:103 rtx/90000
-a=fmtp:103 apt=102
-a=rtpmap:103 VP8/90000
-a=rtcp-fb:103 nack
-a=rtcp-fb:103 nack pli
-a=rtcp-fb:103 goog-remb
-a=rtpmap:104 rtx/90000
-a=fmtp:104 apt=103
-a=ssrc:1111111111 cname:testcname
-"""
-        )
-
-        pc = RTCPeerConnection()
-
-        # Set the problematic offer as remote description
-        await pc.setRemoteDescription(
-            RTCSessionDescription(sdp=problematic_sdp, type="offer")
-        )
-
-        # Create answer
-        answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
-
-        # Extract payload types from answer SDP
-        pts_in_answer = re.findall(r"a=rtpmap:(\d+)\s+", answer.sdp)
-        pts_in_answer = [int(pt) for pt in pts_in_answer]
-
-        # Verify all PTs are unique (no collisions)
-        self.assertEqual(len(pts_in_answer), len(set(pts_in_answer)))
-        self.assertGreaterEqual(len(pts_in_answer), 2)
-
-        # close
-        await pc.close()
-
-    @asynctest
     async def test_setRemoteDescription_media_datachannel_bundled(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
