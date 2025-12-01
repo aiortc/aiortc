@@ -688,115 +688,6 @@ class RTCRtpCodecParametersTest(TestCase):
         self.assertIn(127, used_payload_types)  # video
         self.assertEqual(len(used_payload_types), 2)
 
-    def test_find_common_codecs_without_fix_would_fail(self) -> None:
-        """
-        Verify that the old implementation (without PT collision fix) would
-        produce duplicate PTs. This test documents the bug that was fixed.
-
-        The old find_common_codecs() blindly copied remote PTs without collision
-        detection, causing duplicate assignments when remote SDP had conflicting PTs.
-        """
-        import copy
-
-        # This is the OLD implementation without the fix - it will produce duplicates
-        def find_common_codecs_old(
-            local_codecs: list[RTCRtpCodecParameters],
-            remote_codecs: list[RTCRtpCodecParameters],
-        ) -> list[RTCRtpCodecParameters]:
-            """Old implementation that has the PT collision bug."""
-            from aiortc.codecs import is_rtx
-            from aiortc.rtp import DYNAMIC_PAYLOAD_TYPES
-
-            common = []
-            common_base: dict[int, RTCRtpCodecParameters] = {}
-            for c in remote_codecs:
-                if is_rtx(c):
-                    apt = c.parameters.get("apt")
-                    if isinstance(apt, int) and apt in common_base:
-                        base = common_base[apt]
-                        if c.clockRate == base.clockRate:
-                            common.append(copy.deepcopy(c))
-                    continue
-
-                for codec in local_codecs:
-                    if is_codec_compatible(codec, c):
-                        codec = copy.deepcopy(codec)
-                        if c.payloadType in DYNAMIC_PAYLOAD_TYPES:
-                            codec.payloadType = c.payloadType  # BUG: no collision check!
-                        codec.rtcpFeedback = list(
-                            filter(lambda x: x in c.rtcpFeedback, codec.rtcpFeedback)
-                        )
-                        common.append(codec)
-                        common_base[codec.payloadType] = codec
-                        break
-            return common
-
-        local_codecs = [
-            RTCRtpCodecParameters(
-                mimeType="video/H264",
-                clockRate=90000,
-                payloadType=101,
-                parameters={"profile-level-id": "42e01f"},
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/rtx",
-                clockRate=90000,
-                payloadType=102,
-                parameters={"apt": 101},
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/VP8", clockRate=90000, payloadType=97
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/rtx",
-                clockRate=90000,
-                payloadType=98,
-                parameters={"apt": 97},
-            ),
-        ]
-
-        # Remote SDP with collision: H264 RTX and VP8 both at PT 103
-        remote_codecs = [
-            RTCRtpCodecParameters(
-                mimeType="video/H264",
-                clockRate=90000,
-                payloadType=102,
-                parameters={"profile-level-id": "42e01f"},
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/rtx",
-                clockRate=90000,
-                payloadType=103,  # RTX for H264
-                parameters={"apt": 102},
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/VP8", clockRate=90000, payloadType=103  # COLLISION!
-            ),
-            RTCRtpCodecParameters(
-                mimeType="video/rtx",
-                clockRate=90000,
-                payloadType=104,
-                parameters={"apt": 103},
-            ),
-        ]
-
-        # OLD implementation produces duplicate PTs (the bug!)
-        common_old = find_common_codecs_old(local_codecs, remote_codecs)
-        pts_old = [c.payloadType for c in common_old]
-        # Verify the bug exists: duplicate PTs
-        self.assertNotEqual(
-            len(pts_old), len(set(pts_old)),
-            f"Old implementation should have duplicate PTs but got unique: {pts_old}"
-        )
-
-        # NEW implementation (with fix) produces unique PTs
-        common_new = find_common_codecs(local_codecs, remote_codecs)
-        pts_new = [c.payloadType for c in common_new]
-        self.assertEqual(
-            len(pts_new), len(set(pts_new)),
-            f"New implementation should have unique PTs but got duplicates: {pts_new}"
-        )
-
 
 class RTCPeerConnectionTest(TestCase):
     def assertBundled(self, pc: RTCPeerConnection) -> None:
@@ -5261,20 +5152,9 @@ a=rtpmap:0 PCMU/8000
     @asynctest
     async def test_setRemoteDescription_pt_collision_in_offer(self) -> None:
         """
-        End-to-end test for PT collision fix (PR #1390).
-
-        Simulates a browser SDP offer where H264 RTX uses PT 103 and VP8 also
-        uses PT 103 (collision). The fix ensures aiortc creates an answer with
-        unique PTs by reassigning the colliding PT.
-
-        Without the fix, this would create an answer with duplicate PTs, which
-        browsers reject with: "Duplicate payload type with conflicting codec
-        name or clock rate"
+        Test PT collision fix: H264 RTX and VP8 both at PT 103 in remote offer.
         """
-        import re
-
-        # Create a realistic browser-like SDP offer with PT collision
-        # H264 at PT 102, H264 RTX at PT 103, VP8 at PT 103 (collision!)
+        # SDP with collision: H264 at PT 102, H264 RTX at PT 103, VP8 at PT 103
         problematic_sdp = lf2crlf(
             """v=0
 o=- 1234567890 2 IN IP4 127.0.0.1
@@ -5321,26 +5201,13 @@ a=ssrc:1111111111 cname:testcname
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
 
-        # Parse the answer SDP and extract all payload types
-        pts_in_answer = []
-        for line in answer.sdp.split("\r\n"):
-            # Match rtpmap lines: a=rtpmap:PT codec/clockrate
-            match = re.match(r"a=rtpmap:(\d+)\s+", line)
-            if match:
-                pts_in_answer.append(int(match.group(1)))
+        # Extract payload types from answer SDP
+        pts_in_answer = re.findall(r"a=rtpmap:(\d+)\s+", answer.sdp)
+        pts_in_answer = [int(pt) for pt in pts_in_answer]
 
-        # Verify all PTs in answer are unique (no duplicates)
-        self.assertEqual(
-            len(pts_in_answer),
-            len(set(pts_in_answer)),
-            f"Answer SDP has duplicate payload types! PTs: {pts_in_answer}\n"
-            f"Answer SDP:\n{answer.sdp}",
-        )
-
-        # Verify we have the expected codecs (H264, RTX, VP8, RTX)
-        self.assertGreaterEqual(
-            len(pts_in_answer), 2, "Answer should have at least 2 codecs"
-        )
+        # Verify all PTs are unique (no collisions)
+        self.assertEqual(len(pts_in_answer), len(set(pts_in_answer)))
+        self.assertGreaterEqual(len(pts_in_answer), 2)
 
         # close
         await pc.close()
