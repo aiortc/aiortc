@@ -501,10 +501,9 @@ class RTCRtpCodecParametersTest(TestCase):
             )
         )
 
-    def test_find_common_codecs_pt_collision_pr1390(self) -> None:
+    def test_find_common_codecs_pt_collision_rtx_and_codec(self) -> None:
         """
-        Test PT collision fix for PR #1390.
-        Remote has H264 RTX at PT 103, then VP9 main also at PT 103.
+        Test PT collision when remote has RTX and main codec at same PT.
         """
         local_codecs = [
             RTCRtpCodecParameters(
