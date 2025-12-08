@@ -52,6 +52,26 @@ class RTCBundlePolicy(enum.Enum):
     """
 
 
+class RTCIceTransportPolicy(enum.Enum):
+    """
+    The :class:`RTCIceTransportPolicy` restricts the type of ICE candidates
+    that can be used.
+
+    See https://w3c.github.io/webrtc-pc/#rtcice-transport-policy-enum
+    """
+
+    ALL = "all"
+    """
+    All ICE candidates are considered.
+    """
+
+    RELAY = "relay"
+    """
+    Only ICE candidates whose IP addresses are being relayed, such as those
+    from a TURN server, are considered.
+    """
+
+
 @dataclass
 class RTCConfiguration:
     """
@@ -61,6 +81,9 @@ class RTCConfiguration:
 
     iceServers: Optional[list[RTCIceServer]] = None
     "A list of :class:`RTCIceServer` objects to configure STUN / TURN servers."
+
+    iceTransportPolicy: RTCIceTransportPolicy = RTCIceTransportPolicy.ALL
+    "The ICE transport policy to use."
 
     bundlePolicy: RTCBundlePolicy = RTCBundlePolicy.BALANCED
     "The media-bundling policy to use when gathering ICE candidates."

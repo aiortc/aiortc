@@ -4,11 +4,16 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from aioice import Candidate, Connection, ConnectionClosed
+from aioice import Candidate, Connection, ConnectionClosed, TransportPolicy
 from pyee.asyncio import AsyncIOEventEmitter
 
 from .exceptions import InvalidStateError
-from .rtcconfiguration import RTCIceServer
+from .rtcconfiguration import RTCIceServer, RTCIceTransportPolicy
+
+ICE_TRANSPORT_POLICIES = {
+    RTCIceTransportPolicy.ALL: TransportPolicy.ALL,
+    RTCIceTransportPolicy.RELAY: TransportPolicy.RELAY,
+}
 
 # See https://datatracker.ietf.org/doc/html/rfc7064
 # transport is not defined by RFC 7064 and rejected by browsers.
@@ -184,6 +189,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
     def __init__(
         self,
         iceServers: Optional[list[RTCIceServer]] = None,
+        iceTransportPolicy: RTCIceTransportPolicy = RTCIceTransportPolicy.ALL,
         local_username: Optional[str] = None,
         local_password: Optional[str] = None,
     ) -> None:
@@ -197,6 +203,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             ice_controlling=False,
             local_username=local_username,
             local_password=local_password,
+            transport_policy=ICE_TRANSPORT_POLICIES[iceTransportPolicy],
             **ice_kwargs,
         )
         self._remote_candidates_end = False
