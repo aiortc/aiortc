@@ -8,7 +8,12 @@ from .mediastreams import (
     MediaStreamTrack,
     VideoStreamTrack,
 )
-from .rtcconfiguration import RTCBundlePolicy, RTCConfiguration, RTCIceServer
+from .rtcconfiguration import (
+    RTCBundlePolicy,
+    RTCConfiguration,
+    RTCIceServer,
+    RTCIceTransportPolicy,
+)
 from .rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from .rtcdtlstransport import (
     RTCCertificate,
@@ -74,6 +79,7 @@ __all__ = [
     "RTCIceParameters",
     "RTCIceServer",
     "RTCIceTransport",
+    "RTCIceTransportPolicy",
     "RTCInboundRtpStreamStats",
     "RTCOutboundRtpStreamStats",
     "RTCPeerConnection",

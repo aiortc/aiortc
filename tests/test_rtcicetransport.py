@@ -1,11 +1,12 @@
 import asyncio
-from typing import Optional
+from typing import Any, Optional
+from unittest.mock import AsyncMock, patch
 
 import aioice.ice
 import aioice.stun
 from aioice import ConnectionClosed
 from aiortc.exceptions import InvalidStateError
-from aiortc.rtcconfiguration import RTCIceServer
+from aiortc.rtcconfiguration import RTCIceServer, RTCIceTransportPolicy
 from aiortc.rtcicetransport import (
     RTCIceCandidate,
     RTCIceGatherer,
@@ -183,6 +184,16 @@ class ConnectionKwargsTest(TestCase):
         )
 
 
+    def test_transport_policy(self) -> None:
+        self.assertEqual(
+            connection_kwargs([], transport_policy="all"), {"transport_policy": "all"}
+        )
+        self.assertEqual(
+            connection_kwargs([], transport_policy="relay"),
+            {"transport_policy": "relay"},
+        )
+
+
 class ParseStunTurnUriTest(TestCase):
     def test_invalid_scheme(self) -> None:
         with self.assertRaises(ValueError) as cm:
@@ -257,6 +268,25 @@ class RTCIceGathererTest(TestCase):
             RTCIceGatherer.getDefaultIceServers(),
             [RTCIceServer(urls="stun:stun.l.google.com:19302")],
         )
+
+    @asynctest
+    @patch("aiortc.rtcicetransport.Connection")
+    async def test_gather_relay(self, mock_connection: Any) -> None:
+        mock_connection.return_value.gather_candidates = AsyncMock()
+        mock_connection.return_value.close = AsyncMock()
+
+        gatherer = RTCIceGatherer(iceTransportPolicy=RTCIceTransportPolicy.RELAY)
+        mock_connection.assert_called_once_with(
+            ice_controlling=False,
+            local_username=None,
+            local_password=None,
+            stun_server=("stun.l.google.com", 19302),
+            transport_policy="relay",
+        )
+        self.assertEqual(gatherer.state, "new")
+        await gatherer.gather()
+        self.assertEqual(gatherer.state, "completed")
+        await gatherer._connection.close()
 
 
 class RTCIceTransportTest(TestCase):
