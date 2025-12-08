@@ -15,6 +15,9 @@ WebRTC
    .. autoclass:: RTCBundlePolicy()
       :members:
 
+   .. autoclass:: RTCIceTransportPolicy()
+      :members:
+
    .. autoclass:: RTCConfiguration
       :members:
 
@@ -24,7 +27,7 @@ Interactive Connectivity Establishment (ICE)
    .. autoclass:: RTCIceCandidate
       :members:
 
-   .. autoclass:: RTCIceGatherer
+   .. autoclass:: RTCIceGatherer(iceServers=None, iceTransportPolicy=RTCIceTransportPolicy.ALL)
       :members:
 
    .. autoclass:: RTCIceTransport

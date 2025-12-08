@@ -11,6 +11,7 @@ from aiortc import (
     RTCConfiguration,
     RTCDataChannel,
     RTCIceCandidate,
+    RTCIceTransportPolicy,
     RTCPeerConnection,
     RTCSessionDescription,
 )
@@ -5494,6 +5495,23 @@ a=rtpmap:8 PCMA/8000
             transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
             pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
         )
+
+    @asynctest
+    async def test_icetransportpolicy_relay(self) -> None:
+        pc = RTCPeerConnection(
+            RTCConfiguration(iceTransportPolicy=RTCIceTransportPolicy.RELAY)
+        )
+
+        # Audio and video use separate transports with the balanced bundle policy.
+        pc.addTransceiver("audio")
+        pc.addTransceiver("video")
+
+        await pc.setLocalDescription(await pc.createOffer())
+        self.assertEqual(pc.iceGatheringState, "complete")
+        self.assertNotIn("a=candidate:", pc.localDescription.sdp)
+
+        # close
+        await pc.close()
 
     @asynctest
     async def test_always_negotiate_datachannels(self) -> None:
