@@ -617,6 +617,7 @@ a=msid:stream deprecatedtrack
 
         self.assertEqual(d.media[0].msid, "stream deprecatedtrack")
         self.assertEqual(d.webrtc_track_id(d.media[0]), "deprecatedtrack")
+        self.assertFalse("a=msid-semantic:" in str(d))
 
     def test_audio_freeswitch_no_dtls(self) -> None:
         d = SessionDescription.parse(
