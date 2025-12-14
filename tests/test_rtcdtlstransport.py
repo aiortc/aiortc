@@ -1,8 +1,13 @@
 import asyncio
 import datetime
+from typing import Type
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
+
+from aiortc.rtcdtlstransport import CERTIFICATE_T
 from aiortc.rtcdtlstransport import (
     SRTP_AEAD_AES_256_GCM,
     SRTP_AES128_CM_SHA1_80,
@@ -11,7 +16,10 @@ from aiortc.rtcdtlstransport import (
     RTCDtlsParameters,
     RTCDtlsTransport,
     RtpRouter,
+    SRTPProtectionProfile,
+    certificate_digest,
 )
+from aiortc.rtcdtlstransport import generate_certificate
 from aiortc.rtcrtpparameters import (
     RTCRtpCodecParameters,
     RTCRtpDecodingParameters,
@@ -468,6 +476,50 @@ class RTCDtlsTransportTest(TestCase):
             session1.start(session2.getLocalParameters()),
             session2.start(session1.getLocalParameters()),
         )
+
+        await session1.stop()
+        await session2.stop()
+
+    @asynctest
+    async def test_custom_certificate(self) -> None:
+        custom_ciphers = [b'ECDHE-RSA-CAMELLIA256-SHA384', b'ECDHE-RSA-AES128-GCM-SHA256']
+        fingerprint_algorithm = 'sha-256'
+        class _CustomCertificate(RTCCertificate):
+            def _create_ssl_context(self, srtp_profiles: list[SRTPProtectionProfile]) -> SSL.Context:
+                ctx = SSL.Context(SSL.DTLS_METHOD)
+                ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, lambda *args: True)
+                ctx.use_certificate(self._cert)
+                ctx.use_privatekey(self._key)
+                ctx.set_cipher_list(b':'.join(custom_ciphers))
+                ctx.set_tlsext_use_srtp(b":".join(x.openssl_profile for x in srtp_profiles))
+                return ctx
+
+            def getFingerprints(self) -> list[RTCDtlsFingerprint]:
+                return [RTCDtlsFingerprint(
+                    algorithm=fingerprint_algorithm, value=certificate_digest(self._cert, fingerprint_algorithm))]
+
+            @classmethod
+            def generateCertificate(cls: Type[CERTIFICATE_T]) -> CERTIFICATE_T:
+                key = ec.generate_private_key(ec.SECP521R1(), default_backend())
+                cert = generate_certificate(key)
+                return cls(key=key, cert=cert)
+
+        ice1, ice2 = dummy_ice_transport_pair()
+        session1 = RTCDtlsTransport(ice1, [_CustomCertificate.generateCertificate()])
+        session2 = RTCDtlsTransport(ice2, [_CustomCertificate.generateCertificate()])
+
+        params1 = session1.getLocalParameters()
+        self.assertEqual(fingerprint_algorithm, params1.fingerprints[0].algorithm)
+        params2 = session2.getLocalParameters()
+        self.assertEqual(fingerprint_algorithm, params2.fingerprints[0].algorithm)
+
+        await asyncio.gather(session1.start(params1), session2.start(params2))
+
+        connection_ciphers1 = session1._ssl.get_cipher_list()
+        connection_ciphers2 = session2._ssl.get_cipher_list()
+        for cipher in custom_ciphers:
+            self.assertIn(cipher.decode(), connection_ciphers1)
+            self.assertIn(cipher.decode(), connection_ciphers2)
 
         await session1.stop()
         await session2.stop()
