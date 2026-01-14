@@ -267,18 +267,37 @@ class H264Encoder(Encoder):
             frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
-            self.codec = av.CodecContext.create("libx264", "w")
-            self.codec.width = frame.width
-            self.codec.height = frame.height
-            self.codec.bit_rate = self.target_bitrate
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
-            self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
-            self.codec.options = {
-                "level": "31",
-                "tune": "zerolatency",
-            }
-            self.codec.profile = "Baseline"
+            # Use NVENC hardware encoder if available, fall back to libx264
+            try:
+                self.codec = av.CodecContext.create("h264_nvenc", "w")
+                self.codec.width = frame.width
+                self.codec.height = frame.height
+                self.codec.bit_rate = self.target_bitrate
+                self.codec.pix_fmt = "yuv420p"
+                self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
+                self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+                self.codec.options = {
+                    "preset": "p1",  # Fastest NVENC preset
+                    "tune": "ll",  # Low latency tuning
+                    "rc": "cbr",  # Constant bitrate for streaming
+                    "delay": "0",  # Zero-delay encoding
+                }
+                self.codec.profile = "Baseline"
+                logger.info("Using NVENC hardware encoder")
+            except Exception as e:
+                logger.warning(f"NVENC not available ({e}), falling back to libx264")
+                self.codec = av.CodecContext.create("libx264", "w")
+                self.codec.width = frame.width
+                self.codec.height = frame.height
+                self.codec.bit_rate = self.target_bitrate
+                self.codec.pix_fmt = "yuv420p"
+                self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
+                self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+                self.codec.options = {
+                    "level": "31",
+                    "tune": "zerolatency",
+                }
+                self.codec.profile = "Baseline"
 
         data_to_send = b""
         for package in self.codec.encode(frame):
