@@ -17,11 +17,11 @@ from .base import Decoder, Encoder
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BITRATE = 1000000  # 1 Mbps
-MIN_BITRATE = 500000  # 500 kbps
-MAX_BITRATE = 3000000  # 3 Mbps
+DEFAULT_BITRATE = 10_000_000  # 10 Mbps (good for stereo video)
+MIN_BITRATE = 2_000_000  # 2 Mbps
+MAX_BITRATE = 20_000_000  # 20 Mbps (stereo VR video needs high bitrate)
 
-MAX_FRAME_RATE = 30
+MAX_FRAME_RATE = 60  # Support 60 FPS for VR
 PACKET_MAX = 1300
 
 NAL_TYPE_FU_A = 28
