@@ -6,6 +6,7 @@ from .mediastreams import (
     AudioStreamTrack,
     MediaStreamError,
     MediaStreamTrack,
+    QueuedVideoStreamTrack,
     VideoStreamTrack,
 )
 from .rtcconfiguration import RTCBundlePolicy, RTCConfiguration, RTCIceServer
@@ -61,6 +62,7 @@ __all__ = [
     "InvalidStateError",
     "MediaStreamError",
     "MediaStreamTrack",
+    "QueuedVideoStreamTrack",
     "RTCBundlePolicy",
     "RTCCertificate",
     "RTCConfiguration",

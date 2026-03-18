@@ -126,6 +126,8 @@ class H264Encoder(Encoder):
         self.buffer_data = b""
         self.buffer_pts: Optional[int] = None
         self.codec: Optional[VideoCodecContext] = None
+        self._min_bitrate = MIN_BITRATE
+        self._max_bitrate = MAX_BITRATE
         self.__target_bitrate = DEFAULT_BITRATE
 
     @staticmethod
@@ -310,7 +312,7 @@ class H264Encoder(Encoder):
 
     @target_bitrate.setter
     def target_bitrate(self, bitrate: int) -> None:
-        bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
+        bitrate = max(self._min_bitrate, min(bitrate, self._max_bitrate))
         self.__target_bitrate = bitrate
 
 
