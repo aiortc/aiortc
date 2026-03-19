@@ -13,6 +13,7 @@ from aiortc.rtp import (
     RtcpRtpfbPacket,
     RtcpSdesPacket,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
     clamp_packets_lost,
     pack_header_extensions,
@@ -698,3 +699,285 @@ class RtpUtilTest(TestCase):
             lambda n: math.sin(2 * math.pi * n / num_samples), num_samples, 0
         )
         self.assertEqual(rtp.compute_audio_level_dbov(sine_frame), -3)
+
+
+class RtcpTwccPacketTest(TestCase):
+    def test_parse_simple(self) -> None:
+        """All packets received with small deltas."""
+        packet = RtcpTwccPacket(
+            ssrc=1,
+            media_ssrc=2,
+            base_sequence_number=100,
+            packet_status_count=3,
+            reference_time=1000,
+            feedback_packet_count=0,
+            packet_results=[
+                (100, 250),   # 1 tick
+                (101, 750),   # 2 ticks from ref
+                (102, 1500),  # 6 ticks from ref
+            ],
+        )
+        data = bytes(packet)
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+        parsed = self.ensureIsInstance(packets[0], RtcpTwccPacket)
+        self.assertEqual(parsed.ssrc, 1)
+        self.assertEqual(parsed.media_ssrc, 2)
+        self.assertEqual(parsed.base_sequence_number, 100)
+        self.assertEqual(parsed.packet_status_count, 3)
+        self.assertEqual(parsed.reference_time, 1000)
+        self.assertEqual(parsed.feedback_packet_count, 0)
+        self.assertEqual(len(parsed.packet_results), 3)
+        for seq, delta in parsed.packet_results:
+            self.assertIsNotNone(delta)
+
+    def test_parse_with_loss(self) -> None:
+        """Some packets lost."""
+        packet = RtcpTwccPacket(
+            ssrc=1,
+            media_ssrc=2,
+            base_sequence_number=10,
+            packet_status_count=4,
+            reference_time=500,
+            feedback_packet_count=1,
+            packet_results=[
+                (10, 250),
+                (11, None),   # lost
+                (12, 1000),
+                (13, None),   # lost
+            ],
+        )
+        data = bytes(packet)
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+        parsed = self.ensureIsInstance(packets[0], RtcpTwccPacket)
+        self.assertEqual(parsed.packet_status_count, 4)
+        self.assertEqual(len(parsed.packet_results), 4)
+        self.assertIsNotNone(parsed.packet_results[0][1])
+        self.assertIsNone(parsed.packet_results[1][1])
+        self.assertIsNotNone(parsed.packet_results[2][1])
+        self.assertIsNone(parsed.packet_results[3][1])
+
+    def test_parse_large_delta(self) -> None:
+        """Packet with 2-byte signed delta."""
+        packet = RtcpTwccPacket(
+            ssrc=1,
+            media_ssrc=2,
+            base_sequence_number=0,
+            packet_status_count=2,
+            reference_time=100,
+            feedback_packet_count=0,
+            packet_results=[
+                (0, 250),
+                (1, 100000),  # large delta
+            ],
+        )
+        data = bytes(packet)
+        packets = RtcpPacket.parse(data)
+        parsed = self.ensureIsInstance(packets[0], RtcpTwccPacket)
+        self.assertEqual(len(parsed.packet_results), 2)
+        # First should be small delta
+        self.assertIsNotNone(parsed.packet_results[0][1])
+        # Second should be large delta
+        self.assertIsNotNone(parsed.packet_results[1][1])
+
+    def test_roundtrip(self) -> None:
+        """Create, serialize, parse, and verify fields match."""
+        original = RtcpTwccPacket(
+            ssrc=0x12345678,
+            media_ssrc=0xABCDEF01,
+            base_sequence_number=5000,
+            packet_status_count=5,
+            reference_time=2000,
+            feedback_packet_count=42,
+            packet_results=[
+                (5000, 500),
+                (5001, 1000),
+                (5002, None),
+                (5003, 2000),
+                (5004, 2500),
+            ],
+        )
+        data = bytes(original)
+        packets = RtcpPacket.parse(data)
+        parsed = self.ensureIsInstance(packets[0], RtcpTwccPacket)
+        self.assertEqual(parsed.ssrc, original.ssrc)
+        self.assertEqual(parsed.media_ssrc, original.media_ssrc)
+        self.assertEqual(parsed.base_sequence_number, original.base_sequence_number)
+        self.assertEqual(parsed.packet_status_count, original.packet_status_count)
+        self.assertEqual(parsed.reference_time, original.reference_time)
+        self.assertEqual(parsed.feedback_packet_count, original.feedback_packet_count)
+        self.assertEqual(len(parsed.packet_results), len(original.packet_results))
+        for (seq_o, delta_o), (seq_p, delta_p) in zip(
+            original.packet_results, parsed.packet_results
+        ):
+            self.assertEqual(seq_o, seq_p)
+            if delta_o is None:
+                self.assertIsNone(delta_p)
+            else:
+                self.assertIsNotNone(delta_p)
+
+    def test_serialize_run_length(self) -> None:
+        """Verify run-length encoding output."""
+        from aiortc.rtp import _encode_twcc_chunks
+
+        # All same status
+        statuses = [1] * 10
+        data = _encode_twcc_chunks(statuses)
+        # Should produce one run-length chunk
+        self.assertEqual(len(data), 2)
+        chunk = int.from_bytes(data[0:2], "big")
+        self.assertEqual(chunk & 0x8000, 0)  # run-length
+        self.assertEqual((chunk >> 13) & 0x03, 1)  # status=1
+        self.assertEqual(chunk & 0x1FFF, 10)  # run=10
+
+    def test_parse_status_vector_1bit(self) -> None:
+        """Parse a status vector chunk with 1-bit symbols."""
+        from struct import pack
+
+        from aiortc.rtp import _decode_twcc_chunks
+
+        # Status vector: bit15=1, bit14=0 (1-bit), then 14 bits of symbols
+        # Symbols: 1,0,1,0,1,0,1,0,1,0,1,0,1,0
+        symbols = 0b10101010101010
+        chunk = 0x8000 | symbols  # bit15=1, bit14=0
+        data = pack("!H", chunk)
+        result = _decode_twcc_chunks(data, 0, 14)
+        self.assertEqual(len(result), 14)
+        for i in range(14):
+            expected = 1 if i % 2 == 0 else 0
+            self.assertEqual(result[i], expected)
+
+    def test_parse_status_vector_2bit(self) -> None:
+        """Parse a status vector chunk with 2-bit symbols."""
+        from struct import pack
+
+        from aiortc.rtp import _decode_twcc_chunks
+
+        # Status vector: bit15=1, bit14=1 (2-bit), then 7 x 2-bit symbols
+        # Symbols: 0,1,2,0,1,2,0
+        symbols = 0b00011000011000
+        chunk = 0xC000 | symbols
+        data = pack("!H", chunk)
+        result = _decode_twcc_chunks(data, 0, 7)
+        self.assertEqual(len(result), 7)
+        self.assertEqual(result, [0, 1, 2, 0, 1, 2, 0])
+
+    def test_parse_reference_vectors(self) -> None:
+        """
+        Tests parsing of pre-built TWCC binary payloads.
+        """
+        # Vector 1: Simple 3 packets all received, small deltas
+        # RTCP header: V=2, PT=205, FMT=15, length in words
+        # Build a simple TWCC payload manually:
+        # ssrc=1, media_ssrc=2, base_seq=0, count=3, ref_time=0, fb_count=0
+        # Run-length chunk: status=1 (small delta), run=3
+        # Deltas: 1 tick, 1 tick, 1 tick (250us each)
+        from struct import pack
+
+        from aiortc.rtp import RTCP_RTPFB, RTCP_RTPFB_TWCC, pack_rtcp_packet
+
+        payload = pack("!LL", 1, 2)  # ssrc, media_ssrc
+        payload += pack("!HH", 0, 3)  # base_seq, status_count
+        payload += pack("!BBB", 0, 0, 0)  # ref_time 24-bit = 0
+        payload += pack("!B", 0)  # fb_pkt_count
+        # Run-length chunk: status=1, run=3
+        payload += pack("!H", (1 << 13) | 3)
+        # Deltas: 1, 1, 1 (each 250us)
+        payload += pack("!BBB", 1, 1, 1)
+        # Pad to 4-byte boundary (total=21, need 24)
+        payload += b"\x00" * ((4 - len(payload) % 4) % 4)
+        data = pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload)
+
+        packets = RtcpPacket.parse(data)
+        self.assertEqual(len(packets), 1)
+        parsed = self.ensureIsInstance(packets[0], RtcpTwccPacket)
+        self.assertEqual(parsed.base_sequence_number, 0)
+        self.assertEqual(parsed.packet_status_count, 3)
+        self.assertEqual(len(parsed.packet_results), 3)
+
+        # All received
+        received = sum(1 for _, d in parsed.packet_results if d is not None)
+        lost = sum(1 for _, d in parsed.packet_results if d is None)
+        self.assertEqual(received, 3)
+        self.assertEqual(lost, 0)
+
+        # Vector 2: Mixed received and lost
+        payload2 = pack("!LL", 1, 2)
+        payload2 += pack("!HH", 10, 5)
+        payload2 += pack("!BBB", 0, 0, 1)  # ref_time = 1
+        payload2 += pack("!B", 1)
+
+        # Status vector with 2-bit symbols: received, lost, received, lost, received
+        # = 01 00 01 00 01 00 00 (pad to 7 symbols)
+        symbols = 0b01000100010000
+        chunk = 0xC000 | symbols
+        payload2 += pack("!H", chunk)
+        # Deltas for 3 received: 4, 4, 4 ticks (1000us each)
+        payload2 += pack("!BBB", 4, 4, 4)
+        payload2 += b"\x00" * ((4 - len(payload2) % 4) % 4)
+        data2 = pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload2)
+
+        packets2 = RtcpPacket.parse(data2)
+        parsed2 = self.ensureIsInstance(packets2[0], RtcpTwccPacket)
+        self.assertEqual(parsed2.packet_status_count, 5)
+        received2 = sum(1 for _, d in parsed2.packet_results if d is not None)
+        lost2 = sum(1 for _, d in parsed2.packet_results if d is None)
+        self.assertEqual(received2, 3)
+        self.assertEqual(lost2, 2)
+
+        # Vector 3: Large deltas
+        payload3 = pack("!LL", 1, 2)
+        payload3 += pack("!HH", 0, 2)
+        payload3 += pack("!BBB", 0, 0, 0)
+        payload3 += pack("!B", 0)
+        # Run-length: status=2 (large delta), run=2
+        payload3 += pack("!H", (2 << 13) | 2)
+        # Large deltas: 1000 ticks (250ms), -500 ticks (-125ms)
+        payload3 += pack("!hh", 1000, -500)
+        payload3 += b"\x00" * ((4 - len(payload3) % 4) % 4)
+        data3 = pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload3)
+
+        packets3 = RtcpPacket.parse(data3)
+        parsed3 = self.ensureIsInstance(packets3[0], RtcpTwccPacket)
+        self.assertEqual(parsed3.packet_status_count, 2)
+        self.assertEqual(len(parsed3.packet_results), 2)
+        # Both received
+        self.assertIsNotNone(parsed3.packet_results[0][1])
+        self.assertIsNotNone(parsed3.packet_results[1][1])
+
+        # Vector 4: All lost
+        payload4 = pack("!LL", 1, 2)
+        payload4 += pack("!HH", 0, 5)
+        payload4 += pack("!BBB", 0, 0, 0)
+        payload4 += pack("!B", 0)
+        # Run-length: status=0 (not received), run=5
+        payload4 += pack("!H", 5)
+        # No deltas, pad to 4-byte boundary
+        payload4 += b"\x00" * ((4 - len(payload4) % 4) % 4)
+        data4 = pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload4)
+
+        packets4 = RtcpPacket.parse(data4)
+        parsed4 = self.ensureIsInstance(packets4[0], RtcpTwccPacket)
+        self.assertEqual(parsed4.packet_status_count, 5)
+        lost4 = sum(1 for _, d in parsed4.packet_results if d is None)
+        self.assertEqual(lost4, 5)
+
+        # Vector 5: Single packet
+        payload5 = pack("!LL", 100, 200)
+        payload5 += pack("!HH", 65535, 1)
+        payload5 += pack("!BBB", 0, 0, 10)
+        payload5 += pack("!B", 255)
+        payload5 += pack("!H", (1 << 13) | 1)
+        payload5 += pack("!B", 0)  # delta=0
+        payload5 += b"\x00" * ((4 - len(payload5) % 4) % 4)
+        data5 = pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload5)
+
+        packets5 = RtcpPacket.parse(data5)
+        parsed5 = self.ensureIsInstance(packets5[0], RtcpTwccPacket)
+        self.assertEqual(parsed5.ssrc, 100)
+        self.assertEqual(parsed5.media_ssrc, 200)
+        self.assertEqual(parsed5.base_sequence_number, 65535)
+        self.assertEqual(parsed5.feedback_packet_count, 255)
+        self.assertEqual(len(parsed5.packet_results), 1)
+        self.assertIsNotNone(parsed5.packet_results[0][1])

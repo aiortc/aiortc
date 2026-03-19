@@ -35,6 +35,7 @@ from .rtp import (
     RtcpRrPacket,
     RtcpRtpfbPacket,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
     clamp_packets_lost,
     pack_remb_fci,
@@ -45,7 +46,7 @@ from .stats import (
     RTCRemoteOutboundRtpStreamStats,
     RTCStatsReport,
 )
-from .utils import uint16_add, uint16_gt
+from .utils import uint16_add, uint16_gt, uint16_gte
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,88 @@ class StreamStatistics:
         return clamp_packets_lost(self.packets_expected - self.packets_received)
 
 
+class TwccTracker:
+    DELTA_UNIT_US = 250
+    REF_TIME_UNIT_US = 64_000
+
+    def __init__(self) -> None:
+        self._packets: dict[int, int] = {}  # twcc_seq -> arrival_time_us
+        self._min_seq: Optional[int] = None
+        self._max_seq: Optional[int] = None
+        self._feedback_count: int = 0
+
+    def add(self, twcc_seq: int, arrival_time_us: int) -> None:
+        if twcc_seq in self._packets:
+            return  # skip duplicates
+        self._packets[twcc_seq] = arrival_time_us
+        if self._min_seq is None or uint16_gt(self._min_seq, twcc_seq):
+            self._min_seq = twcc_seq
+        if self._max_seq is None or uint16_gt(twcc_seq, self._max_seq):
+            self._max_seq = twcc_seq
+
+    def build_feedback(
+        self, ssrc: int, media_ssrc: int
+    ) -> Optional[RtcpTwccPacket]:
+        if self._min_seq is None or self._max_seq is None or not self._packets:
+            return None
+
+        base_seq = self._min_seq
+
+        # Iterate from min_seq to max_seq (uint16 wraparound aware)
+        seq = base_seq
+        packet_results: list[tuple[int, Optional[int]]] = []
+
+        # Find reference time from first received packet
+        ref_time_us: Optional[int] = None
+        s = base_seq
+        while True:
+            if s in self._packets:
+                ref_time_us = self._packets[s]
+                break
+            if s == self._max_seq:
+                break
+            s = (s + 1) & 0xFFFF
+        if ref_time_us is None:
+            return None
+
+        reference_time = ref_time_us // self.REF_TIME_UNIT_US
+        # Adjust for signed 24-bit
+        if ref_time_us < 0:
+            reference_time = -((-ref_time_us + self.REF_TIME_UNIT_US - 1) // self.REF_TIME_UNIT_US)
+
+        ref_base_us = reference_time * self.REF_TIME_UNIT_US
+
+        seq = base_seq
+        while True:
+            arrival = self._packets.get(seq)
+            if arrival is None:
+                packet_results.append((seq, None))
+            else:
+                recv_delta_us = arrival - ref_base_us
+                packet_results.append((seq, recv_delta_us))
+            if seq == self._max_seq:
+                break
+            seq = (seq + 1) & 0xFFFF
+
+        fb_count = self._feedback_count & 0xFF
+        self._feedback_count = (self._feedback_count + 1) & 0xFF
+
+        # Clear state
+        self._packets.clear()
+        self._min_seq = None
+        self._max_seq = None
+
+        return RtcpTwccPacket(
+            ssrc=ssrc,
+            media_ssrc=media_ssrc,
+            base_sequence_number=base_seq,
+            packet_status_count=len(packet_results),
+            reference_time=reference_time,
+            feedback_packet_count=fb_count,
+            packet_results=packet_results,
+        )
+
+
 class RemoteStreamTrack(MediaStreamTrack):
     def __init__(self, kind: str, id: Optional[str] = None) -> None:
         super().__init__()
@@ -285,6 +368,7 @@ class RTCRtpReceiver:
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_ssrc: dict[int, int] = {}
+        self.__twcc_tracker: Optional[TwccTracker] = None
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__timestamp_mapper = TimestampMapper()
@@ -383,6 +467,13 @@ class RTCRtpReceiver:
                 if encoding.rtx:
                     self.__rtx_ssrc[encoding.rtx.ssrc] = encoding.ssrc
 
+            # check if TWCC extension is negotiated
+            twcc_uri = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+            for ext in parameters.headerExtensions:
+                if ext.uri == twcc_uri:
+                    self.__twcc_tracker = TwccTracker()
+                    break
+
             # start decoder thread
             self.__decoder_thread = threading.Thread(
                 target=decoder_worker,
@@ -457,6 +548,16 @@ class RTCRtpReceiver:
         # If the receiver is disabled, discard the packet.
         if not self._enabled:
             return
+
+        # feed TWCC tracker
+        if (
+            self.__twcc_tracker is not None
+            and packet.extensions.transport_sequence_number is not None
+        ):
+            self.__twcc_tracker.add(
+                packet.extensions.transport_sequence_number,
+                arrival_time_ms * 1000,
+            )
 
         # feed bitrate estimator
         if self.__remote_bitrate_estimator is not None:
@@ -545,10 +646,33 @@ class RTCRtpReceiver:
         self.__rtcp_started.set()
 
         try:
+            rr_counter = 0
             while True:
-                # The interval between RTCP packets is varied randomly over the
-                # range [0.5, 1.5] times the calculated interval.
-                await asyncio.sleep(0.5 + random.random())
+                if self.__twcc_tracker is not None:
+                    # Shorter interval for TWCC feedback (~100ms with jitter)
+                    await asyncio.sleep(0.05 + random.random() * 0.1)
+                else:
+                    # The interval between RTCP packets is varied randomly over
+                    # the range [0.5, 1.5] times the calculated interval.
+                    await asyncio.sleep(0.5 + random.random())
+
+                # TWCC feedback
+                if (
+                    self.__twcc_tracker is not None
+                    and self.__rtcp_ssrc is not None
+                ):
+                    twcc_packet = self.__twcc_tracker.build_feedback(
+                        ssrc=self.__rtcp_ssrc, media_ssrc=0
+                    )
+                    if twcc_packet is not None:
+                        await self._send_rtcp(twcc_packet)
+
+                rr_counter += 1
+
+                # Send RR at reduced frequency when TWCC is active
+                if self.__twcc_tracker is not None and rr_counter < 10:
+                    continue
+                rr_counter = 0
 
                 # RTCP RR
                 reports = []

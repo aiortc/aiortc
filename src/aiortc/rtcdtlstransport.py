@@ -28,6 +28,7 @@ from .rtp import (
     RtcpRrPacket,
     RtcpRtpfbPacket,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
     is_rtcp,
 )
@@ -292,6 +293,10 @@ class RtpRouter:
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in packet.reports:
                 add_recipient(self.senders.get(report.ssrc))
+        elif isinstance(packet, RtcpTwccPacket):
+            # TWCC feedback is transport-wide, route to all senders
+            for sender in self.senders.values():
+                recipients.add(sender)
         elif isinstance(packet, (RtcpPsfbPacket, RtcpRtpfbPacket)):
             add_recipient(self.senders.get(packet.media_ssrc))
 
@@ -370,6 +375,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__rx_packets = 0
         self.__tx_bytes = 0
         self.__tx_packets = 0
+
+        # TWCC
+        self._twcc_sequence_number: int = 0
 
         # SRTP
         self._rx_srtp: Session = None
@@ -577,6 +585,11 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             raise exc
         finally:
             self._set_state(State.CLOSED)
+
+    def _next_twcc_sequence_number(self) -> int:
+        seq = self._twcc_sequence_number
+        self._twcc_sequence_number = (seq + 1) & 0xFFFF
+        return seq
 
     def _get_stats(self) -> RTCStatsReport:
         report = RTCStatsReport()

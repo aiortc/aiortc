@@ -4,6 +4,7 @@ import random
 import time
 import traceback
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -36,6 +37,7 @@ from .rtp import (
     RtcpSenderInfo,
     RtcpSourceInfo,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
     unpack_remb_fci,
     wrap_rtx,
@@ -115,6 +117,7 @@ class RTCRtpSender:
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random_sequence_number()
+        self.__twcc_send_log: OrderedDict[int, float] = OrderedDict()
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
@@ -279,6 +282,9 @@ class RTCRtpSender:
             RTCP_PSFB_PLI,  # Picture Loss Indication
         ):
             self._send_keyframe()
+        elif isinstance(packet, RtcpTwccPacket):
+            for seq_num, recv_delta_us in packet.packet_results:
+                self.__twcc_send_log.pop(seq_num, None)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
@@ -391,6 +397,16 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
                     if enc_frame.audio_level is not None:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
+
+                    # stamp transport-wide sequence number
+                    packet.extensions.transport_sequence_number = (
+                        self.__transport._next_twcc_sequence_number()
+                    )
+                    self.__twcc_send_log[
+                        packet.extensions.transport_sequence_number
+                    ] = time.time()
+                    while len(self.__twcc_send_log) > 4000:
+                        self.__twcc_send_log.popitem(last=False)
 
                     # send packet
                     self.__log_debug("> %s", packet)
