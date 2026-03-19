@@ -1200,6 +1200,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             receiver=RTCRtpReceiver(kind, dtlsTransport),
         )
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
+        transceiver.sender._set_twcc_callback(
+            lambda feedback: self.emit("twcc", feedback)
+        )
         transceiver.sender._stream_id = self.__stream_id
         transceiver._bundled = bundled
         self.__transceivers.append(transceiver)

@@ -18,6 +18,52 @@ from aiortc.contrib.media import MediaPlayer, MediaRelay
 
 ROOT = os.path.dirname(__file__)
 
+logger = logging.getLogger(__name__)
+
+
+class SimpleCongestionController:
+    """AIMD congestion controller driven by TWCC feedback."""
+
+    def __init__(self, pc, sender):
+        self.sender = sender
+        self.bitrate = 1_000_000  # initial 1 Mbps
+
+        @pc.on("twcc")
+        def on_twcc(feedback):
+            total = len(feedback.results)
+            if total == 0:
+                return
+            lost = sum(1 for r in feedback.results if r.lost)
+            loss_rate = lost / total
+
+            # compute one-way delay gradient
+            prev_send = None
+            prev_recv = None
+            delay_gradients = []
+            for r in feedback.results:
+                if r.lost or r.send_time is None:
+                    prev_send = None
+                    continue
+                if prev_send is not None:
+                    send_delta = r.send_time - prev_send
+                    recv_delta = (r.recv_delta_us - prev_recv) / 1e6
+                    delay_gradients.append(recv_delta - send_delta)
+                prev_send = r.send_time
+                prev_recv = r.recv_delta_us
+
+            # simple AIMD
+            if loss_rate > 0.1 or (
+                delay_gradients
+                and sum(delay_gradients) / len(delay_gradients) > 0.005
+            ):
+                self.bitrate = int(self.bitrate * 0.85)
+            else:
+                self.bitrate = int(self.bitrate * 1.05)
+
+            self.bitrate = max(100_000, min(self.bitrate, 10_000_000))
+            self.sender.set_target_bitrate(self.bitrate)
+            logger.debug("TWCC: target bitrate %d bps", self.bitrate)
+
 pcs = set()
 relay = None
 webcam = None
@@ -105,6 +151,7 @@ async def offer(request: web.Request) -> web.Response:
             force_codec(pc, video_sender, args.video_codec)
         elif args.play_without_decoding:
             raise Exception("You must specify the video codec using --video-codec")
+        SimpleCongestionController(pc, video_sender)
 
     await pc.setRemoteDescription(offer)
 

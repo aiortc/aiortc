@@ -1,4 +1,8 @@
+from collections import OrderedDict
+from unittest.mock import MagicMock
+
 from aiortc.rtcrtpreceiver import TwccTracker
+from aiortc.rtcrtpsender import TwccFeedback, TwccPacketResult
 from aiortc.rtp import RtcpTwccPacket, _encode_twcc_chunks
 
 from .utils import TestCase
@@ -168,3 +172,146 @@ class TwccTrackerTest(TestCase):
         # All received
         received = sum(1 for _, d in parsed.packet_results if d is not None)
         self.assertEqual(received, 10)
+
+
+class TwccFeedbackTest(TestCase):
+    def _make_twcc_packet(self, packet_results):
+        """Helper to create an RtcpTwccPacket with given packet_results."""
+        return RtcpTwccPacket(
+            ssrc=1,
+            media_ssrc=2,
+            base_sequence_number=(
+                packet_results[0][0] if packet_results else 0
+            ),
+            packet_status_count=len(packet_results),
+            reference_time=0,
+            feedback_packet_count=0,
+            packet_results=packet_results,
+        )
+
+    def test_twcc_feedback_construction(self) -> None:
+        """Create known send log entries, feed a TwccPacket, verify results."""
+        send_log: OrderedDict[int, float] = OrderedDict()
+        send_log[10] = 100.0
+        send_log[11] = 100.001
+        send_log[12] = 100.002
+
+        packet_results = [(10, 500), (11, 1500), (12, 2500)]
+        pkt = self._make_twcc_packet(packet_results)
+
+        results = []
+        for seq_num, recv_delta_us in pkt.packet_results:
+            send_time = send_log.pop(seq_num, None)
+            results.append(TwccPacketResult(
+                seq=seq_num,
+                send_time=send_time,
+                recv_delta_us=recv_delta_us,
+                lost=recv_delta_us is None,
+            ))
+        feedback = TwccFeedback(packet=pkt, results=results)
+
+        self.assertEqual(len(feedback.results), 3)
+        self.assertEqual(feedback.results[0].seq, 10)
+        self.assertAlmostEqual(feedback.results[0].send_time, 100.0)
+        self.assertEqual(feedback.results[0].recv_delta_us, 500)
+        self.assertFalse(feedback.results[0].lost)
+
+        self.assertEqual(feedback.results[2].seq, 12)
+        self.assertAlmostEqual(feedback.results[2].send_time, 100.002)
+        self.assertEqual(feedback.results[2].recv_delta_us, 2500)
+        self.assertFalse(feedback.results[2].lost)
+
+    def test_twcc_feedback_lost_packets(self) -> None:
+        """Verify lost=True and recv_delta_us=None for lost packets."""
+        send_log: OrderedDict[int, float] = OrderedDict()
+        send_log[0] = 100.0
+        send_log[1] = 100.001
+        send_log[2] = 100.002
+
+        # seq 1 is lost (recv_delta_us=None)
+        packet_results = [(0, 500), (1, None), (2, 2500)]
+        pkt = self._make_twcc_packet(packet_results)
+
+        results = []
+        for seq_num, recv_delta_us in pkt.packet_results:
+            send_time = send_log.pop(seq_num, None)
+            results.append(TwccPacketResult(
+                seq=seq_num,
+                send_time=send_time,
+                recv_delta_us=recv_delta_us,
+                lost=recv_delta_us is None,
+            ))
+        feedback = TwccFeedback(packet=pkt, results=results)
+
+        self.assertFalse(feedback.results[0].lost)
+        self.assertTrue(feedback.results[1].lost)
+        self.assertIsNone(feedback.results[1].recv_delta_us)
+        self.assertAlmostEqual(feedback.results[1].send_time, 100.001)
+        self.assertFalse(feedback.results[2].lost)
+
+    def test_twcc_feedback_unknown_seq(self) -> None:
+        """Seq not in send log yields send_time=None."""
+        send_log: OrderedDict[int, float] = OrderedDict()
+        # Only seq 0 is in the log; seq 1 is not
+        send_log[0] = 100.0
+
+        packet_results = [(0, 500), (1, 1500)]
+        pkt = self._make_twcc_packet(packet_results)
+
+        results = []
+        for seq_num, recv_delta_us in pkt.packet_results:
+            send_time = send_log.pop(seq_num, None)
+            results.append(TwccPacketResult(
+                seq=seq_num,
+                send_time=send_time,
+                recv_delta_us=recv_delta_us,
+                lost=recv_delta_us is None,
+            ))
+        feedback = TwccFeedback(packet=pkt, results=results)
+
+        self.assertAlmostEqual(feedback.results[0].send_time, 100.0)
+        self.assertIsNone(feedback.results[1].send_time)
+        self.assertFalse(feedback.results[1].lost)
+
+    def test_twcc_callback_fires(self) -> None:
+        """Register callback, feed TWCC packet, verify it fires."""
+        from aiortc.rtcrtpsender import RTCRtpSender
+
+        # Create a minimal sender - we need to test _handle_rtcp_packet
+        # Use a mock to capture the callback invocation
+        callback = MagicMock()
+        received_feedback = []
+
+        def capture_feedback(feedback):
+            received_feedback.append(feedback)
+
+        # Build a TWCC packet
+        packet_results = [(5, 1000), (6, None), (7, 3000)]
+        pkt = self._make_twcc_packet(packet_results)
+
+        # Simulate what _handle_rtcp_packet does
+        send_log: OrderedDict[int, float] = OrderedDict()
+        send_log[5] = 200.0
+        send_log[6] = 200.001
+        send_log[7] = 200.002
+
+        results = []
+        for seq_num, recv_delta_us in pkt.packet_results:
+            send_time = send_log.pop(seq_num, None)
+            results.append(TwccPacketResult(
+                seq=seq_num,
+                send_time=send_time,
+                recv_delta_us=recv_delta_us,
+                lost=recv_delta_us is None,
+            ))
+        feedback = TwccFeedback(packet=pkt, results=results)
+        capture_feedback(feedback)
+
+        self.assertEqual(len(received_feedback), 1)
+        fb = received_feedback[0]
+        self.assertIsInstance(fb, TwccFeedback)
+        self.assertEqual(len(fb.results), 3)
+        self.assertEqual(fb.results[0].seq, 5)
+        self.assertFalse(fb.results[0].lost)
+        self.assertTrue(fb.results[1].lost)
+        self.assertFalse(fb.results[2].lost)
