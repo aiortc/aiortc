@@ -46,7 +46,7 @@ from .stats import (
     RTCRemoteOutboundRtpStreamStats,
     RTCStatsReport,
 )
-from .utils import uint16_add, uint16_gt, uint16_gte
+from .utils import uint16_add, uint16_gt
 
 logger = logging.getLogger(__name__)
 
@@ -234,9 +234,6 @@ class TwccTracker:
             return None
 
         reference_time = ref_time_us // self.REF_TIME_UNIT_US
-        # Adjust for signed 24-bit
-        if ref_time_us < 0:
-            reference_time = -((-ref_time_us + self.REF_TIME_UNIT_US - 1) // self.REF_TIME_UNIT_US)
 
         ref_base_us = reference_time * self.REF_TIME_UNIT_US
 
