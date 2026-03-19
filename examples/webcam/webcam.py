@@ -51,18 +51,30 @@ class SimpleCongestionController:
                 prev_send = r.send_time
                 prev_recv = r.recv_delta_us
 
+            avg_delay = (
+                sum(delay_gradients) / len(delay_gradients)
+                if delay_gradients else 0.0
+            )
+
+            old_bitrate = self.bitrate
+
             # simple AIMD
-            if loss_rate > 0.1 or (
-                delay_gradients
-                and sum(delay_gradients) / len(delay_gradients) > 0.005
-            ):
+            if loss_rate > 0.1 or avg_delay > 0.005:
                 self.bitrate = int(self.bitrate * 0.85)
+                action = "DECREASE"
             else:
                 self.bitrate = int(self.bitrate * 1.05)
+                action = "increase"
 
             self.bitrate = max(100_000, min(self.bitrate, 10_000_000))
             self.sender.set_target_bitrate(self.bitrate)
-            logger.debug("TWCC: target bitrate %d bps", self.bitrate)
+
+            print(
+                f"[TWCC] pkts={total} lost={lost} loss={loss_rate:.1%} "
+                f"avg_delay={avg_delay*1000:.2f}ms "
+                f"bitrate {old_bitrate//1000}k -> {self.bitrate//1000}k kbps "
+                f"({action})"
+            )
 
 pcs = set()
 relay = None
