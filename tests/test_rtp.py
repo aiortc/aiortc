@@ -712,8 +712,8 @@ class RtcpTwccPacketTest(TestCase):
             reference_time=1000,
             feedback_packet_count=0,
             packet_results=[
-                (100, 250),   # 1 tick
-                (101, 750),   # 2 ticks from ref
+                (100, 250),  # 1 tick
+                (101, 750),  # 2 ticks from ref
                 (102, 1500),  # 6 ticks from ref
             ],
         )
@@ -742,9 +742,9 @@ class RtcpTwccPacketTest(TestCase):
             feedback_packet_count=1,
             packet_results=[
                 (10, 250),
-                (11, None),   # lost
+                (11, None),  # lost
                 (12, 1000),
-                (13, None),   # lost
+                (13, None),  # lost
             ],
         )
         data = bytes(packet)

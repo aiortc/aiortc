@@ -689,9 +689,7 @@ class RtcpTwccPacket:
         ref_time = self.reference_time & 0xFFFFFF
 
         payload = pack("!LL", self.ssrc, self.media_ssrc)
-        payload += pack(
-            "!HH", self.base_sequence_number, self.packet_status_count
-        )
+        payload += pack("!HH", self.base_sequence_number, self.packet_status_count)
         payload += pack("!B", (ref_time >> 16) & 0xFF)
         payload += pack("!B", (ref_time >> 8) & 0xFF)
         payload += pack("!B", ref_time & 0xFF)

@@ -533,8 +533,10 @@ class RTCPeerConnectionTest(TestCase):
         self, pc1: RTCPeerConnection, pc2: RTCPeerConnection
     ) -> None:
         await self.sleepWhile(
-            lambda: pc1.iceConnectionState == "checking"
-            or pc2.iceConnectionState == "checking"
+            lambda: (
+                pc1.iceConnectionState == "checking"
+                or pc2.iceConnectionState == "checking"
+            )
         )
         self.assertEqual(pc1.iceConnectionState, "completed")
         self.assertEqual(pc2.iceConnectionState, "completed")

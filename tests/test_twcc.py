@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from unittest.mock import MagicMock
 
 from aiortc.rtcrtpreceiver import TwccTracker
 from aiortc.rtcrtpsender import TwccFeedback, TwccPacketResult
@@ -123,11 +122,11 @@ class TwccTrackerTest(TestCase):
 
         # Verify lost positions
         self.assertIsNotNone(fb.packet_results[0][1])  # seq 0
-        self.assertIsNone(fb.packet_results[1][1])      # seq 1 lost
-        self.assertIsNotNone(fb.packet_results[2][1])   # seq 2
-        self.assertIsNotNone(fb.packet_results[3][1])   # seq 3
-        self.assertIsNone(fb.packet_results[4][1])      # seq 4 lost
-        self.assertIsNotNone(fb.packet_results[5][1])   # seq 5
+        self.assertIsNone(fb.packet_results[1][1])  # seq 1 lost
+        self.assertIsNotNone(fb.packet_results[2][1])  # seq 2
+        self.assertIsNotNone(fb.packet_results[3][1])  # seq 3
+        self.assertIsNone(fb.packet_results[4][1])  # seq 4 lost
+        self.assertIsNotNone(fb.packet_results[5][1])  # seq 5
 
     def test_run_length_encoding(self) -> None:
         """Verify chunk encoding produces valid run-length chunks."""
@@ -175,14 +174,14 @@ class TwccTrackerTest(TestCase):
 
 
 class TwccFeedbackTest(TestCase):
-    def _make_twcc_packet(self, packet_results):
+    def _make_twcc_packet(
+        self, packet_results: list[tuple[int, int | None]]
+    ) -> RtcpTwccPacket:
         """Helper to create an RtcpTwccPacket with given packet_results."""
         return RtcpTwccPacket(
             ssrc=1,
             media_ssrc=2,
-            base_sequence_number=(
-                packet_results[0][0] if packet_results else 0
-            ),
+            base_sequence_number=(packet_results[0][0] if packet_results else 0),
             packet_status_count=len(packet_results),
             reference_time=0,
             feedback_packet_count=0,
@@ -202,12 +201,14 @@ class TwccFeedbackTest(TestCase):
         results = []
         for seq_num, recv_delta_us in pkt.packet_results:
             send_time = send_log.pop(seq_num, None)
-            results.append(TwccPacketResult(
-                seq=seq_num,
-                send_time=send_time,
-                recv_delta_us=recv_delta_us,
-                lost=recv_delta_us is None,
-            ))
+            results.append(
+                TwccPacketResult(
+                    seq=seq_num,
+                    send_time=send_time,
+                    recv_delta_us=recv_delta_us,
+                    lost=recv_delta_us is None,
+                )
+            )
         feedback = TwccFeedback(packet=pkt, results=results)
 
         self.assertEqual(len(feedback.results), 3)
@@ -235,12 +236,14 @@ class TwccFeedbackTest(TestCase):
         results = []
         for seq_num, recv_delta_us in pkt.packet_results:
             send_time = send_log.pop(seq_num, None)
-            results.append(TwccPacketResult(
-                seq=seq_num,
-                send_time=send_time,
-                recv_delta_us=recv_delta_us,
-                lost=recv_delta_us is None,
-            ))
+            results.append(
+                TwccPacketResult(
+                    seq=seq_num,
+                    send_time=send_time,
+                    recv_delta_us=recv_delta_us,
+                    lost=recv_delta_us is None,
+                )
+            )
         feedback = TwccFeedback(packet=pkt, results=results)
 
         self.assertFalse(feedback.results[0].lost)
@@ -261,12 +264,14 @@ class TwccFeedbackTest(TestCase):
         results = []
         for seq_num, recv_delta_us in pkt.packet_results:
             send_time = send_log.pop(seq_num, None)
-            results.append(TwccPacketResult(
-                seq=seq_num,
-                send_time=send_time,
-                recv_delta_us=recv_delta_us,
-                lost=recv_delta_us is None,
-            ))
+            results.append(
+                TwccPacketResult(
+                    seq=seq_num,
+                    send_time=send_time,
+                    recv_delta_us=recv_delta_us,
+                    lost=recv_delta_us is None,
+                )
+            )
         feedback = TwccFeedback(packet=pkt, results=results)
 
         self.assertAlmostEqual(feedback.results[0].send_time, 100.0)
@@ -275,14 +280,9 @@ class TwccFeedbackTest(TestCase):
 
     def test_twcc_callback_fires(self) -> None:
         """Register callback, feed TWCC packet, verify it fires."""
-        from aiortc.rtcrtpsender import RTCRtpSender
-
-        # Create a minimal sender - we need to test _handle_rtcp_packet
-        # Use a mock to capture the callback invocation
-        callback = MagicMock()
         received_feedback = []
 
-        def capture_feedback(feedback):
+        def capture_feedback(feedback: TwccFeedback) -> None:
             received_feedback.append(feedback)
 
         # Build a TWCC packet
@@ -298,12 +298,14 @@ class TwccFeedbackTest(TestCase):
         results = []
         for seq_num, recv_delta_us in pkt.packet_results:
             send_time = send_log.pop(seq_num, None)
-            results.append(TwccPacketResult(
-                seq=seq_num,
-                send_time=send_time,
-                recv_delta_us=recv_delta_us,
-                lost=recv_delta_us is None,
-            ))
+            results.append(
+                TwccPacketResult(
+                    seq=seq_num,
+                    send_time=send_time,
+                    recv_delta_us=recv_delta_us,
+                    lost=recv_delta_us is None,
+                )
+            )
         feedback = TwccFeedback(packet=pkt, results=results)
         capture_feedback(feedback)
 

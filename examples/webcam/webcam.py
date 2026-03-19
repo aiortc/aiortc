@@ -52,8 +52,7 @@ class SimpleCongestionController:
                 prev_recv = r.recv_delta_us
 
             avg_delay = (
-                sum(delay_gradients) / len(delay_gradients)
-                if delay_gradients else 0.0
+                sum(delay_gradients) / len(delay_gradients) if delay_gradients else 0.0
             )
 
             old_bitrate = self.bitrate
@@ -71,10 +70,11 @@ class SimpleCongestionController:
 
             print(
                 f"[TWCC] pkts={total} lost={lost} loss={loss_rate:.1%} "
-                f"avg_delay={avg_delay*1000:.2f}ms "
-                f"bitrate {old_bitrate//1000}k -> {self.bitrate//1000}k kbps "
+                f"avg_delay={avg_delay * 1000:.2f}ms "
+                f"bitrate {old_bitrate // 1000}k -> {self.bitrate // 1000}k kbps "
                 f"({action})"
             )
+
 
 pcs = set()
 relay = None

@@ -208,9 +208,7 @@ class TwccTracker:
         if self._max_seq is None or uint16_gt(twcc_seq, self._max_seq):
             self._max_seq = twcc_seq
 
-    def build_feedback(
-        self, ssrc: int, media_ssrc: int
-    ) -> Optional[RtcpTwccPacket]:
+    def build_feedback(self, ssrc: int, media_ssrc: int) -> Optional[RtcpTwccPacket]:
         if self._min_seq is None or self._max_seq is None or not self._packets:
             return None
 
@@ -654,10 +652,7 @@ class RTCRtpReceiver:
                     await asyncio.sleep(0.5 + random.random())
 
                 # TWCC feedback
-                if (
-                    self.__twcc_tracker is not None
-                    and self.__rtcp_ssrc is not None
-                ):
+                if self.__twcc_tracker is not None and self.__rtcp_ssrc is not None:
                     twcc_packet = self.__twcc_tracker.build_feedback(
                         ssrc=self.__rtcp_ssrc, media_ssrc=0
                     )

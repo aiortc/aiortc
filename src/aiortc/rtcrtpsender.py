@@ -70,16 +70,16 @@ def random_sequence_number() -> int:
 
 @dataclass
 class TwccPacketResult:
-    seq: int                        # transport-wide sequence number
-    send_time: Optional[float]      # time.time() when sent, None if not in log
-    recv_delta_us: Optional[int]    # microseconds from ref_time, None = lost
-    lost: bool                      # True if recv_delta_us is None
+    seq: int  # transport-wide sequence number
+    send_time: Optional[float]  # time.time() when sent, None if not in log
+    recv_delta_us: Optional[int]  # microseconds from ref_time, None = lost
+    lost: bool  # True if recv_delta_us is None
 
 
 @dataclass
 class TwccFeedback:
-    packet: RtcpTwccPacket          # raw RTCP packet
-    results: list[TwccPacketResult] # pre-joined per-packet records
+    packet: RtcpTwccPacket  # raw RTCP packet
+    results: list[TwccPacketResult]  # pre-joined per-packet records
 
 
 class RTCEncodedFrame:
@@ -311,12 +311,14 @@ class RTCRtpSender:
             results = []
             for seq_num, recv_delta_us in packet.packet_results:
                 send_time = self.__twcc_send_log.pop(seq_num, None)
-                results.append(TwccPacketResult(
-                    seq=seq_num,
-                    send_time=send_time,
-                    recv_delta_us=recv_delta_us,
-                    lost=recv_delta_us is None,
-                ))
+                results.append(
+                    TwccPacketResult(
+                        seq=seq_num,
+                        send_time=send_time,
+                        recv_delta_us=recv_delta_us,
+                        lost=recv_delta_us is None,
+                    )
+                )
             if self.__twcc_callback is not None:
                 self.__twcc_callback(TwccFeedback(packet=packet, results=results))
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
