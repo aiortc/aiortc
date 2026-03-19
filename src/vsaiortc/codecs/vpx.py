@@ -177,6 +177,7 @@ class Vp8Decoder(Decoder):
             packet.time_base = VIDEO_TIME_BASE
             return cast(list[Frame], self.codec.decode(packet))
         except av.FFmpegError as e:
+            # logger.warning("Vp8Decoder() failed to decode, skipping package: " + str(e))
             return []
 
 
