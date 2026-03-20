@@ -146,3 +146,25 @@ class VideoStreamTrack(MediaStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
+
+class QueuedVideoStreamTrack(VideoStreamTrack):
+    def __init__(self, buffer_size: int = 30) -> None:
+        super().__init__()
+        self._queue: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=buffer_size)
+
+    @property
+    def buffer_size(self) -> int:
+        return self._queue.maxsize
+
+    @property
+    def queue_size(self) -> int:
+        return self._queue.qsize()
+
+    async def recv(self) -> VideoFrame:
+        return await self._queue.get()
+
+    async def put(self, frame: VideoFrame) -> None:
+        if self._queue.full():
+            self._queue.get_nowait()
+        self._queue.put_nowait(frame)

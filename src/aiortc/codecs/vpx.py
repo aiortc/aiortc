@@ -185,6 +185,8 @@ class Vp8Encoder(Encoder):
     def __init__(self) -> None:
         self.codec: Optional[VideoCodecContext] = None
         self.picture_id = random.randint(0, (1 << 15) - 1)
+        self._min_bitrate = MIN_BITRATE
+        self._max_bitrate = MAX_BITRATE
         self.__target_bitrate = DEFAULT_BITRATE
 
     def encode(
@@ -261,7 +263,7 @@ class Vp8Encoder(Encoder):
 
     @target_bitrate.setter
     def target_bitrate(self, bitrate: int) -> None:
-        bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
+        bitrate = max(self._min_bitrate, min(bitrate, self._max_bitrate))
         self.__target_bitrate = bitrate
 
     @classmethod

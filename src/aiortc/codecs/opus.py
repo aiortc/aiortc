@@ -13,7 +13,6 @@ SAMPLE_RATE = 48000
 SAMPLES_PER_FRAME = 960
 TIME_BASE = fractions.Fraction(1, SAMPLE_RATE)
 
-
 class OpusDecoder(Decoder):
     def __init__(self) -> None:
         self.codec = CodecContext.create("libopus", "r")

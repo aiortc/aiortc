@@ -102,6 +102,8 @@ class RTCRtpSender:
         self._stream_id = str(uuid.uuid4())
         self._enabled = True
         self.__encoder: Optional[Encoder] = None
+        self.__bitrate_config: Optional[tuple[int, int, int]] = None
+        self.__on_bitrate_estimate: Optional[Callable[[int], None]] = None
         self.__force_keyframe = False
         self.__loop = asyncio.get_event_loop()
         self.__mid: Optional[str] = None
@@ -153,6 +155,37 @@ class RTCRtpSender:
         transmitted.
         """
         return self.__transport
+
+    @property
+    def on_bitrate_estimate(self) -> Optional[Callable[[int], None]]:
+        return self.__on_bitrate_estimate
+
+    @on_bitrate_estimate.setter
+    def on_bitrate_estimate(self, callback: Optional[Callable[[int], None]]) -> None:
+        self.__on_bitrate_estimate = callback
+
+    def configure_bitrate(self, initial_bitrate: int, min_bitrate: int, max_bitrate: int) -> None:
+        self.__bitrate_config = (initial_bitrate, min_bitrate, max_bitrate)
+        if self.__encoder is not None and hasattr(self.__encoder, "target_bitrate"):
+            self.__encoder._min_bitrate = min_bitrate
+            self.__encoder._max_bitrate = max_bitrate
+            self.__encoder.target_bitrate = initial_bitrate
+
+    @property
+    def target_bitrate(self) -> Optional[int]:
+        if self.__encoder is not None and hasattr(self.__encoder, "target_bitrate"):
+            return self.__encoder.target_bitrate
+        if self.__bitrate_config is not None:
+            return self.__bitrate_config[0]
+        return None
+
+    @target_bitrate.setter
+    def target_bitrate(self, bitrate: int) -> None:
+        if self.__encoder is not None and hasattr(self.__encoder, "target_bitrate"):
+            self.__encoder.target_bitrate = bitrate
+        elif self.__bitrate_config is not None:
+            initial_bitrate, min_bitrate, max_bitrate = self.__bitrate_config
+            self.__bitrate_config = (bitrate, min_bitrate, max_bitrate)
 
     @classmethod
     def getCapabilities(self, kind: str) -> RTCRtpCapabilities:
@@ -288,6 +321,8 @@ class RTCRtpSender:
                     )
                     if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
                         self.__encoder.target_bitrate = bitrate
+                        if self.__on_bitrate_estimate is not None:
+                            self.__on_bitrate_estimate(self.__encoder.target_bitrate)
             except ValueError:
                 pass
 
@@ -307,6 +342,11 @@ class RTCRtpSender:
 
         if self.__encoder is None:
             self.__encoder = get_encoder(codec)
+            if self.__bitrate_config is not None and hasattr(self.__encoder, "target_bitrate"):
+                initial_bitrate, min_bitrate, max_bitrate = self.__bitrate_config
+                self.__encoder._min_bitrate = min_bitrate
+                self.__encoder._max_bitrate = max_bitrate
+                self.__encoder.target_bitrate = initial_bitrate
 
         if isinstance(data, Frame):
             # Encode the frame.
