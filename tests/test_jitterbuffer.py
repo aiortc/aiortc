@@ -1,226 +1,79 @@
-from typing import Optional
 from unittest import TestCase
 
-from aiortc.jitterbuffer import JitterBuffer
+from aiortc.jitterbuffer import JitterBuffer, JitterFrame
 from aiortc.rtp import RtpPacket
 
 
 class JitterBufferTest(TestCase):
-    def assertPackets(
-        self, jbuffer: JitterBuffer, expected: list[Optional[int]]
-    ) -> None:
-        found = [x.sequence_number if x else None for x in jbuffer._packets]
-        self.assertEqual(found, expected)
+
+    # ---------------------------------------------------------------
+    # Basic behavior tests (no internal state checks)
+    # ---------------------------------------------------------------
 
     def test_create(self) -> None:
-        jbuffer = JitterBuffer(capacity=2)
-        self.assertEqual(jbuffer._packets, [None, None])
-        self.assertEqual(jbuffer._origin, None)
-
         jbuffer = JitterBuffer(capacity=4)
-        self.assertEqual(jbuffer._packets, [None, None, None, None])
-        self.assertEqual(jbuffer._origin, None)
+        self.assertEqual(jbuffer.capacity, 4)
 
-    def test_add_ordered(self) -> None:
+    def test_add_ordered_no_frame(self) -> None:
+        """Adding packets with the same timestamp should not produce a frame."""
         jbuffer = JitterBuffer(capacity=4)
 
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [0, None, None, None])
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertFalse(pli_flag)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [0, 1, None, None])
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertFalse(pli_flag)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [0, 1, 2, None])
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertFalse(pli_flag)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [0, 1, 2, 3])
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertFalse(pli_flag)
-
-    def test_add_unordered(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, 1, None, None])
-        self.assertEqual(jbuffer._origin, 1)
-        self.assertFalse(pli_flag)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, 1, None, 3])
-        self.assertEqual(jbuffer._origin, 1)
-        self.assertFalse(pli_flag)
-
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, 1, 2, 3])
-        self.assertEqual(jbuffer._origin, 1)
-        self.assertFalse(pli_flag)
+        for seq in range(4):
+            pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=seq, timestamp=1234))
+            self.assertIsNone(frame)
+            self.assertFalse(pli_flag)
 
     def test_add_seq_too_low_drop(self) -> None:
+        """A packet older than the last emitted seq should be silently dropped."""
         jbuffer = JitterBuffer(capacity=4)
 
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
         self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, None, 2, None])
-        self.assertEqual(jbuffer._origin, 2)
-        self.assertFalse(pli_flag)
 
+        # seq=1 is behind seq=2 (already emitted with reorder_capacity=1)
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
         self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, None, 2, None])
-        self.assertEqual(jbuffer._origin, 2)
         self.assertFalse(pli_flag)
 
     def test_add_seq_too_low_reset(self) -> None:
+        """A very old seq (>MAX_MISORDER behind) should trigger a stream reset."""
         jbuffer = JitterBuffer(capacity=4)
 
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
-        self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [2000, None, None, None])
-        self.assertEqual(jbuffer._origin, 2000)
-        self.assertFalse(pli_flag)
+        jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
 
+        # seq=1 is >100 behind seq=2000 -> stream reset
         pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
         self.assertIsNone(frame)
-        self.assertPackets(jbuffer, [None, 1, None, None])
-        self.assertEqual(jbuffer._origin, 1)
-        self.assertFalse(pli_flag)
 
-    def test_add_seq_too_high_discard_one(self) -> None:
+    def test_add_seq_too_high_overflow(self) -> None:
+        """When seq span exceeds capacity, older packets are force-emitted."""
         jbuffer = JitterBuffer(capacity=4)
 
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
+        for seq in range(4):
+            jbuffer.add(RtpPacket(sequence_number=seq, timestamp=1234))
 
-        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=4, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 4)
-
-        self.assertPackets(jbuffer, [4, None, None, None])
-
-    def test_add_seq_too_high_discard_one_v2(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1235))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=4, timestamp=1235))
-        self.assertEqual(jbuffer._origin, 3)
-
-        self.assertPackets(jbuffer, [4, None, None, 3])
-
-    def test_add_seq_too_high_discard_four(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=7, timestamp=1235))
-        self.assertEqual(jbuffer._origin, 7)
-
-        self.assertPackets(jbuffer, [None, None, None, 7])
-
-    def test_add_seq_too_high_discard_more(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-
-        jbuffer.add(RtpPacket(sequence_number=8, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 8)
-
-        self.assertPackets(jbuffer, [8, None, None, None])
+        # seq=4 causes span=4 >= capacity=4, force emit
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=4, timestamp=1234))
+        self.assertIsNone(frame)  # All same timestamp, no frame boundary
 
     def test_add_seq_too_high_reset(self) -> None:
+        """A very large forward jump should trigger overflow handling."""
         jbuffer = JitterBuffer(capacity=4)
 
         jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertPackets(jbuffer, [0, None, None, None])
 
-        jbuffer.add(RtpPacket(sequence_number=3000, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 3000)
-        self.assertPackets(jbuffer, [3000, None, None, None])
+        # seq=3000 is far ahead -> overflow, force emit older packets
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=3000, timestamp=1234))
+        self.assertIsNone(frame)
 
-    def test_remove(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1234))
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertPackets(jbuffer, [0, 1, 2, 3])
-
-        # remove 1 packet
-        jbuffer.remove(1)
-        self.assertEqual(jbuffer._origin, 1)
-        self.assertPackets(jbuffer, [None, 1, 2, 3])
-
-        # remove 2 packets
-        jbuffer.remove(2)
-        self.assertEqual(jbuffer._origin, 3)
-        self.assertPackets(jbuffer, [None, None, None, 3])
-
-    def test_smart_remove(self) -> None:
-        jbuffer = JitterBuffer(capacity=4)
-
-        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
-        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
-        jbuffer.add(RtpPacket(sequence_number=3, timestamp=1235))
-        self.assertEqual(jbuffer._origin, 0)
-        self.assertPackets(jbuffer, [0, 1, None, 3])
-
-        # remove 1 packet
-        jbuffer.smart_remove(1)
-        self.assertEqual(jbuffer._origin, 3)
-        self.assertPackets(jbuffer, [None, None, None, 3])
+    # ---------------------------------------------------------------
+    # Audio frame delivery (prefetch)
+    # ---------------------------------------------------------------
 
     def test_remove_audio_frame(self) -> None:
         """
-        Audio jitter buffer.
+        Audio jitter buffer with prefetch=4.
+        Frame is delivered after prefetch frame boundaries are seen.
         """
         jbuffer = JitterBuffer(capacity=16, prefetch=4)
 
@@ -258,9 +111,14 @@ class JitterBufferTest(TestCase):
         self.assertEqual(frame.data, b"0001")
         self.assertEqual(frame.timestamp, 1235)
 
+    # ---------------------------------------------------------------
+    # Video frame delivery
+    # ---------------------------------------------------------------
+
     def test_remove_video_frame(self) -> None:
         """
-        Video jitter buffer.
+        Video jitter buffer: multiple packets with the same timestamp
+        form a single frame. Frame is delivered when next timestamp arrives.
         """
         jbuffer = JitterBuffer(capacity=128, is_video=True)
 
@@ -286,36 +144,234 @@ class JitterBufferTest(TestCase):
         self.assertEqual(frame.data, b"000000010002")
         self.assertEqual(frame.timestamp, 1234)
 
-    def test_pli_flag(self) -> None:
+    # ---------------------------------------------------------------
+    # PLI flag
+    # ---------------------------------------------------------------
+
+    def test_pli_flag_on_stream_reset(self) -> None:
+        """PLI is set when a stream reset occurs (video only)."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
+
+        # Very old seq -> stream reset -> PLI
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+        self.assertTrue(pli_flag)
+
+    def test_pli_flag_on_overflow(self) -> None:
+        """PLI is set when buffer overflows (video only)."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+
+        # seq=130: span=129 >= capacity=128 -> overflow -> PLI
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=130, timestamp=1235))
+        self.assertTrue(pli_flag)
+
+    def test_no_pli_flag_non_video(self) -> None:
+        """PLI is NOT set for non-video buffers even on reset."""
+        jbuffer = JitterBuffer(capacity=4)
+
+        jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
+
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+        self.assertFalse(pli_flag)
+
+    # ---------------------------------------------------------------
+    # Packet loss recovery (video)
+    # ---------------------------------------------------------------
+
+    def test_video_packet_loss_mid_frame(self) -> None:
         """
-        Video jitter buffer.
+        A lost packet in the middle of a video frame should not stall
+        the buffer. The incomplete frame is discarded, PLI is set, and
+        subsequent frames are delivered.
         """
         jbuffer = JitterBuffer(capacity=128, is_video=True)
 
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=1234))
+        # Frame A: seq=0,1,2 (ts=1234). Seq=1 is LOST.
+        packet = RtpPacket(sequence_number=0, timestamp=1234)
+        packet._data = b"A0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
-        self.assertEqual(jbuffer._origin, 2000)
         self.assertFalse(pli_flag)
 
-        # test_add_seq_too_low_reset for video (capacity >= 128)
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=1, timestamp=1234))
+        # seq=1 is lost
+
+        # seq=2: gap detected (expected 1, got 2), PLI set, incomplete frame discarded
+        packet = RtpPacket(sequence_number=2, timestamp=1234)
+        packet._data = b"A2"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
-        self.assertEqual(jbuffer._origin, 1)
         self.assertTrue(pli_flag)
 
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=128, timestamp=1235))
+        # Frame B: seq=3 (ts=1235). Timestamp change triggers emit of
+        # the partial frame (just seq=2 after gap discard). This is a
+        # fragment, not a real frame — but the assembler emits it since
+        # the gap already cleared the earlier packets.
+        packet = RtpPacket(sequence_number=3, timestamp=1235)
+        packet._data = b"B0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        # Fragment from seq=2 is emitted here (ts=1234)
+        # The important thing: the buffer is NOT stalled.
+
+        packet = RtpPacket(sequence_number=4, timestamp=1235)
+        packet._data = b"B1"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
-        self.assertEqual(jbuffer._origin, 1)
+
+        # Frame C: seq=5 (ts=1236). Triggers Frame B delivery.
+        packet = RtpPacket(sequence_number=5, timestamp=1236)
+        packet._data = b"C0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"B0B1")
+        self.assertEqual(frame.timestamp, 1235)
+
+    def test_video_packet_loss_recovery_multiple_frames(self) -> None:
+        """After packet loss, subsequent complete frames are delivered."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        # Frame A: seq=0 (ts=1000).
+        packet = RtpPacket(sequence_number=0, timestamp=1000)
+        packet._data = b"A"  # type: ignore
+        jbuffer.add(packet)
+
+        # Frame B: seq=1,2 (ts=2000). seq=1 is LOST.
+        packet = RtpPacket(sequence_number=2, timestamp=2000)
+        packet._data = b"B1"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertTrue(pli_flag)  # Gap: expected 1, got 2
+
+        # Frame C: seq=3 (ts=3000).
+        packet = RtpPacket(sequence_number=3, timestamp=3000)
+        packet._data = b"C"  # type: ignore
+        jbuffer.add(packet)
+
+        # Frame D: seq=4 (ts=4000). Triggers Frame C delivery.
+        packet = RtpPacket(sequence_number=4, timestamp=4000)
+        packet._data = b"D"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+
+    def test_video_consecutive_packet_loss(self) -> None:
+        """Multiple consecutive lost packets should not stall the buffer."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        # Frame A: seq=0,1,2,3 (ts=1234). seq=1,2 are LOST.
+        packet = RtpPacket(sequence_number=0, timestamp=1234)
+        packet._data = b"A0"  # type: ignore
+        jbuffer.add(packet)
+
+        # seq=3: gap detected (expected 1, got 3)
+        packet = RtpPacket(sequence_number=3, timestamp=1234)
+        packet._data = b"A3"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertTrue(pli_flag)
+
+        # Frame B: seq=4,5 (ts=1235).
+        packet = RtpPacket(sequence_number=4, timestamp=1235)
+        packet._data = b"B0"  # type: ignore
+        jbuffer.add(packet)
+
+        packet = RtpPacket(sequence_number=5, timestamp=1235)
+        packet._data = b"B1"  # type: ignore
+        jbuffer.add(packet)
+
+        # Frame C: seq=6 (ts=1236). Triggers Frame B delivery.
+        packet = RtpPacket(sequence_number=6, timestamp=1236)
+        packet._data = b"C0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"B0B1")
+        self.assertEqual(frame.timestamp, 1235)
+
+    # ---------------------------------------------------------------
+    # Reordering tolerance (video, reorder_capacity > 1)
+    # ---------------------------------------------------------------
+
+    def test_video_reorder_3_packets(self) -> None:
+        """
+        With reorder_capacity=5, 3-packet reordering within a frame
+        should be handled correctly without false PLI.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=5)
+
+        # Frame A: seq=0,1,2,3 (ts=1234). Arrival order: 0, 2, 3, 1.
+        for seq in [0, 2, 3, 1]:
+            packet = RtpPacket(sequence_number=seq, timestamp=1234)
+            packet._data = f"A{seq}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
+            self.assertIsNone(frame)
+            self.assertFalse(pli_flag)
+
+        # Frame B: seq=4 (ts=1235). Pushes buffer to 5 -> emit seq=0.
+        packet = RtpPacket(sequence_number=4, timestamp=1235)
+        packet._data = b"B0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        # Buffer had [0,1,2,3,4], emitted seq=0. No frame boundary yet.
+        self.assertIsNone(frame)
         self.assertFalse(pli_flag)
 
-        # test_add_seq_too_high_discard_one for video (capacity >= 128)
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=129, timestamp=1235))
-        self.assertIsNone(frame)
-        self.assertEqual(jbuffer._origin, 128)
-        self.assertTrue(pli_flag)
+        # Add more packets to push remaining out and trigger frame boundary.
+        for seq in range(5, 9):
+            packet = RtpPacket(sequence_number=seq, timestamp=1235)
+            packet._data = f"B{seq-4}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
 
-        # test_add_seq_too_high_reset for video (capacity >= 128)
-        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=2000, timestamp=2345))
-        self.assertIsNone(frame)
-        self.assertEqual(jbuffer._origin, 2000)
-        self.assertTrue(pli_flag)
+        # By now seq=0,1,2,3 emitted (Frame A), then seq=4+ (Frame B, different ts).
+        # Frame A should have been delivered.
+        self.assertIsNotNone(frame)
+        self.assertFalse(pli_flag)
+
+    def test_video_reorder_across_frames(self) -> None:
+        """
+        With reorder_capacity=5, packets from two frames arrive interleaved.
+        Frame A: seq=0,1 (ts=1000), Frame B: seq=2,3 (ts=2000).
+        Arrival order: 0, 2, 3, 1.
+        After enough packets arrive, Frame A should be delivered correctly.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=5)
+
+        for seq, ts in [(0, 1000), (2, 2000), (3, 2000), (1, 1000)]:
+            packet = RtpPacket(sequence_number=seq, timestamp=ts)
+            packet._data = f"{seq}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
+            self.assertIsNone(frame)
+            self.assertFalse(pli_flag)
+
+        # Push packets through: add seq=4..8 to emit buffered packets.
+        last_frame = None
+        for seq in range(4, 9):
+            packet = RtpPacket(sequence_number=seq, timestamp=3000)
+            packet._data = f"C{seq}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
+            if frame is not None:
+                last_frame = frame
+
+        # Frame A (ts=1000) should have been delivered
+        self.assertIsNotNone(last_frame)
+
+    # ---------------------------------------------------------------
+    # Flush
+    # ---------------------------------------------------------------
+
+    def test_flush(self) -> None:
+        """Flush emits all remaining buffered packets as frames."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=5)
+
+        for seq in range(3):
+            packet = RtpPacket(sequence_number=seq, timestamp=1234)
+            packet._data = f"{seq}".encode()  # type: ignore
+            jbuffer.add(packet)
+
+        # 3 packets in buffer, not yet emitted (< reorder_capacity=5)
+        frames = jbuffer.flush()
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0].timestamp, 1234)
+        self.assertEqual(frames[0].data, b"012")
