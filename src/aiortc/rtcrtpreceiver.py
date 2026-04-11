@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
 
 
 def decoder_worker(
-    loop: asyncio.AbstractEventLoop, input_q: queue.Queue, output_q: asyncio.Queue
+    loop: asyncio.AbstractEventLoop,
+    input_q: queue.Queue,
+    output_q: asyncio.Queue,
+    pli_event: Optional[threading.Event] = None,
 ) -> None:
     codec_name = None
     decoder = None
@@ -68,7 +71,13 @@ def decoder_worker(
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
+        frames = decoder.decode(encoded_frame)
+        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors:
+            # Decode failed — request a keyframe via PLI
+            if pli_event is not None:
+                pli_event.set()
+
+        for frame in frames:
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
@@ -271,6 +280,7 @@ class RTCRtpReceiver:
         self.__codecs: dict[int, RTCRtpCodecParameters] = {}
         self.__decoder_queue: queue.Queue = queue.Queue()
         self.__decoder_thread: Optional[threading.Thread] = None
+        self.__decoder_pli_event = threading.Event()
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
@@ -391,6 +401,7 @@ class RTCRtpReceiver:
                     asyncio.get_event_loop(),
                     self.__decoder_queue,
                     self._track._queue,
+                    self.__decoder_pli_event,
                 ),
             )
             self.__decoder_thread.start()
@@ -529,6 +540,12 @@ class RTCRtpReceiver:
 
         # try to re-assemble encoded frame
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
+
+        # check if the decoder thread requested a PLI (decode error)
+        if self.__decoder_pli_event.is_set():
+            self.__decoder_pli_event.clear()
+            pli_flag = True
+
         # check if the PLI should be sent
         if pli_flag:
             await self._send_rtcp_pli(packet.ssrc)

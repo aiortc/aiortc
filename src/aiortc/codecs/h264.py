@@ -107,17 +107,22 @@ class H264PayloadDescriptor:
 class H264Decoder(Decoder):
     def __init__(self) -> None:
         self.codec = av.CodecContext.create("h264", "r")
+        self.decode_errors = 0
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         try:
             packet = av.Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
-            return cast(list[Frame], self.codec.decode(packet))
+            frames = cast(list[Frame], self.codec.decode(packet))
+            self.decode_errors = 0
+            return frames
         except av.FFmpegError as e:
             logger.warning(
-                "H264Decoder() failed to decode, skipping package: " + str(e)
+                "H264Decoder() failed to decode, resetting: " + str(e)
             )
+            self.codec = av.CodecContext.create("h264", "r")
+            self.decode_errors += 1
             return []
 
 
@@ -274,6 +279,7 @@ class H264Encoder(Encoder):
             self.codec.pix_fmt = "yuv420p"
             self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
             self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+            self.codec.gop_size = 30  # ~1s at 30fps
             self.codec.options = {
                 "level": "31",
                 "tune": "zerolatency",
