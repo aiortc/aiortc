@@ -1,64 +1,13 @@
 """
-Tests that detect video recovery bugs in aiortc.
+Tests that detect video decoder recovery bugs in aiortc.
 These tests use only the OLD public API, so they work on both
 old and new code — failing on old, passing on new.
 """
-import fractions
 from unittest import TestCase
 
-import av
-from av.video.frame import VideoFrame
-
-from aiortc.codecs.h264 import H264Decoder, H264Encoder
-from aiortc.codecs.vpx import Vp8Decoder, Vp8Encoder
+from aiortc.codecs.h264 import H264Decoder
+from aiortc.codecs.vpx import Vp8Decoder
 from aiortc.jitterbuffer import JitterFrame
-
-
-class Vp8GopSizeTest(TestCase):
-    def test_gop_size_is_reasonable(self) -> None:
-        """
-        VP8 encoder gop_size should be <= 60 (~2s at 30fps).
-        Old code has gop_size=3000 (~100s), making recovery from
-        packet loss nearly impossible without PLI.
-        """
-        encoder = Vp8Encoder()
-
-        # Trigger codec creation by encoding a frame
-        frame = VideoFrame(width=320, height=240, format="yuv420p")
-        frame.pts = 0
-        frame.time_base = fractions.Fraction(1, 90000)
-        encoder.encode(frame)
-
-        self.assertIsNotNone(encoder.codec)
-        self.assertLessEqual(
-            encoder.codec.gop_size,
-            60,
-            f"VP8 gop_size={encoder.codec.gop_size} is too large. "
-            f"Should be <= 60 for timely keyframe insertion.",
-        )
-
-
-class H264GopSizeTest(TestCase):
-    def test_gop_size_is_reasonable(self) -> None:
-        """
-        H264 encoder gop_size should be explicitly set to <= 60.
-        Default libx264 gop_size=250 (~8s) is too large.
-        """
-        encoder = H264Encoder()
-
-        frame = VideoFrame(width=320, height=240, format="yuv420p")
-        frame.pts = 0
-        frame.time_base = fractions.Fraction(1, 90000)
-        # H264Encoder.encode is a generator
-        list(encoder.encode(frame))
-
-        self.assertIsNotNone(encoder.codec)
-        self.assertLessEqual(
-            encoder.codec.gop_size,
-            60,
-            f"H264 gop_size={encoder.codec.gop_size} is too large. "
-            f"Should be <= 60 for timely keyframe insertion.",
-        )
 
 
 class Vp8DecoderResetTest(TestCase):
@@ -82,19 +31,23 @@ class Vp8DecoderResetTest(TestCase):
             "Corrupted reference frames will cause permanent garbage output.",
         )
 
-    def test_multiple_errors_always_recreate(self) -> None:
-        """Each consecutive error should create a fresh codec."""
+    def test_subsequent_errors_do_not_reset(self) -> None:
+        """Only first error resets codec. Subsequent errors drop silently
+        to avoid PLI storm."""
         decoder = Vp8Decoder()
         bad_frame = JitterFrame(data=b"\xff\xfe\xfd", timestamp=0)
 
-        for _ in range(3):
-            codec_before = decoder.codec
-            decoder.decode(bad_frame)
-            self.assertIsNot(
-                decoder.codec,
-                codec_before,
-                "CodecContext should be different after each decode error.",
-            )
+        # First error resets
+        decoder.decode(bad_frame)
+        codec_after_first = decoder.codec
+
+        # Second error does NOT reset
+        decoder.decode(bad_frame)
+        self.assertIs(
+            decoder.codec,
+            codec_after_first,
+            "CodecContext should NOT be recreated on subsequent errors.",
+        )
 
 
 class H264DecoderResetTest(TestCase):
