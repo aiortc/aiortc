@@ -30,19 +30,23 @@ class Vp8DecoderResetTest(TestCase):
             "Corrupted reference frames will cause permanent garbage output.",
         )
 
-    def test_multiple_errors_always_recreate(self) -> None:
-        """Each consecutive error should create a fresh codec."""
+    def test_subsequent_errors_do_not_reset(self) -> None:
+        """Only first error resets codec. Subsequent errors drop silently
+        to avoid PLI storm."""
         decoder = Vp8Decoder()
         bad_frame = JitterFrame(data=b"\xff\xfe\xfd", timestamp=0)
 
-        for _ in range(3):
-            codec_before = decoder.codec
-            decoder.decode(bad_frame)
-            self.assertIsNot(
-                decoder.codec,
-                codec_before,
-                "CodecContext should be different after each decode error.",
-            )
+        # First error resets
+        decoder.decode(bad_frame)
+        codec_after_first = decoder.codec
+
+        # Second error does NOT reset
+        decoder.decode(bad_frame)
+        self.assertIs(
+            decoder.codec,
+            codec_after_first,
+            "CodecContext should NOT be recreated on subsequent errors.",
+        )
 
 
 class H264DecoderResetTest(TestCase):

@@ -72,8 +72,10 @@ def decoder_worker(
             codec_name = codec.name
 
         frames = decoder.decode(encoded_frame)
-        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors:
-            # Decode failed — request a keyframe via PLI
+        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors == 1:
+            # First decode error — request a keyframe via PLI (once).
+            # Subsequent errors are expected (P-frames waiting for keyframe)
+            # and should not re-trigger PLI to avoid PLI storm.
             if pli_event is not None:
                 pli_event.set()
 

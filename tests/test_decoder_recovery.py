@@ -31,20 +31,28 @@ class Vp8DecoderRecoveryTest(TestCase):
         """A new decoder should initialize decode_errors to 0."""
         self.assertEqual(Vp8Decoder().decode_errors, 0)
 
-    def test_multiple_errors_recreate_codec_each_time(self) -> None:
-        """Each decode error should create a fresh CodecContext."""
+    def test_only_first_error_resets_codec(self) -> None:
+        """Only the first decode error should reset CodecContext.
+        Subsequent errors silently drop to avoid PLI storm."""
         decoder = Vp8Decoder()
+        original_codec = decoder.codec
         bad_frame = JitterFrame(data=b"\xff\xfe\xfd", timestamp=0)
 
-        codecs_seen = [decoder.codec]
-        for i in range(3):
-            decoder.decode(bad_frame)
-            codecs_seen.append(decoder.codec)
+        # First error: codec is reset
+        decoder.decode(bad_frame)
+        self.assertEqual(decoder.decode_errors, 1)
+        first_reset_codec = decoder.codec
+        self.assertIsNot(first_reset_codec, original_codec)
 
+        # Second error: codec is NOT reset (same instance)
+        decoder.decode(bad_frame)
+        self.assertEqual(decoder.decode_errors, 2)
+        self.assertIs(decoder.codec, first_reset_codec)
+
+        # Third error: still not reset
+        decoder.decode(bad_frame)
         self.assertEqual(decoder.decode_errors, 3)
-        # Each error should have created a new codec
-        for i in range(len(codecs_seen) - 1):
-            self.assertIsNot(codecs_seen[i], codecs_seen[i + 1])
+        self.assertIs(decoder.codec, first_reset_codec)
 
 
 class H264DecoderRecoveryTest(TestCase):
