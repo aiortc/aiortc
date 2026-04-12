@@ -182,7 +182,12 @@ class Vp8Decoder(Decoder):
         except av.FFmpegError as e:
             self.decode_errors += 1
             if self.decode_errors == 1:
-                logger.warning("Vp8Decoder() failed to decode, resetting: " + str(e))
+                # First error: reset codec and signal for PLI.
+                logger.warning("Vp8Decoder() failed to decode, resetting: %s", e)
+                self.codec = CodecContext.create("libvpx", "r")
+            elif self.decode_errors % 30 == 0:
+                # Still failing after ~1s (30 frames). Reset and re-request PLI.
+                logger.warning("Vp8Decoder() still failing after %d errors, resetting: %s", self.decode_errors, e)
                 self.codec = CodecContext.create("libvpx", "r")
             return []
 

@@ -121,11 +121,11 @@ class H264Decoder(Decoder):
             self.decode_errors += 1
             if self.decode_errors == 1:
                 # First error: reset codec and signal for PLI.
-                # Subsequent errors are expected (P-frames without reference)
-                # until a keyframe arrives — drop silently to avoid PLI storm.
-                logger.warning(
-                    "H264Decoder() failed to decode, resetting: " + str(e)
-                )
+                logger.warning("H264Decoder() failed to decode, resetting: %s", e)
+                self.codec = av.CodecContext.create("h264", "r")
+            elif self.decode_errors % 30 == 0:
+                # Still failing after ~1s (30 frames). Reset and re-request PLI.
+                logger.warning("H264Decoder() still failing after %d errors, resetting: %s", self.decode_errors, e)
                 self.codec = av.CodecContext.create("h264", "r")
             return []
 

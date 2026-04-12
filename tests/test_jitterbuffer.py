@@ -512,3 +512,136 @@ class JitterBufferTest(TestCase):
         self.assertEqual(jbuffer._buffer[1].sequence_number, 65535)
         self.assertEqual(jbuffer._buffer[2].sequence_number, 0)
         self.assertEqual(jbuffer._buffer[3].sequence_number, 1)
+
+    # ---------------------------------------------------------------
+    # Marker bit (immediate frame delivery)
+    # ---------------------------------------------------------------
+
+    def test_marker_bit_immediate_frame_delivery(self) -> None:
+        """When the RTP marker bit is set, the frame should be delivered
+        immediately without waiting for the next timestamp."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1000, marker=0)
+        packet._data = b"A0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1000, marker=0)
+        packet._data = b"A1"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        # Last packet of frame: marker=1
+        packet = RtpPacket(sequence_number=2, timestamp=1000, marker=1)
+        packet._data = b"A2"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        # Frame should be delivered immediately (no need for next timestamp)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"A0A1A2")
+        self.assertEqual(frame.timestamp, 1000)
+
+    # ---------------------------------------------------------------
+    # Production reorder_capacity=8
+    # ---------------------------------------------------------------
+
+    def test_production_reorder_capacity_8(self) -> None:
+        """Verify frame delivery with production reorder_capacity=8."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=8)
+
+        # Frame A: seq 0..2 (ts=1000), 3 packets
+        for seq in range(3):
+            packet = RtpPacket(sequence_number=seq, timestamp=1000)
+            packet._data = f"A{seq}".encode()  # type: ignore
+            jbuffer.add(packet)
+
+        # Frame B: seq 3..9 (ts=2000), 7 packets
+        # After adding seq=7 (8th total), buffer starts emitting
+        delivered_frame = None
+        for seq in range(3, 12):
+            packet = RtpPacket(sequence_number=seq, timestamp=2000)
+            packet._data = f"B{seq}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
+            if frame is not None:
+                delivered_frame = frame
+
+        self.assertIsNotNone(delivered_frame)
+
+    # ---------------------------------------------------------------
+    # Frame boundary loss (last packet of frame lost)
+    # ---------------------------------------------------------------
+
+    def test_loss_last_packet_of_frame(self) -> None:
+        """Loss of the last packet in a frame should be detected as a gap
+        and trigger PLI, not deliver an incomplete frame."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        # Frame A: seq=0,1,2 (ts=1000). seq=2 is LOST.
+        packet = RtpPacket(sequence_number=0, timestamp=1000)
+        packet._data = b"A0"  # type: ignore
+        jbuffer.add(packet)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1000)
+        packet._data = b"A1"  # type: ignore
+        jbuffer.add(packet)
+
+        # seq=2 lost. seq=3 from Frame B arrives.
+        packet = RtpPacket(sequence_number=3, timestamp=2000)
+        packet._data = b"B0"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        # Gap detected (expected 2, got 3) -> PLI, incomplete Frame A discarded
+        self.assertTrue(pli_flag)
+
+    # ---------------------------------------------------------------
+    # Memory protection
+    # ---------------------------------------------------------------
+
+    def test_pending_frames_capped(self) -> None:
+        """_pending_frames should not grow beyond MAX_PENDING_FRAMES."""
+        from aiortc.jitterbuffer import MAX_PENDING_FRAMES
+        jbuffer = JitterBuffer(capacity=4096, is_video=True)
+
+        # Generate many single-packet frames rapidly
+        for seq in range(MAX_PENDING_FRAMES + 20):
+            packet = RtpPacket(sequence_number=seq, timestamp=seq * 1000)
+            packet._data = b"X"  # type: ignore
+            jbuffer.add(packet)
+
+        self.assertLessEqual(len(jbuffer._pending_frames), MAX_PENDING_FRAMES)
+
+    def test_frame_packets_capped(self) -> None:
+        """_frame_packets should not grow beyond MAX_FRAME_PACKETS."""
+        from aiortc.jitterbuffer import MAX_FRAME_PACKETS
+        jbuffer = JitterBuffer(capacity=4096, is_video=True)
+
+        # Send many packets with the same timestamp
+        for seq in range(MAX_FRAME_PACKETS + 10):
+            packet = RtpPacket(sequence_number=seq, timestamp=1000)
+            packet._data = b"X"  # type: ignore
+            jbuffer.add(packet)
+
+        self.assertLessEqual(len(jbuffer._frame_packets), MAX_FRAME_PACKETS)
+
+    # ---------------------------------------------------------------
+    # Sustained operation (stress)
+    # ---------------------------------------------------------------
+
+    def test_sustained_1000_frames(self) -> None:
+        """Send 1000 video frames and verify all are delivered."""
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        delivered = []
+        for frame_idx in range(1000):
+            ts = frame_idx * 3000
+            for pkt_idx in range(3):
+                seq = (frame_idx * 3 + pkt_idx) % 65536
+                packet = RtpPacket(sequence_number=seq, timestamp=ts)
+                packet._data = f"{frame_idx}".encode()  # type: ignore
+                pli_flag, frame = jbuffer.add(packet)
+                if frame is not None:
+                    delivered.append(frame.timestamp)
+
+        delivered.extend([f.timestamp for f in jbuffer.flush()])
+        self.assertEqual(len(delivered), 1000)

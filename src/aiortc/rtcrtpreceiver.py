@@ -72,12 +72,13 @@ def decoder_worker(
             codec_name = codec.name
 
         frames = decoder.decode(encoded_frame)
-        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors == 1:
-            # First decode error — request a keyframe via PLI (once).
-            # Subsequent errors are expected (P-frames waiting for keyframe)
-            # and should not re-trigger PLI to avoid PLI storm.
-            if pli_event is not None:
-                pli_event.set()
+        if not frames and hasattr(decoder, "decode_errors"):
+            errors = decoder.decode_errors
+            if errors == 1 or (errors > 0 and errors % 30 == 0):
+                # Request PLI on first error, then retry every ~1s (30 frames)
+                # in case the keyframe response was lost.
+                if pli_event is not None:
+                    pli_event.set()
 
         for frame in frames:
             # pass the decoded frame to the track
@@ -280,7 +281,7 @@ class RTCRtpReceiver:
         self._enabled = True
         self.__active_ssrc: dict[int, datetime.datetime] = {}
         self.__codecs: dict[int, RTCRtpCodecParameters] = {}
-        self.__decoder_queue: queue.Queue = queue.Queue()
+        self.__decoder_queue: queue.Queue = queue.Queue(maxsize=30)
         self.__decoder_thread: Optional[threading.Thread] = None
         self.__decoder_pli_event = threading.Event()
         self.__kind = kind
@@ -557,7 +558,10 @@ class RTCRtpReceiver:
             encoded_frame.timestamp = self.__timestamp_mapper.map(
                 encoded_frame.timestamp
             )
-            self.__decoder_queue.put((codec, encoded_frame))
+            try:
+                self.__decoder_queue.put_nowait((codec, encoded_frame))
+            except queue.Full:
+                self.__log_debug("x Decoder queue full, dropping frame")
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")

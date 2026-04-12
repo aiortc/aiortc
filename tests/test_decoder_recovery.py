@@ -55,6 +55,28 @@ class Vp8DecoderRecoveryTest(TestCase):
         self.assertIs(decoder.codec, first_reset_codec)
 
 
+    def test_pli_retry_at_30_errors(self) -> None:
+        """After 30 consecutive errors without recovery, the codec should
+        be reset again to allow a fresh PLI retry."""
+        decoder = Vp8Decoder()
+        bad_frame = JitterFrame(data=b"\xff\xfe\xfd", timestamp=0)
+
+        # First error resets codec
+        decoder.decode(bad_frame)
+        codec_after_first = decoder.codec
+
+        # Errors 2-29: no reset
+        for _ in range(28):
+            decoder.decode(bad_frame)
+        self.assertEqual(decoder.decode_errors, 29)
+        self.assertIs(decoder.codec, codec_after_first)
+
+        # Error 30: reset again (retry PLI)
+        decoder.decode(bad_frame)
+        self.assertEqual(decoder.decode_errors, 30)
+        self.assertIsNot(decoder.codec, codec_after_first)
+
+
 class H264DecoderRecoveryTest(TestCase):
     def test_decode_error_resets_codec(self) -> None:
         """

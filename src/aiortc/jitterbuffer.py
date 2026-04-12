@@ -4,6 +4,8 @@ from .rtp import RtpPacket
 from .utils import uint16_add, uint16_gt
 
 MAX_MISORDER = 100
+MAX_FRAME_PACKETS = 256
+MAX_PENDING_FRAMES = 16
 
 
 class JitterFrame:
@@ -130,23 +132,46 @@ class JitterBuffer:
 
         self._last_emitted_seq = packet.sequence_number
 
+        # Memory protection: discard oversized frame
+        if len(self._frame_packets) >= MAX_FRAME_PACKETS:
+            if self._is_video and not self._pli_flag:
+                self._pli_flag = True
+            self._frame_packets.clear()
+            self._frame_timestamp = None
+
         # Frame assembly: group packets by timestamp
         if (
             self._frame_timestamp is not None
             and packet.timestamp != self._frame_timestamp
         ):
             # Timestamp changed - previous frame is complete
-            frame = JitterFrame(
-                data=b"".join([p._data for p in self._frame_packets]),  # type: ignore
-                timestamp=self._frame_timestamp,
-            )
-            self._pending_frames.append(frame)
+            self._complete_frame()
             self._frame_packets = [packet]
             self._frame_timestamp = packet.timestamp
         else:
             if self._frame_timestamp is None:
                 self._frame_timestamp = packet.timestamp
             self._frame_packets.append(packet)
+
+        # Marker bit: immediate frame completion
+        if getattr(packet, "marker", 0):
+            self._complete_frame()
+
+    def _complete_frame(self) -> None:
+        """Finalize the current frame and add to pending."""
+        if not self._frame_packets:
+            return
+        frame = JitterFrame(
+            data=b"".join([p._data for p in self._frame_packets]),  # type: ignore
+            timestamp=self._frame_timestamp,
+        )
+        self._pending_frames.append(frame)
+        self._frame_packets = []
+        self._frame_timestamp = None
+
+        # Memory protection: cap pending frames
+        while len(self._pending_frames) > MAX_PENDING_FRAMES:
+            self._pending_frames.pop(0)
 
     def _take_frame(self) -> Optional[JitterFrame]:
         if len(self._pending_frames) >= max(1, self._prefetch):
@@ -159,12 +184,7 @@ class JitterBuffer:
         while self._buffer:
             self._emit_one()
         if self._frame_packets:
-            frame = JitterFrame(
-                data=b"".join([p._data for p in self._frame_packets]),  # type: ignore
-                timestamp=self._frame_timestamp,
-            )
-            frames.append(frame)
-            self._frame_packets.clear()
+            self._complete_frame()
         frames.extend(self._pending_frames)
         self._pending_frames.clear()
         return frames
