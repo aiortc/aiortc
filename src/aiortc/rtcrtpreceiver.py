@@ -72,8 +72,10 @@ def decoder_worker(
             codec_name = codec.name
 
         frames = decoder.decode(encoded_frame)
-        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors:
-            # Decode failed — request a keyframe via PLI
+        if not frames and hasattr(decoder, "decode_errors") and decoder.decode_errors == 1:
+            # First decode error — request a keyframe via PLI (once).
+            # Subsequent errors are expected (P-frames waiting for keyframe)
+            # and should not re-trigger PLI to avoid PLI storm.
             if pli_event is not None:
                 pli_event.set()
 
@@ -287,7 +289,7 @@ class RTCRtpReceiver:
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         else:
-            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
+            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=8)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track: Optional[RemoteStreamTrack] = None

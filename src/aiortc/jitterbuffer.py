@@ -122,7 +122,7 @@ class JitterBuffer:
         if self._last_emitted_seq is not None:
             expected = uint16_add(self._last_emitted_seq, 1)
             if expected != packet.sequence_number:
-                if self._is_video:
+                if self._is_video and not self._pli_flag:
                     self._pli_flag = True
                 # Discard incomplete frame being assembled
                 self._frame_packets.clear()

@@ -180,9 +180,10 @@ class Vp8Decoder(Decoder):
             self.decode_errors = 0
             return frames
         except av.FFmpegError as e:
-            logger.warning("Vp8Decoder() failed to decode, resetting: " + str(e))
-            self.codec = CodecContext.create("libvpx", "r")
             self.decode_errors += 1
+            if self.decode_errors == 1:
+                logger.warning("Vp8Decoder() failed to decode, resetting: " + str(e))
+                self.codec = CodecContext.create("libvpx", "r")
             return []
 
 
