@@ -23,7 +23,7 @@ class JitterBuffer:
         self._capacity = capacity
         self._prefetch = prefetch
         self._is_video = is_video
-        self._reorder_capacity = reorder_capacity
+        self._reorder_capacity = max(1, reorder_capacity)
 
         # Reorder buffer (maintained sorted by sequence number)
         self._buffer: list[RtpPacket] = []
@@ -44,8 +44,10 @@ class JitterBuffer:
     ) -> tuple[bool, Optional[JitterFrame]]:
         self._pli_flag = False
 
-        # Check if packet is too old or stream reset
+        # Check if packet is too old, duplicate, or stream reset
         if self._last_emitted_seq is not None:
+            if packet.sequence_number == self._last_emitted_seq:
+                return self._pli_flag, None  # duplicate of last emitted
             delta = uint16_add(packet.sequence_number, -self._last_emitted_seq)
             misorder = uint16_add(self._last_emitted_seq, -packet.sequence_number)
             if misorder < delta:
@@ -56,16 +58,16 @@ class JitterBuffer:
                 else:
                     return self._pli_flag, None
         elif self._buffer:
+            # Only check for stream reset (very large backward jump).
+            # Do NOT drop reordered packets — they should be inserted
+            # into the sorted buffer.
             min_seq = self._buffer[0].sequence_number
-            delta = uint16_add(packet.sequence_number, -min_seq)
             misorder = uint16_add(min_seq, -packet.sequence_number)
-            if misorder < delta:
-                if misorder >= MAX_MISORDER:
-                    self._reset()
-                    if self._is_video:
-                        self._pli_flag = True
-                else:
-                    return self._pli_flag, None
+            delta = uint16_add(packet.sequence_number, -min_seq)
+            if misorder < delta and misorder >= MAX_MISORDER:
+                self._reset()
+                if self._is_video:
+                    self._pli_flag = True
 
         # Insert into reorder buffer (sorted by seq)
         self._insert_sorted(packet)

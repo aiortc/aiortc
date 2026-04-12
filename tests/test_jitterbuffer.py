@@ -375,3 +375,71 @@ class JitterBufferTest(TestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].timestamp, 1234)
         self.assertEqual(frames[0].data, b"012")
+
+    # ---------------------------------------------------------------
+    # Edge cases / boundary conditions
+    # ---------------------------------------------------------------
+
+    def test_reorder_capacity_zero_does_not_hang(self) -> None:
+        """reorder_capacity=0 must not cause an infinite loop."""
+        jbuffer = JitterBuffer(capacity=4, reorder_capacity=0)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1000)
+        packet._data = b"A"  # type: ignore
+        # This must complete without hanging
+        pli_flag, frame = jbuffer.add(packet)
+
+    def test_duplicate_of_last_emitted_seq(self) -> None:
+        """
+        A duplicate packet with the same seq as the last emitted packet
+        should be silently dropped. It must NOT trigger a false gap
+        detection or PLI.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1000)
+        packet._data = b"A"  # type: ignore
+        jbuffer.add(packet)  # emitted, _last_emitted_seq=0
+
+        packet = RtpPacket(sequence_number=1, timestamp=1000)
+        packet._data = b"B"  # type: ignore
+        jbuffer.add(packet)  # emitted, frame_packets=[A, B]
+
+        # Duplicate of seq=1
+        packet = RtpPacket(sequence_number=1, timestamp=1000)
+        packet._data = b"B"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        # Must NOT trigger PLI or discard the frame being assembled
+        self.assertFalse(pli_flag)
+
+        # Verify frame assembly is still intact by completing the frame
+        packet = RtpPacket(sequence_number=2, timestamp=2000)
+        packet._data = b"C"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"AB")
+        self.assertEqual(frame.timestamp, 1000)
+
+    def test_reorder_buffer_accepts_earlier_seq(self) -> None:
+        """
+        With reorder_capacity>1, a packet with a lower seq than existing
+        buffer contents should be inserted correctly, not dropped.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=5)
+
+        # seq=100 arrives first
+        packet = RtpPacket(sequence_number=100, timestamp=1000)
+        packet._data = b"A"  # type: ignore
+        jbuffer.add(packet)
+
+        # seq=99 arrives (reordered, lower than buffer min)
+        packet = RtpPacket(sequence_number=99, timestamp=1000)
+        packet._data = b"B"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        # Must not be dropped — should be in the buffer
+        self.assertFalse(pli_flag)
+        self.assertEqual(len(jbuffer._buffer), 2)
+        self.assertEqual(jbuffer._buffer[0].sequence_number, 99)
+        self.assertEqual(jbuffer._buffer[1].sequence_number, 100)
