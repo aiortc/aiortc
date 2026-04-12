@@ -443,3 +443,72 @@ class JitterBufferTest(TestCase):
         self.assertEqual(len(jbuffer._buffer), 2)
         self.assertEqual(jbuffer._buffer[0].sequence_number, 99)
         self.assertEqual(jbuffer._buffer[1].sequence_number, 100)
+
+    # ---------------------------------------------------------------
+    # Sequence number wraparound (uint16: 65535 -> 0)
+    # ---------------------------------------------------------------
+
+    def test_seq_wraparound_frame_delivery(self) -> None:
+        """
+        Sequence number wrapping from 65535 to 0 must not be treated
+        as a gap or loss. A frame spanning the wrap boundary should
+        be delivered correctly.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        for seq in [65534, 65535, 0]:
+            packet = RtpPacket(sequence_number=seq, timestamp=1000)
+            packet._data = f"{seq}".encode()  # type: ignore
+            pli_flag, frame = jbuffer.add(packet)
+            self.assertFalse(pli_flag)
+            self.assertIsNone(frame)
+
+        # Trigger frame boundary
+        packet = RtpPacket(sequence_number=1, timestamp=2000)
+        packet._data = b"next"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        self.assertFalse(pli_flag)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.timestamp, 1000)
+        self.assertEqual(frame.data, b"65534655350")
+
+    def test_seq_wraparound_loss_detection(self) -> None:
+        """
+        A genuine packet loss across the wrap boundary should still
+        be detected. seq=65535 followed by seq=1 (seq=0 lost).
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        packet = RtpPacket(sequence_number=65535, timestamp=1000)
+        packet._data = b"A"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertFalse(pli_flag)
+
+        # seq=0 is lost, seq=1 arrives
+        packet = RtpPacket(sequence_number=1, timestamp=1000)
+        packet._data = b"B"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+
+        # Gap: expected 0, got 1 -> PLI
+        self.assertTrue(pli_flag)
+
+    def test_seq_wraparound_reorder(self) -> None:
+        """
+        With reorder_capacity>1, packets around the wrap boundary
+        arriving out of order should be sorted correctly.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=5)
+
+        # Arrival order: 65535, 1, 0, 65534 (out of order around wrap)
+        for seq in [65535, 1, 0, 65534]:
+            packet = RtpPacket(sequence_number=seq, timestamp=1000)
+            packet._data = f"{seq}".encode()  # type: ignore
+            jbuffer.add(packet)
+
+        # Buffer should be sorted: 65534, 65535, 0, 1
+        self.assertEqual(len(jbuffer._buffer), 4)
+        self.assertEqual(jbuffer._buffer[0].sequence_number, 65534)
+        self.assertEqual(jbuffer._buffer[1].sequence_number, 65535)
+        self.assertEqual(jbuffer._buffer[2].sequence_number, 0)
+        self.assertEqual(jbuffer._buffer[3].sequence_number, 1)
