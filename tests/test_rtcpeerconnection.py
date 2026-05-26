@@ -72,6 +72,16 @@ a=fmtp:98 apt=97
 class BogusStreamTrack(AudioStreamTrack):
     kind = "bogus"
 
+def candidate_to_sdp_string(candidate) -> str:
+    """Convert an RTCIceCandidate to a browser-format candidate string."""
+    s = f"candidate:{candidate.foundation} {candidate.component} {candidate.protocol.upper()} {candidate.priority} {candidate.ip} {candidate.port} typ {candidate.type}"
+    if candidate.relatedAddress:
+        s += f" raddr {candidate.relatedAddress}"
+    if candidate.relatedPort:
+        s += f" rport {candidate.relatedPort}"
+    if candidate.tcpType:
+        s += f" tcptype {candidate.tcpType}"
+    return s
 
 def mids(pc: RTCPeerConnection) -> list[Optional[str]]:
     mids = [x.mid for x in pc.getTransceivers()]
@@ -1351,8 +1361,10 @@ a=rtpmap:8 PCMA/8000
         for transceiver in pc2.getTransceivers():
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
+                print(type(candidate))
+                print(dir(candidate))
                 await pc1.addIceCandidate(RTCIceCandidate(
-                    candidate="candidate:" + candidate.to_sdp(),
+                    candidate="candidate:" + candidate_to_sdp_string(candidate),
                     sdpMid=transceiver.mid if with_mid else None,
                     sdpMLineIndex=None if with_mid else transceiver._get_mline_index(),
                 ))
@@ -1360,7 +1372,7 @@ a=rtpmap:8 PCMA/8000
             iceGatherer = transceiver.sender.transport.transport.iceGatherer
             for candidate in iceGatherer.getLocalCandidates():
                 await pc2.addIceCandidate(RTCIceCandidate(
-                    candidate="candidate:" + candidate.to_sdp(),
+                    candidate="candidate:" + candidate_to_sdp_string(candidate),
                     sdpMid=transceiver.mid if with_mid else None,
                     sdpMLineIndex=None if with_mid else transceiver._get_mline_index(),
                 ))
@@ -4617,13 +4629,13 @@ a=rtpmap:0 PCMU/8000
         # trickle candidates in browser string format
         for candidate in pc2.sctp.transport.transport.iceGatherer.getLocalCandidates():
             await pc1.addIceCandidate(RTCIceCandidate(
-                candidate="candidate:" + candidate.to_sdp(),
+                candidate="candidate:" + candidate_to_sdp_string(candidate),
                 sdpMid=pc2.sctp.mid if with_mid else None,
                 sdpMLineIndex=None if with_mid else 0,
             ))
         for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
             await pc2.addIceCandidate(RTCIceCandidate(
-                candidate="candidate:" + candidate.to_sdp(),
+                candidate="candidate:" + candidate_to_sdp_string(candidate),
                 sdpMid=pc1.sctp.mid if with_mid else None,
                 sdpMLineIndex=None if with_mid else 0,
             ))
