@@ -27,6 +27,12 @@ COOKIE_LIFETIME = 60
 MAX_STREAMS = 65535
 USERDATA_MAX_LENGTH = 1200
 
+# packet and chunk constants
+SCTP_COMMON_HEADER_LENGTH = 12
+SCTP_CHUNK_HEADER_LENGTH = 4
+# SCTP packet must contain at least one chunk.
+SCTP_PACKET_MINIMUM_LENGTH = SCTP_COMMON_HEADER_LENGTH + SCTP_CHUNK_HEADER_LENGTH
+
 # protocol constants
 SCTP_CAUSE_INVALID_STREAM = 0x0001
 SCTP_CAUSE_STALE_COOKIE = 0x0003
@@ -397,21 +403,34 @@ CHUNK_TYPES = dict((cls.type, cls) for cls in CHUNK_CLASSES)
 
 def parse_packet(data: bytes) -> tuple[int, int, int, list[Chunk]]:
     length = len(data)
-    if length < 12:
-        raise ValueError("SCTP packet length is less than 12 bytes")
+
+    # Check the packet is long enough to accomodate the common header
+    # and one chunk's header.
+    if length < SCTP_PACKET_MINIMUM_LENGTH:
+        raise ValueError(
+            f"SCTP packet length is less than {SCTP_PACKET_MINIMUM_LENGTH} bytes"
+        )
 
     source_port, destination_port, verification_tag = unpack_from("!HHL", data)
 
-    # verify checksum
+    # Verify the checksum matches.
     checksum = unpack_from("<L", data, 8)[0]
     if checksum != crc32c(data[0:8] + b"\x00\x00\x00\x00" + data[12:]):
         raise ValueError("SCTP packet has invalid checksum")
 
     chunks: list[Chunk] = []
-    pos = 12
-    while pos <= length - 4:
+    pos = SCTP_COMMON_HEADER_LENGTH
+    while pos <= length - SCTP_CHUNK_HEADER_LENGTH:
         chunk_type, chunk_flags, chunk_length = unpack_from("!BBH", data, pos)
-        chunk_body = data[pos + 4 : pos + chunk_length]
+
+        # Check the chunk length:
+        # - It must be at least as long as the chunk header.
+        # - It must not exceed the remaining packet data.
+        if chunk_length < SCTP_CHUNK_HEADER_LENGTH or pos + chunk_length > length:
+            raise ValueError(
+                f"SCTP chunk has an invalid length of {chunk_length} bytes"
+            )
+        chunk_body = data[pos + SCTP_CHUNK_HEADER_LENGTH : pos + chunk_length]
         chunk_cls = CHUNK_TYPES.get(chunk_type)
         if chunk_cls:
             chunks.append(chunk_cls(flags=chunk_flags, body=chunk_body))

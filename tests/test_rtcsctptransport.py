@@ -146,7 +146,7 @@ class SctpPacketTest(TestCase):
         data = load("sctp_init.bin")[0:10]
         with self.assertRaises(ValueError) as cm:
             self.roundtrip_packet(data, None)
-        self.assertEqual(str(cm.exception), "SCTP packet length is less than 12 bytes")
+        self.assertEqual(str(cm.exception), "SCTP packet length is less than 16 bytes")
 
     def test_parse_cookie_echo(self) -> None:
         data = load("sctp_cookie_echo.bin")
@@ -194,6 +194,22 @@ class SctpPacketTest(TestCase):
         self.assertEqual(chunk.user_data, b"M")
         self.assertEqual(
             repr(chunk), "DataChunk(flags=3, tsn=2584679421, stream_id=1, stream_seq=1)"
+        )
+
+    def test_parse_data_truncated_chunk_value(self) -> None:
+        data = load("sctp_data_truncated.bin")
+        with self.assertRaises(ValueError) as cm:
+            self.roundtrip_packet(data, None)
+        self.assertEqual(
+            str(cm.exception), "SCTP chunk has an invalid length of 8 bytes"
+        )
+
+    def test_parse_data_zero_length(self) -> None:
+        data = load("sctp_data_zero_length.bin")
+        with self.assertRaises(ValueError) as cm:
+            self.roundtrip_packet(data, None)
+        self.assertEqual(
+            str(cm.exception), "SCTP chunk has an invalid length of 0 bytes"
         )
 
     def test_parse_error(self) -> None:
@@ -307,6 +323,12 @@ class SctpPacketTest(TestCase):
         self.assertEqual(chunk.type, 7)
         self.assertEqual(chunk.flags, 0)
         self.assertEqual(chunk.cumulative_tsn, 2696426712)
+
+    def test_parse_shutdown_ack(self) -> None:
+        data = load("sctp_shutdown_ack.bin")
+        chunk = self.roundtrip_packet(data, ShutdownAckChunk)
+
+        self.assertEqual(chunk.type, 8)
 
 
 class ChunkFactory:
