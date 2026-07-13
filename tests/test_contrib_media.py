@@ -5,7 +5,7 @@ import tempfile
 import time
 import wave
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -13,7 +13,12 @@ import av
 import av.container
 import av.stream
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
-from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
+from aiortc.mediastreams import (
+    AudioStreamTrack,
+    MediaStreamError,
+    MediaStreamTrack,
+    VideoStreamTrack,
+)
 
 from .codecs import CodecTestCase
 from .utils import asynctest
@@ -203,6 +208,20 @@ class MediaBlackholeTest(TestCase):
 
 
 class MediaRelayTest(MediaTestCase):
+    async def recv(
+        self, proxy1: MediaStreamTrack, proxy2: MediaStreamTrack
+    ) -> tuple[av.AudioFrame | MediaStreamError, av.AudioFrame | MediaStreamError]:
+        """
+        Wrapper around `asyncio.gather` to keep mypy happy.
+        """
+        results = await asyncio.gather(
+            proxy1.recv(), proxy2.recv(), return_exceptions=True
+        )
+        return cast(
+            tuple[av.AudioFrame | MediaStreamError, av.AudioFrame | MediaStreamError],
+            results,
+        )
+
     @asynctest
     async def test_audio_stop_consumer(self) -> None:
         source = AudioStreamTrack()
@@ -213,7 +232,7 @@ class MediaRelayTest(MediaTestCase):
         # read some frames
         samples_per_frame = 160
         for pts in range(0, 2 * samples_per_frame, samples_per_frame):
-            frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+            frame1, frame2 = await self.recv(proxy1, proxy2)
 
             assert isinstance(frame1, av.AudioFrame)
             self.assertEqual(frame1.format.name, "s16")
@@ -232,9 +251,7 @@ class MediaRelayTest(MediaTestCase):
 
         # continue reading
         for i in range(2):
-            exc1, frame3 = await asyncio.gather(
-                proxy1.recv(), proxy2.recv(), return_exceptions=True
-            )
+            exc1, frame3 = await self.recv(proxy1, proxy2)
             self.assertIsInstance(exc1, MediaStreamError)
             self.assertIsInstance(frame3, av.AudioFrame)
 
@@ -251,7 +268,7 @@ class MediaRelayTest(MediaTestCase):
         # read some frames
         samples_per_frame = 160
         for pts in range(0, 2 * samples_per_frame, samples_per_frame):
-            frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+            frame1, frame2 = await self.recv(proxy1, proxy2)
 
             assert isinstance(frame1, av.AudioFrame)
             self.assertEqual(frame1.format.name, "s16")
@@ -270,9 +287,7 @@ class MediaRelayTest(MediaTestCase):
 
         # continue reading
         for i in range(2):
-            exc1, frame3 = await asyncio.gather(
-                proxy1.recv(), proxy2.recv(), return_exceptions=True
-            )
+            exc1, frame3 = await self.recv(proxy1, proxy2)
             self.assertIsInstance(exc1, MediaStreamError)
             self.assertIsInstance(frame3, av.AudioFrame)
 
@@ -289,7 +304,7 @@ class MediaRelayTest(MediaTestCase):
         # read some frames
         samples_per_frame = 160
         for pts in range(0, 2 * samples_per_frame, samples_per_frame):
-            frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+            frame1, frame2 = await self.recv(proxy1, proxy2)
 
             assert isinstance(frame1, av.AudioFrame)
             self.assertEqual(frame1.format.name, "s16")
@@ -309,9 +324,7 @@ class MediaRelayTest(MediaTestCase):
         # continue reading
         await asyncio.gather(proxy1.recv(), proxy2.recv())
         for i in range(2):
-            exc1, exc2 = await asyncio.gather(
-                proxy1.recv(), proxy2.recv(), return_exceptions=True
-            )
+            exc1, exc2 = await self.recv(proxy1, proxy2)
             self.assertIsInstance(exc1, MediaStreamError)
             self.assertIsInstance(exc2, MediaStreamError)
 
@@ -325,7 +338,7 @@ class MediaRelayTest(MediaTestCase):
         # read some frames
         samples_per_frame = 160
         for pts in range(0, 2 * samples_per_frame, samples_per_frame):
-            frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+            frame1, frame2 = await self.recv(proxy1, proxy2)
 
             assert isinstance(frame1, av.AudioFrame)
             self.assertEqual(frame1.format.name, "s16")
@@ -344,9 +357,7 @@ class MediaRelayTest(MediaTestCase):
 
         # continue reading
         for i in range(2):
-            exc1, exc2 = await asyncio.gather(
-                proxy1.recv(), proxy2.recv(), return_exceptions=True
-            )
+            exc1, exc2 = await self.recv(proxy1, proxy2)
             self.assertIsInstance(exc1, MediaStreamError)
             self.assertIsInstance(exc2, MediaStreamError)
 
@@ -360,7 +371,7 @@ class MediaRelayTest(MediaTestCase):
         # read some frames
         samples_per_frame = 160
         for pts in range(0, 2 * samples_per_frame, samples_per_frame):
-            frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+            frame1, frame2 = await self.recv(proxy1, proxy2)
 
             assert isinstance(frame1, av.AudioFrame)
             self.assertEqual(frame1.format.name, "s16")
@@ -378,7 +389,7 @@ class MediaRelayTest(MediaTestCase):
         timestamp = 5 * samples_per_frame
         await asyncio.sleep(source._start + (timestamp / 8000) - time.time())
 
-        frame1, frame2 = await asyncio.gather(proxy1.recv(), proxy2.recv())
+        frame1, frame2 = await self.recv(proxy1, proxy2)
 
         assert isinstance(frame1, av.AudioFrame)
         self.assertEqual(frame1.format.name, "s16")
@@ -397,9 +408,7 @@ class MediaRelayTest(MediaTestCase):
 
         # continue reading
         for i in range(2):
-            exc1, frame3 = await asyncio.gather(
-                proxy1.recv(), proxy2.recv(), return_exceptions=True
-            )
+            exc1, frame3 = await self.recv(proxy1, proxy2)
             self.assertIsInstance(exc1, MediaStreamError)
             self.assertIsInstance(frame3, av.AudioFrame)
 
