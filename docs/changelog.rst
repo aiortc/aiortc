@@ -3,6 +3,15 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.15.0
+------
+
+ * Add support for :attr:`RTCConfiguration.alwaysNegotiateDataChannels`.
+ * Use the same same ICE credentials for all media sections.
+ * Harden SCTP packet parsing against chunks with an invalid length.
+ * Relax versioned dependency on PyAV to allow version 17.x. This fixes a
+   per-frame memory leak.
+
 1.14.0
 ------
 
