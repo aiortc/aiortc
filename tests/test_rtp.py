@@ -38,10 +38,10 @@ def create_audio_frame(
 ) -> AudioFrame:
     frame = AudioFrame(format="s16", layout=layout, samples=samples)
     for p in frame.planes:
-        buf = bytearray()
+        buf = b""
         for i in range(samples):
             sample = int(sample_func(i) * 32767)
-            buf.extend(int.to_bytes(sample, 2, sys.byteorder, signed=True))
+            buf += int.to_bytes(sample, 2, sys.byteorder, signed=True)
         p.update(buf)
     frame.pts = pts
     frame.sample_rate = sample_rate
@@ -558,7 +558,7 @@ class RtpUtilTest(TestCase):
         )
 
     def test_map_header_extensions(self) -> None:
-        data = bytearray(
+        data = bytes(
             [
                 0x90,
                 0x64,
