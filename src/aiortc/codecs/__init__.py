@@ -14,7 +14,14 @@ from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .g722 import G722Decoder, G722Encoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
 from .opus import OpusDecoder, OpusEncoder
-from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
+from .vpx import (
+    Vp8Decoder,
+    Vp8Encoder,
+    Vp9Decoder,
+    Vp9Encoder,
+    vp8_depayload,
+    vp9_depayload,
+)
 
 # The clockrate for G.722 is 8kHz even though the sampling rate is 16kHz.
 # See https://datatracker.ietf.org/doc/html/rfc3551
@@ -102,11 +109,14 @@ def init_codecs() -> None:
                 "profile-level-id": profile_level_id,
             },
         )
+    add_video_codec("video/VP9")
 
 
 def depayload(codec: RTCRtpCodecParameters, payload: bytes) -> bytes:
     if codec.name == "VP8":
         return vp8_depayload(payload)
+    elif codec.name == "VP9":
+        return vp9_depayload(payload)
     elif codec.name == "H264":
         return h264_depayload(payload)
     else:
@@ -160,6 +170,8 @@ def get_decoder(codec: RTCRtpCodecParameters) -> Decoder:
         return H264Decoder()
     elif mimeType == "video/vp8":
         return Vp8Decoder()
+    elif mimeType == "video/vp9":
+        return Vp9Decoder()
     else:
         raise ValueError(f"No decoder found for MIME type `{mimeType}`")
 
@@ -179,6 +191,8 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
         return H264Encoder()
     elif mimeType == "video/vp8":
         return Vp8Encoder()
+    elif mimeType == "video/vp9":
+        return Vp9Encoder()  # Defaults to flexible_mode=True
     else:
         raise ValueError(f"No encoder found for MIME type `{mimeType}`")
 

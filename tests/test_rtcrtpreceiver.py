@@ -287,6 +287,7 @@ class RTCRtpReceiverTest(CodecTestCase):
                         "profile-level-id": "42e01f",
                     },
                 ),
+                RTCRtpCodecCapability(mimeType="video/VP9", clockRate=90000),
             ],
         )
         self.assertEqual(

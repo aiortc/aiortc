@@ -437,6 +437,7 @@ class MediaRecorder:
             file=file, format=format, mode="w", options=options
         )
         self.__tracks: dict[MediaStreamTrack, MediaRecorderContext] = {}
+        self.__options = options or {}
 
     def addTrack(self, track: MediaStreamTrack) -> None:
         """
@@ -460,7 +461,9 @@ class MediaRecorder:
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"
             elif self.__container.format.name == "webm":
-                stream = self.__container.add_stream("libvpx", rate=30)
+                # Support both VP8 and VP9 for webm
+                video_codec = self.__options.get("video_codec", "libvpx")
+                stream = self.__container.add_stream(video_codec, rate=30)
                 stream.pix_fmt = "yuv420p"
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
