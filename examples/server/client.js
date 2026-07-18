@@ -74,11 +74,31 @@ function enumerateInputDevices() {
     });
 }
 
-function negotiate() {
+function negotiate(trickle = false) {
+    const pcId = Math.random().toString(36).substring(2, 15);
+
     return pc.createOffer().then((offer) => {
         return pc.setLocalDescription(offer);
     }).then(() => {
-        // wait for ICE gathering to complete
+        if (trickle) {
+            // Trickle ICE: send candidates as they arrive
+            async function onicecandidate(evt) {
+                const candidate = evt.candidate;
+                if (candidate) {
+                    fetch('/add_candidate/' + pcId, {
+                        body: JSON.stringify(candidate.toJSON()),
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                }
+            }
+            pc.addEventListener('icecandidate', onicecandidate);
+            return
+        }
+
+        // Vanilla ICE: wait for ICE gathering to complete
         return new Promise((resolve) => {
             if (pc.iceGatheringState === 'complete') {
                 resolve();
@@ -107,7 +127,7 @@ function negotiate() {
         }
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
-        return fetch('/offer', {
+        return fetch('/offer/' + pcId, {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,
@@ -206,8 +226,9 @@ function start() {
         constraints.video = Object.keys(videoConstraints).length ? videoConstraints : true;
     }
 
-    // Acquire media and start negociation.
+    const useTrickleICE = document.getElementById('use-trickle-ice').checked;
 
+    // Acquire media and start negotiation.
     if (constraints.audio || constraints.video) {
         if (constraints.video) {
             document.getElementById('media').style.display = 'block';
@@ -216,12 +237,12 @@ function start() {
             stream.getTracks().forEach((track) => {
                 pc.addTrack(track, stream);
             });
-            return negotiate();
+            return negotiate(useTrickleICE);
         }, (err) => {
             alert('Could not acquire media: ' + err);
         });
     } else {
-        negotiate();
+        negotiate(useTrickleICE);
     }
 
     document.getElementById('stop').style.display = 'inline-block';

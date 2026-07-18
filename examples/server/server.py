@@ -4,18 +4,81 @@ import json
 import logging
 import os
 import ssl
-import uuid
+from collections import defaultdict
 
 import cv2
 from aiohttp import web
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc import (
+    MediaStreamTrack,
+    RTCConfiguration,
+    RTCIceServer,
+    RTCPeerConnection,
+    RTCSessionDescription,
+)
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiortc.sdp import candidate_from_sdp
 from av import VideoFrame
 
 ROOT = os.path.dirname(__file__)
 
+
+class IDWaiter:
+    """
+    A synchronization primitive that allows tasks to wait for a value
+    associated with a specific ID to be set asynchronously.
+    """
+
+    def __init__(self):
+        # Stores the values set for each ID
+        self._values = {}
+
+        # Stores asyncio.Event objects to notify waiters when a value is set
+        self._events = defaultdict(asyncio.Event)
+
+    def set(self, id, value):
+        """
+        Set a value for the given ID and notify any waiting tasks.
+
+        Raises:
+            RuntimeError: If a value has already been set for the ID.
+        """
+        if id in self._values:
+            raise RuntimeError(f"Value for ID {id} already set.")
+        self._values[id] = value
+        self._events[id].set()
+
+    async def get(self, id, timeout=None):
+        """
+        Wait for the value associated with the given ID.
+
+        Args:
+            id: The ID to wait for.
+            timeout: Maximum time to wait in seconds (optional).
+
+        Returns:
+            The value associated with the ID.
+
+        Raises:
+            TimeoutError: If the value is not set within the timeout.
+        """
+        if id not in self._values:
+            try:
+                await asyncio.wait_for(self._events[id].wait(), timeout)
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Timeout while waiting for ID {id}")
+        return self._values[id]
+
+    def delete(self, id):
+        """
+        Remove the stored value and event associated with the given ID.
+        Does nothing if the ID does not exist.
+        """
+        self._values.pop(id, None)
+        self._events.pop(id, None)
+
+
 logger = logging.getLogger("pc")
-pcs = set()
+pcs = IDWaiter()
 relay = MediaRelay()
 
 
@@ -101,14 +164,15 @@ async def javascript(request):
 
 async def offer(request):
     params = await request.json()
+    pc_id = request.match_info["pc_id"]
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-    pc = RTCPeerConnection()
-    pc_id = "PeerConnection(%s)" % uuid.uuid4()
-    pcs.add(pc)
+    pc = RTCPeerConnection(
+        RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
+    )
 
     def log_info(msg, *args):
-        logger.info(pc_id + " " + msg, *args)
+        logger.info("PeerConnection(%s)" % pc_id + " " + msg, *args)
 
     log_info("Created for %s", request.remote)
 
@@ -131,7 +195,7 @@ async def offer(request):
         log_info("Connection state is %s", pc.connectionState)
         if pc.connectionState == "failed":
             await pc.close()
-            pcs.discard(pc)
+            pcs.delete(pc_id)
 
     @pc.on("track")
     def on_track(track):
@@ -158,6 +222,10 @@ async def offer(request):
     await pc.setRemoteDescription(offer)
     await recorder.start()
 
+    # make `pc.addIceCandidate` able to be called
+    # after `setRemoteDescription` for Trickle ICE
+    pcs.set(pc_id, pc)
+
     # send answer
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
@@ -170,9 +238,28 @@ async def offer(request):
     )
 
 
+async def add_candidate(request):
+    params = await request.json()
+
+    pc_id = request.match_info["pc_id"]
+
+    # Wait until `pc.setRemoteDescription` is called in `offer` above
+    # because it sets up the transceiver that `addIceCandidate` adds an ICE candidate to
+    # while `add_candidate` can be called before it due to network jitter or something
+    pc = await pcs.get(pc_id, timeout=10)
+
+    candidate = candidate_from_sdp(params["candidate"])
+    candidate.sdpMid = params.get("sdpMid")
+    candidate.sdpMLineIndex = params.get("sdpMLineIndex")
+
+    await pc.addIceCandidate(candidate)
+
+    return web.Response()
+
+
 async def on_shutdown(app):
     # close peer connections
-    coros = [pc.close() for pc in pcs]
+    coros = [pc.close() for pc in pcs.values()]
     await asyncio.gather(*coros)
     pcs.clear()
 
@@ -208,7 +295,8 @@ if __name__ == "__main__":
     app.on_shutdown.append(on_shutdown)
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
-    app.router.add_post("/offer", offer)
+    app.router.add_post("/offer/{pc_id}", offer)
+    app.router.add_post("/add_candidate/{pc_id}", add_candidate)
     web.run_app(
         app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
     )
