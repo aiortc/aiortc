@@ -501,6 +501,181 @@ class RTCRtpCodecParametersTest(TestCase):
             )
         )
 
+    def test_find_common_codecs_pt_collision_rtx_and_codec(self) -> None:
+        """
+        Test PT collision when remote has RTX and main codec at same PT.
+        """
+        local_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=101,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=102,
+                parameters={"apt": 101},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=104,
+                parameters={"apt": 103},
+            ),
+        ]
+
+        # remote has collision: H264 RTX and VP9 both use PT 103
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=102,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=103,
+                parameters={"apt": 102},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=104,
+                parameters={"apt": 103},
+            ),
+        ]
+
+        common = find_common_codecs(local_codecs, remote_codecs)
+
+        # all PTs should be unique
+        self.assertEqual(len(common), 4)
+        pts = [c.payloadType for c in common]
+        self.assertEqual(len(pts), len(set(pts)))
+
+        # verify codec assignments
+        h264 = next(c for c in common if c.mimeType == "video/H264")
+        self.assertEqual(h264.payloadType, 102)
+
+        h264_rtx = next(
+            c for c in common if c.mimeType == "video/rtx" and c.parameters["apt"] == 102
+        )
+        self.assertEqual(h264_rtx.payloadType, 103)
+
+        vp9 = next(c for c in common if c.mimeType == "video/VP9")
+        self.assertNotEqual(vp9.payloadType, 103)
+        self.assertIn(vp9.payloadType, range(96, 128))
+
+        vp9_rtx = next(
+            c
+            for c in common
+            if c.mimeType == "video/rtx" and c.parameters["apt"] == vp9.payloadType
+        )
+        self.assertIsNotNone(vp9_rtx)
+
+    def test_find_common_codecs_pt_collision_descending(self) -> None:
+        """
+        Test libwebrtc collision resolution uses descending search.
+        Multiple collisions should allocate from 127 downward.
+        """
+        local_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=97
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=103
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=99,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+        ]
+
+        # remote uses same PT for all codecs
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=100
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP9", clockRate=90000, payloadType=100
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/H264",
+                clockRate=90000,
+                payloadType=100,
+                parameters={"profile-level-id": "42e01f"},
+            ),
+        ]
+
+        common = find_common_codecs(local_codecs, remote_codecs)
+
+        self.assertEqual(len(common), 3)
+        pts = [c.payloadType for c in common]
+        self.assertEqual(len(set(pts)), 3)
+
+        # first codec uses preferred PT, subsequent use descending search
+        self.assertEqual(pts[0], 100)
+        self.assertEqual(pts[1], 127)
+        self.assertEqual(pts[2], 126)
+
+    def test_find_common_codecs_bundle_collision(self) -> None:
+        """
+        Test BUNDLE PT collision prevention across media types.
+        """
+        # shared PT namespace for BUNDLE
+        used_payload_types: set[int] = set()
+
+        local_audio = [
+            RTCRtpCodecParameters(
+                mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
+            ),
+        ]
+        remote_audio = [
+            RTCRtpCodecParameters(
+                mimeType="audio/opus", clockRate=48000, channels=2, payloadType=97
+            ),
+        ]
+        local_video = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=100
+            ),
+        ]
+        remote_video = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=97
+            ),
+        ]
+
+        # negotiate audio first
+        common_audio = find_common_codecs(
+            local_audio, remote_audio, used_payload_types
+        )
+        self.assertEqual(len(common_audio), 1)
+        self.assertEqual(common_audio[0].payloadType, 97)
+        self.assertIn(97, used_payload_types)
+
+        # negotiate video second, PT 97 already used
+        common_video = find_common_codecs(
+            local_video, remote_video, used_payload_types
+        )
+        self.assertEqual(len(common_video), 1)
+        self.assertNotEqual(common_video[0].payloadType, 97)
+        self.assertEqual(common_video[0].payloadType, 127)
+
+        self.assertIn(97, used_payload_types)
+        self.assertIn(127, used_payload_types)
+        self.assertEqual(len(used_payload_types), 2)
+
 
 class RTCPeerConnectionTest(TestCase):
     def assertBundled(self, pc: RTCPeerConnection) -> None:
