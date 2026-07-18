@@ -50,6 +50,10 @@ HEADER_EXTENSIONS: dict[str, list[RTCRtpHeaderExtensionParameters]] = {
         RTCRtpHeaderExtensionParameters(
             id=2, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
         ),
+        RTCRtpHeaderExtensionParameters(
+            id=5,
+            uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+        ),
     ],
     "video": [
         RTCRtpHeaderExtensionParameters(
@@ -57,6 +61,10 @@ HEADER_EXTENSIONS: dict[str, list[RTCRtpHeaderExtensionParameters]] = {
         ),
         RTCRtpHeaderExtensionParameters(
             id=3, uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+        ),
+        RTCRtpHeaderExtensionParameters(
+            id=5,
+            uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
         ),
     ],
 }

@@ -30,6 +30,7 @@ RTCP_RTPFB = 205
 RTCP_PSFB = 206
 
 RTCP_RTPFB_NACK = 1
+RTCP_RTPFB_TWCC = 15
 
 RTCP_PSFB_PLI = 1
 RTCP_PSFB_SLI = 2
@@ -583,6 +584,204 @@ class RtcpSrPacket:
         return RtcpSrPacket(ssrc=ssrc, sender_info=sender_info, reports=reports)
 
 
+def _decode_twcc_chunks(data: bytes, offset: int, count: int) -> list[int]:
+    """Decode TWCC status chunks, returning a list of status symbols."""
+    statuses: list[int] = []
+    pos = offset
+    while len(statuses) < count:
+        if pos + 2 > len(data):
+            break
+        chunk = unpack_from("!H", data, pos)[0]
+        pos += 2
+        if chunk & 0x8000 == 0:
+            # Run-length chunk: bit15=0, bits14-13=status, bits12-0=run_length
+            status = (chunk >> 13) & 0x03
+            run_length = chunk & 0x1FFF
+            for _ in range(min(run_length, count - len(statuses))):
+                statuses.append(status)
+        else:
+            # Status vector chunk: bit15=1, bit14=symbol_size
+            symbol_size = (chunk >> 14) & 0x01
+            if symbol_size == 0:
+                # 1-bit symbols, 14 symbols
+                for i in range(13, -1, -1):
+                    if len(statuses) >= count:
+                        break
+                    statuses.append((chunk >> i) & 0x01)
+            else:
+                # 2-bit symbols, 7 symbols
+                for i in range(6, -1, -1):
+                    if len(statuses) >= count:
+                        break
+                    statuses.append((chunk >> (i * 2)) & 0x03)
+    return statuses[:count]
+
+
+def _encode_twcc_chunks(statuses: list[int]) -> bytes:
+    """Run-length encode statuses into 16-bit chunks."""
+    data = b""
+    i = 0
+    while i < len(statuses):
+        status = statuses[i]
+        run = 1
+        while i + run < len(statuses) and statuses[i + run] == status:
+            run += 1
+        # Emit run-length chunks (max 8191 per chunk)
+        remaining = run
+        while remaining > 0:
+            chunk_run = min(remaining, 0x1FFF)
+            data += pack("!H", (status << 13) | chunk_run)
+            remaining -= chunk_run
+        i += run
+    return data
+
+
+@dataclass
+class RtcpTwccPacket:
+    """
+    Transport-Wide Congestion Control feedback packet (RFC 8888 / draft-holmer).
+    """
+
+    ssrc: int
+    media_ssrc: int
+    base_sequence_number: int
+    packet_status_count: int
+    reference_time: int  # 24-bit signed, in 64ms units
+    feedback_packet_count: int  # uint8
+    packet_results: list[tuple[int, Optional[int]]]
+    # Each entry: (seq_num, recv_delta_us) where None = lost
+
+    def __bytes__(self) -> bytes:
+        # Compute per-packet deltas in 250us ticks from reference_time
+        statuses: list[int] = []
+        deltas: list[tuple[int, int]] = []  # (status, delta_ticks)
+
+        if self.packet_results:
+            ref_time_us = self.reference_time * 64000
+            last_time_us = ref_time_us
+            for seq_num, recv_delta_us in self.packet_results:
+                if recv_delta_us is None:
+                    statuses.append(0)  # not received
+                else:
+                    abs_time_us = ref_time_us + recv_delta_us
+                    delta_us = abs_time_us - last_time_us
+                    delta_ticks = delta_us // 250
+                    if 0 <= delta_ticks <= 255:
+                        statuses.append(1)  # small delta
+                        deltas.append((1, delta_ticks))
+                    else:
+                        statuses.append(2)  # large delta
+                        deltas.append((2, delta_ticks))
+                    last_time_us = abs_time_us
+
+        # Encode chunks
+        chunk_data = _encode_twcc_chunks(statuses)
+
+        # Encode deltas
+        delta_data = b""
+        for status, ticks in deltas:
+            if status == 1:
+                delta_data += pack("!B", ticks & 0xFF)
+            elif status == 2:
+                delta_data += pack("!h", ticks)
+
+        # Reference time as 24-bit signed
+        ref_time = self.reference_time & 0xFFFFFF
+
+        payload = pack("!LL", self.ssrc, self.media_ssrc)
+        payload += pack("!HH", self.base_sequence_number, self.packet_status_count)
+        payload += pack("!B", (ref_time >> 16) & 0xFF)
+        payload += pack("!B", (ref_time >> 8) & 0xFF)
+        payload += pack("!B", ref_time & 0xFF)
+        payload += pack("!B", self.feedback_packet_count & 0xFF)
+        payload += chunk_data
+        payload += delta_data
+
+        # Pad to 4-byte boundary
+        pad_len = (4 - len(payload) % 4) % 4
+        payload += b"\x00" * pad_len
+
+        return pack_rtcp_packet(RTCP_RTPFB, RTCP_RTPFB_TWCC, payload)
+
+    @classmethod
+    def parse(cls, data: bytes, fmt: int) -> "RtcpTwccPacket":
+        if len(data) < 16:
+            raise ValueError("RTCP TWCC feedback length is invalid")
+
+        ssrc, media_ssrc = unpack("!LL", data[0:8])
+        base_seq, status_count = unpack("!HH", data[8:12])
+
+        # Reference time: 24-bit signed
+        ref_b0, ref_b1, ref_b2 = unpack("!BBB", data[12:15])
+        ref_time = (ref_b0 << 16) | (ref_b1 << 8) | ref_b2
+        if ref_time & 0x800000:
+            ref_time -= 0x1000000
+
+        fb_pkt_count = data[15]
+
+        # Decode status chunks
+        statuses = _decode_twcc_chunks(data, 16, status_count)
+
+        # Calculate where deltas start (after all chunk data)
+        # Each chunk is 2 bytes. We need to figure out how many chunks were used.
+        pos = 16
+        decoded = 0
+        while decoded < status_count and pos + 2 <= len(data):
+            chunk = unpack_from("!H", data, pos)[0]
+            pos += 2
+            if chunk & 0x8000 == 0:
+                # Run-length
+                run_length = chunk & 0x1FFF
+                decoded += run_length
+            else:
+                # Status vector
+                symbol_size = (chunk >> 14) & 0x01
+                if symbol_size == 0:
+                    decoded += 14
+                else:
+                    decoded += 7
+
+        # Decode receive deltas
+        ref_time_us = ref_time * 64000
+        last_time_us = ref_time_us
+        packet_results: list[tuple[int, Optional[int]]] = []
+        seq = base_seq
+        for status in statuses:
+            if status == 0:
+                packet_results.append((seq & 0xFFFF, None))
+            elif status == 1:
+                # Small delta: 1 byte unsigned
+                if pos >= len(data):
+                    break
+                delta_ticks = data[pos]
+                pos += 1
+                delta_us = delta_ticks * 250
+                last_time_us += delta_us
+                recv_delta_us = last_time_us - ref_time_us
+                packet_results.append((seq & 0xFFFF, recv_delta_us))
+            elif status == 2:
+                # Large delta: 2 bytes signed
+                if pos + 2 > len(data):
+                    break
+                delta_ticks = unpack("!h", data[pos : pos + 2])[0]
+                pos += 2
+                delta_us = delta_ticks * 250
+                last_time_us += delta_us
+                recv_delta_us = last_time_us - ref_time_us
+                packet_results.append((seq & 0xFFFF, recv_delta_us))
+            seq += 1
+
+        return cls(
+            ssrc=ssrc,
+            media_ssrc=media_ssrc,
+            base_sequence_number=base_seq,
+            packet_status_count=status_count,
+            reference_time=ref_time,
+            feedback_packet_count=fb_pkt_count,
+            packet_results=packet_results,
+        )
+
+
 AnyRtcpPacket = Union[
     RtcpByePacket,
     RtcpPsfbPacket,
@@ -590,6 +789,7 @@ AnyRtcpPacket = Union[
     RtcpRtpfbPacket,
     RtcpSdesPacket,
     RtcpSrPacket,
+    RtcpTwccPacket,
 ]
 
 
@@ -633,7 +833,10 @@ class RtcpPacket:
             elif packet_type == RTCP_RR:
                 packets.append(RtcpRrPacket.parse(payload, count))
             elif packet_type == RTCP_RTPFB:
-                packets.append(RtcpRtpfbPacket.parse(payload, count))
+                if count == RTCP_RTPFB_TWCC:
+                    packets.append(RtcpTwccPacket.parse(payload, count))
+                else:
+                    packets.append(RtcpRtpfbPacket.parse(payload, count))
             elif packet_type == RTCP_PSFB:
                 packets.append(RtcpPsfbPacket.parse(payload, count))
 
