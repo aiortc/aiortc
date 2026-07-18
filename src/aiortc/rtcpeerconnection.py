@@ -288,11 +288,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     between the local computer and a remote peer.
 
     :param configuration: An optional :class:`RTCConfiguration`.
+    :param certificate: An optional :class:`RTCCertificate`.
     """
 
-    def __init__(self, configuration: Optional[RTCConfiguration] = None) -> None:
+    def __init__(
+            self, configuration: Optional[RTCConfiguration] = None, certificate: Optional[RTCCertificate] = None
+    ) -> None:
         super().__init__()
-        self.__certificates = [RTCCertificate.generateCertificate()]
+        self.__certificates = [certificate or RTCCertificate.generateCertificate()]
         self.__cname = f"{uuid.uuid4()}"
         self.__configuration = configuration or RTCConfiguration()
         self.__dtlsTransports: set[RTCDtlsTransport] = set()
