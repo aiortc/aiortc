@@ -22,6 +22,9 @@ class OpusDecoder(Decoder):
         self.codec.sample_rate = SAMPLE_RATE
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
+        if not encoded_frame.data:
+            return []
+
         packet = Packet(encoded_frame.data)
         packet.pts = encoded_frame.timestamp
         packet.time_base = TIME_BASE
