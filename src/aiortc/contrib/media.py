@@ -109,7 +109,7 @@ def player_worker_decode(
     video_first_pts = None
 
     frame_time = None
-    start_time = time.time()
+    start_time = time.monotonic()
 
     while not quit_event.is_set():
         try:
@@ -129,7 +129,7 @@ def player_worker_decode(
 
         # read up to 1 second ahead
         if throttle_playback:
-            elapsed_time = time.time() - start_time
+            elapsed_time = time.monotonic() - start_time
             if frame_time and frame_time > elapsed_time + 1:
                 time.sleep(0.1)
 
@@ -170,7 +170,7 @@ def player_worker_demux(
 ) -> None:
     video_first_pts = None
     frame_time = None
-    start_time = time.time()
+    start_time = time.monotonic()
 
     while not quit_event.is_set():
         try:
@@ -192,7 +192,7 @@ def player_worker_demux(
 
         # read up to 1 second ahead
         if throttle_playback:
-            elapsed_time = time.time() - start_time
+            elapsed_time = time.monotonic() - start_time
             if frame_time and frame_time > elapsed_time + 1:
                 time.sleep(0.1)
 
@@ -250,9 +250,9 @@ class PlayerStreamTrack(MediaStreamTrack):
             and data_time is not None
         ):
             if self._start is None:
-                self._start = time.time() - data_time
+                self._start = time.monotonic() - data_time
             else:
-                wait = self._start + data_time - time.time()
+                wait = self._start + data_time - time.monotonic()
                 await asyncio.sleep(wait)
 
         return data
