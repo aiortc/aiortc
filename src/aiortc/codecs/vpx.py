@@ -213,7 +213,7 @@ class Vp8Encoder(Encoder):
             self.codec.height = frame.height
             self.codec.bit_rate = self.target_bitrate
             self.codec.pix_fmt = "yuv420p"
-            self.codec.gop_size = 3000  # kf_max_dist
+            self.codec.gop_size = MAX_FRAME_RATE  # kf_max_dist (~1s)
             self.codec.qmin = 2  # rc_min_quantizer
             self.codec.qmax = 56  # rc_max_quantizer
             self.codec.options = {
