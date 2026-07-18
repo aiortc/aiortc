@@ -169,15 +169,26 @@ class VpxPayloadDescriptor:
 class Vp8Decoder(Decoder):
     def __init__(self) -> None:
         self.codec = CodecContext.create("libvpx", "r")
+        self.decode_errors = 0
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
         try:
             packet = Packet(encoded_frame.data)
             packet.pts = encoded_frame.timestamp
             packet.time_base = VIDEO_TIME_BASE
-            return cast(list[Frame], self.codec.decode(packet))
+            frames = cast(list[Frame], self.codec.decode(packet))
+            self.decode_errors = 0
+            return frames
         except av.FFmpegError as e:
-            logger.warning("Vp8Decoder() failed to decode, skipping package: " + str(e))
+            self.decode_errors += 1
+            if self.decode_errors == 1:
+                # First error: reset codec and signal for PLI.
+                logger.warning("Vp8Decoder() failed to decode, resetting: %s", e)
+                self.codec = CodecContext.create("libvpx", "r")
+            elif self.decode_errors % 30 == 0:
+                # Still failing after ~1s (30 frames). Reset and re-request PLI.
+                logger.warning("Vp8Decoder() still failing after %d errors, resetting: %s", self.decode_errors, e)
+                self.codec = CodecContext.create("libvpx", "r")
             return []
 
 
@@ -213,7 +224,7 @@ class Vp8Encoder(Encoder):
             self.codec.height = frame.height
             self.codec.bit_rate = self.target_bitrate
             self.codec.pix_fmt = "yuv420p"
-            self.codec.gop_size = 3000  # kf_max_dist
+            self.codec.gop_size = 30  # kf_max_dist (~1s at 30fps)
             self.codec.qmin = 2  # rc_min_quantizer
             self.codec.qmax = 56  # rc_max_quantizer
             self.codec.options = {

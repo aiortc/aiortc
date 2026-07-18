@@ -1,9 +1,11 @@
 from typing import Optional
 
 from .rtp import RtpPacket
-from .utils import uint16_add
+from .utils import uint16_add, uint16_gt
 
 MAX_MISORDER = 100
+MAX_FRAME_PACKETS = 256
+MAX_PENDING_FRAMES = 16
 
 
 class JitterFrame:
@@ -14,111 +16,175 @@ class JitterFrame:
 
 class JitterBuffer:
     def __init__(
-        self, capacity: int, prefetch: int = 0, is_video: bool = False
+        self,
+        capacity: int,
+        prefetch: int = 0,
+        is_video: bool = False,
+        reorder_capacity: int = 1,
     ) -> None:
-        assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
-        self._origin: Optional[int] = None
-        self._packets: list[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
         self._is_video = is_video
+        self._reorder_capacity = max(1, reorder_capacity)
+
+        # Reorder buffer (maintained sorted by sequence number)
+        self._buffer: list[RtpPacket] = []
+        self._last_emitted_seq: Optional[int] = None
+
+        # Frame assembler state
+        self._frame_packets: list[RtpPacket] = []
+        self._frame_timestamp: Optional[int] = None
+        self._pending_frames: list[JitterFrame] = []
+        self._pli_flag = False
 
     @property
     def capacity(self) -> int:
         return self._capacity
 
-    def add(self, packet: RtpPacket) -> tuple[bool, Optional[JitterFrame]]:
-        pli_flag = False
-        if self._origin is None:
-            self._origin = packet.sequence_number
-            delta = 0
-            misorder = 0
-        else:
-            delta = uint16_add(packet.sequence_number, -self._origin)
-            misorder = uint16_add(self._origin, -packet.sequence_number)
+    def add(
+        self, packet: RtpPacket, arrival_time_ms: int = 0
+    ) -> tuple[bool, Optional[JitterFrame]]:
+        self._pli_flag = False
 
-        if misorder < delta:
-            if misorder >= MAX_MISORDER:
-                self.remove(self.capacity)
-                self._origin = packet.sequence_number
-                delta = misorder = 0
+        # Check if packet is too old, duplicate, or stream reset
+        if self._last_emitted_seq is not None:
+            if packet.sequence_number == self._last_emitted_seq:
+                return self._pli_flag, None  # duplicate of last emitted
+            delta = uint16_add(packet.sequence_number, -self._last_emitted_seq)
+            misorder = uint16_add(self._last_emitted_seq, -packet.sequence_number)
+            if misorder < delta:
+                if misorder >= MAX_MISORDER:
+                    self._reset()
+                    if self._is_video:
+                        self._pli_flag = True
+                else:
+                    return self._pli_flag, None
+        elif self._buffer:
+            # Only check for stream reset (very large backward jump).
+            # Do NOT drop reordered packets — they should be inserted
+            # into the sorted buffer.
+            min_seq = self._buffer[0].sequence_number
+            misorder = uint16_add(min_seq, -packet.sequence_number)
+            delta = uint16_add(packet.sequence_number, -min_seq)
+            if misorder < delta and misorder >= MAX_MISORDER:
+                self._reset()
                 if self._is_video:
-                    pli_flag = True
-            else:
-                return pli_flag, None
+                    self._pli_flag = True
 
-        if delta >= self.capacity:
-            # remove just enough frames to fit the received packets
-            excess = delta - self.capacity + 1
-            if self.smart_remove(excess):
-                self._origin = packet.sequence_number
-            if self._is_video:
-                pli_flag = True
+        # Insert into reorder buffer (sorted by seq)
+        self._insert_sorted(packet)
 
-        pos = packet.sequence_number % self._capacity
-        self._packets[pos] = packet
-
-        return pli_flag, self._remove_frame(packet.sequence_number)
-
-    def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
-        frame = None
-        frames = 0
-        packets: list[RtpPacket] = []
-        remove = 0
-        timestamp = None
-
-        for count in range(self.capacity):
-            pos = (self._origin + count) % self._capacity
-            packet = self._packets[pos]
-            if packet is None:
-                break
-            if timestamp is None:
-                timestamp = packet.timestamp
-            elif packet.timestamp != timestamp:
-                # we now have a complete frame, only store the first one
-                if frame is None:
-                    frame = JitterFrame(
-                        data=b"".join([x._data for x in packets]),  # type: ignore
-                        timestamp=timestamp,
+        # Handle buffer overflow (seq span exceeds capacity)
+        if len(self._buffer) >= 2:
+            span = uint16_add(
+                self._buffer[-1].sequence_number,
+                -self._buffer[0].sequence_number,
+            )
+            if span >= self._capacity:
+                if self._is_video:
+                    self._pli_flag = True
+                while len(self._buffer) >= 2:
+                    span = uint16_add(
+                        self._buffer[-1].sequence_number,
+                        -self._buffer[0].sequence_number,
                     )
-                    remove = count
+                    if span < self._capacity:
+                        break
+                    self._emit_one()
 
-                # check we have prefetched enough
-                frames += 1
-                if frames >= self._prefetch:
-                    self.remove(remove)
-                    return frame
+        # Emit packets when reorder buffer is full
+        while len(self._buffer) >= self._reorder_capacity:
+            self._emit_one()
 
-                # start a new frame
-                packets = []
-                timestamp = packet.timestamp
+        return self._pli_flag, self._take_frame()
 
-            packets.append(packet)
+    def _reset(self) -> None:
+        self._buffer.clear()
+        self._last_emitted_seq = None
+        self._frame_packets.clear()
+        self._frame_timestamp = None
+        self._pending_frames.clear()
 
+    def _insert_sorted(self, packet: RtpPacket) -> None:
+        seq = packet.sequence_number
+        for i, p in enumerate(self._buffer):
+            if p.sequence_number == seq:
+                return  # duplicate
+            if uint16_gt(p.sequence_number, seq):
+                self._buffer.insert(i, packet)
+                return
+        self._buffer.append(packet)
+
+    def _emit_one(self) -> None:
+        if not self._buffer:
+            return
+        packet = self._buffer.pop(0)
+
+        # Check for gap (confirmed loss)
+        if self._last_emitted_seq is not None:
+            expected = uint16_add(self._last_emitted_seq, 1)
+            if expected != packet.sequence_number:
+                if self._is_video and not self._pli_flag:
+                    self._pli_flag = True
+                # Discard incomplete frame being assembled
+                self._frame_packets.clear()
+                self._frame_timestamp = None
+
+        self._last_emitted_seq = packet.sequence_number
+
+        # Memory protection: discard oversized frame
+        if len(self._frame_packets) >= MAX_FRAME_PACKETS:
+            if self._is_video and not self._pli_flag:
+                self._pli_flag = True
+            self._frame_packets.clear()
+            self._frame_timestamp = None
+
+        # Frame assembly: group packets by timestamp
+        if (
+            self._frame_timestamp is not None
+            and packet.timestamp != self._frame_timestamp
+        ):
+            # Timestamp changed - previous frame is complete
+            self._complete_frame()
+            self._frame_packets = [packet]
+            self._frame_timestamp = packet.timestamp
+        else:
+            if self._frame_timestamp is None:
+                self._frame_timestamp = packet.timestamp
+            self._frame_packets.append(packet)
+
+        # Marker bit: immediate frame completion
+        if getattr(packet, "marker", 0):
+            self._complete_frame()
+
+    def _complete_frame(self) -> None:
+        """Finalize the current frame and add to pending."""
+        if not self._frame_packets:
+            return
+        frame = JitterFrame(
+            data=b"".join([p._data for p in self._frame_packets]),  # type: ignore
+            timestamp=self._frame_timestamp,
+        )
+        self._pending_frames.append(frame)
+        self._frame_packets = []
+        self._frame_timestamp = None
+
+        # Memory protection: cap pending frames
+        while len(self._pending_frames) > MAX_PENDING_FRAMES:
+            self._pending_frames.pop(0)
+
+    def _take_frame(self) -> Optional[JitterFrame]:
+        if len(self._pending_frames) >= max(1, self._prefetch):
+            return self._pending_frames.pop(0)
         return None
 
-    def remove(self, count: int) -> None:
-        assert count <= self._capacity
-        for i in range(count):
-            pos = self._origin % self._capacity
-            self._packets[pos] = None
-            self._origin = uint16_add(self._origin, 1)
-
-    def smart_remove(self, count: int) -> bool:
-        """
-        Makes sure that all packages belonging to the same frame are removed
-        to prevent sending corrupted frames to the decoder.
-        """
-        timestamp = None
-        for i in range(self._capacity):
-            pos = self._origin % self._capacity
-            packet = self._packets[pos]
-            if packet is not None:
-                if i >= count and timestamp != packet.timestamp:
-                    break
-                timestamp = packet.timestamp
-            self._packets[pos] = None
-            self._origin = uint16_add(self._origin, 1)
-            if i == self._capacity - 1:
-                return True
-        return False
+    def flush(self) -> list[JitterFrame]:
+        """Flush all remaining buffered packets. Call on stream end."""
+        frames: list[JitterFrame] = []
+        while self._buffer:
+            self._emit_one()
+        if self._frame_packets:
+            self._complete_frame()
+        frames.extend(self._pending_frames)
+        self._pending_frames.clear()
+        return frames

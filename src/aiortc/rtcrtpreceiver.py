@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
 
 
 def decoder_worker(
-    loop: asyncio.AbstractEventLoop, input_q: queue.Queue, output_q: asyncio.Queue
+    loop: asyncio.AbstractEventLoop,
+    input_q: queue.Queue,
+    output_q: asyncio.Queue,
+    pli_event: Optional[threading.Event] = None,
 ) -> None:
     codec_name = None
     decoder = None
@@ -68,7 +71,16 @@ def decoder_worker(
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
+        frames = decoder.decode(encoded_frame)
+        if not frames and hasattr(decoder, "decode_errors"):
+            errors = decoder.decode_errors
+            if errors == 1 or (errors > 0 and errors % 30 == 0):
+                # Request PLI on first error, then retry every ~1s (30 frames)
+                # in case the keyframe response was lost.
+                if pli_event is not None:
+                    pli_event.set()
+
+        for frame in frames:
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
@@ -269,15 +281,16 @@ class RTCRtpReceiver:
         self._enabled = True
         self.__active_ssrc: dict[int, datetime.datetime] = {}
         self.__codecs: dict[int, RTCRtpCodecParameters] = {}
-        self.__decoder_queue: queue.Queue = queue.Queue()
+        self.__decoder_queue: queue.Queue = queue.Queue(maxsize=30)
         self.__decoder_thread: Optional[threading.Thread] = None
+        self.__decoder_pli_event = threading.Event()
         self.__kind = kind
         if kind == "audio":
             self.__jitter_buffer = JitterBuffer(capacity=16, prefetch=4)
             self.__nack_generator = None
             self.__remote_bitrate_estimator = None
         else:
-            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True)
+            self.__jitter_buffer = JitterBuffer(capacity=128, is_video=True, reorder_capacity=8)
             self.__nack_generator = NackGenerator()
             self.__remote_bitrate_estimator = RemoteBitrateEstimator()
         self._track: Optional[RemoteStreamTrack] = None
@@ -391,6 +404,7 @@ class RTCRtpReceiver:
                     asyncio.get_event_loop(),
                     self.__decoder_queue,
                     self._track._queue,
+                    self.__decoder_pli_event,
                 ),
             )
             self.__decoder_thread.start()
@@ -529,6 +543,12 @@ class RTCRtpReceiver:
 
         # try to re-assemble encoded frame
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
+
+        # check if the decoder thread requested a PLI (decode error)
+        if self.__decoder_pli_event.is_set():
+            self.__decoder_pli_event.clear()
+            pli_flag = True
+
         # check if the PLI should be sent
         if pli_flag:
             await self._send_rtcp_pli(packet.ssrc)
@@ -538,7 +558,10 @@ class RTCRtpReceiver:
             encoded_frame.timestamp = self.__timestamp_mapper.map(
                 encoded_frame.timestamp
             )
-            self.__decoder_queue.put((codec, encoded_frame))
+            try:
+                self.__decoder_queue.put_nowait((codec, encoded_frame))
+            except queue.Full:
+                self.__log_debug("x Decoder queue full, dropping frame")
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
