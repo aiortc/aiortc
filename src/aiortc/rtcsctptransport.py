@@ -701,7 +701,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
     @property
     def is_server(self) -> bool:
-        return self.transport.transport.role != "controlling"
+        # RFC 8832 ties SCTP behaviour to the DTLS role, not the ICE role.
+        return self.transport._role == "server"
 
     @property
     def maxChannels(self) -> Optional[int]:
@@ -762,11 +763,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self.__log_debug = lambda msg, *args: logger.debug(prefix + msg, *args)
 
             # initialise local channel ID counter
-            # one side should be using even IDs, the other odd IDs
+            # RFC 8832: the DTLS client uses even IDs, the DTLS server odd IDs
             if self.is_server:
-                self._data_channel_id = 0
-            else:
                 self._data_channel_id = 1
+            else:
+                self._data_channel_id = 0
 
             self.__transport._register_data_receiver(self)
             if not self.is_server:
