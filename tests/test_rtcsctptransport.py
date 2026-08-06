@@ -54,7 +54,8 @@ T = TypeVar("T")
 async def client_and_server() -> AsyncGenerator[
     tuple[RTCSctpTransport, RTCSctpTransport], None
 ]:
-    async with dummy_dtls_transport_pair() as (client_transport, server_transport):
+    # The controlled side resolves to the DTLS client in auto mode.
+    async with dummy_dtls_transport_pair() as (server_transport, client_transport):
         client = RTCSctpTransport(client_transport)
         server = RTCSctpTransport(server_transport)
         assert client.is_server is False
@@ -73,7 +74,7 @@ async def client_and_server() -> AsyncGenerator[
 
 @contextlib.asynccontextmanager
 async def client_standalone() -> AsyncGenerator[RTCSctpTransport, None]:
-    async with dummy_dtls_transport_pair() as (client_transport, _):
+    async with dummy_dtls_transport_pair() as (_, client_transport):
         client = RTCSctpTransport(client_transport)
         assert client.is_server is False
 
@@ -909,11 +910,11 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(channel.label, "chat")
 
             await asyncio.sleep(0.1)
-            self.assertEqual(channel.id, 1)
+            self.assertEqual(channel.id, 0)
             self.assertEqual(channel.label, "chat")
             self.assertEqual(len(client_channels), 0)
             self.assertEqual(len(server_channels), 1)
-            self.assertEqual(server_channels[0].id, 1)
+            self.assertEqual(server_channels[0].id, 0)
             self.assertEqual(server_channels[0].label, "chat")
 
     @asynctest
@@ -1011,13 +1012,13 @@ class RTCSctpTransportTest(TestCase):
             await asyncio.sleep(0.1)
             self.assertEqual(channel.id, 1)
             self.assertEqual(channel.label, "chat")
-            self.assertEqual(channel2.id, 3)
+            self.assertEqual(channel2.id, 0)
             self.assertEqual(channel2.label, "chat")
             self.assertEqual(len(client_channels), 0)
             self.assertEqual(len(server_channels), 2)
             self.assertEqual(server_channels[0].id, 1)
             self.assertEqual(server_channels[0].label, "chat")
-            self.assertEqual(server_channels[1].id, 3)
+            self.assertEqual(server_channels[1].id, 0)
             self.assertEqual(server_channels[1].label, "chat")
 
     @asynctest
@@ -1292,7 +1293,7 @@ class RTCSctpTransportTest(TestCase):
 
             await asyncio.sleep(0.1)
             self.assertEqual(len(client_channels), 1)
-            self.assertEqual(client_channels[0].id, 0)
+            self.assertEqual(client_channels[0].id, 1)
             self.assertEqual(client_channels[0].label, "chat")
             self.assertEqual(len(server_channels), 0)
 
