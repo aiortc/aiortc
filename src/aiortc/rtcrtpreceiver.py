@@ -144,6 +144,7 @@ class StreamStatistics:
         self.base_seq: Optional[int] = None
         self.max_seq: Optional[int] = None
         self.cycles = 0
+        self.bytes_received = 0
         self.packets_received = 0
 
         # jitter
@@ -160,6 +161,7 @@ class StreamStatistics:
         in_order = self.max_seq is None or uint16_gt(
             packet.sequence_number, self.max_seq
         )
+        self.bytes_received += len(packet.payload)
         self.packets_received += 1
 
         if self.base_seq is None:
@@ -379,7 +381,8 @@ class RTCRtpReceiver:
                     packetsReceived=stream.packets_received,
                     packetsLost=stream.packets_lost,
                     jitter=stream.jitter,
-                    # RTPInboundRtpStreamStats
+                    # RTCInboundRtpStreamStats
+                    bytesReceived=stream.bytes_received,
                 )
             )
         self.__stats.update(self.transport._get_stats())
