@@ -50,7 +50,9 @@ async def create_receiver(kind: str) -> AsyncGenerator[RTCRtpReceiver, None]:
             await receiver.stop()
 
 
-def create_rtp_packets(count: int, seq: int = 0) -> list[RtpPacket]:
+def create_rtp_packets(
+    count: int, seq: int = 0, payload: bytes = b""
+) -> list[RtpPacket]:
     packets = []
     for i in range(count):
         packets.append(
@@ -59,6 +61,7 @@ def create_rtp_packets(count: int, seq: int = 0) -> list[RtpPacket]:
                 sequence_number=uint16_add(seq, i),
                 ssrc=1234,
                 timestamp=i * 160,
+                payload=payload,
             )
         )
     return packets
@@ -128,6 +131,28 @@ class NackGeneratorTest(TestCase):
 class StreamStatisticsTest(TestCase):
     def create_counter(self) -> StreamStatistics:
         return StreamStatistics(clockrate=8000)
+
+    def test_bytes_received(self) -> None:
+        counter = self.create_counter()
+
+        # receive 10 packets carrying a 160-byte payload
+        for packet in create_rtp_packets(10, 0, payload=b"\xd5" * 160):
+            counter.add(packet)
+
+        self.assertEqual(counter.bytes_received, 1600)
+        self.assertEqual(counter.packets_received, 10)
+
+    def test_bytes_received_padding_only(self) -> None:
+        counter = self.create_counter()
+
+        # receive a packet which consists solely of padding
+        packet = RtpPacket.parse(load("rtp_only_padding.bin"))
+        self.assertEqual(packet.padding_size, 224)
+        counter.add(packet)
+
+        # padding is not counted as payload bytes
+        self.assertEqual(counter.bytes_received, 0)
+        self.assertEqual(counter.packets_received, 1)
 
     def test_no_loss(self) -> None:
         counter = self.create_counter()
@@ -360,6 +385,10 @@ class RTCRtpReceiverTest(CodecTestCase):
                 sorted([s.type for s in report.values()]),
                 ["inbound-rtp", "remote-outbound-rtp", "transport"],
             )
+
+            inbound_rtp = report["inbound-rtp_" + str(id(receiver))]
+            self.assertEqual(inbound_rtp.packetsReceived, 10)
+            self.assertEqual(inbound_rtp.bytesReceived, 1600)
 
             # check sources
             sources = receiver.getSynchronizationSources()
