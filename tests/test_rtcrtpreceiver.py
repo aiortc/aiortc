@@ -34,6 +34,7 @@ from aiortc.rtp import (
     RtcpRrPacket,
     RtcpSdesPacket,
     RtpPacket,
+    wrap_rtx,
 )
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
@@ -706,16 +707,38 @@ class RTCRtpReceiverTest(CodecTestCase):
                 )
             )
 
-            # Receive a media packet, then its retransmission.
-            packet = RtpPacket(payload_type=100, sequence_number=1, ssrc=1234)
-            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
-            packet = RtpPacket(payload_type=101, ssrc=2345, payload=b"\x00\x01")
+            # Receive media packets 0 and 2, packet 1 is missing.
+            for seq in (0, 2):
+                packet = RtpPacket(
+                    payload_type=100,
+                    sequence_number=seq,
+                    ssrc=1234,
+                    timestamp=seq * 3000,
+                    payload=b"\xd5" * 10,
+                )
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Receive the missing packet as a retransmission on the RTX stream.
+            packet = wrap_rtx(
+                RtpPacket(
+                    payload_type=100,
+                    sequence_number=1,
+                    ssrc=1234,
+                    timestamp=3000,
+                    payload=b"\xd5" * 10,
+                ),
+                payload_type=101,
+                sequence_number=0,
+                ssrc=2345,
+            )
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
-            # Check the retransmission is not reported as a stream of its own.
+            # Check the retransmission counts towards the media stream.
             report = await receiver.getStats()
             inbound = [s for s in report.values() if s.type == "inbound-rtp"]
             self.assertEqual([s.ssrc for s in inbound], [1234])
+            self.assertEqual(inbound[0].packetsReceived, 3)
+            self.assertEqual(inbound[0].bytesReceived, 30)
 
     @asynctest
     async def test_rtp_ssrc_change_stats(self) -> None:

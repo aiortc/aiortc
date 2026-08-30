@@ -45,7 +45,7 @@ class RTCInboundRtpStreamStats(RTCReceivedRtpStreamStats):
     """
 
     bytesReceived: int
-    "Total number of bytes received for this SSRC, excluding RTP headers and padding."
+    "Total number of payload bytes received for this SSRC, including retransmissions."
 
 
 @dataclass
