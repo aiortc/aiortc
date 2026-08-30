@@ -5,6 +5,7 @@ import queue
 import random
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
@@ -306,6 +307,8 @@ class RTCRtpReceiver:
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
+        self.__rtx_recovered_bytes: Counter[int] = Counter()
+        self.__rtx_recovered_packets: Counter[int] = Counter()
         self.__rtx_ssrc: dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
@@ -378,11 +381,13 @@ class RTCRtpReceiver:
                     kind=self.__kind,
                     transportId=self.transport._stats_id,
                     # RTCReceivedRtpStreamStats
-                    packetsReceived=stream.packets_received,
+                    packetsReceived=stream.packets_received
+                    + self.__rtx_recovered_packets[ssrc],
                     packetsLost=stream.packets_lost,
                     jitter=stream.jitter,
                     # RTCInboundRtpStreamStats
-                    bytesReceived=stream.bytes_received,
+                    bytesReceived=stream.bytes_received
+                    + self.__rtx_recovered_bytes[ssrc],
                 )
             )
         self.__stats.update(self.transport._get_stats())
@@ -553,6 +558,11 @@ class RTCRtpReceiver:
 
             packet = unwrap_rtx(packet, payload_type=apt, ssrc=original_ssrc)
             codec = self.__codecs[apt]
+
+            # Retransmissions count towards the media stream's stats (webrtc-stats,
+            # "inbound-rtp"), but not its RTCP statistics (RFC 4588 section 6.2).
+            self.__rtx_recovered_packets[original_ssrc] += 1
+            self.__rtx_recovered_bytes[original_ssrc] += len(packet.payload)
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
