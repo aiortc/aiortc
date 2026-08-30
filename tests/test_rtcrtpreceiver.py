@@ -26,7 +26,7 @@ from aiortc.rtcrtpreceiver import (
     StreamStatistics,
     TimestampMapper,
 )
-from aiortc.rtp import RtcpPacket, RtpPacket
+from aiortc.rtp import RtcpPacket, RtpPacket, wrap_rtx
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
 
@@ -540,6 +540,68 @@ class RTCRtpReceiverTest(CodecTestCase):
             # receive RTX without payload
             packet = RtpPacket(payload_type=101, ssrc=2345)
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+    @asynctest
+    async def test_rtp_rtx_stats(self) -> None:
+        async with create_receiver("video") as receiver:
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(
+                RTCRtpReceiveParameters(
+                    codecs=[
+                        VP8_CODEC,
+                        RTCRtpCodecParameters(
+                            mimeType="video/rtx",
+                            clockRate=90000,
+                            payloadType=101,
+                            parameters={"apt": 100},
+                        ),
+                    ],
+                    encodings=[
+                        RTCRtpDecodingParameters(
+                            ssrc=1234,
+                            payloadType=100,
+                            rtx=RTCRtpRtxParameters(ssrc=2345),
+                        )
+                    ],
+                )
+            )
+
+            # receive media packets 0 and 2, packet 1 is missing
+            for seq in (0, 2):
+                packet = RtpPacket(
+                    payload_type=100,
+                    sequence_number=seq,
+                    ssrc=1234,
+                    timestamp=seq * 3000,
+                    payload=b"\xd5" * 10,
+                )
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # the missing packet arrives as a retransmission on the RTX stream
+            packet = wrap_rtx(
+                RtpPacket(
+                    payload_type=100,
+                    sequence_number=1,
+                    ssrc=1234,
+                    timestamp=3000,
+                    payload=b"\xd5" * 10,
+                ),
+                payload_type=101,
+                sequence_number=0,
+                ssrc=2345,
+            )
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # the RTX stream is not reported as a separate "inbound-rtp" entry,
+            # its recovered packet and payload bytes count towards the media
+            # stream
+            report = await receiver.getStats()
+            inbound = [s for s in report.values() if s.type == "inbound-rtp"]
+            self.assertEqual(len(inbound), 1)
+            self.assertEqual(inbound[0].ssrc, 1234)
+            self.assertEqual(inbound[0].packetsReceived, 3)
+            self.assertEqual(inbound[0].bytesReceived, 30)
 
     @asynctest
     async def test_rtp_rtx_unknown_ssrc(self) -> None:
