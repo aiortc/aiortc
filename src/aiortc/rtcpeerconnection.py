@@ -1013,6 +1013,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if self.__sctp and self.__sctp.mid == primaryMid:
                 primaryTransport = self.__sctp.transport
 
+            # The BUNDLE-tag section supplies candidates for the shared transport.
+            # Later sections may have no candidates or belong to discarded transports.
+            for media in description.media:
+                if media.rtp.muxId == primaryMid:
+                    iceCandidates[primaryTransport.transport] = media
+                    break
+
             # replace transport for bundled media
             oldTransports = set()
             slaveMids = bundle.items[1:]

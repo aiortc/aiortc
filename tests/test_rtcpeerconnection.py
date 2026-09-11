@@ -3,6 +3,7 @@ import re
 from collections.abc import Callable
 from typing import Optional, Union
 from unittest import TestCase
+from unittest.mock import AsyncMock, patch
 
 import aioice.stun
 from aiortc import (
@@ -4963,6 +4964,108 @@ a=rtpmap:0 PCMU/8000
 
         # close
         await pc.close()
+
+    @asynctest
+    async def test_setRemoteDescription_bundle_tag_candidates(self) -> None:
+        # Check the candidate bookkeeping directly: peer-reflexive ICE can mask
+        # incorrect candidate selection in a successful localhost connection.
+        for policy, kinds, description_type in [
+            (RTCBundlePolicy.MAX_BUNDLE, ["video", "application"], "answer"),
+            (RTCBundlePolicy.MAX_BUNDLE, ["video", "application"], "offer"),
+            (RTCBundlePolicy.BALANCED, ["video", "video"], "offer"),
+            (RTCBundlePolicy.MAX_COMPAT, ["video", "application"], "answer"),
+        ]:
+            for primary_index in (
+                [0, 1] if policy == RTCBundlePolicy.MAX_COMPAT else [0]
+            ):
+                for secondary_has_candidates in [False, True]:
+                    with self.subTest(
+                        policy=policy,
+                        kinds=kinds,
+                        description_type=description_type,
+                        primary_index=primary_index,
+                        secondary_has_candidates=secondary_has_candidates,
+                    ):
+                        pc1 = RTCPeerConnection(
+                            RTCConfiguration(iceServers=[], bundlePolicy=policy)
+                        )
+                        pc2 = RTCPeerConnection(
+                            RTCConfiguration(iceServers=[], bundlePolicy=policy)
+                        )
+                        try:
+                            with patch.object(
+                                RTCPeerConnection,
+                                "_RTCPeerConnection__connect",
+                                new_callable=AsyncMock,
+                            ):
+                                for kind in kinds:
+                                    if kind == "application":
+                                        pc1.createDataChannel("chat")
+                                    else:
+                                        pc1.addTransceiver(kind)
+                                await pc1.setLocalDescription(await pc1.createOffer())
+                                if description_type == "answer":
+                                    await pc2.setRemoteDescription(pc1.localDescription)
+                                    await pc2.setLocalDescription(
+                                        await pc2.createAnswer()
+                                    )
+                                    description = pc2.localDescription
+                                    target = pc1
+                                else:
+                                    description = pc1.localDescription
+                                    target = pc2
+
+                                parsed = SessionDescription.parse(description.sdp)
+                                bundle = next(
+                                    g for g in parsed.group if g.semantic == "BUNDLE"
+                                )
+                                if primary_index:
+                                    bundle.items.reverse()
+                                expected = RTCIceCandidate(
+                                    component=1,
+                                    foundation="primary",
+                                    ip="192.0.2.1",
+                                    port=5000,
+                                    priority=2130706431,
+                                    protocol="udp",
+                                    type="host",
+                                )
+                                other = RTCIceCandidate(
+                                    component=1,
+                                    foundation="secondary",
+                                    ip="192.0.2.2",
+                                    port=6000,
+                                    priority=2130706431,
+                                    protocol="udp",
+                                    type="host",
+                                )
+                                for index, media in enumerate(parsed.media):
+                                    media.ice_candidates = (
+                                        [expected]
+                                        if index == primary_index
+                                        else [other]
+                                        if secondary_has_candidates
+                                        else []
+                                    )
+                                    media.ice_candidates_complete = (
+                                        index == primary_index
+                                    )
+                                await target.setRemoteDescription(
+                                    RTCSessionDescription(
+                                        sdp=str(parsed), type=description_type
+                                    )
+                                )
+                                transport = target.getTransceivers()[
+                                    0
+                                ].receiver.transport
+                                self.assertEqual(
+                                    transport.transport.getRemoteCandidates(),
+                                    [expected],
+                                )
+                                self.assertBundled(target)
+                        finally:
+                            await pc1.close()
+                            await pc2.close()
 
     @asynctest
     async def test_setRemoteDescription_media_datachannel_bundled(self) -> None:
