@@ -25,13 +25,24 @@ logger = logging.getLogger(__name__)
 COOKIE_LENGTH = 24
 COOKIE_LIFETIME = 60
 MAX_STREAMS = 65535
-USERDATA_MAX_LENGTH = 1200
 
 # packet and chunk constants
 SCTP_COMMON_HEADER_LENGTH = 12
 SCTP_CHUNK_HEADER_LENGTH = 4
+SCTP_DATA_CHUNK_HEADER_LENGTH = 16
 # SCTP packet must contain at least one chunk.
 SCTP_PACKET_MINIMUM_LENGTH = SCTP_COMMON_HEADER_LENGTH + SCTP_CHUNK_HEADER_LENGTH
+# The maximum size of an SCTP packet, including the common header, which
+# still fits the minimum IPv6 MTU once UDP and DTLS overhead is subtracted.
+# See https://issues.webrtc.org/issues/42222640
+SCTP_MAX_PACKET_LENGTH = 1189
+# The maximum amount of user data in a DATA chunk. As chunks are padded to
+# a multiple of 4 bytes, round down to stay within the packet size.
+USERDATA_MAX_LENGTH = (
+    (SCTP_MAX_PACKET_LENGTH - SCTP_COMMON_HEADER_LENGTH - SCTP_DATA_CHUNK_HEADER_LENGTH)
+    // 4
+    * 4
+)
 
 # protocol constants
 SCTP_CAUSE_INVALID_STREAM = 0x0001
@@ -189,7 +200,7 @@ class DataChunk(Chunk):
             self.user_data = b""
 
     def __bytes__(self) -> bytes:
-        length = 16 + len(self.user_data)
+        length = SCTP_DATA_CHUNK_HEADER_LENGTH + len(self.user_data)
         data = (
             pack(
                 "!BBHLHHL",
