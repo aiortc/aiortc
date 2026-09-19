@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (
+    LOCAL_MAX_MESSAGE_SIZE,
+    REMOTE_DEFAULT_MAX_MESSAGE_SIZE,
     SCTP_DATA_FIRST_FRAG,
     SCTP_DATA_LAST_FRAG,
     SCTP_DATA_UNORDERED,
@@ -916,6 +918,75 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(len(server_channels), 1)
             self.assertEqual(server_channels[0].id, 0)
             self.assertEqual(server_channels[0].label, "chat")
+
+    @asynctest
+    async def test_connect_then_send_message_too_large(self) -> None:
+        async with client_and_server() as (client, server):
+            # connect, the server only accepts messages of up to 1000 bytes
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(RTCSctpCapabilities(maxMessageSize=1000), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+
+            # create data channel
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "open")
+
+            # a message which fits is accepted
+            channel.send(b"M" * 1000)
+
+            # a larger message is rejected and is not buffered
+            buffered_amount = channel.bufferedAmount
+            with self.assertRaises(ValueError) as cm:
+                channel.send(b"M" * 1001)
+            self.assertEqual(
+                str(cm.exception),
+                "Cannot send message of 1001 bytes, the remote party only supports "
+                "messages up to 1000 bytes",
+            )
+            self.assertEqual(channel.bufferedAmount, buffered_amount)
+
+    @asynctest
+    async def test_connect_then_send_message_unlimited(self) -> None:
+        async with client_and_server() as (client, server):
+            # connect, the server accepts messages of any size
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(RTCSctpCapabilities(maxMessageSize=0), server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+
+            # create data channel
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "open")
+
+            # a large message is accepted
+            channel.send(b"M" * (2 * LOCAL_MAX_MESSAGE_SIZE))
+
+    @asynctest
+    async def test_connect_without_remote_capabilities(self) -> None:
+        async with client_and_server() as (client, server):
+            # connect, the server did not advertise a maximum message size
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(None, server.port)
+
+            # check outcome
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(
+                client._remote_max_message_size, REMOTE_DEFAULT_MAX_MESSAGE_SIZE
+            )
 
     @asynctest
     async def test_connect_then_client_creates_data_channel_with_custom_id(
