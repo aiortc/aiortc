@@ -33,6 +33,13 @@ SCTP_CHUNK_HEADER_LENGTH = 4
 # SCTP packet must contain at least one chunk.
 SCTP_PACKET_MINIMUM_LENGTH = SCTP_COMMON_HEADER_LENGTH + SCTP_CHUNK_HEADER_LENGTH
 
+# The maximum message size we advertise in our SDP.
+LOCAL_MAX_MESSAGE_SIZE = 262144
+
+# The maximum message size to assume if the remote party does not
+# advertise one, see RFC 8841 - section 6.
+REMOTE_DEFAULT_MAX_MESSAGE_SIZE = 65536
+
 # protocol constants
 SCTP_CAUSE_INVALID_STREAM = 0x0001
 SCTP_CAUSE_STALE_COOKIE = 0x0003
@@ -641,6 +648,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._local_verification_tag = random32()
 
         self._remote_extensions: list[int] = []
+        self._remote_max_message_size = REMOTE_DEFAULT_MAX_MESSAGE_SIZE
         self._remote_partial_reliability = False
         self._remote_port: Optional[int] = None
         self._remote_verification_tag = 0
@@ -740,12 +748,14 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         :rtype: RTCSctpCapabilities
         """
-        return RTCSctpCapabilities(maxMessageSize=65536)
+        return RTCSctpCapabilities(maxMessageSize=LOCAL_MAX_MESSAGE_SIZE)
 
     def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
-    async def start(self, remoteCaps: RTCSctpCapabilities, remotePort: int) -> None:
+    async def start(
+        self, remoteCaps: Optional[RTCSctpCapabilities], remotePort: int
+    ) -> None:
         """
         Start the transport.
         """
@@ -753,6 +763,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self.__started = True
             self.__state = "connecting"
             self._remote_port = remotePort
+            if remoteCaps is not None:
+                self._remote_max_message_size = remoteCaps.maxMessageSize
 
             # configure logging
             if logger.isEnabledFor(logging.DEBUG):
@@ -1835,6 +1847,16 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             pp_id, user_data = WEBRTC_BINARY_EMPTY, b"\x00"
         else:
             pp_id, user_data = WEBRTC_BINARY, data
+
+        # A maximum message size of 0 means the remote party can handle
+        # messages of any size.
+        if self._remote_max_message_size and (
+            len(user_data) > self._remote_max_message_size
+        ):
+            raise ValueError(
+                f"Cannot send message of {len(user_data)} bytes, the remote party "
+                f"only supports messages up to {self._remote_max_message_size} bytes"
+            )
 
         channel._addBufferedAmount(len(user_data))
         self._data_channel_queue.append((channel, pp_id, user_data))
