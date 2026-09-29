@@ -899,18 +899,26 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         chunk_pos = self._sent_queue.index(chunk)
         for pos in range(chunk_pos, -1, -1):
             ochunk = self._sent_queue[pos]
-            ochunk._abandoned = True
-            ochunk._retransmit = False
+            self._mark_abandoned(ochunk)
             if ochunk.flags & SCTP_DATA_FIRST_FRAG:
                 break
         for pos in range(chunk_pos, len(self._sent_queue)):
             ochunk = self._sent_queue[pos]
-            ochunk._abandoned = True
-            ochunk._retransmit = False
+            self._mark_abandoned(ochunk)
             if ochunk.flags & SCTP_DATA_LAST_FRAG:
                 break
 
         return True
+
+    def _mark_abandoned(self, chunk: DataChunk) -> None:
+        """
+        Mark a chunk as abandoned, and take it out of the flight size if it
+        is still outstanding.
+        """
+        if not (chunk._abandoned or chunk._acked or chunk._retransmit):
+            self._flight_size_decrease(chunk)
+        chunk._abandoned = True
+        chunk._retransmit = False
 
     def _mark_received(self, tsn: int) -> bool:
         """
@@ -1212,9 +1220,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                         schunk._misses = 0
                         if not self._maybe_abandon(schunk):
                             schunk._retransmit = True
+                            self._flight_size_decrease(schunk)
 
                         schunk._acked = False
-                        self._flight_size_decrease(schunk)
 
                         loss = True
 

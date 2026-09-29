@@ -1740,6 +1740,34 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._outbound_stream_seq, {123: 1})
 
     @asynctest
+    async def test_receive_sack_abandoned_fragments_flight_size(self) -> None:
+        async with client_standalone() as client:
+            client._cwnd = 8 * USERDATA_MAX_LENGTH
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._advanced_peer_ack_tsn = 0
+            client._send_chunk = noop_send_chunk  # type: ignore
+
+            # send a 5 fragment message
+            await client._send(
+                123, 456, b"M" * USERDATA_MAX_LENGTH * 5, max_retransmits=0
+            )
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4])
+            self.assertEqual(queued_tsns(client), [5])
+
+            # the first fragment is reported missing three times, which
+            # abandons the whole message, including the last fragment which
+            # is not acknowledged
+            for last_acked in (2, 3, 4):
+                sack = SackChunk()
+                sack.cumulative_tsn = 0
+                sack.gaps = [(2, last_acked)]
+                await client._receive_chunk(sack)
+
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(client._flight_size, 0)
+
+    @asynctest
     async def test_send_data_unordered(self) -> None:
         async with client_standalone() as client:
             client._local_tsn = 0
