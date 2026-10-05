@@ -116,6 +116,14 @@ Statistics
 
    .. autoclass:: RTCStatsReport()
 
+   .. autoclass:: RTCIceCandidatePairStats()
+      :members:
+      :inherited-members:
+
+   .. autoclass:: RTCIceCandidateStats()
+      :members:
+      :inherited-members:
+
    .. autoclass:: RTCInboundRtpStreamStats()
       :members:
       :inherited-members:

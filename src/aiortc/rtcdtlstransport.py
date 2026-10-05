@@ -598,6 +598,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             self._set_state(State.CLOSED)
 
     def _get_stats(self) -> RTCStatsReport:
+        ice_report, selectedCandidatePairId = self.transport._get_stats(self._stats_id)
         report = RTCStatsReport()
         report.add(
             RTCTransportStats(
@@ -612,8 +613,10 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 bytesReceived=self.__rx_bytes,
                 iceRole=self.transport.role,
                 dtlsState=self.state,
+                selectedCandidatePairId=selectedCandidatePairId,
             )
         )
+        report.update(ice_report)
         return report
 
     async def _handle_rtcp_data(self, data: bytes) -> None:

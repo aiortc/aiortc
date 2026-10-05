@@ -47,6 +47,8 @@ from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
 from .stats import (
+    RTCIceCandidatePairStats,
+    RTCIceCandidateStats,
     RTCInboundRtpStreamStats,
     RTCOutboundRtpStreamStats,
     RTCRemoteInboundRtpStreamStats,
@@ -75,6 +77,8 @@ __all__ = [
     "RTCDtlsParameters",
     "RTCDtlsTransport",
     "RTCIceCandidate",
+    "RTCIceCandidatePairStats",
+    "RTCIceCandidateStats",
     "RTCIceGatherer",
     "RTCIceParameters",
     "RTCIceServer",
