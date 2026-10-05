@@ -113,6 +113,12 @@ Statistics
 
    .. autoclass:: RTCStatsReport()
 
+   .. autoclass:: RTCIceCandidatePairStats()
+      :members:
+
+   .. autoclass:: RTCIceCandidateStats()
+      :members:
+
    .. autoclass:: RTCInboundRtpStreamStats()
       :members:
 

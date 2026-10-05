@@ -39,6 +39,7 @@ from .test_contrib_media import MediaTestCase
 from .utils import asynctest, lf2crlf
 
 LONG_DATA = b"\xff" * 2000
+ICE_STATS_TYPES = ["candidate-pair", "local-candidate", "remote-candidate"]
 STRIP_CANDIDATES_RE = re.compile("^a=(candidate:.*|end-of-candidates)\r\n", re.M)
 
 H264_SDP = lf2crlf(
@@ -529,6 +530,20 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc.iceConnectionState, "checking")
         self.assertEqual(pc.iceGatheringState, "complete")
 
+    def assertIceStats(self, report: RTCStatsReport) -> None:
+        transport = next(s for s in report.values() if s.type == "transport")
+        pair = report[transport.selectedCandidatePairId]
+        self.assertEqual(pair.state, "succeeded")
+        self.assertTrue(pair.nominated)
+        self.assertGreater(pair.bytesSent, 0)
+        self.assertGreater(pair.bytesReceived, 0)
+        self.assertGreater(pair.requestsSent, 0)
+        self.assertGreater(pair.responsesReceived, 0)
+        self.assertIsNotNone(pair.currentRoundTripTime)
+        self.assertEqual(report[pair.localCandidateId].type, "local-candidate")
+        self.assertEqual(report[pair.remoteCandidateId].type, "remote-candidate")
+        self.assertGreater(pair.priority, 0)
+
     async def assertIceCompleted(
         self, pc1: RTCPeerConnection, pc2: RTCPeerConnection
     ) -> None:
@@ -969,8 +984,9 @@ a=rtpmap:8 PCMA/8000
         # check stats
         report = await pc1.getStats()
         self.assertIsInstance(report, RTCStatsReport)
+        self.assertIceStats(report)
         self.assertEqual(
-            sorted([s.type for s in report.values()]),
+            sorted(s.type for s in report.values() if s.type not in ICE_STATS_TYPES),
             [
                 "inbound-rtp",
                 "outbound-rtp",
@@ -1325,8 +1341,9 @@ a=rtpmap:0 PCMU/8000
         # check stats
         report = await pc1.getStats()
         self.assertIsInstance(report, RTCStatsReport)
+        self.assertIceStats(report)
         self.assertEqual(
-            sorted([s.type for s in report.values()]),
+            sorted(s.type for s in report.values() if s.type not in ICE_STATS_TYPES),
             [
                 "inbound-rtp",
                 "outbound-rtp",
@@ -2802,8 +2819,9 @@ a=rtpmap:0 PCMU/8000
         # check stats
         report = await pc1.getStats()
         self.assertIsInstance(report, RTCStatsReport)
+        self.assertIceStats(report)
         self.assertEqual(
-            sorted([s.type for s in report.values()]),
+            sorted(s.type for s in report.values() if s.type not in ICE_STATS_TYPES),
             [
                 "inbound-rtp",
                 "outbound-rtp",
