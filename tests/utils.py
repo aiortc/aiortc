@@ -82,6 +82,9 @@ class DummyIceTransport:
     async def _send(self, data: bytes) -> None:
         await self._connection.send(data)
 
+    def _get_stats(self, transportId: str) -> tuple[RTCStatsReport, None]:
+        return RTCStatsReport(), None
+
 
 class TestCase(unittest.TestCase):
     def ensureIsInstance(self, obj: object, cls: type[T]) -> T:

@@ -110,6 +110,69 @@ class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
 
 
 @dataclass(kw_only=True)
+class RTCIceCandidatePairStats(RTCStats):
+    """
+    The :class:`RTCIceCandidatePairStats` dictionary represents the measurement
+    metrics for an ICE candidate pair.
+    """
+
+    transportId: str
+    "The ID of the statistics of the transport using this candidate pair."
+    localCandidateId: str
+    "The ID of the statistics of the local candidate."
+    remoteCandidateId: str
+    "The ID of the statistics of the remote candidate."
+    state: str
+    "The check list state: `frozen`, `waiting`, `in-progress`, `succeeded` or `failed`."
+    nominated: bool
+    "Whether the candidate pair was nominated."
+    packetsSent: int
+    "Total number of packets sent on this candidate pair."
+    packetsReceived: int
+    "Total number of packets received on this candidate pair."
+    bytesSent: int
+    "Total number of payload bytes sent, not including ICE connectivity checks."
+    bytesReceived: int
+    "Total number of payload bytes received, not including ICE connectivity checks."
+    totalRoundTripTime: float
+    "Sum of all round trip times in seconds measured by connectivity checks."
+    requestsReceived: int
+    "Total number of connectivity check requests received, including consent checks."
+    requestsSent: int
+    "Total number of connectivity check requests sent."
+    responsesReceived: int
+    "Total number of connectivity check responses received."
+    responsesSent: int
+    "Total number of connectivity check responses sent."
+    consentRequestsSent: int
+    "Total number of consent freshness requests sent."
+    currentRoundTripTime: Optional[float] = None
+    "The latest round trip time in seconds measured by a connectivity check."
+
+
+@dataclass(kw_only=True)
+class RTCIceCandidateStats(RTCStats):
+    """
+    The :class:`RTCIceCandidateStats` dictionary represents an ICE candidate.
+    """
+
+    transportId: str
+    "The ID of the statistics of the transport using this candidate."
+    address: str
+    "The IP address or hostname of the candidate."
+    port: int
+    "The port number of the candidate."
+    protocol: str
+    "Either `udp` or `tcp`."
+    candidateType: str
+    "One of `host`, `srflx`, `prflx` or `relay`."
+    priority: int
+    "The priority of the candidate."
+    foundation: str
+    "The ICE foundation of the candidate."
+
+
+@dataclass(kw_only=True)
 class RTCTransportStats(RTCStats):
     """
     The :class:`RTCTransportStats` dictionary represents the measurement metrics
@@ -128,6 +191,8 @@ class RTCTransportStats(RTCStats):
     "The current value of :attr:`RTCIceTransport.role`."
     dtlsState: str
     "The current value of :attr:`RTCDtlsTransport.state`."
+    selectedCandidatePairId: Optional[str] = None
+    "The ID of the statistics of the selected candidate pair, used to send data."
 
 
 class RTCStatsReport(dict):
@@ -139,6 +204,8 @@ class RTCStatsReport(dict):
     This object consists of a mapping of string identifiers to objects which
     are instances of:
 
+    - :class:`RTCIceCandidatePairStats`
+    - :class:`RTCIceCandidateStats`
     - :class:`RTCInboundRtpStreamStats`
     - :class:`RTCOutboundRtpStreamStats`
     - :class:`RTCRemoteInboundRtpStreamStats`
