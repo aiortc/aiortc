@@ -45,7 +45,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(descr.tid, None)
         self.assertEqual(descr.keyidx, None)
-        self.assertEqual(bytes(descr), b"\x90\x80\x11")
+        self.assertEqual(bytes(descr), b"\x90\x80\x80\x11")
         self.assertEqual(repr(descr), "VpxPayloadDescriptor(S=1, PID=0, pic_id=17)")
 
         self.assertEqual(rest, b"")
@@ -58,7 +58,7 @@ class VpxPayloadDescriptorTest(TestCase):
         self.assertEqual(descr.tl0picidx, None)
         self.assertEqual(descr.tid, None)
         self.assertEqual(descr.keyidx, None)
-        self.assertEqual(bytes(descr), b"\x90\x80\x7f")
+        self.assertEqual(bytes(descr), b"\x90\x80\x80\x7f")
 
         self.assertEqual(rest, b"")
 
@@ -200,7 +200,7 @@ class Vp8Test(CodecTestCase):
 
         packet = self.create_packet(payload=b"\x00", pts=1)
         payloads, timestamp = encoder.pack(packet)
-        self.assertEqual(payloads, [b"\x90\x80\x00\x00"])
+        self.assertEqual(payloads, [b"\x90\x80\x80\x00\x00"])
         self.assertEqual(timestamp, 90)
 
     def test_encoder_large(self) -> None:

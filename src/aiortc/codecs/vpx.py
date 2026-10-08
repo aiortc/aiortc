@@ -70,10 +70,7 @@ class VpxPayloadDescriptor:
         if ext_octet:
             data = pack("!BB", (1 << 7) | octet, ext_octet)
             if self.picture_id is not None:
-                if self.picture_id < 128:
-                    data += pack("!B", self.picture_id)
-                else:
-                    data += pack("!H", (1 << 15) | self.picture_id)
+                data += pack("!H", (1 << 15) | self.picture_id)
             if self.tl0picidx is not None:
                 data += pack("!B", self.tl0picidx)
             if self.tid is not None or self.keyidx is not None:
