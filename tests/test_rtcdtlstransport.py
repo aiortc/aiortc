@@ -449,6 +449,26 @@ class RTCDtlsTransportTest(TestCase):
         await session2.stop()
 
     @asynctest
+    async def test_retransmit_after_handshake(self) -> None:
+        transport1, transport2 = dummy_ice_transport_pair()
+
+        certificate1 = RTCCertificate.generateCertificate()
+        session1 = RTCDtlsTransport(transport1, [certificate1])
+
+        certificate2 = RTCCertificate.generateCertificate()
+        session2 = RTCDtlsTransport(transport2, [certificate2])
+
+        await asyncio.gather(
+            session1.start(session2.getLocalParameters()),
+            session2.start(session1.getLocalParameters()),
+        )
+        self.assertEqual(session1.state, "connected")
+        self.assertIsNone(session1._ssl.DTLSv1_get_timeout())
+
+        await session1.stop()
+        await session2.stop()
+
+    @asynctest
     async def test_lossy_channel(self) -> None:
         """
         Transport with 25% loss eventually connects.
