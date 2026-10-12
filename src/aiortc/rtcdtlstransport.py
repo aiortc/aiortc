@@ -365,6 +365,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._stats_id = "transport_" + str(id(self))
         self._task: Optional[asyncio.Future[None]] = None
         self._transport = transport
+        self.__handshake_done = False
 
         # counters
         self.__rx_bytes = 0
@@ -623,10 +624,13 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=arrival_time_ms)
 
     async def _recv_next(self) -> None:
-        # get timeout
+        # get timeout, with DTLS 1.3 the last flight may need to be
+        # retransmitted after the handshake has completed
         timeout = None
-        if not self.encrypted:
+        if not self.__handshake_done:
             timeout = self._ssl.DTLSv1_get_timeout()
+            if timeout is None and self.encrypted:
+                self.__handshake_done = True
 
         # receive next datagram
         if timeout is not None:
