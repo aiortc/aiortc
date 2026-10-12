@@ -1,7 +1,7 @@
 import fractions
 from typing import Optional, cast
 
-from av import AudioCodecContext, AudioFrame, AudioResampler, CodecContext
+from av import AudioFrame, AudioResampler, CodecContext
 from av.frame import Frame
 from av.packet import Packet
 
@@ -21,7 +21,7 @@ CLOCK_BASE = fractions.Fraction(1, 8000)
 
 class G722Decoder(Decoder):
     def __init__(self) -> None:
-        self.codec = cast(AudioCodecContext, CodecContext.create("g722", "r"))
+        self.codec = CodecContext.create("g722", "r")
         self.codec.format = "s16"
         self.codec.layout = "mono"
         self.codec.sample_rate = SAMPLE_RATE
@@ -35,7 +35,7 @@ class G722Decoder(Decoder):
 
 class G722Encoder(Encoder):
     def __init__(self) -> None:
-        self.codec = cast(AudioCodecContext, CodecContext.create("g722", "w"))
+        self.codec = CodecContext.create("g722", "w")
         self.codec.format = "s16"
         self.codec.layout = "mono"
         self.codec.sample_rate = SAMPLE_RATE
