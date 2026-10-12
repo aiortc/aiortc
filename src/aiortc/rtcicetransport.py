@@ -33,13 +33,14 @@ class RTCIceCandidate:
     establish an RTCPeerConnection.
     """
 
-    component: int
-    foundation: str
-    ip: str
-    port: int
-    priority: int
-    protocol: str
-    type: str
+    candidate: Optional[str] = None
+    component: Optional[int] = None
+    foundation: Optional[str] = None
+    ip: Optional[str] = None
+    port: Optional[int] = None
+    priority: Optional[int] = None
+    protocol: Optional[str] = None
+    type: Optional[str] = None
     relatedAddress: Optional[str] = None
     relatedPort: Optional[int] = None
     sdpMid: Optional[str] = None

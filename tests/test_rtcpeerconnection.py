@@ -72,6 +72,16 @@ a=fmtp:98 apt=97
 class BogusStreamTrack(AudioStreamTrack):
     kind = "bogus"
 
+def candidate_to_sdp_string(candidate) -> str:
+    """Convert an RTCIceCandidate to a browser-format candidate string."""
+    s = f"candidate:{candidate.foundation} {candidate.component} {candidate.protocol.upper()} {candidate.priority} {candidate.ip} {candidate.port} typ {candidate.type}"
+    if candidate.relatedAddress:
+        s += f" raddr {candidate.relatedAddress}"
+    if candidate.relatedPort:
+        s += f" rport {candidate.relatedPort}"
+    if candidate.tcpType:
+        s += f" tcptype {candidate.tcpType}"
+    return s
 
 def mids(pc: RTCPeerConnection) -> list[Optional[str]]:
     mids = [x.mid for x in pc.getTransceivers()]
@@ -611,6 +621,28 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc.remoteDescription.sdp.count("a=candidate:"), 2)
 
     @asynctest
+    async def test_addIceCandidate_browser_string(self) -> None:
+        pc = RTCPeerConnection()
+        pc.createDataChannel("test")
+        offer = await pc.createOffer()
+        await pc.setRemoteDescription(offer)
+        self.assertFalse("a=candidate:" in pc.remoteDescription.sdp)
+
+        candidate_with_index = RTCIceCandidate(
+            candidate="candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host",
+            sdpMLineIndex=0,
+        )
+        await pc.addIceCandidate(candidate_with_index)
+        self.assertTrue("a=candidate:" in pc.remoteDescription.sdp)
+
+        candidate_with_mid = RTCIceCandidate(
+            candidate="candidate:0 1 UDP 2122252543 192.168.99.7 33544 typ host",
+            sdpMid=pc.sctp.mid,
+        )
+        await pc.addIceCandidate(candidate_with_mid)
+        self.assertEqual(pc.remoteDescription.sdp.count("a=candidate:"), 2)
+
+    @asynctest
     async def test_addIceCandidate_no_sdpMid_or_sdpMLineIndex(self) -> None:
         pc = RTCPeerConnection()
         with self.assertRaises(ValueError) as cm:
@@ -623,6 +655,19 @@ class RTCPeerConnectionTest(TestCase):
                     priority=2122252543,
                     protocol="UDP",
                     type="host",
+                )
+            )
+        self.assertEqual(
+            str(cm.exception), "Candidate must have either sdpMid or sdpMLineIndex"
+        )
+
+    @asynctest
+    async def test_addIceCandidate_browser_string_no_sdpMid_or_sdpMLineIndex(self) -> None:
+        pc = RTCPeerConnection()
+        with self.assertRaises(ValueError) as cm:
+            await pc.addIceCandidate(
+                RTCIceCandidate(
+                    candidate="candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host",
                 )
             )
         self.assertEqual(
@@ -655,6 +700,26 @@ class RTCPeerConnectionTest(TestCase):
             priority=2122252543,
             protocol="UDP",
             type="host",
+            sdpMLineIndex=0,
+        )
+        with self.assertLogs("aiortc.rtcpeerconnection", level="WARN") as logger:
+            await pc.addIceCandidate(candidate_with_index)
+            self.assertEqual(
+                logger.output,
+                [
+                    "WARNING:aiortc.rtcpeerconnection:RTCPeerConnection "
+                    "addIceCandidate called without remote description"
+                ],
+            )
+
+    @asynctest
+    async def test_addIceCandidate_browser_string_before_setremotedescription(self) -> None:
+        pc = RTCPeerConnection()
+        pc.createDataChannel("test")
+        offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        candidate_with_index = RTCIceCandidate(
+            candidate="candidate:0 1 UDP 2122252543 192.168.99.7 33543 typ host",
             sdpMLineIndex=0,
         )
         with self.assertLogs("aiortc.rtcpeerconnection", level="WARN") as logger:
@@ -1225,6 +1290,140 @@ a=rtpmap:8 PCMA/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    async def _test_connect_audio_bidirectional_trickle_browser_string(self, with_mid: bool) -> None:
+        pc1 = RTCPeerConnection()
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_states = track_states(pc2)
+
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "new")
+        self.assertIsNone(pc1.localDescription)
+        self.assertIsNone(pc1.remoteDescription)
+
+        self.assertEqual(pc2.iceConnectionState, "new")
+        self.assertEqual(pc2.iceGatheringState, "new")
+        self.assertIsNone(pc2.localDescription)
+        self.assertIsNone(pc2.remoteDescription)
+
+        # create offer
+        pc1.addTrack(AudioStreamTrack())
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+        self.assertTrue("m=audio " in offer.sdp)
+        self.assertFalse("a=candidate:" in offer.sdp)
+        self.assertFalse("a=end-of-candidates" in offer.sdp)
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0"])
+        self.assertTrue("m=audio " in pc1.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, "actpass")
+
+        # strip out candidates
+        desc1 = strip_ice_candidates(pc1.localDescription)
+
+        # handle offer
+        await pc2.setRemoteDescription(desc1)
+        self.assertEqual(pc2.remoteDescription, desc1)
+        self.assertEqual(len(pc2.getReceivers()), 1)
+        self.assertEqual(len(pc2.getSenders()), 1)
+        self.assertEqual(len(pc2.getTransceivers()), 1)
+        self.assertEqual(mids(pc2), ["0"])
+
+        # create answer
+        pc2.addTrack(AudioStreamTrack())
+        answer = await pc2.createAnswer()
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("m=audio " in answer.sdp)
+        self.assertFalse("a=candidate:" in answer.sdp)
+        self.assertFalse("a=end-of-candidates" in answer.sdp)
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+        self.assertEqual(mids(pc2), ["0"])
+        self.assertTrue("m=audio " in pc2.localDescription.sdp)
+        self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, "active")
+
+        # strip out candidates
+        desc2 = strip_ice_candidates(pc2.localDescription)
+
+        # handle answer
+        await pc1.setRemoteDescription(desc2)
+        self.assertEqual(pc1.remoteDescription, desc2)
+
+        # trickle candidates in browser string format
+        for transceiver in pc2.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                print(type(candidate))
+                print(dir(candidate))
+                await pc1.addIceCandidate(RTCIceCandidate(
+                    candidate="candidate:" + candidate_to_sdp_string(candidate),
+                    sdpMid=transceiver.mid if with_mid else None,
+                    sdpMLineIndex=None if with_mid else transceiver._get_mline_index(),
+                ))
+        for transceiver in pc1.getTransceivers():
+            iceGatherer = transceiver.sender.transport.transport.iceGatherer
+            for candidate in iceGatherer.getLocalCandidates():
+                await pc2.addIceCandidate(RTCIceCandidate(
+                    candidate="candidate:" + candidate_to_sdp_string(candidate),
+                    sdpMid=transceiver.mid if with_mid else None,
+                    sdpMLineIndex=None if with_mid else transceiver._get_mline_index(),
+                ))
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
+    @asynctest
+    async def test_connect_audio_bidirectional_trickle_browser_string_with_mid(self) -> None:
+        await self._test_connect_audio_bidirectional_trickle_browser_string(with_mid=True)
+
+    @asynctest
+    async def test_connect_audio_bidirectional_trickle_browser_string_with_mline_index(self) -> None:
+        await self._test_connect_audio_bidirectional_trickle_browser_string(with_mid=False)
 
     @asynctest
     async def test_connect_audio_codec_preferences_offerer(self) -> None:
@@ -4332,6 +4531,192 @@ a=rtpmap:0 PCMU/8000
     @asynctest
     async def test_connect_datachannel_trickle_with_mline_index(self) -> None:
         await self._test_connect_datachannel_trickle(with_mid=False)
+
+    async def _test_connect_datachannel_trickle_browser_string(self, with_mid: bool) -> None:
+        pc1 = RTCPeerConnection()
+        pc1_data_messages = []
+        pc1_states = track_states(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_data_channels = []
+        pc2_data_messages = []
+        pc2_states = track_states(pc2)
+
+        @pc2.on("datachannel")
+        def on_datachannel(channel: RTCDataChannel) -> None:
+            self.assertEqual(channel.readyState, "open")
+            pc2_data_channels.append(channel)
+
+            @channel.on("message")
+            def on_message(message: Union[bytes, str]) -> None:
+                pc2_data_messages.append(message)
+                if isinstance(message, str):
+                    channel.send("string-echo: " + message)
+                else:
+                    channel.send(b"binary-echo: " + message)
+
+        # create data channel
+        dc = pc1.createDataChannel("chat", protocol="bob")
+        self.assertEqual(dc.label, "chat")
+        self.assertEqual(dc.maxPacketLifeTime, None)
+        self.assertEqual(dc.maxRetransmits, None)
+        self.assertEqual(dc.ordered, True)
+        self.assertEqual(dc.protocol, "bob")
+        self.assertEqual(dc.readyState, "connecting")
+
+        # send messages
+        @dc.on("open")
+        def on_open() -> None:
+            dc.send("hello")
+            dc.send("")
+            dc.send(b"\x00\x01\x02\x03")
+            dc.send(b"")
+            dc.send(LONG_DATA)
+            with self.assertRaises(ValueError) as cm:
+                dc.send(1234)  # type: ignore
+            self.assertEqual(
+                str(cm.exception), "Cannot send unsupported data type: <class 'int'>"
+            )
+
+        @dc.on("message")
+        def on_message(message: Union[bytes, str]) -> None:
+            pc1_data_messages.append(message)
+
+        # create offer
+        offer = await pc1.createOffer()
+        self.assertEqual(offer.type, "offer")
+        self.assertTrue("m=application " in offer.sdp)
+        self.assertFalse("a=candidate:" in offer.sdp)
+        self.assertFalse("a=end-of-candidates" in offer.sdp)
+
+        await pc1.setLocalDescription(offer)
+        self.assertEqual(pc1.iceConnectionState, "new")
+        self.assertEqual(pc1.iceGatheringState, "complete")
+        self.assertEqual(mids(pc1), ["0"])
+        self.assertTrue("m=application " in pc1.localDescription.sdp)
+        self.assertHasIceCandidates(pc1.localDescription)
+        self.assertHasDtls(pc1.localDescription, "actpass")
+
+        # strip out candidates
+        desc1 = strip_ice_candidates(pc1.localDescription)
+
+        # handle offer
+        await pc2.setRemoteDescription(desc1)
+        self.assertEqual(pc2.remoteDescription, desc1)
+        self.assertEqual(len(pc2.getReceivers()), 0)
+        self.assertEqual(len(pc2.getSenders()), 0)
+        self.assertEqual(len(pc2.getTransceivers()), 0)
+        self.assertEqual(mids(pc2), ["0"])
+
+        # create answer
+        answer = await pc2.createAnswer()
+        self.assertEqual(answer.type, "answer")
+        self.assertTrue("m=application " in answer.sdp)
+        self.assertFalse("a=candidate:" in answer.sdp)
+        self.assertFalse("a=end-of-candidates" in answer.sdp)
+
+        await pc2.setLocalDescription(answer)
+        await self.assertIceChecking(pc2)
+        self.assertTrue("m=application " in pc2.localDescription.sdp)
+        self.assertHasIceCandidates(pc2.localDescription)
+        self.assertHasDtls(pc2.localDescription, "active")
+
+        # strip out candidates
+        desc2 = strip_ice_candidates(pc2.localDescription)
+
+        # handle answer
+        await pc1.setRemoteDescription(desc2)
+        self.assertEqual(pc1.remoteDescription, desc2)
+
+        # trickle candidates in browser string format
+        for candidate in pc2.sctp.transport.transport.iceGatherer.getLocalCandidates():
+            await pc1.addIceCandidate(RTCIceCandidate(
+                candidate="candidate:" + candidate_to_sdp_string(candidate),
+                sdpMid=pc2.sctp.mid if with_mid else None,
+                sdpMLineIndex=None if with_mid else 0,
+            ))
+        for candidate in pc1.sctp.transport.transport.iceGatherer.getLocalCandidates():
+            await pc2.addIceCandidate(RTCIceCandidate(
+                candidate="candidate:" + candidate_to_sdp_string(candidate),
+                sdpMid=pc1.sctp.mid if with_mid else None,
+                sdpMLineIndex=None if with_mid else 0,
+            ))
+
+        # check outcome
+        await self.assertIceCompleted(pc1, pc2)
+        await self.assertDataChannelOpen(dc)
+
+        # check pc2 got a datachannel
+        self.assertEqual(len(pc2_data_channels), 1)
+        self.assertEqual(pc2_data_channels[0].label, "chat")
+        self.assertEqual(pc2_data_channels[0].maxPacketLifeTime, None)
+        self.assertEqual(pc2_data_channels[0].maxRetransmits, None)
+        self.assertEqual(pc2_data_channels[0].ordered, True)
+        self.assertEqual(pc2_data_channels[0].protocol, "bob")
+
+        # check pc2 got messages
+        await asyncio.sleep(0.1)
+        self.assertEqual(
+            pc2_data_messages, ["hello", "", b"\x00\x01\x02\x03", b"", LONG_DATA]
+        )
+
+        # check pc1 got replies
+        self.assertEqual(
+            pc1_data_messages,
+            [
+                "string-echo: hello",
+                "string-echo: ",
+                b"binary-echo: \x00\x01\x02\x03",
+                b"binary-echo: ",
+                b"binary-echo: " + LONG_DATA,
+            ],
+        )
+
+        # close data channel
+        await self.closeDataChannel(dc)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # check state changes
+        self.assertEqual(
+            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc1_states["signalingState"],
+            ["stable", "have-local-offer", "stable", "closed"],
+        )
+
+        self.assertEqual(
+            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+        )
+        self.assertEqual(
+            pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
+        )
+        self.assertEqual(
+            pc2_states["signalingState"],
+            ["stable", "have-remote-offer", "stable", "closed"],
+        )
+
+    @asynctest
+    async def test_connect_datachannel_trickle_browser_string_with_mid(self) -> None:
+        await self._test_connect_datachannel_trickle_browser_string(with_mid=True)
+
+    @asynctest
+    async def test_connect_datachannel_trickle_browser_string_with_mline_index(self) -> None:
+        await self._test_connect_datachannel_trickle_browser_string(with_mid=False)
 
     @asynctest
     async def test_connect_datachannel_max_packet_lifetime(self) -> None:

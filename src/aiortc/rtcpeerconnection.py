@@ -398,10 +398,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
     async def addIceCandidate(self, candidate: Optional[RTCIceCandidate]) -> None:
         """
         Add a new :class:`RTCIceCandidate` received from the remote peer.
-
         The specified candidate must have a value for either `sdpMid` or
         `sdpMLineIndex`.
-
         :param candidate: The new remote candidate or `None` to signal
                             end-of-candidates.
         """
@@ -411,6 +409,43 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             and candidate.sdpMLineIndex is None
         ):
             raise ValueError("Candidate must have either sdpMid or sdpMLineIndex")
+
+        # Per the W3C WebRTC spec, the remaining attributes are derived from
+        # parsing the candidate string if it is well formed. Browsers send
+        # candidates with the "candidate:" prefix as defined in RFC 5245 s15.1.
+        if candidate is not None and candidate.candidate:
+            candidate_str = candidate.candidate
+            if candidate_str.startswith("candidate:"):
+                candidate_str = candidate_str[10:]
+            parts = candidate_str.split()
+            if len(parts) >= 8:
+                related_address = None
+                related_port = None
+                tcp_type = None
+                for i in range(8, len(parts) - 1, 2):
+                    if parts[i] == "raddr":
+                        related_address = parts[i + 1]
+                    elif parts[i] == "rport":
+                        try:
+                            related_port = int(parts[i + 1])
+                        except ValueError:
+                            pass
+                    elif parts[i] == "tcptype":
+                        tcp_type = parts[i + 1]
+                candidate = RTCIceCandidate(
+                    foundation=parts[0],
+                    component=int(parts[1]),
+                    protocol=parts[2].lower(),
+                    priority=int(parts[3]),
+                    ip=parts[4],
+                    port=int(parts[5]),
+                    type=parts[7],
+                    relatedAddress=related_address,
+                    relatedPort=related_port,
+                    tcpType=tcp_type,
+                    sdpMid=candidate.sdpMid,
+                    sdpMLineIndex=candidate.sdpMLineIndex,
+                )
 
         for transceiver in self.__transceivers:
             if (
