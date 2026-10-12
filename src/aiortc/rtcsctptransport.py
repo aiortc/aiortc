@@ -779,9 +779,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             else:
                 self._data_channel_id = 1
 
+            # both endpoints initiate the association, see RFC 8841 section 9.3
             self.__transport._register_data_receiver(self)
-            if not self.is_server:
-                await self._init()
+            await self._init()
 
     async def stop(self) -> None:
         """
@@ -996,8 +996,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 if cls is not None:
                     await self._receive_reconfig_param(cls.parse(param[1]))
 
-        # server
-        elif isinstance(chunk, InitChunk) and self.is_server:
+        # an INIT may collide with our own, see RFC 9260 section 5.2.1
+        elif isinstance(chunk, InitChunk):
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._reconfig_response_seq = tsn_minus_one(chunk.initial_tsn)
             self._remote_verification_tag = chunk.initiate_tag
@@ -1029,7 +1029,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             cookie += hmac.new(self._hmac_key, cookie, "sha1").digest()
             init_ack.params.append((SCTP_STATE_COOKIE, cookie))
             await self._send_chunk(init_ack)
-        elif isinstance(chunk, CookieEchoChunk) and self.is_server:
+        elif isinstance(chunk, CookieEchoChunk):
             # check state cookie MAC
             cookie = chunk.body
             if (
@@ -1049,11 +1049,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 await self._send_chunk(error)
                 return
 
+            self._t1_cancel()
             cookie_ack = CookieAckChunk()
             await self._send_chunk(cookie_ack)
             self._set_state(self.State.ESTABLISHED)
 
-        # client
         elif (
             isinstance(chunk, InitAckChunk)
             and self._association_state == self.State.COOKIE_WAIT
