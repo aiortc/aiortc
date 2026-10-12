@@ -125,6 +125,7 @@ class StreamStatistics:
         self.base_seq: Optional[int] = None
         self.max_seq: Optional[int] = None
         self.cycles = 0
+        self.bytes_received = 0
         self.packets_received = 0
 
         # jitter
@@ -141,6 +142,7 @@ class StreamStatistics:
         in_order = self.max_seq is None or uint16_gt(
             packet.sequence_number, self.max_seq
         )
+        self.bytes_received += len(packet.payload)
         self.packets_received += 1
 
         if self.base_seq is None:
@@ -284,6 +286,8 @@ class RTCRtpReceiver:
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
+        self.__rtx_recovered_bytes: dict[int, int] = {}
+        self.__rtx_recovered_packets: dict[int, int] = {}
         self.__rtx_ssrc: dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
@@ -335,6 +339,11 @@ class RTCRtpReceiver:
         :rtype: :class:`RTCStatsReport`
         """
         for ssrc, stream in self.__remote_streams.items():
+            # Per webrtc-stats, an RTX stream is not reported as a separate
+            # "inbound-rtp" entry: its recovered packets and payload bytes are
+            # credited to the media stream instead.
+            if ssrc in self.__rtx_ssrc:
+                continue
             self.__stats.add(
                 RTCInboundRtpStreamStats(
                     # RTCStats
@@ -346,10 +355,13 @@ class RTCRtpReceiver:
                     kind=self.__kind,
                     transportId=self.transport._stats_id,
                     # RTCReceivedRtpStreamStats
-                    packetsReceived=stream.packets_received,
+                    packetsReceived=stream.packets_received
+                    + self.__rtx_recovered_packets.get(ssrc, 0),
                     packetsLost=stream.packets_lost,
                     jitter=stream.jitter,
-                    # RTPInboundRtpStreamStats
+                    # RTCInboundRtpStreamStats
+                    bytesReceived=stream.bytes_received
+                    + self.__rtx_recovered_bytes.get(ssrc, 0),
                 )
             )
         self.__stats.update(self.transport._get_stats())
@@ -510,6 +522,17 @@ class RTCRtpReceiver:
 
             packet = unwrap_rtx(packet, payload_type=apt, ssrc=original_ssrc)
             codec = self.__codecs[apt]
+
+            # Credit the recovered packet and its payload bytes to the media
+            # stream's "inbound-rtp" statistics. This is tracked apart from
+            # the wire statistics above, which feed the RTCP receiver reports
+            # where the RTX stream is a distinct RTP stream (RFC 4588).
+            self.__rtx_recovered_packets[original_ssrc] = (
+                self.__rtx_recovered_packets.get(original_ssrc, 0) + 1
+            )
+            self.__rtx_recovered_bytes[original_ssrc] = self.__rtx_recovered_bytes.get(
+                original_ssrc, 0
+            ) + len(packet.payload)
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
