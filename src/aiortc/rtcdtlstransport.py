@@ -195,6 +195,7 @@ class RTCCertificate:
         self, srtp_profiles: list[SRTPProtectionProfile]
     ) -> SSL.Context:
         ctx = SSL.Context(SSL.DTLS_METHOD)
+        ctx.set_options(SSL.OP_NO_TICKET)
         ctx.set_verify(
             SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, lambda *args: True
         )
