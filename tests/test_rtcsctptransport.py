@@ -83,6 +83,10 @@ async def client_standalone() -> AsyncGenerator[RTCSctpTransport, None]:
             await client.stop()
 
 
+async def noop_init() -> None:
+    pass
+
+
 async def noop_send_chunk(chunk: Chunk) -> None:
     pass
 
@@ -709,7 +713,50 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
             self.assertEqual(client.state, "closed")
             self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
-            self.assertEqual(server.state, "connecting")
+            self.assertEqual(server.state, "closed")
+
+    @asynctest
+    async def test_connect_one_side_initiates(self) -> None:
+        for initiator in ["client", "server"]:
+            async with client_and_server() as (client, server):
+                if initiator == "client":
+                    server._init = noop_init  # type: ignore
+                else:
+                    client._init = noop_init  # type: ignore
+
+                await server.start(client.getCapabilities(), client.port)
+                await client.start(server.getCapabilities(), server.port)
+
+                await wait_for_outcome(client, server)
+                self.assertEqual(
+                    client._association_state, RTCSctpTransport.State.ESTABLISHED
+                )
+                self.assertEqual(
+                    server._association_state, RTCSctpTransport.State.ESTABLISHED
+                )
+
+    @asynctest
+    async def test_connect_peer_ignores_init(self) -> None:
+        async with client_and_server() as (client, server):
+            real_receive_chunk = client._receive_chunk
+
+            async def mock_receive_chunk(chunk: Chunk) -> None:
+                if not isinstance(chunk, InitChunk):
+                    await real_receive_chunk(chunk)
+
+            client._receive_chunk = mock_receive_chunk  # type: ignore
+
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+
+            await wait_for_outcome(client, server)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.ESTABLISHED
+            )
+            self.assertIsNone(server._t1_handle)
 
     @asynctest
     async def test_connect_lossy_transport(self) -> None:
@@ -1323,7 +1370,9 @@ class RTCSctpTransportTest(TestCase):
 
             # check outcome
             await asyncio.sleep(0.1)
-            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.COOKIE_WAIT
+            )
 
     @asynctest
     async def test_bad_verification_tag(self) -> None:
@@ -1336,7 +1385,9 @@ class RTCSctpTransportTest(TestCase):
 
             # check outcome
             await asyncio.sleep(0.1)
-            self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(
+                server._association_state, RTCSctpTransport.State.COOKIE_WAIT
+            )
 
     @asynctest
     async def test_bad_cookie(self) -> None:
@@ -1350,6 +1401,7 @@ class RTCSctpTransportTest(TestCase):
                 return await real_send_chunk(chunk)
 
             client._send_chunk = mock_send_chunk  # type: ignore
+            server._init = noop_init  # type: ignore
 
             await server.start(client.getCapabilities(), client.port)
             await client.start(server.getCapabilities(), server.port)
@@ -1434,6 +1486,7 @@ class RTCSctpTransportTest(TestCase):
 
         async with client_and_server() as (client, server):
             server._get_timestamp = mock_timestamp  # type: ignore
+            server._init = noop_init  # type: ignore
             await server.start(client.getCapabilities(), client.port)
             await client.start(server.getCapabilities(), server.port)
 
