@@ -36,7 +36,7 @@ async def run_answer(pc, signaling, fp):
 
     @pc.on("datachannel")
     def on_datachannel(channel):
-        start = time.time()
+        start = time.monotonic()
         octets = 0
 
         @channel.on("message")
@@ -47,7 +47,7 @@ async def run_answer(pc, signaling, fp):
                 octets += len(message)
                 fp.write(message)
             else:
-                elapsed = time.time() - start
+                elapsed = time.monotonic() - start
                 print(
                     "received %d bytes in %.1f s (%.3f Mbps)"
                     % (octets, elapsed, octets * 8 / elapsed / 1000000)

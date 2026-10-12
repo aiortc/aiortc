@@ -41,10 +41,10 @@ def current_stamp():
     global time_start
 
     if time_start is None:
-        time_start = time.time()
+        time_start = time.monotonic()
         return 0
     else:
-        return int((time.time() - time_start) * 1000000)
+        return int((time.monotonic() - time_start) * 1000000)
 
 
 async def run_answer(pc, signaling):
