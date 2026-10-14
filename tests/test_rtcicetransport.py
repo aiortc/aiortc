@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional
+from unittest.mock import patch
 
 import aioice.ice
 import aioice.stun
@@ -11,6 +12,7 @@ from aiortc.rtcicetransport import (
     RTCIceGatherer,
     RTCIceParameters,
     RTCIceTransport,
+    TimestampingConnection,
     connection_kwargs,
     parse_stun_turn_uri,
 )
@@ -434,3 +436,21 @@ class RTCIceTransportTest(TestCase):
 
         await transport.stop()
         self.assertEqual(transport.state, "closed")
+
+
+class TimestampingConnectionTest(TestCase):
+    @asynctest
+    async def test_recv_with_arrival_time(self) -> None:
+        connection = TimestampingConnection(ice_controlling=False)
+        connection._nominated[1] = None  # type: ignore[assignment]
+
+        with patch(
+            "aiortc.rtcicetransport.time.monotonic_ns",
+            side_effect=[1_000_000, 3_500_000],
+        ):
+            connection.data_received(b"first", 1)
+            connection.data_received(b"second", 1)
+
+        # Arrival times are recorded when the datagram is queued, not when it is read.
+        self.assertEqual(await connection.recv_with_arrival_time(), (b"first", 1_000))
+        self.assertEqual(await connection.recv_with_arrival_time(), (b"second", 3_500))

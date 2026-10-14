@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import re
+import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -173,6 +175,36 @@ def parse_stun_turn_uri(uri: str) -> dict[str, Any]:
     return parsed
 
 
+class TimestampingConnection(Connection):
+    """
+    An ICE connection which records when each datagram arrived.
+
+    Datagrams wait in the connection's queue until the DTLS transport gets to them,
+    which under load (bursts, SRTP, frame decoding) can be many milliseconds. TWCC
+    feedback must report socket arrival times, otherwise queueing on this side looks
+    like network delay to the remote congestion controller.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Monotonic microseconds, in the same FIFO order as the datagram queue.
+        self._arrival_times_us: deque[int] = deque()
+
+    def data_received(self, data: Optional[bytes], component: Optional[int]) -> None:
+        self._arrival_times_us.append(time.monotonic_ns() // 1000)
+        super().data_received(data, component)
+
+    async def recv_with_arrival_time(self) -> tuple[bytes, int]:
+        """
+        Receive the next datagram and the monotonic time in microseconds at which
+        it arrived.
+        """
+        data = await self.recv()
+        if self._arrival_times_us:
+            return data, self._arrival_times_us.popleft()
+        return data, time.monotonic_ns() // 1000
+
+
 class RTCIceGatherer(AsyncIOEventEmitter):
     """
     The :class:`RTCIceGatherer` interface gathers local host, server reflexive
@@ -193,7 +225,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             iceServers = self.getDefaultIceServers()
         ice_kwargs = connection_kwargs(iceServers)
 
-        self._connection = Connection(
+        self._connection = TimestampingConnection(
             ice_controlling=False,
             local_username=local_username,
             local_password=local_password,
@@ -268,6 +300,10 @@ class RTCIceTransport(AsyncIOEventEmitter):
 
         # expose recv / send methods
         self._recv = self._connection.recv
+        # None when the gatherer's connection does not record arrival times.
+        self._recv_with_arrival_time = getattr(
+            self._connection, "recv_with_arrival_time", None
+        )
         self._send = self._connection.send
 
     @property

@@ -36,6 +36,7 @@ from .rtp import (
     RtcpRtpfbPacket,
     RtcpSrPacket,
     RtpPacket,
+    TwccTracker,
     clamp_packets_lost,
     pack_remb_fci,
     unwrap_rtx,
@@ -285,6 +286,7 @@ class RTCRtpReceiver:
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_ssrc: dict[int, int] = {}
+        self.__twcc_tracker: Optional[TwccTracker] = None
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__timestamp_mapper = TimestampMapper()
@@ -383,6 +385,17 @@ class RTCRtpReceiver:
                 if encoding.rtx:
                     self.__rtx_ssrc[encoding.rtx.ssrc] = encoding.ssrc
 
+            # check if TWCC extension is negotiated
+            twcc_uri = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+            for ext in parameters.headerExtensions:
+                if ext.uri == twcc_uri:
+                    # Transport-wide sequence numbers are shared by every stream on
+                    # the transport, so all receivers share the transport's tracker,
+                    # which it feeds before routing packets. A tracker per receiver
+                    # would report other streams' packets as lost.
+                    self.__twcc_tracker = self.__transport._enable_twcc()
+                    break
+
             # start decoder thread
             self.__decoder_thread = threading.Thread(
                 target=decoder_worker,
@@ -448,7 +461,12 @@ class RTCRtpReceiver:
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
 
-    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int) -> None:
+    async def _handle_rtp_packet(
+        self,
+        packet: RtpPacket,
+        arrival_time_ms: int,
+        arrival_time_us: Optional[int] = None,
+    ) -> None:
         """
         Handle an incoming RTP packet.
         """
@@ -545,10 +563,30 @@ class RTCRtpReceiver:
         self.__rtcp_started.set()
 
         try:
+            rr_counter = 0
             while True:
-                # The interval between RTCP packets is varied randomly over the
-                # range [0.5, 1.5] times the calculated interval.
-                await asyncio.sleep(0.5 + random.random())
+                if self.__twcc_tracker is not None:
+                    # Shorter interval for TWCC feedback (~100ms with jitter)
+                    await asyncio.sleep(0.05 + random.random() * 0.1)
+                else:
+                    # The interval between RTCP packets is varied randomly over
+                    # the range [0.5, 1.5] times the calculated interval.
+                    await asyncio.sleep(0.5 + random.random())
+
+                # TWCC feedback
+                if self.__twcc_tracker is not None and self.__rtcp_ssrc is not None:
+                    twcc_packet = self.__twcc_tracker.build_feedback(
+                        ssrc=self.__rtcp_ssrc
+                    )
+                    if twcc_packet is not None:
+                        await self._send_rtcp(twcc_packet)
+
+                rr_counter += 1
+
+                # Send RR at reduced frequency when TWCC is active
+                if self.__twcc_tracker is not None and rr_counter < 10:
+                    continue
+                rr_counter = 0
 
                 # RTCP RR
                 reports = []

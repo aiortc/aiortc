@@ -36,7 +36,7 @@ from .rtcrtpparameters import (
     RTCRtpSendParameters,
 )
 from .rtcrtpreceiver import RemoteStreamTrack, RTCRtpReceiver
-from .rtcrtpsender import RTCRtpSender
+from .rtcrtpsender import RTCRtpSender, TwccFeedback
 from .rtcrtptransceiver import RTCRtpTransceiver
 from .rtcsctptransport import RTCSctpCapabilities, RTCSctpTransport
 from .rtcsessiondescription import RTCSessionDescription
@@ -1200,6 +1200,11 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             receiver=RTCRtpReceiver(kind, dtlsTransport),
         )
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
+
+        def _twcc_cb(feedback: "TwccFeedback") -> None:
+            self.emit("twcc", feedback)
+
+        transceiver.sender._set_twcc_callback(_twcc_cb)
         transceiver.sender._stream_id = self.__stream_id
         transceiver._bundled = bundled
         self.__transceivers.append(transceiver)
