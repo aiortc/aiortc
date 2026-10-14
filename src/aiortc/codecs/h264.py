@@ -274,6 +274,7 @@ class H264Encoder(Encoder):
             self.codec.pix_fmt = "yuv420p"
             self.codec.framerate = fractions.Fraction(MAX_FRAME_RATE, 1)
             self.codec.time_base = fractions.Fraction(1, MAX_FRAME_RATE)
+            self.codec.gop_size = MAX_FRAME_RATE  # ~1s
             self.codec.options = {
                 "level": "31",
                 "tune": "zerolatency",
