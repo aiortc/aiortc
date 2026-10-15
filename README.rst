@@ -92,6 +92,11 @@ The easiest way to install ``aiortc`` is to run:
 
     pip install aiortc
 
+``aiortc`` is only distributed through `PyPI`_ and its `GitHub repository`_.
+
+.. _PyPI: https://pypi.org/project/aiortc/
+.. _GitHub repository: https://github.com/aiortc/aiortc
+
 License
 -------
 
