@@ -93,8 +93,14 @@ def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
     )
 
 
-def connection_kwargs(servers: list[RTCIceServer]) -> dict[str, Any]:
+def connection_kwargs(
+    servers: list[RTCIceServer], transport_policy: Optional[str] = None
+) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
+
+    if transport_policy:
+        kwargs["transport_policy"] = transport_policy
+
 
     for server in servers:
         if isinstance(server.urls, list):
@@ -184,6 +190,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
     def __init__(
         self,
         iceServers: Optional[list[RTCIceServer]] = None,
+        iceTransportPolicy: Optional[RTCIceTransportPolicy] = None,
         local_username: Optional[str] = None,
         local_password: Optional[str] = None,
     ) -> None:
@@ -191,7 +198,10 @@ class RTCIceGatherer(AsyncIOEventEmitter):
 
         if iceServers is None:
             iceServers = self.getDefaultIceServers()
-        ice_kwargs = connection_kwargs(iceServers)
+        ice_kwargs = connection_kwargs(
+            iceServers,
+            transport_policy=iceTransportPolicy.value if iceTransportPolicy else None,
+        )
 
         self._connection = Connection(
             ice_controlling=False,
