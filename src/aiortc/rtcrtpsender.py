@@ -361,9 +361,11 @@ class RTCRtpSender:
 
         sequence_number = random_sequence_number()
         timestamp_origin = random32()
+        sending_resumed = True
         try:
             while True:
                 if not self.__track:
+                    sending_resumed = True
                     await asyncio.sleep(0.02)
                     continue
 
@@ -371,6 +373,8 @@ class RTCRtpSender:
                 # is disabled, in which case we just continue the loop.
                 enc_frame = await self._next_encoded_frame(codec)
                 if enc_frame is None:
+                    if not self._enabled:
+                        sending_resumed = True
                     continue
 
                 timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
@@ -383,7 +387,14 @@ class RTCRtpSender:
                     )
                     packet.ssrc = self._ssrc
                     packet.payload = payload
-                    packet.marker = (i == len(enc_frame.payloads) - 1) and 1 or 0
+                    if self.__kind == "audio":
+                        # For audio, the first packet after a gap in transmission
+                        # starts a talkspurt and is marked (RFC 3551 section 4.1).
+                        packet.marker = int(sending_resumed and i == 0)
+                    else:
+                        # For video, the marker bit flags the last packet of a
+                        # frame (RFC 7741 section 4.1).
+                        packet.marker = int(i == len(enc_frame.payloads) - 1)
 
                     # set header extensions
                     packet.extensions.abs_send_time = (
@@ -406,6 +417,8 @@ class RTCRtpSender:
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
+
+                sending_resumed = False
         except (asyncio.CancelledError, ConnectionError, MediaStreamError):
             pass
         except Exception:

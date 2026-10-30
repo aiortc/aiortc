@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 from struct import pack
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -14,7 +15,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpHeaderExtensionCapability,
     RTCRtpSendParameters,
 )
-from aiortc.rtcrtpsender import RTCRtpSender
+from aiortc.rtcrtpsender import RTCEncodedFrame, RTCRtpSender
 from aiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_FIR,
@@ -409,6 +410,81 @@ class RTCRtpSenderTest(TestCase):
             self.assertEqual(found_rtx.payload_type, 101)
             self.assertEqual(found_rtx.ssrc, 2345)
             self.assertEqual(found_rtx.payload[0:2], pack("!H", packet.sequence_number))
+
+    @asynctest
+    async def test_marker_audio(self) -> None:
+        """
+        The marker bit is only set when sending starts or resumes.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            # pause and resume sending
+            sender._enabled = False
+            await asyncio.sleep(0.1)
+            while not queue.empty():
+                queue.get_nowait()
+            sender._enabled = True
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            # remove and restore the track
+            sender.replaceTrack(None)
+            await asyncio.sleep(0.1)
+            while not queue.empty():
+                queue.get_nowait()
+            sender.replaceTrack(AudioStreamTrack())
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            await sender.stop()
+
+    @asynctest
+    async def test_marker_video(self) -> None:
+        """
+        The marker bit is set on the last packet of each frame.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        timestamps = itertools.count(step=3000)
+
+        async def mock_next_encoded_frame(
+            codec: RTCRtpCodecParameters,
+        ) -> RTCEncodedFrame:
+            await asyncio.sleep(0.02)
+            return RTCEncodedFrame([b"a", b"b", b"c"], next(timestamps), None)
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            # The track only sets the kind, frames of three packets come from
+            # the mock.
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            sender._next_encoded_frame = mock_next_encoded_frame  # type: ignore
+            await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
+
+            markers = [(await queue.get()).marker for _ in range(6)]
+            self.assertEqual(markers, [0, 0, 1, 0, 0, 1])
+
+            await sender.stop()
 
     @asynctest
     async def test_disabled(self) -> None:
