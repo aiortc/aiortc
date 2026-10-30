@@ -411,6 +411,79 @@ class RTCRtpSenderTest(TestCase):
             self.assertEqual(found_rtx.payload[0:2], pack("!H", packet.sequence_number))
 
     @asynctest
+    async def test_marker_audio(self) -> None:
+        """
+        The marker bit is only set on the first packet of a talkspurt.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            # pause and resume sending
+            sender._enabled = False
+            await asyncio.sleep(0.1)
+            while not queue.empty():
+                queue.get_nowait()
+            sender._enabled = True
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            # remove and restore the track
+            sender.replaceTrack(None)
+            await asyncio.sleep(0.1)
+            while not queue.empty():
+                queue.get_nowait()
+            sender.replaceTrack(AudioStreamTrack())
+
+            markers = [(await queue.get()).marker for _ in range(3)]
+            self.assertEqual(markers, [1, 0, 0])
+
+            await sender.stop()
+
+    @asynctest
+    async def test_marker_video(self) -> None:
+        """
+        The marker bit is set on the last packet of each frame.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
+
+            # collect the packets of the first two frames
+            packets = [await queue.get()]
+            while len({p.timestamp for p in packets}) < 3:
+                packets.append(await queue.get())
+            packets.pop()
+
+            for current, following in zip(packets, packets[1:] + [None]):
+                last_of_frame = (
+                    following is None or following.timestamp != current.timestamp
+                )
+                self.assertEqual(current.marker, int(last_of_frame))
+
+            await sender.stop()
+
+    @asynctest
     async def test_disabled(self) -> None:
         async with dummy_dtls_transport_pair() as (local_transport, _):
             sender = RTCRtpSender(AudioStreamTrack(), local_transport)
