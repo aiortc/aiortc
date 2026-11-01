@@ -132,12 +132,11 @@ check-manifest
 ## Commit messages
 
 Keep commit messages concise. The subject line states what the commit does
-in the imperative, optionally prefixed by the component (e.g. `sctp:`);
-the body explains *why*: the goal being pursued, the constraint that forced
-the approach, the non-obvious insight behind the change. Skip anything a
-reader can trivially deduce from the diff: do not enumerate the modified
-files, restate renamed symbols, or narrate the changes function by
-function.
+in the imperative; the body explains *why*: the goal being pursued, the
+constraint that forced the approach, the non-obvious insight behind the
+change. Skip anything a reader can trivially deduce from the diff: do not
+enumerate the modified files, restate renamed symbols, or narrate the
+changes function by function.
 
 Quote a specification only where its wording matters, such as the MUST or
 SHOULD that justifies a behaviour change, and keep the quote to the
