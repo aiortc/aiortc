@@ -35,13 +35,6 @@ dependencies = [
 ]
 dynamic = ["version"]
 
-[project.optional-dependencies]
-dev = [
-    "aiohttp>=3.7.0",
-    "coverage[toml]>=7.2.2",
-    "numpy>=1.19.0",
-]
-
 [project.urls]
 homepage = "https://github.com/aiortc/aiortc"
 changelog = "https://aiortc.readthedocs.io/en/stable/changelog.html"
@@ -57,6 +50,7 @@ source = ["aiortc"]
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
+files = ["src", "tests"]
 ignore_missing_imports = true
 strict_optional = false
 warn_redundant_casts = true
