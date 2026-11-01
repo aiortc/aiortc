@@ -3,7 +3,7 @@ import fractions
 import time
 import uuid
 from abc import ABCMeta, abstractmethod
-from typing import Union
+from typing import Protocol, Union
 
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
@@ -16,11 +16,29 @@ VIDEO_PTIME = 1 / 30  # 30fps
 VIDEO_TIME_BASE = fractions.Fraction(1, VIDEO_CLOCK_RATE)
 
 
-def convert_timebase(
-    pts: int, from_base: fractions.Fraction, to_base: fractions.Fraction
-) -> int:
+class TimeBase(Protocol):
+    """
+    A time base, expressed as a rational number.
+
+    PyAV < 19 represents time bases as :class:`fractions.Fraction`, whereas
+    PyAV >= 19 uses its own :class:`av.rational.AVRational` type, which is not
+    a subclass of :class:`fractions.Fraction`. This protocol accepts either by
+    only requiring the ``numerator`` and ``denominator`` properties they both
+    provide, so the code type-checks against all supported PyAV versions.
+    """
+
+    @property
+    def numerator(self) -> int: ...
+
+    @property
+    def denominator(self) -> int: ...
+
+
+def convert_timebase(pts: int, from_base: TimeBase, to_base: TimeBase) -> int:
     if from_base != to_base:
-        pts = int(pts * from_base / to_base)
+        from_fraction = fractions.Fraction(from_base.numerator, from_base.denominator)
+        to_fraction = fractions.Fraction(to_base.numerator, to_base.denominator)
+        pts = int(pts * from_fraction / to_fraction)
     return pts
 
 
