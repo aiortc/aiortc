@@ -18,11 +18,17 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python:
+          - '3.15'
+          - '3.11'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
       - name: Run linters
         run: |
           pip install . -r requirements/lint.txt
