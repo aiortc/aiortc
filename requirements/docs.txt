@@ -1,0 +1,3 @@
+sphinx
+sphinx-autodoc-typehints
+sphinxcontrib-trio
