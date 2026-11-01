@@ -1,5 +1,6 @@
 exclude .readthedocs.yaml
 include CODE_OF_CONDUCT.md
+include CONTRIBUTING.md
 include LICENSE
 include SECURITY.md
 recursive-include docs *.py *.rst *.svg Makefile
