@@ -19,6 +19,8 @@ Bug reports, patches and suggestions are welcome!
 
 Please open an issue_ or send a `pull request`_.
 
+Before contributing code, please read the `contributing guidelines`_.
+
 Feedback about the examples or documentation are especially valuable as they
 make ``aiortc`` accessible to a wider audience.
 
@@ -28,6 +30,7 @@ requires a proper investment in automated testing.
 
 .. _issue: https://github.com/aiortc/aiortc/issues/new
 .. _pull request: https://github.com/aiortc/aiortc/compare/
+.. _contributing guidelines: https://github.com/aiortc/aiortc/blob/main/CONTRIBUTING.md
 
 Questions
 ---------
