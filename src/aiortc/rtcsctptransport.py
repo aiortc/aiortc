@@ -186,6 +186,8 @@ class DataChunk(Chunk):
     _abandoned: bool
     _book_size: int
     _expiry: Optional[float]
+    # Whether the chunk is counted in the flight size.
+    _in_flight: bool
     _max_retransmits: Optional[int]
     _misses: int
     _retransmit: bool
@@ -833,10 +835,27 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._set_state(self.State.COOKIE_WAIT)
 
     def _flight_size_decrease(self, chunk: DataChunk) -> None:
-        self._flight_size = max(0, self._flight_size - chunk._book_size)
+        """
+        Stop counting a chunk in the flight size.
+
+        This does nothing if the chunk is not in flight, so it is safe to call
+        whenever a chunk is acknowledged, abandoned or marked for
+        retransmission, even if an earlier event already released it.
+        """
+        if chunk._in_flight:
+            chunk._in_flight = False
+            self._flight_size -= chunk._book_size
 
     def _flight_size_increase(self, chunk: DataChunk) -> None:
-        self._flight_size += chunk._book_size
+        """
+        Start counting a chunk in the flight size, as it is sent or resent.
+
+        This does nothing if the chunk is already in flight, as a resent chunk
+        is counted once (RFC 9260 section 1.3).
+        """
+        if not chunk._in_flight:
+            chunk._in_flight = True
+            self._flight_size += chunk._book_size
 
     def _get_extensions(self, params: list[tuple[int, bytes]]) -> None:
         """
@@ -920,17 +939,20 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if not abandon:
             return False
 
+        # Abandoned chunks are no longer outstanding (RFC 3758 section 3.5).
         chunk_pos = self._sent_queue.index(chunk)
         for pos in range(chunk_pos, -1, -1):
             ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
+            self._flight_size_decrease(ochunk)
             if ochunk.flags & SCTP_DATA_FIRST_FRAG:
                 break
         for pos in range(chunk_pos, len(self._sent_queue)):
             ochunk = self._sent_queue[pos]
             ochunk._abandoned = True
             ochunk._retransmit = False
+            self._flight_size_decrease(ochunk)
             if ochunk.flags & SCTP_DATA_LAST_FRAG:
                 break
 
@@ -1200,7 +1222,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             done += 1
             if not schunk._acked:
                 done_bytes += schunk._book_size
-                self._flight_size_decrease(schunk)
+            self._flight_size_decrease(schunk)
 
             # update RTO estimate
             if done == 1 and schunk._sent_count == 1:
@@ -1220,11 +1242,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             for schunk in self._sent_queue:
                 if uint32_gt(schunk.tsn, highest_seen_tsn):
                     break
-                if schunk.tsn in seen and not schunk._acked:
-                    done_bytes += schunk._book_size
-                    schunk._acked = True
+                if schunk.tsn in seen:
+                    if not schunk._acked:
+                        done_bytes += schunk._book_size
+                        schunk._acked = True
+                        highest_newly_acked = schunk.tsn
                     self._flight_size_decrease(schunk)
-                    highest_newly_acked = schunk.tsn
 
             # strike missing chunks prior to HTNA
             for schunk in self._sent_queue:
@@ -1366,6 +1389,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             chunk._acked = False
             chunk._book_size = len(chunk.user_data)
             chunk._expiry = expiry
+            chunk._in_flight = False
             chunk._max_retransmits = max_retransmits
             chunk._misses = 0
             chunk._retransmit = False
@@ -1527,11 +1551,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         for chunk in self._sent_queue:
             if not self._maybe_abandon(chunk):
                 chunk._retransmit = True
+            # Chunks awaiting retransmission are not outstanding (RFC 9260 section 1.3).
+            self._flight_size_decrease(chunk)
         self._update_advanced_peer_ack_point()
 
         # adjust congestion window
         self._fast_recovery_exit = None
-        self._flight_size = 0
         self._partial_bytes_acked = 0
 
         self._ssthresh = max(self._cwnd // 2, 4 * USERDATA_MAX_LENGTH)
