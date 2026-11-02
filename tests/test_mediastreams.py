@@ -10,7 +10,9 @@ from aiortc.mediastreams import (
     AudioStreamTrack,
     MediaStreamTrack,
     VideoStreamTrack,
+    convert_timebase,
 )
+from av import AudioFrame
 from av.packet import Packet
 
 
@@ -65,3 +67,26 @@ class MediaStreamTrackTest(TestCase):
         track = VideoPacketStreamTrack()
         self.assertEqual(track.kind, "video")
         self.assertEqual(len(track.id), 36)
+
+
+class ConvertTimebaseTest(TestCase):
+    def test_same_base(self) -> None:
+        self.assertEqual(convert_timebase(1234, VIDEO_TIME_BASE, VIDEO_TIME_BASE), 1234)
+
+    def test_fraction(self) -> None:
+        self.assertEqual(
+            convert_timebase(960, fractions.Fraction(1, 48000), VIDEO_TIME_BASE),
+            1800,
+        )
+
+    def test_pyav_time_base(self) -> None:
+        # PyAV >= 19 returns an AVRational rather than a Fraction.
+        frame = AudioFrame(format="s16", layout="mono", samples=960)
+        frame.time_base = fractions.Fraction(1, 48000)
+        self.assertEqual(convert_timebase(960, frame.time_base, VIDEO_TIME_BASE), 1800)
+
+    def test_negative_pts_truncates_toward_zero(self) -> None:
+        self.assertEqual(
+            convert_timebase(-1, fractions.Fraction(1, 2), fractions.Fraction(1, 1)),
+            0,
+        )

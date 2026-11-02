@@ -347,8 +347,10 @@ class RTCIceTransportTest(TestCase):
         await asyncio.gather(gatherer_1.gather(), gatherer_2.gather())
         for candidate in gatherer_2.getLocalCandidates():
             await transport_1.addRemoteCandidate(candidate)
+        await transport_1.addRemoteCandidate(None)
         for candidate in gatherer_1.getLocalCandidates():
             await transport_2.addRemoteCandidate(candidate)
+        await transport_2.addRemoteCandidate(None)
         self.assertEqual(transport_1.state, "new")
         self.assertEqual(transport_2.state, "new")
 
