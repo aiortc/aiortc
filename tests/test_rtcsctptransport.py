@@ -16,7 +16,9 @@ from aiortc.rtcsctptransport import (
     SCTP_DATA_LAST_FRAG,
     SCTP_DATA_UNORDERED,
     SCTP_MAX_PACKET_LENGTH,
+    SCTP_STR_RESET_RESPONSE,
     USERDATA_MAX_LENGTH,
+    WEBRTC_BINARY,
     AbortChunk,
     Chunk,
     CookieEchoChunk,
@@ -968,6 +970,42 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server_channels[0].label, "chat")
 
     @asynctest
+    async def test_connect_then_send_message_and_close(self) -> None:
+        async with client_and_server() as (client, server):
+            server_channels = track_channels(server)
+
+            # Connect the client and the server.
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+
+            # Open a data channel.
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "open")
+            self.assertEqual(len(server_channels), 1)
+
+            received: list[bytes] = []
+            server_channels[0].on("message", received.append)
+
+            # Send a message larger than the congestion window, then close.
+            message = b"M" * (4 * USERDATA_MAX_LENGTH)
+            channel.send(message)
+            channel.close()
+
+            # The message is received before the channel closes.
+            for i in range(50):
+                if (
+                    channel.readyState == "closed"
+                    and server_channels[0].readyState == "closed"
+                ):
+                    break
+                await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(server_channels[0].readyState, "closed")
+            self.assertEqual(received, [message])
+
+    @asynctest
     async def test_connect_then_send_message_too_large(self) -> None:
         async with client_and_server() as (client, server):
             # connect, the server only accepts messages of up to 1000 bytes
@@ -1893,6 +1931,122 @@ class RTCSctpTransportTest(TestCase):
             # check response
             self.assertIsInstance(ack, HeartbeatAckChunk)
             self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
+
+    @asynctest
+    async def test_receive_reconfig_reset_deferred(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def reset_results() -> list[int]:
+            return [
+                StreamResetResponseParam.parse(param[1]).result
+                for chunk in sent
+                if isinstance(chunk, ReconfigChunk)
+                for param in chunk.params
+                if param[0] == SCTP_STR_RESET_RESPONSE
+            ]
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+            received: list[bytes] = []
+            channel.on("message", received.append)
+
+            # The request follows data which is not received yet.
+            request = StreamResetOutgoingParam(
+                request_sequence=1, response_sequence=0, last_tsn=1, streams=[1]
+            )
+            await client._receive_reconfig_param(request)
+            self.assertEqual(reset_results(), [RECONFIG_RESULT_IN_PROGRESS])
+            self.assertEqual(channel.readyState, "open")
+
+            # The request is sent again before the data is received.
+            await client._receive_reconfig_param(request)
+            self.assertEqual(reset_results(), [RECONFIG_RESULT_IN_PROGRESS] * 2)
+            self.assertEqual(channel.readyState, "open")
+
+            # The data is delivered, then the stream is reset and the reset reported.
+            chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
+            chunk.protocol = WEBRTC_BINARY
+            chunk.stream_id = 1
+            chunk.tsn = 1
+            chunk.user_data = b"foo"
+            await client._receive_chunk(chunk)
+            self.assertEqual(received, [b"foo"])
+            self.assertEqual(channel.readyState, "closing")
+            self.assertEqual(client._inbound_streams, {})
+            self.assertEqual(
+                reset_results(),
+                [RECONFIG_RESULT_IN_PROGRESS] * 2 + [RECONFIG_RESULT_SUCCESS_PERFORMED],
+            )
+
+            # The request is sent again after the stream is reset.
+            await client._receive_reconfig_param(request)
+            self.assertEqual(
+                reset_results(),
+                [RECONFIG_RESULT_IN_PROGRESS] * 2
+                + [RECONFIG_RESULT_SUCCESS_PERFORMED] * 2,
+            )
+
+    @asynctest
+    async def test_receive_reconfig_reset_deferred_forward_tsn(self) -> None:
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            await client._receive_reconfig_param(
+                StreamResetOutgoingParam(
+                    request_sequence=1, response_sequence=0, last_tsn=1, streams=[1]
+                )
+            )
+            self.assertEqual(channel.readyState, "open")
+
+            # The data is abandoned, then the stream is reset.
+            chunk = ForwardTsnChunk()
+            chunk.cumulative_tsn = 1
+            chunk.streams = [(1, 0)]
+            await client._receive_chunk(chunk)
+            self.assertEqual(channel.readyState, "closing")
+
+    @asynctest
+    async def test_receive_reconfig_reset_performed(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            # All the data sent before the request is received.
+            await client._receive_reconfig_param(
+                StreamResetOutgoingParam(
+                    request_sequence=1, response_sequence=0, last_tsn=1, streams=[1]
+                )
+            )
+            self.assertEqual(channel.readyState, "closing")
+            assert isinstance(sent[0], ReconfigChunk)
+            self.assertEqual(
+                StreamResetResponseParam.parse(sent[0].params[0][1]),
+                StreamResetResponseParam(
+                    response_sequence=1, result=RECONFIG_RESULT_SUCCESS_PERFORMED
+                ),
+            )
 
     @asynctest
     async def test_receive_reconfig_response_denied(self) -> None:

@@ -723,6 +723,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._sent_queue: Deque[DataChunk] = deque()
 
         # reconfiguration
+        self._reconfig_deferred: Optional[StreamResetOutgoingParam] = None
         self._reconfig_failures = 0
         self._reconfig_handle: Optional[asyncio.TimerHandle] = None
         self._reconfig_in_progress = False
@@ -1197,6 +1198,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._advertised_rwnd += len(message[2])
             await self._receive(*message)
 
+        await self._reset_deferred_streams()
+
     async def _receive_forward_tsn_chunk(self, chunk: ForwardTsnChunk) -> None:
         """
         Handle a FORWARD TSN chunk.
@@ -1241,6 +1244,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._advertised_rwnd += inbound_stream.prune_chunks(
                 self._last_received_tsn
             )
+
+        await self._reset_deferred_streams()
 
     async def _receive_sack_chunk(self, chunk: SackChunk) -> None:
         """
@@ -1350,23 +1355,26 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self.__log_debug("<< %s", param)
 
         if isinstance(param, StreamResetOutgoingParam):
-            # mark closed inbound streams
-            for stream_id in param.streams:
-                self._inbound_streams.pop(stream_id, None)
+            if param.request_sequence != self._reconfig_response_seq:
+                self._reconfig_deferred = param
+                self._reconfig_response_seq = param.request_sequence
+                await self._reset_deferred_streams()
+            elif self._reconfig_deferred is None:
+                # A retransmitted request is answered again (RFC 6525 section 5.2.1).
+                await self._send_reconfig_param(
+                    StreamResetResponseParam(
+                        response_sequence=param.request_sequence,
+                        result=RECONFIG_RESULT_SUCCESS_PERFORMED,
+                    )
+                )
 
-                # close data channel
-                channel = self._data_channels.get(stream_id)
-                if channel:
-                    self._data_channel_close(channel)
-
-            # send response
-            response_param = StreamResetResponseParam(
-                response_sequence=param.request_sequence,
-                result=RECONFIG_RESULT_SUCCESS_PERFORMED,
-            )
-            self._reconfig_response_seq = param.request_sequence
-
-            await self._send_reconfig_param(response_param)
+            if self._reconfig_deferred is not None:
+                await self._send_reconfig_param(
+                    StreamResetResponseParam(
+                        response_sequence=param.request_sequence,
+                        result=RECONFIG_RESULT_IN_PROGRESS,
+                    )
+                )
         elif isinstance(param, StreamAddOutgoingParam):
             # increase inbound streams
             self._inbound_streams_count += param.new_streams
@@ -1407,6 +1415,34 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
                 self._reconfig_request = None
                 await self._transmit_reconfig()
+
+    async def _reset_deferred_streams(self) -> None:
+        """
+        Reset the streams of the peer's last request once their data is received.
+        """
+        # The reset waits for the data sent before the request, and is reported
+        # as soon as it is done (RFC 6525 section 5.2.2 E2 and E5).
+        request = self._reconfig_deferred
+        if request is not None and uint32_gte(
+            self._last_received_tsn, request.last_tsn
+        ):
+            self._reconfig_deferred = None
+
+            # mark closed inbound streams
+            for stream_id in request.streams:
+                self._inbound_streams.pop(stream_id, None)
+
+                # close data channel
+                channel = self._data_channels.get(stream_id)
+                if channel:
+                    self._data_channel_close(channel)
+
+            await self._send_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=request.request_sequence,
+                    result=RECONFIG_RESULT_SUCCESS_PERFORMED,
+                )
+            )
 
     async def _send(
         self,
