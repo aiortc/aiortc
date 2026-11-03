@@ -970,6 +970,53 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server_channels[0].label, "chat")
 
     @asynctest
+    async def test_connect_then_receive_message_and_close(self) -> None:
+        async with client_and_server() as (client, server):
+            server_channels = track_channels(server)
+
+            # Connect the client and the server.
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+
+            # Open a data channel.
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "open")
+            self.assertEqual(len(server_channels), 1)
+
+            # Open a new data channel as soon as the first one closes.
+            new_channels: list[RTCDataChannel] = []
+            new_received: list[bytes] = []
+
+            @channel.on("close")
+            def on_close() -> None:
+                new_channel = RTCDataChannel(
+                    client, RTCDataChannelParameters(label="chat")
+                )
+                new_channel.on("message", new_received.append)
+                new_channels.append(new_channel)
+
+            # The server sends a message larger than the congestion window, and
+            # the client closes the channel.
+            server_channels[0].send(b"M" * (16 * USERDATA_MAX_LENGTH))
+            channel.close()
+
+            # The new data channel reuses the stream identifier, but not the stream.
+            for i in range(50):
+                if new_channels and new_channels[0].readyState == "open":
+                    break
+                await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(server_channels[0].readyState, "closed")
+            self.assertEqual(len(new_channels), 1)
+            self.assertEqual(new_channels[0].id, channel.id)
+            self.assertEqual(new_channels[0].readyState, "open")
+            self.assertEqual(new_received, [])
+            self.assertEqual(len(server_channels), 2)
+            self.assertEqual(server_channels[1].readyState, "open")
+
+    @asynctest
     async def test_connect_then_send_message_and_close(self) -> None:
         async with client_and_server() as (client, server):
             server_channels = track_channels(server)
@@ -2048,6 +2095,50 @@ class RTCSctpTransportTest(TestCase):
                 ),
             )
 
+            # The channel closes once its outgoing stream is reset too.
+            await asyncio.sleep(0)
+            assert client._reconfig_request is not None
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=client._reconfig_request.request_sequence,
+                    result=RECONFIG_RESULT_SUCCESS_PERFORMED,
+                )
+            )
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(client._data_channels, {})
+
+    @asynctest
+    async def test_receive_reconfig_response_before_reset(self) -> None:
+        async with client_standalone() as client:
+            client._last_received_tsn = 1
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            channel.close()
+            await asyncio.sleep(0)
+            assert client._reconfig_request is not None
+
+            # The stream identifier stays in use until the peer resets its stream.
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=client._reconfig_request.request_sequence,
+                    result=RECONFIG_RESULT_SUCCESS_PERFORMED,
+                )
+            )
+            self.assertEqual(channel.readyState, "closing")
+            self.assertEqual(client._data_channels, {1: channel})
+
+            await client._receive_reconfig_param(
+                StreamResetOutgoingParam(
+                    request_sequence=1, response_sequence=0, last_tsn=1, streams=[1]
+                )
+            )
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(client._data_channels, {})
+
     @asynctest
     async def test_receive_reconfig_response_denied(self) -> None:
         async with client_standalone() as client:
@@ -2120,7 +2211,7 @@ class RTCSctpTransportTest(TestCase):
                     result=RECONFIG_RESULT_SUCCESS_PERFORMED,
                 )
             )
-            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(channel.readyState, "closing")
             self.assertEqual(client._outbound_stream_seq, {})
             self.assertIsNone(client._reconfig_handle)
             self.assertIsNone(client._reconfig_request)

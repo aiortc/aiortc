@@ -748,6 +748,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
         # data channels
         self._data_channel_id: Optional[int] = None
+        self._data_channel_inbound_reset: set[int] = set()
+        self._data_channel_outbound_reset: set[int] = set()
         self._data_channel_queue: DataChannelQueue = deque()
         self._data_channels: dict[int, RTCDataChannel] = {}
 
@@ -1402,7 +1404,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     return
 
                 # Reset the streams only on success (RFC 6525 section 5.2.7 H3 and H4).
-                # The data channels close either way, as the application asked for it.
+                # Otherwise the data channels close at once, as the application asked.
                 reset = param.result in (
                     RECONFIG_RESULT_SUCCESS_NOTHING_TO_DO,
                     RECONFIG_RESULT_SUCCESS_PERFORMED,
@@ -1411,7 +1413,10 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     if reset:
                         self._forward_tsn_streams.pop(stream_id, None)
                         self._outbound_stream_seq.pop(stream_id, None)
-                    self._data_channel_closed(stream_id)
+                        self._data_channel_outbound_reset.add(stream_id)
+                        self._data_channel_reset(stream_id)
+                    else:
+                        self._data_channel_closed(stream_id)
 
                 self._reconfig_request = None
                 await self._transmit_reconfig()
@@ -1435,7 +1440,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 # close data channel
                 channel = self._data_channels.get(stream_id)
                 if channel:
+                    self._data_channel_inbound_reset.add(stream_id)
                     self._data_channel_close(channel)
+                    self._data_channel_reset(stream_id)
 
             await self._send_reconfig_param(
                 StreamResetResponseParam(
@@ -1879,6 +1886,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 channel._setReadyState("closed")
 
     def _data_channel_closed(self, stream_id: int) -> None:
+        self._data_channel_inbound_reset.discard(stream_id)
+        self._data_channel_outbound_reset.discard(stream_id)
         channel = self._data_channels.pop(stream_id)
         channel._setReadyState("closed")
 
@@ -2038,6 +2047,15 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         elif pp_id == WEBRTC_BINARY_EMPTY and stream_id in self._data_channels:
             # emit message
             self._data_channels[stream_id].emit("message", b"")
+
+    def _data_channel_reset(self, stream_id: int) -> None:
+        # The data channel and its stream identifier are only released once the
+        # streams are reset in both directions (RFC 8831 section 6.7).
+        if (
+            stream_id in self._data_channel_inbound_reset
+            and stream_id in self._data_channel_outbound_reset
+        ):
+            self._data_channel_closed(stream_id)
 
     def _data_channel_send(
         self, channel: RTCDataChannel, data: Union[bytes, str]
