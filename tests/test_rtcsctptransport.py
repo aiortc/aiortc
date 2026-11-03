@@ -1794,6 +1794,45 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(received, [(456, 123, b"barbazqux")])
 
     @asynctest
+    async def test_receive_forward_tsn_stale_stream(self) -> None:
+        received = []
+
+        async def mock_receive(stream_id: int, pp_id: int, data: bytes) -> None:
+            received.append((stream_id, pp_id, data))
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 101
+            client._receive = mock_receive  # type: ignore
+
+            factory = ChunkFactory(tsn=102)
+            chunks = factory.create([b"foo"]) + factory.create([b"bar"])
+            # The next TSN carries a chunk of another stream.
+            factory.tsn += 1
+            chunks += factory.create([b"baz"])
+
+            # The first message is abandoned, and the second one is delivered.
+            chunk = ForwardTsnChunk()
+            chunk.cumulative_tsn = 102
+            chunk.streams = [(456, 0)]
+            await client._receive_chunk(chunk)
+            await client._receive_chunk(chunks[1])
+            self.assertEqual(received, [(456, 123, b"bar")])
+            self.assertEqual(client._inbound_streams[456].sequence_number, 2)
+            received.clear()
+
+            # The chunk of the other stream is abandoned, and the sender reports
+            # the first message again.
+            chunk = ForwardTsnChunk()
+            chunk.cumulative_tsn = 104
+            chunk.streams = [(456, 0), (789, 0)]
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._inbound_streams[456].sequence_number, 2)
+
+            # The third message is delivered.
+            await client._receive_chunk(chunks[2])
+            self.assertEqual(received, [(456, 123, b"baz")])
+
+    @asynctest
     async def test_receive_heartbeat(self) -> None:
         ack = None
 

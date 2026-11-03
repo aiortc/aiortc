@@ -1212,8 +1212,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         for stream_id, stream_seq in chunk.streams:
             inbound_stream = self._get_inbound_stream(stream_id)
 
-            # advance sequence number and perform delivery
-            inbound_stream.sequence_number = uint16_add(stream_seq, 1)
+            # Advance the sequence number, but never move it backwards as a
+            # FORWARD TSN can report a message again (RFC 3758 section 3.6).
+            sequence_number = uint16_add(stream_seq, 1)
+            if uint16_gt(sequence_number, inbound_stream.sequence_number):
+                inbound_stream.sequence_number = sequence_number
             for message in inbound_stream.pop_messages():
                 self._advertised_rwnd += len(message[2])
                 await self._receive(*message)
