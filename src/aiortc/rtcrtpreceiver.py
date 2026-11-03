@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
+import av
 from av.frame import Frame
 
 from . import clock
@@ -51,7 +52,10 @@ logger = logging.getLogger(__name__)
 
 
 def decoder_worker(
-    loop: asyncio.AbstractEventLoop, input_q: queue.Queue, output_q: asyncio.Queue
+    loop: asyncio.AbstractEventLoop,
+    input_q: queue.Queue,
+    output_q: asyncio.Queue,
+    decode_error: threading.Event,
 ) -> None:
     codec_name = None
     decoder = None
@@ -68,7 +72,21 @@ def decoder_worker(
             decoder = get_decoder(codec)
             codec_name = codec.name
 
-        for frame in decoder.decode(encoded_frame):
+        try:
+            frames = decoder.decode(encoded_frame)
+        except av.FFmpegError as exc:
+            # Keep the decoder state: resetting it would make every frame
+            # fail to decode until the next keyframe.
+            logger.warning(
+                "RTCRtpReceiver(%s) failed to decode %s frame: %s",
+                codec.mimeType.split("/")[0],
+                codec.name,
+                exc,
+            )
+            decode_error.set()
+            continue
+
+        for frame in frames:
             # pass the decoded frame to the track
             asyncio.run_coroutine_threadsafe(output_q.put(frame), loop)
 
@@ -269,6 +287,7 @@ class RTCRtpReceiver:
         self._enabled = True
         self.__active_ssrc: dict[int, datetime.datetime] = {}
         self.__codecs: dict[int, RTCRtpCodecParameters] = {}
+        self.__decoder_error = threading.Event()
         self.__decoder_queue: queue.Queue = queue.Queue()
         self.__decoder_thread: Optional[threading.Thread] = None
         self.__kind = kind
@@ -391,6 +410,7 @@ class RTCRtpReceiver:
                     asyncio.get_event_loop(),
                     self.__decoder_queue,
                     self._track._queue,
+                    self.__decoder_error,
                 ),
             )
             self.__decoder_thread.start()
@@ -527,9 +547,15 @@ class RTCRtpReceiver:
             self.__log_debug("x RTP payload parsing failed: %s", exc)
             return
 
-        # try to re-assemble encoded frame
+        # Try to re-assemble an encoded frame.
         pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
-        # check if the PLI should be sent
+
+        # Check if a PLI should be sent.
+        if self.__decoder_error.is_set():
+            self.__decoder_error.clear()
+            if self.__kind == "video":
+                # Report the lost picture data to the sender (RFC 4585 section 6.3.1.1).
+                pli_flag = True
         if pli_flag:
             await self._send_rtcp_pli(packet.ssrc)
 

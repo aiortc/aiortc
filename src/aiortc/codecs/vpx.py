@@ -1,4 +1,3 @@
-import logging
 import multiprocessing
 import random
 from struct import pack, unpack_from
@@ -13,8 +12,6 @@ from av.video.codeccontext import VideoCodecContext
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 from .base import Decoder, Encoder
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_BITRATE = 500000  # 500 kbps
 MIN_BITRATE = 250000  # 250 kbps
@@ -168,14 +165,10 @@ class Vp8Decoder(Decoder):
         self.codec = CodecContext.create("libvpx", "r")
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
-        try:
-            packet = Packet(encoded_frame.data)
-            packet.pts = encoded_frame.timestamp
-            packet.time_base = VIDEO_TIME_BASE
-            return cast(list[Frame], self.codec.decode(packet))
-        except av.FFmpegError as e:
-            logger.warning("Vp8Decoder() failed to decode, skipping package: " + str(e))
-            return []
+        packet = Packet(encoded_frame.data)
+        packet.pts = encoded_frame.timestamp
+        packet.time_base = VIDEO_TIME_BASE
+        return cast(list[Frame], self.codec.decode(packet))
 
 
 class Vp8Encoder(Encoder):

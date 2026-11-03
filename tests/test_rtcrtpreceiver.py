@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import fractions
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -29,10 +29,14 @@ from aiortc.rtcrtpreceiver import (
 from aiortc.rtp import RtcpPacket, RtpPacket
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
+from av.frame import Frame
 
 from .codecs import CodecTestCase
 from .utils import ClosedDtlsTransport, asynctest, dummy_dtls_transport_pair, load
 
+OPUS_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
+)
 VP8_CODEC = RTCRtpCodecParameters(
     mimeType="video/VP8", clockRate=90000, payloadType=100
 )
@@ -64,12 +68,39 @@ def create_rtp_packets(count: int, seq: int = 0) -> list[RtpPacket]:
     return packets
 
 
+def create_rtp_audio_packets(
+    self: CodecTestCase, codec: RTCRtpCodecParameters, frames: int, seq: int = 0
+) -> list[RtpPacket]:
+    return encode_rtp_packets(
+        self,
+        codec=codec,
+        frames=self.create_audio_frames(
+            layout="stereo", sample_rate=48000, count=frames
+        ),
+        seq=seq,
+    )
+
+
 def create_rtp_video_packets(
     self: CodecTestCase, codec: RTCRtpCodecParameters, frames: int, seq: int = 0
 ) -> list[RtpPacket]:
+    return encode_rtp_packets(
+        self,
+        codec=codec,
+        frames=self.create_video_frames(width=640, height=480, count=frames),
+        seq=seq,
+    )
+
+
+def encode_rtp_packets(
+    self: CodecTestCase,
+    codec: RTCRtpCodecParameters,
+    frames: Sequence[Frame],
+    seq: int,
+) -> list[RtpPacket]:
     encoder = get_encoder(codec)
     packets = []
-    for frame in self.create_video_frames(width=640, height=480, count=frames):
+    for frame in frames:
         payloads, timestamp = encoder.encode(frame)
         self.assertEqual(len(payloads), 1)
         packet = RtpPacket(
@@ -421,6 +452,86 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(nacks[0], (1234, lost_packets))
 
             # check PLI was triggered
+            self.assertEqual(pli, [1234])
+
+    @asynctest
+    async def test_rtp_audio_decode_error(self) -> None:
+        pli = []
+
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
+
+        async with create_receiver("audio") as receiver:
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
+            receiver._track = RemoteStreamTrack(kind="audio")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[OPUS_CODEC]))
+
+            # Generate some packets and corrupt the second frame.
+            packets = create_rtp_audio_packets(self, codec=OPUS_CODEC, frames=8)
+            packets[1].payload = b"junk"
+
+            # The jitter buffer holds back four frames before passing one on.
+            with self.assertLogs("aiortc.rtcrtpreceiver", level="WARNING") as cm:
+                for packet in packets[0:7]:
+                    await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+                # The decoder skips the corrupt frame and keeps decoding.
+                frame = self.ensureIsInstance(
+                    await receiver.track.recv(), av.AudioFrame
+                )
+                self.assertEqual(frame.pts, packets[0].timestamp)
+                frame = self.ensureIsInstance(
+                    await receiver.track.recv(), av.AudioFrame
+                )
+                self.assertEqual(frame.pts, packets[2].timestamp)
+            self.assertEqual(len(cm.output), 1)
+            self.assertIn(
+                "RTCRtpReceiver(audio) failed to decode opus frame", cm.output[0]
+            )
+
+            # Check no PLI is sent for audio.
+            await receiver._handle_rtp_packet(packets[7], arrival_time_ms=0)
+            self.assertEqual(pli, [])
+
+    @asynctest
+    async def test_rtp_video_decode_error(self) -> None:
+        pli = []
+
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
+
+        async with create_receiver("video") as receiver:
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
+
+            # Generate some packets and corrupt the second frame.
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=5)
+            packets[1].payload = b"\x10junk"
+
+            # Each frame is passed to the decoder when the next one starts.
+            with self.assertLogs("aiortc.rtcrtpreceiver", level="WARNING") as cm:
+                for packet in packets[0:4]:
+                    await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+                # The decoder skips the corrupt frame and keeps decoding.
+                frame = self.ensureIsInstance(
+                    await receiver.track.recv(), av.VideoFrame
+                )
+                self.assertEqual(frame.pts, packets[0].timestamp)
+                frame = self.ensureIsInstance(
+                    await receiver.track.recv(), av.VideoFrame
+                )
+                self.assertEqual(frame.pts, packets[2].timestamp)
+            self.assertEqual(len(cm.output), 1)
+            self.assertIn(
+                "RTCRtpReceiver(video) failed to decode VP8 frame", cm.output[0]
+            )
+
+            # Check a PLI is sent once the decoder has reported the error.
+            await receiver._handle_rtp_packet(packets[4], arrival_time_ms=0)
             self.assertEqual(pli, [1234])
 
     @asynctest

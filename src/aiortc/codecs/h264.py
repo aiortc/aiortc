@@ -1,5 +1,4 @@
 import fractions
-import logging
 import math
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import tee
@@ -14,8 +13,6 @@ from av.video.codeccontext import VideoCodecContext
 from ..jitterbuffer import JitterFrame
 from ..mediastreams import VIDEO_TIME_BASE, convert_timebase
 from .base import Decoder, Encoder
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_BITRATE = 1000000  # 1 Mbps
 MIN_BITRATE = 500000  # 500 kbps
@@ -109,16 +106,10 @@ class H264Decoder(Decoder):
         self.codec = av.CodecContext.create("h264", "r")
 
     def decode(self, encoded_frame: JitterFrame) -> list[Frame]:
-        try:
-            packet = av.Packet(encoded_frame.data)
-            packet.pts = encoded_frame.timestamp
-            packet.time_base = VIDEO_TIME_BASE
-            return cast(list[Frame], self.codec.decode(packet))
-        except av.FFmpegError as e:
-            logger.warning(
-                "H264Decoder() failed to decode, skipping package: " + str(e)
-            )
-            return []
+        packet = av.Packet(encoded_frame.data)
+        packet.pts = encoded_frame.timestamp
+        packet.time_base = VIDEO_TIME_BASE
+        return cast(list[Frame], self.codec.decode(packet))
 
 
 class H264Encoder(Encoder):

@@ -3,6 +3,7 @@ import io
 from contextlib import redirect_stderr
 from unittest import TestCase
 
+import av
 from aiortc.codecs import get_decoder, get_encoder
 from aiortc.codecs.vpx import (
     Vp8Decoder,
@@ -165,9 +166,8 @@ class Vp8Test(CodecTestCase):
         self.assertIsInstance(decoder, Vp8Decoder)
 
         # decode junk
-        with redirect_stderr(io.StringIO()):
-            frames = decoder.decode(JitterFrame(data=b"123", timestamp=0))
-        self.assertEqual(frames, [])
+        with redirect_stderr(io.StringIO()), self.assertRaises(av.InvalidDataError):
+            decoder.decode(JitterFrame(data=b"123", timestamp=0))
 
     def test_encoder(self) -> None:
         encoder = self.ensureIsInstance(get_encoder(VP8_CODEC), Vp8Encoder)
