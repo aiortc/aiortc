@@ -1383,6 +1383,45 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(len(server_channels), 0)
 
     @asynctest
+    async def test_connect_then_client_creates_data_channel_and_closes_it(
+        self,
+    ) -> None:
+        async with client_and_server() as (client, server):
+            server_channels = track_channels(server)
+
+            # Connect the client and the server.
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+
+            # Open a data channel.
+            other = RTCDataChannel(client, RTCDataChannelParameters(label="other"))
+            await asyncio.sleep(0.1)
+            self.assertEqual(other.readyState, "open")
+            self.assertEqual(len(server_channels), 1)
+
+            received: list[bytes] = []
+            server_channels[0].on("message", received.append)
+
+            # A new data channel has no stream identifier until the next flush,
+            # so it closes at once. Messages queued for other channels are kept.
+            other.send(b"ping")
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            channel.close()
+            self.assertIsNone(channel.id)
+            self.assertEqual(channel.readyState, "closed")
+
+            # The peer never learns about the data channel.
+            other.send(b"pong")
+            for i in range(50):
+                if len(received) == 2:
+                    break
+                await asyncio.sleep(0.1)
+            self.assertEqual(received, [b"ping", b"pong"])
+            self.assertEqual(len(server_channels), 1)
+            self.assertEqual(channel.readyState, "closed")
+
+    @asynctest
     async def test_connect_then_server_creates_data_channel(self) -> None:
         async with client_and_server() as (client, server):
             client_channels = track_channels(client)

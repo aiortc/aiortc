@@ -1747,7 +1747,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if channel.readyState not in ["closing", "closed"]:
             channel._setReadyState("closing")
 
-            if self._association_state == self.State.ESTABLISHED:
+            # A data channel without a stream identifier has not been announced
+            # to the peer yet, so it closes at once.
+            if (
+                self._association_state == self.State.ESTABLISHED
+                and channel.id is not None
+            ):
                 # queue a stream reset
                 self._reconfig_queue.append(channel.id)
                 if len(self._reconfig_queue) == 1:
