@@ -72,6 +72,11 @@ SCTP_TSN_MODULO = 2**32
 
 RECONFIG_MAX_STREAMS = 135
 
+# Re-configuration results (RFC 6525 section 4.4).
+RECONFIG_RESULT_SUCCESS_NOTHING_TO_DO = 0
+RECONFIG_RESULT_SUCCESS_PERFORMED = 1
+RECONFIG_RESULT_IN_PROGRESS = 6
+
 # parameters
 SCTP_STATE_COOKIE = 0x0007
 SCTP_STR_RESET_OUT_REQUEST = 0x000D
@@ -718,6 +723,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._sent_queue: Deque[DataChunk] = deque()
 
         # reconfiguration
+        self._reconfig_failures = 0
+        self._reconfig_handle: Optional[asyncio.TimerHandle] = None
+        self._reconfig_in_progress = False
         self._reconfig_queue: list[int] = []
         self._reconfig_request: Optional[StreamResetOutgoingParam] = None
         self._reconfig_request_seq = self._local_tsn
@@ -1353,7 +1361,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             # send response
             response_param = StreamResetResponseParam(
-                response_sequence=param.request_sequence, result=1
+                response_sequence=param.request_sequence,
+                result=RECONFIG_RESULT_SUCCESS_PERFORMED,
             )
             self._reconfig_response_seq = param.request_sequence
 
@@ -1364,7 +1373,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             # send response
             response_param = StreamResetResponseParam(
-                response_sequence=param.request_sequence, result=1
+                response_sequence=param.request_sequence,
+                result=RECONFIG_RESULT_SUCCESS_PERFORMED,
             )
             self._reconfig_response_seq = param.request_sequence
 
@@ -1374,10 +1384,25 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._reconfig_request
                 and param.response_sequence == self._reconfig_request.request_sequence
             ):
-                # mark closed streams
+                self._reconfig_timer_cancel()
+
+                # The peer has not reset the streams yet, so the request is
+                # sent again later (RFC 6525 section 5.2.7 H2).
+                if param.result == RECONFIG_RESULT_IN_PROGRESS:
+                    self._reconfig_timer_start()
+                    self._reconfig_in_progress = True
+                    return
+
+                # Reset the streams only on success (RFC 6525 section 5.2.7 H3 and H4).
+                # The data channels close either way, as the application asked for it.
+                reset = param.result in (
+                    RECONFIG_RESULT_SUCCESS_NOTHING_TO_DO,
+                    RECONFIG_RESULT_SUCCESS_PERFORMED,
+                )
                 for stream_id in self._reconfig_request.streams:
-                    self._forward_tsn_streams.pop(stream_id, None)
-                    self._outbound_stream_seq.pop(stream_id, None)
+                    if reset:
+                        self._forward_tsn_streams.pop(stream_id, None)
+                        self._outbound_stream_seq.pop(stream_id, None)
                     self._data_channel_closed(stream_id)
 
                 self._reconfig_request = None
@@ -1510,6 +1535,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     channel._setReadyState("open")
             asyncio.ensure_future(self._data_channel_flush())
         elif state == self.State.CLOSED:
+            self._reconfig_timer_cancel()
             self._t1_cancel()
             self._t2_cancel()
             self._t3_cancel()
@@ -1524,6 +1550,44 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self.remove_all_listeners()
 
     # timers
+
+    def _reconfig_timer_cancel(self) -> None:
+        if self._reconfig_handle is not None:
+            self.__log_debug("- RECONFIG cancel")
+            self._reconfig_handle.cancel()
+            self._reconfig_handle = None
+
+    def _reconfig_timer_expired(self) -> None:
+        assert self._reconfig_request is not None
+        self._reconfig_handle = None
+
+        # Sending the request again after an "In progress" response is not a
+        # failure (RFC 6525 section 5.2.7 H2).
+        if self._reconfig_in_progress:
+            self._reconfig_in_progress = False
+        else:
+            self._reconfig_failures += 1
+        self.__log_debug("x RECONFIG expired %d", self._reconfig_failures)
+
+        if self._reconfig_failures > SCTP_MAX_ASSOCIATION_RETRANS:
+            self._set_state(self.State.CLOSED)
+        else:
+            asyncio.ensure_future(self._send_reconfig_param(self._reconfig_request))
+
+            # The timer backs off exponentially (RFC 6525 section 5.1.1).
+            delay = min(self._rto * 2**self._reconfig_failures, SCTP_RTO_MAX)
+            self._reconfig_handle = self._loop.call_later(
+                delay, self._reconfig_timer_expired
+            )
+
+    def _reconfig_timer_start(self) -> None:
+        assert self._reconfig_handle is None
+        self._reconfig_failures = 0
+        self._reconfig_in_progress = False
+        self.__log_debug("- RECONFIG start")
+        self._reconfig_handle = self._loop.call_later(
+            self._rto, self._reconfig_timer_expired
+        )
 
     def _t1_cancel(self) -> None:
         if self._t1_handle is not None:
@@ -1686,6 +1750,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._reconfig_request = param
             self._reconfig_request_seq = tsn_plus_one(self._reconfig_request_seq)
 
+            self._reconfig_timer_start()
             await self._send_reconfig_param(param)
 
     def _update_advanced_peer_ack_point(self) -> None:
