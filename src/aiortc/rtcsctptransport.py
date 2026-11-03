@@ -596,6 +596,8 @@ class InboundStream:
                 if ordered and chunk.stream_seq == self.sequence_number:
                     self.sequence_number = uint16_add(self.sequence_number, 1)
                 pos = start_pos
+                # The next chunk starts a new message.
+                start_pos = None
                 yield (chunk.stream_id, chunk.protocol, user_data)
             else:
                 pos += 1
