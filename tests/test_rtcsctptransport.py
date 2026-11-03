@@ -1883,6 +1883,47 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._flight_size, 0)
 
     @asynctest
+    async def test_receive_sack_abandoned_queued_fragments(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._cwnd = 4 * USERDATA_MAX_LENGTH
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+
+            # Send an 8 fragment message, of which only 4 fragments fit.
+            await client._send(
+                123, 456, b"M" * USERDATA_MAX_LENGTH * 8, max_retransmits=0
+            )
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4])
+            self.assertEqual(queued_tsns(client), [5, 6, 7, 8])
+            sent.clear()
+
+            # The first fragment is reported missing three times, while each
+            # SACK lets one more fragment be sent. This abandons the whole
+            # message, including the fragments which are still queued.
+            for last_acked in (2, 3, 4):
+                sack = SackChunk()
+                sack.cumulative_tsn = 0
+                sack.gaps = [(2, last_acked)]
+                await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._advanced_peer_ack_tsn, 8)
+
+            # Fragments 5 and 6 are sent, then a FORWARD TSN which skips the
+            # whole message, and fragments 7 and 8 are never sent.
+            self.assertEqual(
+                [type(chunk) for chunk in sent],
+                [DataChunk, DataChunk, ForwardTsnChunk],
+            )
+
+    @asynctest
     async def test_receive_sack_abandoned_then_acked(self) -> None:
         async with client_standalone() as client:
             client._cwnd = 8 * USERDATA_MAX_LENGTH
@@ -2829,6 +2870,36 @@ class RTCSctpTransportTest(TestCase):
 
             # let async code complete
             await asyncio.sleep(0)
+
+    @asynctest
+    async def test_t3_expired_abandoned_queued_fragments(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+
+            # Send a 6 fragment message, of which only 3 fragments fit.
+            await client._send(
+                123, 456, b"M" * USERDATA_MAX_LENGTH * 6, max_retransmits=0
+            )
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3])
+            self.assertEqual(queued_tsns(client), [4, 5, 6])
+            sent.clear()
+
+            # T3 expires, which abandons the whole message, including the
+            # queued fragments, so only a FORWARD TSN is sent.
+            client._t3_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(queued_tsns(client), [])
+            self.assertEqual(client._advanced_peer_ack_tsn, 6)
+            self.assertEqual([type(chunk) for chunk in sent], [ForwardTsnChunk])
 
     @asynctest
     async def test_t3_expired_forward_tsn_lost(self) -> None:

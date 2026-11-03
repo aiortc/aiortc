@@ -1,6 +1,7 @@
 import asyncio
 import enum
 import hmac
+import itertools
 import logging
 import math
 import os
@@ -973,8 +974,12 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._flight_size_decrease(ochunk)
             if ochunk.flags & SCTP_DATA_FIRST_FRAG:
                 break
-        for pos in range(chunk_pos, len(self._sent_queue)):
-            ochunk = self._sent_queue[pos]
+        # Abandon the following fragments too, including those not sent yet
+        # (RFC 3758 section 3.5 A3). They are at the end of the sent queue,
+        # then at the start of the outbound queue.
+        for ochunk in itertools.chain(
+            itertools.islice(self._sent_queue, chunk_pos, None), self._outbound_queue
+        ):
             ochunk._abandoned = True
             ochunk._retransmit = False
             self._flight_size_decrease(ochunk)
@@ -1689,6 +1694,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         if uint32_gt(self._last_sacked_tsn, self._advanced_peer_ack_tsn):
             self._advanced_peer_ack_tsn = self._last_sacked_tsn
+
+        # Abandoned chunks which are not sent yet are never sent, but their TSNs
+        # follow those of the sent chunks, so they are skipped the same way.
+        while self._outbound_queue and self._outbound_queue[0]._abandoned:
+            self._sent_queue.append(self._outbound_queue.popleft())
 
         while self._sent_queue and self._sent_queue[0]._abandoned:
             chunk = self._sent_queue.popleft()
