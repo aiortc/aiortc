@@ -9,6 +9,8 @@ from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (
     LOCAL_MAX_MESSAGE_SIZE,
+    RECONFIG_RESULT_IN_PROGRESS,
+    RECONFIG_RESULT_SUCCESS_PERFORMED,
     REMOTE_DEFAULT_MAX_MESSAGE_SIZE,
     SCTP_DATA_FIRST_FRAG,
     SCTP_DATA_LAST_FRAG,
@@ -1893,6 +1895,83 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
 
     @asynctest
+    async def test_receive_reconfig_response_denied(self) -> None:
+        async with client_standalone() as client:
+            client._outbound_stream_seq = {1: 1}
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            channel.close()
+            await asyncio.sleep(0)
+            assert client._reconfig_request is not None
+
+            # The peer denies the request, so the stream is not reset.
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=client._reconfig_request.request_sequence,
+                    result=2,
+                )
+            )
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(client._outbound_stream_seq, {1: 1})
+            self.assertIsNone(client._reconfig_handle)
+            self.assertIsNone(client._reconfig_request)
+
+    @asynctest
+    async def test_receive_reconfig_response_in_progress(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._outbound_stream_seq = {1: 1}
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            channel.close()
+            await asyncio.sleep(0)
+            assert client._reconfig_request is not None
+            request_sequence = client._reconfig_request.request_sequence
+            self.assertEqual(len(sent), 1)
+
+            # The peer has not reset the stream yet, so the channel is still closing.
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=request_sequence,
+                    result=RECONFIG_RESULT_IN_PROGRESS,
+                )
+            )
+            self.assertEqual(channel.readyState, "closing")
+            self.assertIsNotNone(client._reconfig_handle)
+            self.assertIsNotNone(client._reconfig_request)
+
+            # Sending the request again is not a failure.
+            client._reconfig_timer_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(client._reconfig_failures, 0)
+            self.assertEqual(len(sent), 2)
+            self.assertEqual(bytes(sent[1]), bytes(sent[0]))
+
+            # The peer has now reset the stream.
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=request_sequence,
+                    result=RECONFIG_RESULT_SUCCESS_PERFORMED,
+                )
+            )
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(client._outbound_stream_seq, {})
+            self.assertIsNone(client._reconfig_handle)
+            self.assertIsNone(client._reconfig_request)
+
+    @asynctest
     async def test_receive_sack_abandoned_fragments_flight_size(self) -> None:
         async with client_standalone() as client:
             client._cwnd = 8 * USERDATA_MAX_LENGTH
@@ -2847,6 +2926,54 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(sent_tsns, [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4])
             self.assertEqual(outstanding_tsns(client), [])
             self.assertEqual(queued_tsns(client), [])
+
+    @asynctest
+    async def test_reconfig_timer_expired(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def timer_delay() -> float:
+            assert client._reconfig_handle is not None
+            return client._reconfig_handle.when() - client._loop.time()
+
+        async with client_standalone() as client:
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            channel.close()
+            await asyncio.sleep(0)
+            self.assertEqual(len(sent), 1)
+            self.assertAlmostEqual(timer_delay(), 3, places=1)
+
+            # The request is lost, so it is sent again after twice the delay.
+            client._reconfig_timer_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(client._reconfig_failures, 1)
+            self.assertEqual(len(sent), 2)
+            self.assertEqual(bytes(sent[1]), bytes(sent[0]))
+            self.assertAlmostEqual(timer_delay(), 6, places=1)
+
+            # The delay is capped.
+            client._reconfig_failures = 9
+            client._reconfig_timer_expired()
+            self.assertEqual(client._reconfig_failures, 10)
+            self.assertAlmostEqual(timer_delay(), 60, places=1)
+            self.assertEqual(channel.readyState, "closing")
+
+            # The association fails.
+            client._reconfig_timer_expired()
+            self.assertEqual(client._reconfig_failures, 11)
+            self.assertIsNone(client._reconfig_handle)
+            self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(channel.readyState, "closed")
+
+            # Let the resent requests go out.
+            await asyncio.sleep(0)
 
     @asynctest
     async def test_t2_expired_when_shutdown_ack_sent(self) -> None:
