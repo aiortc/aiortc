@@ -1740,6 +1740,13 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             and not self._reconfig_request
         ):
             streams = self._reconfig_queue[0:RECONFIG_MAX_STREAMS]
+
+            # Pending messages are sent before the streams are reset (W3C WebRTC
+            # section 6.2.4), so their TSNs precede the last assigned TSN.
+            pending = {channel.id for channel, _, _ in self._data_channel_queue}
+            if pending.intersection(streams):
+                return
+
             self._reconfig_queue = self._reconfig_queue[RECONFIG_MAX_STREAMS:]
             param = StreamResetOutgoingParam(
                 request_sequence=self._reconfig_request_seq,
@@ -1879,6 +1886,9 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     ordered=channel.ordered,
                 )
                 channel._addBufferedAmount(-len(user_data))
+
+        # A stream reset may have been waiting for these messages.
+        await self._transmit_reconfig()
 
     def _data_channel_add_negotiated(self, channel: RTCDataChannel) -> None:
         if channel.id in self._data_channels:

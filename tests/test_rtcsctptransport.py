@@ -2563,6 +2563,72 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(queued_tsns(client), [])
 
     @asynctest
+    async def test_send_data_then_close(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def reset_requests() -> list[StreamResetOutgoingParam]:
+            return [
+                StreamResetOutgoingParam.parse(param[1])
+                for chunk in sent
+                if isinstance(chunk, ReconfigChunk)
+                for param in chunk.params
+            ]
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
+            client._cwnd = 3 * USERDATA_MAX_LENGTH
+            client._last_sacked_tsn = 4294967295
+            client._local_tsn = 0
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._ssthresh = 4 * USERDATA_MAX_LENGTH
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            # The second message waits until the first one is sent.
+            channel.send(b"A" * (4 * USERDATA_MAX_LENGTH))
+            channel.send(b"B")
+            await asyncio.sleep(0)
+            self.assertEqual(outstanding_tsns(client), [0, 1, 2])
+            self.assertEqual(queued_tsns(client), [3])
+            self.assertEqual(len(client._data_channel_queue), 1)
+
+            # The stream is not reset while the second message is pending.
+            channel.close()
+            await asyncio.sleep(0)
+            self.assertEqual(reset_requests(), [])
+
+            sack = SackChunk()
+            sack.cumulative_tsn = 2
+            await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [3])
+            self.assertEqual(len(client._data_channel_queue), 1)
+            self.assertEqual(reset_requests(), [])
+
+            # Once the second message is sent, the stream is reset after it.
+            sack = SackChunk()
+            sack.cumulative_tsn = 3
+            await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [4])
+            self.assertEqual(len(client._data_channel_queue), 0)
+            self.assertEqual(
+                reset_requests(),
+                [
+                    StreamResetOutgoingParam(
+                        request_sequence=client._reconfig_request_seq - 1,
+                        response_sequence=0,
+                        last_tsn=4,
+                        streams=[1],
+                    )
+                ],
+            )
+            self.assertEqual(channel.readyState, "closing")
+
+    @asynctest
     async def test_send_data_with_gap(self) -> None:
         sent_tsns = []
 
