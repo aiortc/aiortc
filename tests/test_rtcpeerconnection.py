@@ -668,6 +668,8 @@ class RTCPeerConnectionTest(TestCase):
                 ],
             )
 
+        await pc.close()
+
     @asynctest
     async def test_addTrack_audio(self) -> None:
         pc = RTCPeerConnection()
@@ -5521,3 +5523,6 @@ a=rtpmap:0 PCMU/8000
             offer = await pc.createOffer()
             parsed = SessionDescription.parse(offer.sdp)
             self.assertEqual(len(parsed.media), 2)
+
+        await pc1.close()
+        await pc2.close()
