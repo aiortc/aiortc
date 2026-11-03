@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import re
 from collections.abc import Callable
 from typing import Optional, Union
@@ -862,6 +863,23 @@ class RTCPeerConnectionTest(TestCase):
         await pc.close()
 
         self.assertEqual(pc_states["signalingState"], ["stable", "closed"])
+
+    @asynctest
+    async def test_close_before_connect(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+
+        await pc1.setLocalDescription()
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription()
+
+        # Close before the connection task scheduled above gets to run.
+        with self.assertNoLogs("asyncio", level="ERROR"):
+            await pc2.close()
+            gc.collect()
+
+        await pc1.close()
 
     async def _test_connect_audio_bidirectional(
         self, pc1: RTCPeerConnection, pc2: RTCPeerConnection
