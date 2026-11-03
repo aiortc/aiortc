@@ -1936,8 +1936,111 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._last_sacked_tsn, sack_point)
 
     @asynctest
+    async def test_receive_sack_forward_tsn_acked_stream(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def forward_tsns() -> list[tuple[int, list[tuple[int, int]]]]:
+            return [
+                (chunk.cumulative_tsn, chunk.streams)
+                for chunk in sent
+                if isinstance(chunk, ForwardTsnChunk)
+            ]
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._cwnd = 10 * USERDATA_MAX_LENGTH
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+
+            # Send a chunk on stream 1 and a chunk on stream 2 which are never
+            # retransmitted, each followed by 3 reliable chunks.
+            await client._send(1, 456, b"A", max_retransmits=0)
+            await client._send(9, 456, b"B" * USERDATA_MAX_LENGTH * 3)
+            await client._send(2, 456, b"C", max_retransmits=0)
+            await client._send(9, 456, b"D" * USERDATA_MAX_LENGTH * 3)
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4, 5, 6, 7, 8])
+
+            # TSN 1 and 5 are each reported missing three times, so they are
+            # abandoned.
+            for gaps in (
+                [(2, 2)],
+                [(2, 3)],
+                [(2, 4)],
+                [(2, 4), (6, 6)],
+                [(2, 4), (6, 7)],
+                [(2, 4), (6, 8)],
+            ):
+                sack = SackChunk()
+                sack.cumulative_tsn = 0
+                sack.gaps = gaps
+                await client._receive_chunk(sack)
+            self.assertEqual(forward_tsns()[-1], (1, [(1, 0)]))
+            sent.clear()
+
+            # The peer acknowledges TSN 1, so stream 1 is no longer reported.
+            sack = SackChunk()
+            sack.cumulative_tsn = 4
+            sack.gaps = [(2, 4)]
+            await client._receive_chunk(sack)
+            self.assertEqual(forward_tsns(), [(5, [(2, 0)])])
+
+    @asynctest
+    async def test_receive_sack_forward_tsn_lost(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def forward_tsns() -> list[tuple[int, list[tuple[int, int]]]]:
+            return [
+                (chunk.cumulative_tsn, chunk.streams)
+                for chunk in sent
+                if isinstance(chunk, ForwardTsnChunk)
+            ]
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._cwnd = 8 * USERDATA_MAX_LENGTH
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+
+            # Send a chunk which is never retransmitted, then 3 reliable chunks.
+            await client._send(123, 456, b"A", max_retransmits=0)
+            await client._send(124, 456, b"B" * USERDATA_MAX_LENGTH * 3)
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3, 4])
+
+            # TSN 1 is reported missing three times, so it is abandoned.
+            for last_acked in (2, 3, 4):
+                sack = SackChunk()
+                sack.cumulative_tsn = 0
+                sack.gaps = [(2, last_acked)]
+                await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [2, 3, 4])
+            self.assertEqual(forward_tsns(), [(1, [(123, 0)])])
+            sent.clear()
+
+            # The FORWARD TSN is lost, so it is sent again.
+            await client._receive_chunk(sack)
+            self.assertEqual(forward_tsns(), [(1, [(123, 0)])])
+            sent.clear()
+
+            # The peer catches up, so no FORWARD TSN is sent.
+            sack = SackChunk()
+            sack.cumulative_tsn = 4
+            await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(forward_tsns(), [])
+            self.assertEqual(client._forward_tsn_streams, {})
+
+    @asynctest
     async def test_receive_sack_gap_acked_after_retransmit(self) -> None:
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
             client._last_sacked_tsn = 0
             client._local_tsn = 1
             client._send_chunk = noop_send_chunk  # type: ignore
@@ -1968,6 +2071,7 @@ class RTCSctpTransportTest(TestCase):
             pass
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
             client._cwnd = 8 * USERDATA_MAX_LENGTH
             client._last_sacked_tsn = 0
             client._local_tsn = 1
@@ -2140,6 +2244,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._cwnd = 4 * USERDATA_MAX_LENGTH
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
@@ -2229,6 +2334,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
             client._ssthresh = 131072
@@ -2306,6 +2412,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
             client._ssthresh = 131072
@@ -2384,6 +2491,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
             client._ssthresh = 131072
@@ -2464,6 +2572,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
             client._ssthresh = 131072
@@ -2557,6 +2666,7 @@ class RTCSctpTransportTest(TestCase):
             sent_tsns.append(chunk.tsn)
 
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 4294967295
             client._last_sacked_tsn = 4294967295
             client._local_tsn = 0
             client._ssthresh = 131072
@@ -2721,8 +2831,96 @@ class RTCSctpTransportTest(TestCase):
             await asyncio.sleep(0)
 
     @asynctest
+    async def test_t3_expired_forward_tsn_lost(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def forward_tsns() -> list[tuple[int, list[tuple[int, int]]]]:
+            return [
+                (chunk.cumulative_tsn, chunk.streams)
+                for chunk in sent
+                if isinstance(chunk, ForwardTsnChunk)
+            ]
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+
+            # Send a chunk which is never retransmitted.
+            await client._send(123, 456, b"A", max_retransmits=0)
+            self.assertEqual(outstanding_tsns(client), [1])
+
+            # T3 expires, so the chunk is abandoned.
+            client._t3_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(outstanding_tsns(client), [])
+            self.assertEqual(forward_tsns(), [(1, [(123, 0)])])
+            self.assertIsNotNone(client._t3_handle)
+            sent.clear()
+
+            # The FORWARD TSN is lost and T3 expires again, so it is sent again.
+            client._t3_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(forward_tsns(), [(1, [(123, 0)])])
+            self.assertIsNotNone(client._t3_handle)
+
+    @asynctest
+    async def test_t3_expired_forward_tsn_lost_stream_reset(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        def forward_tsns() -> list[tuple[int, list[tuple[int, int]]]]:
+            return [
+                (chunk.cumulative_tsn, chunk.streams)
+                for chunk in sent
+                if isinstance(chunk, ForwardTsnChunk)
+            ]
+
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+            RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            # Send a chunk which is never retransmitted, and T3 expires.
+            await client._send(1, 456, b"A", max_retransmits=0)
+            client._t3_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(forward_tsns(), [(1, [(1, 0)])])
+            sent.clear()
+
+            # The stream is reset, so it may be reused.
+            client._reconfig_request = StreamResetOutgoingParam(
+                request_sequence=client._reconfig_request_seq,
+                response_sequence=0,
+                last_tsn=1,
+                streams=[1],
+            )
+            await client._receive_reconfig_param(
+                StreamResetResponseParam(
+                    response_sequence=client._reconfig_request_seq, result=1
+                )
+            )
+
+            # The FORWARD TSN is lost and T3 expires again, so it is sent again
+            # without the reset stream.
+            client._t3_expired()
+            await asyncio.sleep(0)
+            self.assertEqual(forward_tsns(), [(1, [])])
+
+    @asynctest
     async def test_t3_expired_gap_acked(self) -> None:
         async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
             client._last_sacked_tsn = 0
             client._local_tsn = 1
             client._send_chunk = noop_send_chunk  # type: ignore

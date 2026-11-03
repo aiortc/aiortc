@@ -704,6 +704,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._fast_recovery_exit = None
         self._fast_recovery_transmit = False
         self._forward_tsn_chunk: Optional[ForwardTsnChunk] = None
+        # Stream sequence number and TSN of the last abandoned chunk per stream.
+        self._forward_tsn_streams: dict[int, tuple[int, int]] = {}
         self._flight_size = 0
         self._local_tsn = random32()
         self._last_sacked_tsn = tsn_minus_one(self._local_tsn)
@@ -1369,6 +1371,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             ):
                 # mark closed streams
                 for stream_id in self._reconfig_request.streams:
+                    self._forward_tsn_streams.pop(stream_id, None)
                     self._outbound_stream_seq.pop(stream_id, None)
                     self._data_channel_closed(stream_id)
 
@@ -1687,20 +1690,31 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if uint32_gt(self._last_sacked_tsn, self._advanced_peer_ack_tsn):
             self._advanced_peer_ack_tsn = self._last_sacked_tsn
 
-        done = 0
-        streams = {}
         while self._sent_queue and self._sent_queue[0]._abandoned:
             chunk = self._sent_queue.popleft()
             self._advanced_peer_ack_tsn = chunk.tsn
-            done += 1
             if not (chunk.flags & SCTP_DATA_UNORDERED):
-                streams[chunk.stream_id] = chunk.stream_seq
+                self._forward_tsn_streams[chunk.stream_id] = (
+                    chunk.stream_seq,
+                    chunk.tsn,
+                )
 
-        if done:
-            # build FORWARD TSN
+        # Stop reporting streams whose abandoned chunks the peer acknowledged.
+        self._forward_tsn_streams = {
+            stream_id: (stream_seq, tsn)
+            for stream_id, (stream_seq, tsn) in self._forward_tsn_streams.items()
+            if uint32_gt(tsn, self._last_sacked_tsn)
+        }
+
+        # Send a FORWARD TSN until the peer acknowledges it, as an earlier one
+        # may have been lost (RFC 3758 section 3.5 C3 and A5).
+        if uint32_gt(self._advanced_peer_ack_tsn, self._last_sacked_tsn):
             self._forward_tsn_chunk = ForwardTsnChunk()
             self._forward_tsn_chunk.cumulative_tsn = self._advanced_peer_ack_tsn
-            self._forward_tsn_chunk.streams = list(streams.items())
+            self._forward_tsn_chunk.streams = [
+                (stream_id, stream_seq)
+                for stream_id, (stream_seq, _) in self._forward_tsn_streams.items()
+            ]
 
     def _update_rto(self, R: float) -> None:
         """
