@@ -1070,6 +1070,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             self.__pendingRemoteDescription = description
 
     async def __connect(self) -> None:
+        # The connection may have been closed before this task got to run.
+        if self.__isClosed:
+            return
+
         for transceiver in self.__transceivers:
             dtlsTransport = transceiver.receiver.transport
             iceTransport = dtlsTransport.transport
