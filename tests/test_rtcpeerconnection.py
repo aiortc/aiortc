@@ -521,6 +521,15 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(pc.iceConnectionState, "closed")
         self.assertEqual(pc.signalingState, "closed")
 
+    def assertCodecNames(
+        self, description: RTCSessionDescription, names: list[str]
+    ) -> None:
+        parsed = SessionDescription.parse(description.sdp)
+        self.assertEqual(
+            [codec.name for media in parsed.media for codec in media.rtp.codecs],
+            names,
+        )
+
     async def assertDataChannelOpen(self, dc: RTCDataChannel) -> None:
         await self.sleepWhile(lambda: dc.readyState == "connecting")
         self.assertEqual(dc.readyState, "open")
@@ -1284,14 +1293,7 @@ a=rtpmap:8 PCMA/8000
         self.assertEqual(pc1.iceGatheringState, "complete")
         self.assertEqual(mids(pc1), ["0"])
         self.assertTrue("m=audio " in pc1.localDescription.sdp)
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:8 PCMA/8000
-a=rtpmap:0 PCMU/8000
-"""
-            )
-            in pc1.localDescription.sdp
-        )
+        self.assertCodecNames(pc1.localDescription, ["PCMA", "PCMU"])
         self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
@@ -1316,14 +1318,7 @@ a=rtpmap:0 PCMU/8000
         await self.assertIceChecking(pc2)
         self.assertEqual(mids(pc2), ["0"])
         self.assertTrue("m=audio " in pc2.localDescription.sdp)
-        self.assertTrue(
-            lf2crlf(
-                """a=rtpmap:8 PCMA/8000
-a=rtpmap:0 PCMU/8000
-"""
-            )
-            in pc2.localDescription.sdp
-        )
+        self.assertCodecNames(pc2.localDescription, ["PCMA", "PCMU"])
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
@@ -2908,8 +2903,7 @@ a=rtpmap:0 PCMU/8000
         parsed.media[0].rtp.codecs.pop(0)
         parsed.media[0].fmt.pop(0)
         desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
-        self.assertFalse("VP8" in desc1.sdp)
-        self.assertTrue("H264" in desc1.sdp)
+        self.assertCodecNames(desc1, ["rtx", "H264", "rtx", "H264", "rtx"])
 
         # handle offer
         await pc2.setRemoteDescription(desc1)
@@ -2933,6 +2927,7 @@ a=rtpmap:0 PCMU/8000
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
+        self.assertCodecNames(pc2.localDescription, ["H264", "rtx", "H264", "rtx"])
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)
@@ -3127,6 +3122,9 @@ a=rtpmap:0 PCMU/8000
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
         self.assertTrue(VIDEO_SDP in pc1.localDescription.sdp)
+        self.assertCodecNames(
+            pc1.localDescription, ["H264", "rtx", "H264", "rtx", "VP8", "rtx"]
+        )
 
         # handle offer
         await pc2.setRemoteDescription(pc1.localDescription)
@@ -3151,6 +3149,9 @@ a=rtpmap:0 PCMU/8000
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
         self.assertTrue(VIDEO_SDP in pc2.localDescription.sdp)
+        self.assertCodecNames(
+            pc2.localDescription, ["H264", "rtx", "H264", "rtx", "VP8", "rtx"]
+        )
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)
@@ -3235,7 +3236,7 @@ a=rtpmap:0 PCMU/8000
         self.assertTrue("a=sendrecv" in pc1.localDescription.sdp)
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
-        self.assertFalse("VP8" in pc1.localDescription.sdp)
+        self.assertCodecNames(pc1.localDescription, ["H264", "rtx", "H264", "rtx"])
 
         # handle offer
         await pc2.setRemoteDescription(pc1.localDescription)
@@ -3259,7 +3260,7 @@ a=rtpmap:0 PCMU/8000
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
-        self.assertFalse("VP8" in pc2.localDescription.sdp)
+        self.assertCodecNames(pc2.localDescription, ["H264", "rtx", "H264", "rtx"])
 
         # handle answer
         await pc1.setRemoteDescription(pc2.localDescription)
