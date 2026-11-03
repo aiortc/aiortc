@@ -1509,6 +1509,41 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(channel.readyState, "closed")
 
     @asynctest
+    async def test_connect_then_client_creates_data_channel_and_closes_it_before_ack(
+        self,
+    ) -> None:
+        async with client_and_server() as (client, server):
+            server_channels = track_channels(server)
+
+            # Connect the client and the server.
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+
+            # Open a data channel, then close it before the server acknowledges it.
+            channel = RTCDataChannel(client, RTCDataChannelParameters(label="chat"))
+            events: list[str] = []
+            channel.on("open", lambda: events.append("open"))
+            channel.on("close", lambda: events.append("close"))
+            await asyncio.sleep(0)
+            self.assertIsNotNone(channel.id)
+            self.assertEqual(channel.readyState, "connecting")
+            channel.close()
+
+            # The acknowledgement does not open the data channel again.
+            for i in range(50):
+                if (
+                    channel.readyState == "closed"
+                    and server_channels
+                    and server_channels[0].readyState == "closed"
+                ):
+                    break
+                await asyncio.sleep(0.1)
+            self.assertEqual(events, ["close"])
+            self.assertEqual(channel.readyState, "closed")
+            self.assertEqual(server_channels[0].readyState, "closed")
+
+    @asynctest
     async def test_connect_then_server_creates_data_channel(self) -> None:
         async with client_and_server() as (client, server):
             client_channels = track_channels(client)

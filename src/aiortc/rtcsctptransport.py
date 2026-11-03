@@ -2034,7 +2034,10 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             elif msg_type == DATA_CHANNEL_ACK:
                 assert stream_id in self._data_channels
                 channel = self._data_channels[stream_id]
-                channel._setReadyState("open")
+
+                # A closing data channel is not opened again (W3C WebRTC section 6.2.2).
+                if channel.readyState == "connecting":
+                    channel._setReadyState("open")
         elif pp_id == WEBRTC_STRING and stream_id in self._data_channels:
             # emit message
             self._data_channels[stream_id].emit("message", data.decode("utf8"))
