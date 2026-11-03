@@ -377,7 +377,9 @@ class RTCIceTransport(AsyncIOEventEmitter):
         logger.debug(f"RTCIceTransport(%s) {msg}", self.role, *args)
 
     def __setState(self, state: str) -> None:
-        if state != self.__state:
+        # The "closed" state is final, even if connectivity checks were still
+        # in progress when stop() was called (W3C WebRTC section 5.6).
+        if state != self.__state and self.__state != "closed":
             self.__log_debug("- %s -> %s", self.__state, state)
             self.__state = state
             self.emit("statechange")
