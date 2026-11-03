@@ -464,6 +464,27 @@ class SctpStreamTest(TestCase):
         self.assertEqual(stream.reassembly, [chunks[2]])
         self.assertEqual(stream.sequence_number, 2)
 
+    def test_whole_out_of_order_not_adjacent(self) -> None:
+        stream = InboundStream()
+        chunks = self.factory.create([b"foo"])
+        # The next TSN carries a chunk of another stream.
+        self.factory.tsn += 1
+        chunks += self.factory.create([b"bar"])
+
+        # Feed the second message.
+        stream.add_chunk(chunks[1])
+        self.assertEqual(list(stream.pop_messages()), [])
+        self.assertEqual(stream.reassembly, [chunks[1]])
+        self.assertEqual(stream.sequence_number, 0)
+
+        # Feed the first message, so both messages are delivered.
+        stream.add_chunk(chunks[0])
+        self.assertEqual(
+            list(stream.pop_messages()), [(456, 123, b"foo"), (456, 123, b"bar")]
+        )
+        self.assertEqual(stream.reassembly, [])
+        self.assertEqual(stream.sequence_number, 2)
+
     def test_fragments_in_order(self) -> None:
         stream = InboundStream()
         chunks = self.factory.create([b"foo", b"bar", b"baz"])
