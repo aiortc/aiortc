@@ -666,6 +666,31 @@ class SctpStreamTest(TestCase):
         self.assertEqual(stream.reassembly, [chunks[2]])
         self.assertEqual(stream.sequence_number, 2)
 
+    def test_prune_chunks_message_in_progress(self) -> None:
+        factory = ChunkFactory(tsn=100)
+        chunks = factory.create([b"foo", b"bar", b"baz", b"qux"])
+
+        # The fragments up to the TSN are all received, so they are kept.
+        stream = InboundStream()
+        for i in [0, 1]:
+            stream.add_chunk(chunks[i])
+        self.assertEqual(stream.prune_chunks(101), 0)
+        self.assertEqual(stream.reassembly, [chunks[0], chunks[1]])
+
+        # A fragment before the TSN is missing, so they are pruned.
+        stream = InboundStream()
+        for i in [0, 2]:
+            stream.add_chunk(chunks[i])
+        self.assertEqual(stream.prune_chunks(102), 6)
+        self.assertEqual(stream.reassembly, [])
+
+        # The first fragment is missing, so they are pruned.
+        stream = InboundStream()
+        for i in [1, 2]:
+            stream.add_chunk(chunks[i])
+        self.assertEqual(stream.prune_chunks(102), 6)
+        self.assertEqual(stream.reassembly, [])
+
 
 class SctpUtilTest(TestCase):
     def test_tsn_minus_one(self) -> None:
@@ -1734,6 +1759,39 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(received, [(456, 123, b"corge"), (456, 123, b"grault")])
             received.clear()
             client._sack_needed = False
+
+    @asynctest
+    async def test_receive_forward_tsn_message_in_progress(self) -> None:
+        received = []
+
+        async def mock_receive(stream_id: int, pp_id: int, data: bytes) -> None:
+            received.append((stream_id, pp_id, data))
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 101
+            client._receive = mock_receive  # type: ignore
+
+            factory = ChunkFactory(tsn=102)
+            chunks = factory.create([b"foo"]) + factory.create([b"bar", b"baz", b"qux"])
+
+            # Receive the first two fragments of the second message.
+            for i in [1, 2]:
+                await client._receive_chunk(chunks[i])
+            self.assertEqual(client._last_received_tsn, 101)
+
+            # The first message is abandoned, so the cumulative TSN moves past
+            # the fragments received so far.
+            chunk = ForwardTsnChunk()
+            chunk.cumulative_tsn = 102
+            chunk.streams = [(456, 0)]
+            await client._receive_chunk(chunk)
+            self.assertEqual(client._last_received_tsn, 104)
+            self.assertEqual(received, [])
+
+            # Receive the last fragment of the second message.
+            await client._receive_chunk(chunks[3])
+            self.assertEqual(client._last_received_tsn, 105)
+            self.assertEqual(received, [(456, 123, b"barbazqux")])
 
     @asynctest
     async def test_receive_heartbeat(self) -> None:

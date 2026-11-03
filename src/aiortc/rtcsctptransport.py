@@ -607,17 +607,38 @@ class InboundStream:
     def prune_chunks(self, tsn: int) -> int:
         """
         Prune chunks up to the given TSN.
+
+        A message whose fragments are received up to the given TSN and continue
+        after it is kept, as it is not missing any TSN up to the given TSN
+        (RFC 3758 section 3.6).
         """
         pos = -1
-        size = 0
         for i, chunk in enumerate(self.reassembly):
             if uint32_gte(tsn, chunk.tsn):
                 pos = i
-                size += len(chunk.user_data)
             else:
                 break
 
-        self.reassembly = self.reassembly[pos + 1 :]
+        # Fragments have consecutive TSNs (RFC 9260 section 6.9), so look back
+        # from the given TSN for the first fragment of the message.
+        start = pos + 1
+        if (
+            pos >= 0
+            and self.reassembly[pos].tsn == tsn
+            and not (self.reassembly[pos].flags & SCTP_DATA_LAST_FRAG)
+        ):
+            expected_tsn = tsn
+            for i in range(pos, -1, -1):
+                chunk = self.reassembly[i]
+                if chunk.tsn != expected_tsn:
+                    break
+                if chunk.flags & SCTP_DATA_FIRST_FRAG:
+                    start = i
+                    break
+                expected_tsn = tsn_minus_one(expected_tsn)
+
+        size = sum(len(chunk.user_data) for chunk in self.reassembly[:start])
+        self.reassembly = self.reassembly[start:]
         return size
 
 
