@@ -414,6 +414,36 @@ class RTCIceTransportTest(TestCase):
         self.assertEqual(transport_2.state, "closed")
 
     @asynctest
+    async def test_connect_then_stop(self) -> None:
+        gatherer_1 = RTCIceGatherer()
+        transport_1 = RTCIceTransport(gatherer_1)
+
+        gatherer_2 = RTCIceGatherer()
+        transport_2 = RTCIceTransport(gatherer_2)
+
+        await asyncio.gather(gatherer_1.gather(), gatherer_2.gather())
+        for candidate in gatherer_2.getLocalCandidates():
+            await transport_1.addRemoteCandidate(candidate)
+        await transport_1.addRemoteCandidate(None)
+
+        # Call stop() while connectivity checks are still in progress.
+        start_task = asyncio.ensure_future(
+            transport_1.start(gatherer_2.getLocalParameters())
+        )
+        await asyncio.sleep(0)
+        self.assertEqual(transport_1.state, "checking")
+        await transport_1.stop()
+        await start_task
+        self.assertEqual(transport_1.state, "closed")
+
+        # The transport cannot be restarted.
+        with self.assertRaises(InvalidStateError) as cm:
+            await transport_1.start(gatherer_2.getLocalParameters())
+        self.assertEqual(str(cm.exception), "RTCIceTransport is closed")
+
+        await transport_2.stop()
+
+    @asynctest
     async def test_connect_when_closed(self) -> None:
         gatherer = RTCIceGatherer()
         transport = RTCIceTransport(gatherer)
