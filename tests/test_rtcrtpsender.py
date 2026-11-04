@@ -81,6 +81,9 @@ class RTCRtpSenderTest(TestCase):
                 RTCRtpHeaderExtensionCapability(
                     uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
                 ),
+                RTCRtpHeaderExtensionCapability(
+                    uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+                ),
             ],
         )
 
@@ -120,6 +123,9 @@ class RTCRtpSenderTest(TestCase):
                 ),
                 RTCRtpHeaderExtensionCapability(
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+                ),
+                RTCRtpHeaderExtensionCapability(
+                    uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
                 ),
             ],
         )

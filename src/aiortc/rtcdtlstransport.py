@@ -28,7 +28,9 @@ from .rtp import (
     RtcpRrPacket,
     RtcpRtpfbPacket,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
+    TwccTracker,
     is_rtcp,
 )
 from .stats import RTCStatsReport, RTCTransportStats
@@ -231,7 +233,10 @@ class RtpReceiver(Protocol):
     def _handle_disconnect(self) -> None: ...
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None: ...
     async def _handle_rtp_packet(
-        self, packet: RtpPacket, arrival_time_ms: int
+        self,
+        packet: RtpPacket,
+        arrival_time_ms: int,
+        arrival_time_us: Optional[int] = None,
     ) -> None: ...
 
 
@@ -293,6 +298,10 @@ class RtpRouter:
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in packet.reports:
                 add_recipient(self.senders.get(report.ssrc))
+        elif isinstance(packet, RtcpTwccPacket):
+            # TWCC feedback is transport-wide, route to all senders
+            for sender in self.senders.values():
+                recipients.add(sender)
         elif isinstance(packet, (RtcpPsfbPacket, RtcpRtpfbPacket)):
             add_recipient(self.senders.get(packet.media_ssrc))
 
@@ -361,6 +370,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self._role = "auto"
         self._rtp_header_extensions_map = rtp.HeaderExtensionsMap()
         self._rtp_router = RtpRouter()
+        self._twcc_tracker: Optional[TwccTracker] = None
         self._state = State.NEW
         self._stats_id = "transport_" + str(id(self))
         self._task: Optional[asyncio.Future[None]] = None
@@ -372,6 +382,9 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         self.__rx_packets = 0
         self.__tx_bytes = 0
         self.__tx_packets = 0
+
+        # TWCC
+        self._twcc_sequence_number: int = 0
 
         # SRTP
         self._rx_srtp: Session = None
@@ -580,6 +593,11 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
         finally:
             self._set_state(State.CLOSED)
 
+    def _next_twcc_sequence_number(self) -> int:
+        seq = self._twcc_sequence_number
+        self._twcc_sequence_number = (seq + 1) & 0xFFFF
+        return seq
+
     def _get_stats(self) -> RTCStatsReport:
         report = RTCStatsReport()
         report.add(
@@ -611,17 +629,46 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             for recipient in self._rtp_router.route_rtcp(packet):
                 await recipient._handle_rtcp_packet(packet)
 
-    async def _handle_rtp_data(self, data: bytes, arrival_time_ms: int) -> None:
+    def _enable_twcc(self) -> TwccTracker:
+        """
+        Return the transport's TWCC tracker, creating it on first use.
+        """
+        if self._twcc_tracker is None:
+            self._twcc_tracker = TwccTracker()
+        return self._twcc_tracker
+
+    async def _handle_rtp_data(
+        self, data: bytes, arrival_time_ms: int, arrival_time_us: Optional[int] = None
+    ) -> None:
         try:
             packet = RtpPacket.parse(data, self._rtp_header_extensions_map)
         except ValueError as exc:
             self.__log_debug("x RTP parsing failed: %s", exc)
             return
 
+        # Record every packet carrying a transport-wide sequence number, before
+        # routing: TWCC feedback must cover all streams on the transport, including
+        # packets no receiver accepts. Prefer the socket arrival time: arrival_time_ms
+        # is taken after the datagram waited in the receive queue, and has 1 ms
+        # resolution where TWCC reports 250 us.
+        if (
+            self._twcc_tracker is not None
+            and packet.extensions.transport_sequence_number is not None
+        ):
+            self._twcc_tracker.add(
+                packet.extensions.transport_sequence_number,
+                arrival_time_us
+                if arrival_time_us is not None
+                else arrival_time_ms * 1000,
+                media_ssrc=packet.ssrc,
+            )
+
         # route RTP packet
         receiver = self._rtp_router.route_rtp(packet)
         if receiver is not None:
-            await receiver._handle_rtp_packet(packet, arrival_time_ms=arrival_time_ms)
+            await receiver._handle_rtp_packet(
+                packet, arrival_time_ms=arrival_time_ms, arrival_time_us=arrival_time_us
+            )
 
     async def _recv_next(self) -> None:
         # get timeout, with DTLS 1.3 the last flight may need to be
@@ -632,15 +679,29 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
             if timeout is None and self.encrypted:
                 self.__handshake_done = True
 
-        # receive next datagram
+        # receive next datagram, with its socket arrival time if the transport
+        # records it (used for TWCC feedback)
+        recv_with_arrival_time = getattr(
+            self.transport, "_recv_with_arrival_time", None
+        )
+        arrival_time_us: Optional[int] = None
         if timeout is not None:
             try:
-                data = await asyncio.wait_for(self.transport._recv(), timeout=timeout)
+                if recv_with_arrival_time is not None:
+                    data, arrival_time_us = await asyncio.wait_for(
+                        recv_with_arrival_time(), timeout=timeout
+                    )
+                else:
+                    data = await asyncio.wait_for(
+                        self.transport._recv(), timeout=timeout
+                    )
             except asyncio.TimeoutError:
                 self.__log_debug("x DTLS handling timeout")
                 self._ssl.DTLSv1_handle_timeout()
                 await self._write_ssl()
                 return
+        elif recv_with_arrival_time is not None:
+            data, arrival_time_us = await recv_with_arrival_time()
         else:
             data = await self.transport._recv()
 
@@ -672,7 +733,11 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                     await self._handle_rtcp_data(data)
                 else:
                     data = self._rx_srtp.unprotect(data)
-                    await self._handle_rtp_data(data, arrival_time_ms=arrival_time_ms)
+                    await self._handle_rtp_data(
+                        data,
+                        arrival_time_ms=arrival_time_ms,
+                        arrival_time_us=arrival_time_us,
+                    )
             except pylibsrtp.Error as exc:
                 self.__log_debug("x SRTP unprotect failed: %s", exc)
 
