@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from aioice import Candidate, Connection, ConnectionClosed
+from aioice.ice import CandidatePair, candidate_pair_priority
 from pyee.asyncio import AsyncIOEventEmitter
 
+from . import clock
 from .exceptions import InvalidStateError
 from .rtcconfiguration import RTCIceServer
+from .stats import RTCIceCandidatePairStats, RTCIceCandidateStats, RTCStatsReport
 
 # See https://datatracker.ietf.org/doc/html/rfc7064
 # transport is not defined by RFC 7064 and rejected by browsers.
@@ -76,6 +79,10 @@ def candidate_from_aioice(x: Candidate) -> RTCIceCandidate:
         tcpType=x.tcptype,
         type=x.type,
     )
+
+
+def candidate_pair_stats_id(pair: CandidatePair) -> str:
+    return "candidate-pair_" + str(id(pair))
 
 
 def candidate_to_aioice(x: RTCIceCandidate) -> Candidate:
@@ -357,6 +364,71 @@ class RTCIceTransport(AsyncIOEventEmitter):
             if self.__monitor_task is not None:
                 await self.__monitor_task
                 self.__monitor_task = None
+
+    def _get_selected_pair_stats_id(self) -> Optional[str]:
+        pair = self._connection.get_selected_pair(1)
+        return candidate_pair_stats_id(pair) if pair else None
+
+    def _get_stats(self, transportId: str) -> RTCStatsReport:
+        report = RTCStatsReport()
+        timestamp = clock.current_datetime()
+        pairs = self._connection.candidate_pairs
+        selected = self._connection.get_selected_pair(1)
+        if selected and selected not in pairs:
+            pairs.append(selected)
+        for pair in pairs:
+            local_id = "local-candidate_" + str(id(pair.local_candidate))
+            remote_id = "remote-candidate_" + str(id(pair.remote_candidate))
+            report.add(
+                RTCIceCandidatePairStats(
+                    timestamp=timestamp,
+                    type="candidate-pair",
+                    id=candidate_pair_stats_id(pair),
+                    transportId=transportId,
+                    localCandidateId=local_id,
+                    remoteCandidateId=remote_id,
+                    state=pair.state.name.lower().replace("_", "-"),
+                    nominated=pair.nominated,
+                    priority=candidate_pair_priority(
+                        pair.local_candidate,
+                        pair.remote_candidate,
+                        self._connection.ice_controlling,
+                    ),
+                    packetsSent=pair.packets_sent,
+                    packetsReceived=pair.packets_received,
+                    bytesSent=pair.bytes_sent,
+                    bytesReceived=pair.bytes_received,
+                    totalRoundTripTime=pair.total_round_trip_time,
+                    requestsReceived=pair.requests_received,
+                    requestsSent=pair.requests_sent,
+                    responsesReceived=pair.responses_received,
+                    responsesSent=pair.responses_sent,
+                    consentRequestsSent=pair.consent_requests_sent,
+                    currentRoundTripTime=pair.current_round_trip_time,
+                )
+            )
+        candidates = [
+            ("local-candidate", c) for c in self._connection.local_candidates
+        ] + [("remote-candidate", c) for c in self._connection.remote_candidates]
+        for pair in pairs:
+            candidates.append(("local-candidate", pair.local_candidate))
+            candidates.append(("remote-candidate", pair.remote_candidate))
+        for stats_type, candidate in candidates:
+            report.add(
+                RTCIceCandidateStats(
+                    timestamp=timestamp,
+                    type=stats_type,
+                    id=f"{stats_type}_{id(candidate)}",
+                    transportId=transportId,
+                    address=candidate.host,
+                    port=candidate.port,
+                    protocol=candidate.transport,
+                    candidateType=candidate.type,
+                    priority=candidate.priority,
+                    foundation=candidate.foundation,
+                )
+            )
+        return report
 
     async def _monitor(self) -> None:
         while True:

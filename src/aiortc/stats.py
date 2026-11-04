@@ -79,6 +79,47 @@ class RTCRemoteOutboundRtpStreamStats(RTCSentRtpStreamStats):
 
 
 @dataclass
+class RTCIceCandidatePairStats(RTCStats):
+    """
+    The :class:`RTCIceCandidatePairStats` dictionary represents the measurement
+    metrics for an ICE candidate pair.
+    """
+
+    transportId: str
+    localCandidateId: str
+    remoteCandidateId: str
+    state: str
+    nominated: bool
+    priority: int
+    packetsSent: int
+    packetsReceived: int
+    bytesSent: int
+    bytesReceived: int
+    totalRoundTripTime: float
+    requestsReceived: int
+    requestsSent: int
+    responsesReceived: int
+    responsesSent: int
+    consentRequestsSent: int
+    currentRoundTripTime: Optional[float] = None
+
+
+@dataclass
+class RTCIceCandidateStats(RTCStats):
+    """
+    The :class:`RTCIceCandidateStats` dictionary represents an ICE candidate.
+    """
+
+    transportId: str
+    address: str
+    port: int
+    protocol: str
+    candidateType: str
+    priority: int
+    foundation: str
+
+
+@dataclass
 class RTCTransportStats(RTCStats):
     packetsSent: int
     "Total number of packets sent over this transport."
@@ -92,6 +133,8 @@ class RTCTransportStats(RTCStats):
     "The current value of :attr:`RTCIceTransport.role`."
     dtlsState: str
     "The current value of :attr:`RTCDtlsTransport.state`."
+    selectedCandidatePairId: Optional[str] = None
+    "The id of the :class:`RTCIceCandidatePairStats` used to send data."
 
 
 class RTCStatsReport(dict):
@@ -103,6 +146,8 @@ class RTCStatsReport(dict):
     This object consists of a mapping of string identifiers to objects which
     are instances of:
 
+    - :class:`RTCIceCandidatePairStats`
+    - :class:`RTCIceCandidateStats`
     - :class:`RTCInboundRtpStreamStats`
     - :class:`RTCOutboundRtpStreamStats`
     - :class:`RTCRemoteInboundRtpStreamStats`

@@ -15,6 +15,7 @@ else:
 
 from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from aiortc.rtcicetransport import RTCIceTransport
+from aiortc.stats import RTCStatsReport
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -80,6 +81,12 @@ class DummyIceTransport:
 
     async def _send(self, data: bytes) -> None:
         await self._connection.send(data)
+
+    def _get_selected_pair_stats_id(self) -> None:
+        return None
+
+    def _get_stats(self, transportId: str) -> RTCStatsReport:
+        return RTCStatsReport()
 
 
 class TestCase(unittest.TestCase):
