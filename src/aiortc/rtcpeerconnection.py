@@ -518,7 +518,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             await self.__isClosed
             return
         self.__isClosed = asyncio.Future()
-        self.__setSignalingState("closed")
+        self.__connectionState = "closed"
+        self.__iceConnectionState = "closed"
+        self.__signalingState = "closed"
 
         # stop senders / receivers
         for transceiver in self.__transceivers:
@@ -533,11 +535,6 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         if self.__sctp:
             await self.__sctp.transport.stop()
             await self.__sctp.transport.transport.stop()
-
-        # update states
-        self.__updateIceGatheringState()
-        self.__updateIceConnectionState()
-        self.__updateConnectionState()
 
         # no more events will be emitted, so remove all event listeners
         # to facilitate garbage collection.
