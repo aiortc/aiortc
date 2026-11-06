@@ -68,35 +68,21 @@ class BaseSignaling(ABC):
 
 
 class CopyAndPasteSignaling(BaseSignaling):
-    def __init__(self) -> None:
-        self._read_pipe = sys.stdin
-        self._read_transport: Optional[asyncio.ReadTransport] = None
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._write_pipe = sys.stdout
-
     async def connect(self) -> None:
-        loop = asyncio.get_event_loop()
-        self._reader = asyncio.StreamReader(loop=loop)
-        self._read_transport, _ = await loop.connect_read_pipe(
-            lambda: asyncio.StreamReaderProtocol(self._reader), self._read_pipe
-        )
+        pass
 
     async def close(self) -> None:
-        if self._reader is not None:
-            await self.send(BYE)
-            self._read_transport.close()
-            self._reader = None
+        await self.send(BYE)
 
     async def receive(self) -> Optional[_SignalingObject]:
         print("-- Please enter a message from remote party --")
-        data = await self._reader.readline()
+        data = await asyncio.to_thread(sys.stdin.readline)
         print()
-        return object_from_string(data.decode(self._read_pipe.encoding))
+        return object_from_string(data)
 
     async def send(self, descr: _SignalingObject) -> None:
         print("-- Please send this message to the remote party --")
-        self._write_pipe.write(object_to_string(descr) + "\n")
-        self._write_pipe.flush()
+        print(object_to_string(descr) + "\n")
         print()
 
 
