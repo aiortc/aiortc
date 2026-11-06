@@ -1037,6 +1037,15 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if self.__sctp and self.__sctp.mid == primaryMid:
                 primaryTransport = self.__sctp.transport
 
+            # The loop above leaves the last section on a shared transport, but the
+            # tagged section's candidates apply to the group (RFC 9143 sections 7.4
+            # and 10).
+            primaryMedia = next(
+                (m for m in description.media if m.rtp.muxId == primaryMid), None
+            )
+            if primaryTransport is not None and primaryMedia is not None:
+                iceCandidates[primaryTransport.transport] = primaryMedia
+
             # replace transport for bundled media
             oldTransports = set()
             slaveMids = bundle.items[1:]

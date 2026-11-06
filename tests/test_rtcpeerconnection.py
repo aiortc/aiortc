@@ -88,6 +88,14 @@ def strip_ice_candidates(description: RTCSessionDescription) -> RTCSessionDescri
     )
 
 
+def strip_ice_candidates_from_section(
+    description: RTCSessionDescription, index: int
+) -> RTCSessionDescription:
+    sections = description.sdp.split("m=")
+    sections[index + 1] = STRIP_CANDIDATES_RE.sub("", sections[index + 1])
+    return RTCSessionDescription(sdp="m=".join(sections), type=description.type)
+
+
 def track_states(pc: RTCPeerConnection) -> dict[str, list[str]]:
     states = {
         "connectionState": [pc.connectionState],
@@ -4991,6 +4999,68 @@ a=rtpmap:8 PCMA/8000
 
         # close
         await pc.close()
+
+    @asynctest
+    async def test_setRemoteDescription_bundled_candidates_from_tagged_media(
+        self,
+    ) -> None:
+        # Like a browser, pc1 offers each video section with its own candidates.
+        pc1 = RTCPeerConnection(
+            RTCConfiguration(bundlePolicy=RTCBundlePolicy.MAX_COMPAT)
+        )
+        pc2 = RTCPeerConnection()
+        pc1.addTransceiver("video")
+        pc1.addTransceiver("video")
+        await pc1.setLocalDescription(await pc1.createOffer())
+        self.assertTrue("a=group:BUNDLE 0 1" in pc1.localDescription.sdp)
+
+        def ports(candidates: list[RTCIceCandidate]) -> list[int]:
+            return sorted(c.port for c in candidates)
+
+        tagged, other = [
+            ports(t.sender.transport.transport.iceGatherer.getLocalCandidates())
+            for t in pc1.getTransceivers()
+        ]
+        self.assertNotEqual(tagged, other)
+
+        # pc2 must check the candidates of the BUNDLE-tagged section, "0".
+        await pc2.setRemoteDescription(pc1.localDescription)
+        iceTransport = pc2.getTransceivers()[0].receiver.transport.transport
+        self.assertEqual(ports(iceTransport.getRemoteCandidates()), tagged)
+
+        # close
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_setRemoteDescription_bundled_candidates_from_tag(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1_transceiver1 = pc1.addTransceiver("video")
+        pc1_transceiver2 = pc1.addTransceiver("video")
+        self.assertIs(
+            pc1_transceiver1.receiver.transport, pc1_transceiver2.receiver.transport
+        )
+        await pc1.setLocalDescription(await pc1.createOffer())
+        pc1_ice = pc1_transceiver1.receiver.transport.transport
+        pc1_candidates = pc1_ice.iceGatherer.getLocalCandidates()
+        self.assertTrue(pc1_candidates)
+
+        pc2 = RTCPeerConnection()
+        await pc2.setRemoteDescription(
+            strip_ice_candidates_from_section(pc1.localDescription, 1)
+        )
+        pc2_transceiver1, pc2_transceiver2 = pc2.getTransceivers()
+        self.assertIs(
+            pc2_transceiver1.receiver.transport, pc2_transceiver2.receiver.transport
+        )
+        pc2_ice = pc2_transceiver1.receiver.transport.transport
+        self.assertEqual(
+            [(c.ip, c.port) for c in pc2_ice.getRemoteCandidates()],
+            [(c.ip, c.port) for c in pc1_candidates],
+        )
+
+        await pc1.close()
+        await pc2.close()
 
     @asynctest
     async def test_setRemoteDescription_media_datachannel_bundled(self) -> None:
