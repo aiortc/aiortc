@@ -14,7 +14,7 @@ from av.frame import Frame
 from av.packet import Packet
 from av.video.stream import VideoStream
 
-from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
+from ..mediastreams import AUDIO_PTIME, VIDEO_TIME_BASE, MediaStreamError, MediaStreamTrack
 
 logger = logging.getLogger(__name__)
 
@@ -465,6 +465,9 @@ class MediaRecorder:
             else:
                 stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
+            # Allows incoming FPS higher than the rate set above
+            # Fix for error "non-strictly-monotonic PTS error"
+            stream.time_base = VIDEO_TIME_BASE
         self.__tracks[track] = MediaRecorderContext(stream)
 
     async def start(self) -> None:
