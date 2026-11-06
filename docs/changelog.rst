@@ -3,6 +3,42 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.16.0
+------
+
+ * Add support for :attr:`RTCConfiguration.iceTransportPolicy`.
+ * Raise the advertised maximum data channel message size to 256 KiB, and make
+   :meth:`RTCDataChannel.send` raise a `ValueError` for messages larger than
+   the remote peer accepts. This limit defaults to 64 KiB if the peer does not
+   announce one.
+ * Fix several data channel closing bugs which could lose messages or leave a
+   channel stuck in the "closing" state.
+ * Fix several SCTP partial reliability bugs which could lose messages or stall
+   a stream or association when using `maxPacketLifeTime` or `maxRetransmits`.
+ * Fix SCTP flight size accounting for abandoned and retransmitted chunks.
+ * Deliver every complete message when reassembling an SCTP stream, instead of
+   leaving some queued until another chunk arrives.
+ * Initiate the SCTP association from both endpoints, so that it no longer
+   depends on both sides agreeing on which one starts.
+ * Derive the SCTP role and data channel stream identifier parity from the DTLS
+   role instead of the ICE role, as required by RFC 8832.
+ * Reduce the maximum SCTP packet size to 1189 bytes, to fit the minimum IPv6
+   MTU.
+ * Send a Picture Loss Indication (PLI) when a video frame fails to decode, and
+   keep the decoder running after an audio decode error.
+ * Raise the video jitter buffer capacity to 512 packets.
+ * Always use two-byte VP8 picture IDs, so that SFUs can rewrite them.
+ * Disable TLS session tickets for DTLS, which reduces the size of the last
+   handshake flight.
+ * Keep the DTLS retransmission timer running after the handshake, in
+   preparation for DTLS 1.3.
+ * Do not log an unretrieved exception when closing an
+   :class:`RTCPeerConnection` right after applying a session description.
+ * Require `aioice` 0.12.0, which is needed to enforce
+   :attr:`RTCConfiguration.iceTransportPolicy`.
+ * Relax versioned dependency on PyAV to allow version 18.x and 19.x.
+ * Add support for Python 3.15, drop end-of-life Python 3.10.
+
 1.15.0
 ------
 
