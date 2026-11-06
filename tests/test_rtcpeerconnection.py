@@ -5063,6 +5063,30 @@ a=rtpmap:8 PCMA/8000
         await pc2.close()
 
     @asynctest
+    async def test_setRemoteDescription_bundled_same_kind_after_other_kind(
+        self,
+    ) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+        pc1.addTransceiver("audio")
+        pc1.addTransceiver("video")
+        pc1.addTransceiver("video")
+
+        await pc1.setLocalDescription(await pc1.createOffer())
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        await pc1.setRemoteDescription(pc2.localDescription)
+
+        self.assertBundled(pc1)
+        self.assertBundled(pc2)
+        for pc in [pc1, pc2]:
+            iceTransport = pc.getTransceivers()[0].receiver.transport.transport
+            self.assertNotEqual(iceTransport.state, "closed")
+
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
     async def test_setRemoteDescription_media_datachannel_bundled(self) -> None:
         pc1 = RTCPeerConnection()
         pc2 = RTCPeerConnection()
