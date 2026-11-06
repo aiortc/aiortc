@@ -403,7 +403,7 @@ class MediaPlayer:
 
 class MediaRecorderContext:
     def __init__(self, stream: _AudioOrVideoStream) -> None:
-        self.started = False
+        self.ready = False
         self.stream = stream
         self.task: Optional[asyncio.Task[None]] = None
 
@@ -437,6 +437,7 @@ class MediaRecorder:
             file=file, format=format, mode="w", options=options
         )
         self.__tracks: dict[MediaStreamTrack, MediaRecorderContext] = {}
+        self.__streams_ready = asyncio.Event()
 
     def addTrack(self, track: MediaStreamTrack) -> None:
         """
@@ -466,6 +467,11 @@ class MediaRecorder:
                 stream = self.__container.add_stream("libx264", rate=30)
                 stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
+
+    def __mark_track_ready(self, context: MediaRecorderContext) -> None:
+        context.ready = True
+        if all(context.ready for context in self.__tracks.values()):
+            self.__streams_ready.set()
 
     async def start(self) -> None:
         """
@@ -498,20 +504,26 @@ class MediaRecorder:
             try:
                 frame = await track.recv()
             except MediaStreamError:
+                self.__mark_track_ready(context)
                 return
-            assert isinstance(frame, (AudioFrame, VideoFrame)), (
-                "Only audio or video frames can be recorded"
-            )
+            except Exception:
+                self.__mark_track_ready(context)
+                raise
 
-            if not context.started:
+            if not context.ready:
                 # Adjust the output size to match the first frame.
                 if isinstance(context.stream, VideoStream) and isinstance(
                     frame, VideoFrame
                 ):
                     context.stream.width = frame.width
                     context.stream.height = frame.height
-                context.started = True
+                self.__mark_track_ready(context)
 
+            assert isinstance(frame, (AudioFrame, VideoFrame)), (
+                "Only audio or video frames can be recorded"
+            )
+            # Wait for every stream's first frame before muxing the container.
+            await self.__streams_ready.wait()
             for packet in context.stream.encode(frame):  # type: ignore
                 self.__container.mux(packet)
 
