@@ -925,7 +925,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         return self._inbound_streams[stream_id]
 
     def _get_timestamp(self) -> int:
-        return int(time.time())
+        return int(time.monotonic())
 
     async def _handle_data(self, data: bytes) -> None:
         """
@@ -972,7 +972,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         abandon = (
             chunk._max_retransmits is not None
             and chunk._sent_count > chunk._max_retransmits
-        ) or (chunk._expiry is not None and chunk._expiry < time.time())
+        ) or (chunk._expiry is not None and chunk._expiry < time.monotonic())
         if not abandon:
             return False
 
@@ -1256,7 +1256,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if uint32_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
             return
 
-        received_time = time.time()
+        received_time = time.monotonic()
         self._last_sacked_tsn = chunk.cumulative_tsn
         cwnd_fully_utilized = self._flight_size >= self._cwnd
         done = 0
@@ -1770,7 +1770,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
 
             # update counters
             chunk._sent_count += 1
-            chunk._sent_time = time.time()
+            chunk._sent_time = time.monotonic()
 
             await self._send_chunk(chunk)
             if not self._t3_handle:
@@ -1919,7 +1919,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 await self._send(stream_id, protocol, user_data)
             else:
                 if channel.maxPacketLifeTime:
-                    expiry = time.time() + (channel.maxPacketLifeTime / 1000)
+                    expiry = time.monotonic() + (channel.maxPacketLifeTime / 1000)
                 else:
                     expiry = None
                 await self._send(

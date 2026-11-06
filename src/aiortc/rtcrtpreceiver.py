@@ -165,7 +165,7 @@ class StreamStatistics:
             self.base_seq = packet.sequence_number
 
         if in_order:
-            arrival = int(time.time() * self._clockrate)
+            arrival = int(time.monotonic() * self._clockrate)
 
             if self.max_seq is not None and packet.sequence_number < self.max_seq:
                 self.cycles += 1 << 16
@@ -285,7 +285,7 @@ class RTCRtpReceiver:
             raise InvalidStateError
 
         self._enabled = True
-        self.__active_ssrc: dict[int, datetime.datetime] = {}
+        self.__active_ssrc: dict[int, tuple[float, datetime.datetime]] = {}
         self.__codecs: dict[int, RTCRtpCodecParameters] = {}
         self.__decoder_error = threading.Event()
         self.__decoder_queue: queue.Queue = queue.Queue()
@@ -380,10 +380,10 @@ class RTCRtpReceiver:
         Returns a :class:`RTCRtpSynchronizationSource` for each unique SSRC identifier
         received in the last 10 seconds.
         """
-        cutoff = clock.current_datetime() - datetime.timedelta(seconds=10)
+        cutoff = time.monotonic() - 10
         sources = []
-        for source, timestamp in self.__active_ssrc.items():
-            if timestamp >= cutoff:
+        for source, (received_at, timestamp) in self.__active_ssrc.items():
+            if received_at >= cutoff:
                 sources.append(
                     RTCRtpSynchronizationSource(source=source, timestamp=timestamp)
                 )
@@ -464,7 +464,7 @@ class RTCRtpReceiver:
             self.__lsr[packet.ssrc] = (
                 (packet.sender_info.ntp_timestamp) >> 16
             ) & 0xFFFFFFFF
-            self.__lsr_time[packet.ssrc] = time.time()
+            self.__lsr_time[packet.ssrc] = time.monotonic()
         elif isinstance(packet, RtcpByePacket):
             self.__stop_decoder()
 
@@ -498,7 +498,7 @@ class RTCRtpReceiver:
                     await self._send_rtcp(rtcp_packet)
 
         # keep track of sources
-        self.__active_ssrc[packet.ssrc] = clock.current_datetime()
+        self.__active_ssrc[packet.ssrc] = (time.monotonic(), clock.current_datetime())
 
         # check the codec is known
         codec = self.__codecs.get(packet.payload_type)
@@ -583,7 +583,7 @@ class RTCRtpReceiver:
                     dlsr = 0
                     if ssrc in self.__lsr:
                         lsr = self.__lsr[ssrc]
-                        delay = time.time() - self.__lsr_time[ssrc]
+                        delay = time.monotonic() - self.__lsr_time[ssrc]
                         if delay > 0 and delay < 65536:
                             dlsr = int(delay * 65536)
 

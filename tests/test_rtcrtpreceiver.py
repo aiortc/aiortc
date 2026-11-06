@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import datetime
 import fractions
+import time
 from collections.abc import AsyncGenerator, Sequence
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -217,42 +219,42 @@ class StreamStatisticsTest(TestCase):
         self.assertEqual(counter.packets_lost, 1)
         self.assertEqual(counter.fraction_lost, 0)
 
-    @patch("time.time")
-    def test_no_jitter(self, mock_time: MagicMock) -> None:
+    @patch("time.monotonic")
+    def test_no_jitter(self, mock_monotonic: MagicMock) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
 
-        mock_time.return_value = 1531562330.00
+        mock_monotonic.return_value = 1531562330.00
         counter.add(packets[0])
         self.assertEqual(counter._jitter_q4, 0)
         self.assertEqual(counter.jitter, 0)
 
-        mock_time.return_value = 1531562330.02
+        mock_monotonic.return_value = 1531562330.02
         counter.add(packets[1])
         self.assertEqual(counter._jitter_q4, 0)
         self.assertEqual(counter.jitter, 0)
 
-        mock_time.return_value = 1531562330.04
+        mock_monotonic.return_value = 1531562330.04
         counter.add(packets[2])
         self.assertEqual(counter._jitter_q4, 0)
         self.assertEqual(counter.jitter, 0)
 
-    @patch("time.time")
-    def test_with_jitter(self, mock_time: MagicMock) -> None:
+    @patch("time.monotonic")
+    def test_with_jitter(self, mock_monotonic: MagicMock) -> None:
         counter = self.create_counter()
         packets = create_rtp_packets(3, 0)
 
-        mock_time.return_value = 1531562330.00
+        mock_monotonic.return_value = 1531562330.00
         counter.add(packets[0])
         self.assertEqual(counter._jitter_q4, 0)
         self.assertEqual(counter.jitter, 0)
 
-        mock_time.return_value = 1531562330.03
+        mock_monotonic.return_value = 1531562330.03
         counter.add(packets[1])
         self.assertEqual(counter._jitter_q4, 80)
         self.assertEqual(counter.jitter, 5)
 
-        mock_time.return_value = 1531562330.05
+        mock_monotonic.return_value = 1531562330.05
         counter.add(packets[2])
         self.assertEqual(counter._jitter_q4, 75)
         self.assertEqual(counter.jitter, 4)
@@ -397,6 +399,15 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(len(sources), 1)
             self.assertIsInstance(sources[0], RTCRtpSynchronizationSource)
             self.assertEqual(sources[0].source, 4028317929)
+
+            # A wall clock step must not make the source look stale.
+            later = sources[0].timestamp + datetime.timedelta(hours=1)
+            with patch("aiortc.clock.current_datetime", return_value=later):
+                self.assertEqual(len(receiver.getSynchronizationSources()), 1)
+
+            # Sources expire 10 seconds after their last packet.
+            with patch("time.monotonic", return_value=time.monotonic() + 11):
+                self.assertEqual(receiver.getSynchronizationSources(), [])
 
             # check remote track
             frame = self.ensureIsInstance(await receiver.track.recv(), av.AudioFrame)

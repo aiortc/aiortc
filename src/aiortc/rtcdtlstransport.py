@@ -4,6 +4,7 @@ import datetime
 import enum
 import logging
 import os
+import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Optional, Protocol, Type, TypeVar, Union
@@ -665,7 +666,7 @@ class RTCDtlsTransport(AsyncIOEventEmitter):
                 await self._data_receiver._handle_data(data)
         elif first_byte > 127 and first_byte < 192 and self._rx_srtp:
             # SRTP / SRTCP
-            arrival_time_ms = clock.current_ms()
+            arrival_time_ms = int(time.monotonic() * 1000)
             try:
                 if is_rtcp(data):
                     data = self._rx_srtp.unprotect_rtcp(data)

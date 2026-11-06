@@ -246,7 +246,7 @@ class RTCRtpSender:
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
                 # estimate round-trip time
                 if self.__lsr == report.lsr and report.dlsr:
-                    rtt = time.time() - self.__lsr_time - (report.dlsr / 65536)
+                    rtt = time.monotonic() - self.__lsr_time - (report.dlsr / 65536)
                     if self.__rtt is None:
                         self.__rtt = rtt
                     else:
@@ -446,7 +446,7 @@ class RTCRtpSender:
                     )
                 ]
                 self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
-                self.__lsr_time = time.time()
+                self.__lsr_time = time.monotonic()
 
                 # RTCP SDES
                 if self.__cname is not None:
