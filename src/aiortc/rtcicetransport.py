@@ -317,6 +317,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
                 await self._connection.add_remote_candidate(
                     candidate_to_aioice(candidate)
                 )
+                self.__updateChecking()
 
     def getRemoteCandidates(self) -> list[RTCIceCandidate]:
         """
@@ -342,7 +343,7 @@ class RTCIceTransport(AsyncIOEventEmitter):
         self.__start = asyncio.Event()
         self.__monitor_task = asyncio.ensure_future(self._monitor())
 
-        self.__setState("checking")
+        self.__updateChecking()
         self._connection.remote_is_lite = remoteParameters.iceLite
         self._connection.remote_username = remoteParameters.usernameFragment
         self._connection.remote_password = remoteParameters.password
@@ -389,3 +390,14 @@ class RTCIceTransport(AsyncIOEventEmitter):
             if state == "closed":
                 self.iceGatherer.remove_all_listeners()
                 self.remove_all_listeners()
+
+    def __updateChecking(self) -> None:
+        # Checks need a candidate pair, so remain in "new" until one can exist
+        # (W3C WebRTC section 5.6.4).
+        if (
+            self.__start is not None
+            and self.state == "new"
+            and self.__iceGatherer.getLocalCandidates()
+            and self.getRemoteCandidates()
+        ):
+            self.__setState("checking")
