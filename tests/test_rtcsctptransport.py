@@ -1693,6 +1693,13 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server._association_state, RTCSctpTransport.State.CLOSED)
 
     @asynctest
+    async def test_get_timestamp(self) -> None:
+        async with client_standalone() as client:
+            # The timestamp reaches the peer, so it cannot be the monotonic clock.
+            with patch("time.time", return_value=1234.5):
+                self.assertEqual(client._get_timestamp(), 1234)
+
+    @asynctest
     async def test_maybe_abandon(self) -> None:
         async with client_standalone() as client:
             client._local_tsn = 0
@@ -1709,6 +1716,39 @@ class RTCSctpTransportTest(TestCase):
             client._maybe_abandon(client._sent_queue[1])
             for chunk in client._outbound_queue:
                 self.assertEqual(chunk._abandoned, False)
+
+    @asynctest
+    async def test_maybe_abandon_max_packet_lifetime(self) -> None:
+        async with client_and_server() as (client, server):
+            # Connect the client and the server.
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+
+            # Open a data channel whose messages live for 100 ms.
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", maxPacketLifeTime=100)
+            )
+            await asyncio.sleep(0.1)
+            self.assertEqual(channel.readyState, "open")
+
+            client._send_chunk = noop_send_chunk  # type: ignore
+            with patch("aiortc.rtcsctptransport.time") as mock_time:
+                # Send a message.
+                mock_time.monotonic.return_value = 1000.0
+                channel.send(b"ping")
+                await client._data_channel_flush()
+                chunk = client._sent_queue[0]
+
+                # The message is kept during its lifetime.
+                mock_time.monotonic.return_value = 1000.05
+                self.assertEqual(client._maybe_abandon(chunk), False)
+                self.assertEqual(chunk._abandoned, False)
+
+                # The message is abandoned once its lifetime is over.
+                mock_time.monotonic.return_value = 1000.2
+                self.assertEqual(client._maybe_abandon(chunk), True)
+                self.assertEqual(chunk._abandoned, True)
 
     @asynctest
     async def test_maybe_abandon_max_retransmits(self) -> None:
