@@ -1920,7 +1920,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             if protocol == WEBRTC_DCEP:
                 await self._send(stream_id, protocol, user_data)
             else:
-                if channel.maxPacketLifeTime:
+                if channel.maxPacketLifeTime is not None:
                     expiry = time.monotonic() + (channel.maxPacketLifeTime / 1000)
                 else:
                     expiry = None
