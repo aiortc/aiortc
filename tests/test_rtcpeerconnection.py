@@ -2,7 +2,7 @@ import asyncio
 import gc
 import re
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from unittest import TestCase
 
 import aioice.stun
@@ -551,6 +551,12 @@ class RTCPeerConnectionTest(TestCase):
         )
         self.assertEqual(pc1.iceConnectionState, "completed")
         self.assertEqual(pc2.iceConnectionState, "completed")
+
+    async def assertIceNew(self, pc: RTCPeerConnection) -> None:
+        # Give the connection attempt a chance to run.
+        await asyncio.sleep(0.1)
+        self.assertEqual(pc.iceConnectionState, "new")
+        self.assertEqual(pc.iceGatheringState, "complete")
 
     def assertHasIceCandidates(self, description: RTCSessionDescription) -> None:
         self.assertTrue("a=candidate:" in description.sdp)
@@ -1111,7 +1117,7 @@ a=rtpmap:8 PCMA/8000
         self.assertFalse("a=end-of-candidates" in answer.sdp)
 
         await pc2.setLocalDescription(answer)
-        await self.assertIceChecking(pc2)
+        await self.assertIceNew(pc2)
         self.assertEqual(mids(pc2), ["0"])
         self.assertTrue("m=audio " in pc2.localDescription.sdp)
         self.assertTrue("a=sendrecv" in pc2.localDescription.sdp)
@@ -4253,7 +4259,7 @@ a=rtpmap:8 PCMA/8000
         self.assertFalse("a=end-of-candidates" in answer.sdp)
 
         await pc2.setLocalDescription(answer)
-        await self.assertIceChecking(pc2)
+        await self.assertIceNew(pc2)
         self.assertTrue("m=application " in pc2.localDescription.sdp)
         self.assertHasIceCandidates(pc2.localDescription)
         self.assertHasDtls(pc2.localDescription, "active")
@@ -5495,6 +5501,121 @@ a=rtpmap:8 PCMA/8000
             transceiver1.receiver.transport.transport.iceGatherer.getLocalParameters(),
             pc.sctp.transport.transport.iceGatherer.getLocalParameters(),
         )
+
+    async def _test_connect_without_local_candidates(
+        self, pc1: RTCPeerConnection
+    ) -> None:
+        # Without a TURN server, the relay policy leaves no local candidates.
+        pc2 = RTCPeerConnection(
+            RTCConfiguration(iceTransportPolicy=RTCIceTransportPolicy.RELAY)
+        )
+        pc2_states = track_states(pc2)
+
+        await pc1.setLocalDescription(await pc1.createOffer())
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        self.assertNotIn("a=candidate:", pc2.localDescription.sdp)
+
+        await self.sleepWhile(lambda: pc2.connectionState != "failed")
+        self.assertEqual(pc2.iceConnectionState, "failed")
+
+        # There is nothing to run DTLS over.
+        transceivers = pc2.getTransceivers()
+        dtlsTransport = (
+            transceivers[0].receiver.transport if transceivers else pc2.sctp.transport
+        )
+        self.assertEqual(dtlsTransport.state, "new")
+
+        # Close both peers.
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+        # Check the state changes.
+        self.assertEqual(pc2_states["connectionState"], ["new", "failed", "closed"])
+        self.assertEqual(pc2_states["iceConnectionState"], ["new", "failed", "closed"])
+
+    @asynctest
+    async def test_connect_audio_without_local_candidates(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTransceiver("audio")
+        await self._test_connect_without_local_candidates(pc1)
+
+    @asynctest
+    async def test_connect_audio_without_local_candidates_trickle(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTransceiver("audio")
+        pc2 = RTCPeerConnection(
+            RTCConfiguration(iceTransportPolicy=RTCIceTransportPolicy.RELAY)
+        )
+        pc2_states = track_states(pc2)
+
+        await pc1.setLocalDescription(await pc1.createOffer())
+        await pc2.setRemoteDescription(strip_ice_candidates(pc1.localDescription))
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        await self.assertIceNew(pc2)
+
+        # Remote candidates alone do not make a candidate pair.
+        iceGatherer = pc1.getSenders()[0].transport.transport.iceGatherer
+        for candidate in iceGatherer.getLocalCandidates():
+            candidate.sdpMid = pc1.getTransceivers()[0].mid
+            await pc2.addIceCandidate(candidate)
+        await self.assertIceNew(pc2)
+
+        # ICE can only fail once the remote candidates end.
+        await pc2.addIceCandidate(None)
+        await self.sleepWhile(lambda: pc2.iceConnectionState != "failed")
+        self.assertEqual(pc2.iceConnectionState, "failed")
+
+        # Close both peers.
+        await pc1.close()
+        await pc2.close()
+        self.assertEqual(pc2_states["iceConnectionState"], ["new", "failed", "closed"])
+
+    @asynctest
+    async def test_connect_close_during_dtls_handshake(self) -> None:
+        errors: list[dict[str, Any]] = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda loop, context: errors.append(context)
+        )
+
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # Both sections share a transport, which the second one must not restart.
+        pc1.addTransceiver("audio")
+        pc1.createDataChannel("chat")
+        await pc1.setLocalDescription(await pc1.createOffer())
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+
+        closed = asyncio.Event()
+
+        async def close() -> None:
+            await pc2.close()
+            closed.set()
+
+        @pc2.on("iceconnectionstatechange")
+        def iceconnectionstatechange() -> None:
+            if pc2.iceConnectionState == "completed":
+                asyncio.ensure_future(close())
+
+        await pc1.setRemoteDescription(pc2.localDescription)
+        await asyncio.wait_for(closed.wait(), timeout=5)
+        await asyncio.sleep(0.1)
+        await pc1.close()
+
+        # An exception nobody retrieved is reported when its task is collected.
+        gc.collect()
+        await asyncio.sleep(0)
+        self.assertEqual(errors, [])
+
+    @asynctest
+    async def test_connect_datachannel_without_local_candidates(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.createDataChannel("chat")
+        await self._test_connect_without_local_candidates(pc1)
 
     @asynctest
     async def test_icetransportpolicy_relay(self) -> None:

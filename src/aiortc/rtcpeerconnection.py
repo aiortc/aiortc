@@ -49,6 +49,30 @@ MEDIA_KINDS = ["audio", "video"]
 logger = logging.getLogger(__name__)
 
 
+def can_start_dtls(dtlsTransport: RTCDtlsTransport) -> bool:
+    """
+    Return whether the DTLS handshake can start.
+
+    A handshake runs once and needs the connection found by ICE, so DTLS must be
+    in "new" and ICE in "completed". If ICE fails, DTLS stays in "new" as it has
+    not started negotiating (W3C WebRTC section 5.5.1).
+    """
+    return dtlsTransport.state == "new" and dtlsTransport.transport.state == "completed"
+
+
+def can_start_ice(iceTransport: RTCIceTransport) -> bool:
+    """
+    Return whether ICE can start.
+
+    The checks use the gathered candidates, so gathering must have completed, and
+    a closed transport cannot be started. If no candidates were gathered, ICE
+    goes on to fail once the remote candidates end (W3C WebRTC section 5.6.4).
+    """
+    return (
+        iceTransport.iceGatherer.state == "completed" and iceTransport.state != "closed"
+    )
+
+
 def filter_preferred_codecs(
     codecs: list[RTCRtpCodecParameters], preferred: list[RTCRtpCodecCapability]
 ) -> list[RTCRtpCodecParameters]:
@@ -1077,12 +1101,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for transceiver in self.__transceivers:
             dtlsTransport = transceiver.receiver.transport
             iceTransport = dtlsTransport.transport
-            if (
-                iceTransport.iceGatherer.getLocalCandidates()
-                and transceiver in self.__remoteIce
-            ):
+            if can_start_ice(iceTransport) and transceiver in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[transceiver])
-                if dtlsTransport.state == "new":
+                if can_start_dtls(dtlsTransport):
                     await dtlsTransport.start(self.__remoteDtls[transceiver])
                 if dtlsTransport.state == "connected":
                     if transceiver.currentDirection in ["sendonly", "sendrecv"]:
@@ -1094,12 +1115,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         if self.__sctp:
             dtlsTransport = self.__sctp.transport
             iceTransport = dtlsTransport.transport
-            if (
-                iceTransport.iceGatherer.getLocalCandidates()
-                and self.__sctp in self.__remoteIce
-            ):
+            if can_start_ice(iceTransport) and self.__sctp in self.__remoteIce:
                 await iceTransport.start(self.__remoteIce[self.__sctp])
-                if dtlsTransport.state == "new":
+                if can_start_dtls(dtlsTransport):
                     await dtlsTransport.start(self.__remoteDtls[self.__sctp])
                 if dtlsTransport.state == "connected":
                     await self.__sctp.start(
