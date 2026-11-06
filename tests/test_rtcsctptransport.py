@@ -1751,6 +1751,32 @@ class RTCSctpTransportTest(TestCase):
                 self.assertEqual(chunk._abandoned, True)
 
     @asynctest
+    async def test_maybe_abandon_max_packet_lifetime_zero(self) -> None:
+        async with client_standalone() as client:
+            client._association_state = RTCSctpTransport.State.ESTABLISHED
+            client._send_chunk = noop_send_chunk  # type: ignore
+
+            channel = RTCDataChannel(
+                client,
+                RTCDataChannelParameters(
+                    label="chat", maxPacketLifeTime=0, negotiated=True, id=100
+                ),
+            )
+            self.assertEqual(channel.readyState, "open")
+
+            with patch("aiortc.rtcsctptransport.time") as mock_time:
+                # Send a message.
+                mock_time.monotonic.return_value = 1000.0
+                channel.send(b"ping")
+                await client._data_channel_flush()
+                chunk = client._sent_queue[0]
+
+                # The message expires as soon as any time has passed.
+                mock_time.monotonic.return_value = 1000.001
+                self.assertEqual(client._maybe_abandon(chunk), True)
+                self.assertEqual(chunk._abandoned, True)
+
+    @asynctest
     async def test_maybe_abandon_max_retransmits(self) -> None:
         async with client_standalone() as client:
             client._local_tsn = 1
