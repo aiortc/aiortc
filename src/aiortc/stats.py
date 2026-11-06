@@ -44,7 +44,8 @@ class RTCInboundRtpStreamStats(RTCReceivedRtpStreamStats):
     metrics for the incoming RTP media stream.
     """
 
-    pass
+    bytesReceived: int
+    "Total number of bytes received for this SSRC, excluding RTP headers and padding."
 
 
 @dataclass
