@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+from typing import Optional
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,8 @@ from aiortc.rtcdtlstransport import (
 from aiortc.rtcrtpparameters import (
     RTCRtpCodecParameters,
     RTCRtpDecodingParameters,
+    RTCRtpHeaderExtensionParameters,
+    RTCRtpParameters,
     RTCRtpReceiveParameters,
 )
 from aiortc.rtp import (
@@ -57,12 +60,19 @@ class DummyRtpReceiver:
     def __init__(self) -> None:
         self.rtp_packets: list[RtpPacket] = []
         self.rtcp_packets: list[AnyRtcpPacket] = []
+        self.arrival_times_us: list[Optional[int]] = []
 
     def _handle_disconnect(self) -> None:
         pass
 
-    async def _handle_rtp_packet(self, packet: RtpPacket, arrival_time_ms: int) -> None:
+    async def _handle_rtp_packet(
+        self,
+        packet: RtpPacket,
+        arrival_time_ms: int,
+        arrival_time_us: Optional[int] = None,
+    ) -> None:
         self.rtp_packets.append(packet)
+        self.arrival_times_us.append(arrival_time_us)
 
     async def _handle_rtcp_packet(self, packet: AnyRtcpPacket) -> None:
         self.rtcp_packets.append(packet)
@@ -254,6 +264,53 @@ class RTCDtlsTransportTest(TestCase):
         # try sending after close
         with self.assertRaises(ConnectionError):
             await session1._send_rtp(RTP)
+
+    @asynctest
+    async def test_twcc_tracks_all_streams_on_transport(self) -> None:
+        transport1, _ = dummy_ice_transport_pair()
+        session = RTCDtlsTransport(transport1, [RTCCertificate.generateCertificate()])
+        twcc_extension = RTCRtpHeaderExtensionParameters(
+            id=5,
+            uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+        )
+        session._rtp_header_extensions_map.configure(
+            RTCRtpParameters(headerExtensions=[twcc_extension])
+        )
+        receiver = DummyRtpReceiver()
+        session._register_rtp_receiver(
+            receiver,
+            RTCRtpReceiveParameters(
+                codecs=[
+                    RTCRtpCodecParameters(
+                        mimeType="audio/PCMU", clockRate=8000, payloadType=0
+                    )
+                ],
+                encodings=[RTCRtpDecodingParameters(ssrc=1234, payloadType=0)],
+            ),
+        )
+        tracker = session._enable_twcc()
+
+        # Transport-wide sequence numbers interleave across streams; the packets
+        # on SSRC 5678 (unknown payload type) are not accepted by any receiver.
+        for twcc_seq, ssrc, payload_type in [(1, 1234, 0), (2, 5678, 96), (3, 1234, 0)]:
+            packet = RtpPacket(payload_type=payload_type, ssrc=ssrc, payload=b"x")
+            packet.extensions.transport_sequence_number = twcc_seq
+            await session._handle_rtp_data(
+                packet.serialize(session._rtp_header_extensions_map),
+                arrival_time_ms=0,
+                arrival_time_us=1_000_000 + twcc_seq * 1000,
+            )
+
+        self.assertEqual(len(receiver.rtp_packets), 2)
+        feedback = tracker.build_feedback(ssrc=1)
+        assert feedback is not None
+        self.assertEqual(feedback.base_sequence_number, 1)
+        # libwebrtc drops transport feedback whose media SSRC it does not send.
+        self.assertEqual(feedback.media_ssrc, 1234)
+        self.assertEqual(
+            [seq for seq, delta in feedback.packet_results if delta is not None],
+            [1, 2, 3],
+        )
 
     @asynctest
     async def test_rtp_malformed(self) -> None:

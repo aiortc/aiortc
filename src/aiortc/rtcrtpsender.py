@@ -4,7 +4,9 @@ import random
 import time
 import traceback
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional, Union
 
 from av import AudioFrame
@@ -36,6 +38,7 @@ from .rtp import (
     RtcpSenderInfo,
     RtcpSourceInfo,
     RtcpSrPacket,
+    RtcpTwccPacket,
     RtpPacket,
     unpack_remb_fci,
     wrap_rtx,
@@ -63,6 +66,20 @@ def random_sequence_number() -> int:
     https://chromiumdash.appspot.com/commit/13b327b05fa3788b4daa9c3463e13282824cb320
     """
     return random16() % 32768
+
+
+@dataclass
+class TwccPacketResult:
+    seq: int  # transport-wide sequence number
+    send_time: Optional[float]  # time.time() when sent, None if not in log
+    recv_delta_us: Optional[int]  # microseconds from ref_time, None = lost
+    lost: bool  # True if recv_delta_us is None
+
+
+@dataclass
+class TwccFeedback:
+    packet: RtcpTwccPacket  # raw RTCP packet
+    results: list[TwccPacketResult]  # pre-joined per-packet records
 
 
 class RTCEncodedFrame:
@@ -115,6 +132,8 @@ class RTCRtpSender:
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
         self.__rtx_payload_type: Optional[int] = None
         self.__rtx_sequence_number = random_sequence_number()
+        self.__twcc_send_log: OrderedDict[int, float] = OrderedDict()
+        self.__twcc_callback: Optional[Callable[[TwccFeedback], None]] = None
         self.__started = False
         self.__stats = RTCStatsReport()
         self.__transport = transport
@@ -201,6 +220,15 @@ class RTCRtpSender:
     def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
 
+    def _set_twcc_callback(
+        self, callback: Optional[Callable[[TwccFeedback], None]]
+    ) -> None:
+        self.__twcc_callback = callback
+
+    def set_target_bitrate(self, bitrate: int) -> None:
+        if self.__encoder and hasattr(self.__encoder, "target_bitrate"):
+            self.__encoder.target_bitrate = bitrate
+
     async def send(self, parameters: RTCRtpSendParameters) -> None:
         """
         Attempt to set the parameters controlling the sending of media.
@@ -279,6 +307,20 @@ class RTCRtpSender:
             RTCP_PSFB_PLI,  # Picture Loss Indication
         ):
             self._send_keyframe()
+        elif isinstance(packet, RtcpTwccPacket):
+            results = []
+            for seq_num, recv_delta_us in packet.packet_results:
+                send_time = self.__twcc_send_log.pop(seq_num, None)
+                results.append(
+                    TwccPacketResult(
+                        seq=seq_num,
+                        send_time=send_time,
+                        recv_delta_us=recv_delta_us,
+                        lost=recv_delta_us is None,
+                    )
+                )
+            if self.__twcc_callback is not None:
+                self.__twcc_callback(TwccFeedback(packet=packet, results=results))
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_APP:
             try:
                 bitrate, ssrcs = unpack_remb_fci(packet.fci)
@@ -391,6 +433,16 @@ class RTCRtpSender:
                     packet.extensions.mid = self.__mid
                     if enc_frame.audio_level is not None:
                         packet.extensions.audio_level = (False, -enc_frame.audio_level)
+
+                    # stamp transport-wide sequence number
+                    packet.extensions.transport_sequence_number = (
+                        self.__transport._next_twcc_sequence_number()
+                    )
+                    self.__twcc_send_log[
+                        packet.extensions.transport_sequence_number
+                    ] = time.time()
+                    while len(self.__twcc_send_log) > 4000:
+                        self.__twcc_send_log.popitem(last=False)
 
                     # send packet
                     self.__log_debug("> %s", packet)
