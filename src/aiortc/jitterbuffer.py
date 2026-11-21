@@ -1,7 +1,7 @@
 from typing import Optional
 
 from .rtp import RtpPacket
-from .utils import uint16_add
+from .utils import uint16_add, uint16_gt
 
 MAX_MISORDER = 100
 
@@ -14,10 +14,15 @@ class JitterFrame:
 
 class JitterBuffer:
     def __init__(
-        self, capacity: int, prefetch: int = 0, is_video: bool = False
+        self,
+        capacity: int,
+        prefetch: int = 0,
+        is_video: bool = False,
+        lost_after: Optional[int] = None,
     ) -> None:
         assert capacity & (capacity - 1) == 0, "capacity must be a power of 2"
         self._capacity = capacity
+        self._lost_after = lost_after
         self._origin: Optional[int] = None
         self._packets: list[Optional[RtpPacket]] = [None for i in range(capacity)]
         self._prefetch = prefetch
@@ -54,11 +59,27 @@ class JitterBuffer:
                 self._origin = packet.sequence_number
             if self._is_video:
                 pli_flag = True
+        elif self._lost_after is not None and delta > self._lost_after:
+            # Stop waiting for a missing packet that will no longer be retransmitted.
+            gap = self._last_gap(delta - self._lost_after)
+            if gap is not None:
+                if self.smart_remove(gap + 1):
+                    self._origin = packet.sequence_number
+                if self._is_video:
+                    pli_flag = True
+                if uint16_gt(self._origin, packet.sequence_number):
+                    return pli_flag, None
 
         pos = packet.sequence_number % self._capacity
         self._packets[pos] = packet
 
         return pli_flag, self._remove_frame(packet.sequence_number)
+
+    def _last_gap(self, count: int) -> Optional[int]:
+        for i in reversed(range(count)):
+            if self._packets[(self._origin + i) % self._capacity] is None:
+                return i
+        return None
 
     def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
         frame = None

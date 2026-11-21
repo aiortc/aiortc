@@ -466,6 +466,36 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(pli, [1234])
 
     @asynctest
+    async def test_rtp_missing_video_packet_never_resent(self) -> None:
+        nacks = []
+        pli = []
+
+        async def mock_send_rtcp_nack(media_ssrc: int, lost: list[int]) -> None:
+            nacks.append((media_ssrc, lost))
+
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
+
+        async with create_receiver("video") as receiver:
+            receiver._send_rtcp_nack = mock_send_rtcp_nack  # type: ignore
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
+
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=131)
+
+            # Packet 1 is lost, and so is its retransmission.
+            await receiver._handle_rtp_packet(packets[0], arrival_time_ms=0)
+            await receiver._handle_rtp_packet(packets[2], arrival_time_ms=0)
+            self.assertEqual(nacks, [(1234, [1])])
+            for packet in packets[3:]:
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Packet 1 has left the NACK history, so it will never arrive.
+            self.assertEqual(pli, [1234])
+
+    @asynctest
     async def test_rtp_audio_decode_error(self) -> None:
         pli = []
 

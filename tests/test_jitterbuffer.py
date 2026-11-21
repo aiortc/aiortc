@@ -286,6 +286,52 @@ class JitterBufferTest(TestCase):
         self.assertEqual(frame.data, b"000000010002")
         self.assertEqual(frame.timestamp, 1234)
 
+    def test_lost_packet_reset(self) -> None:
+        jbuffer = JitterBuffer(capacity=4, is_video=True, lost_after=1)
+
+        jbuffer.add(RtpPacket(sequence_number=0, timestamp=1234))
+        jbuffer.add(RtpPacket(sequence_number=2, timestamp=1234))
+
+        # Dropping the frame of the lost packet empties the buffer.
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=3, timestamp=1235))
+        self.assertIsNone(frame)
+        self.assertTrue(pli_flag)
+        self.assertEqual(jbuffer._origin, 3)
+        self.assertPackets(jbuffer, [None, None, None, 3])
+
+    def test_lost_packets(self) -> None:
+        jbuffer = JitterBuffer(capacity=16, is_video=True, lost_after=4)
+        for sequence_number, timestamp in [(0, 1234), (2, 1235), (4, 1236)]:
+            jbuffer.add(RtpPacket(sequence_number=sequence_number, timestamp=timestamp))
+
+        # Packets 1 and 3 are both too old to be retransmitted.
+        packet = RtpPacket(sequence_number=9, timestamp=1237)
+        packet._data = b"0009"  # type: ignore
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+        self.assertTrue(pli_flag)
+
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=10, timestamp=1238))
+        self.assertIsNotNone(frame)
+        assert frame is not None
+        self.assertEqual(frame.data, b"0009")
+        self.assertEqual(frame.timestamp, 1237)
+        self.assertTrue(pli_flag)
+
+    def test_lost_packets_late_packet(self) -> None:
+        jbuffer = JitterBuffer(capacity=16, is_video=True, lost_after=4)
+        for sequence_number in [0, 2, 16]:
+            jbuffer.add(
+                RtpPacket(sequence_number=sequence_number, timestamp=sequence_number)
+            )
+
+        # The drop moves past this late packet: it must not be stored.
+        pli_flag, frame = jbuffer.add(RtpPacket(sequence_number=12, timestamp=12))
+        self.assertIsNone(frame)
+        self.assertTrue(pli_flag)
+        self.assertEqual(jbuffer._origin, 16)
+        self.assertPackets(jbuffer, [16] + [None] * 15)
+
     def test_pli_flag(self) -> None:
         """
         Video jitter buffer.
