@@ -1895,6 +1895,100 @@ a=setup:actpass
             ],
         )
 
+    def test_video_fmtp_without_rtpmap(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+m=video 9 UDP/TLS/RTP/SAVPF 96 97
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=mid:0
+a=rtpmap:96 VP8/90000
+a=fmtp:97 apt=96
+"""
+            )
+        )
+
+        # The parameters of a format without an rtpmap line are ignored.
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8", clockRate=90000, payloadType=96
+                ),
+            ],
+        )
+
+    def test_video_rtpmap_out_of_order(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+m=video 9 UDP/TLS/RTP/SAVPF 96 97 98
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=mid:0
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtpmap:98 H264/90000
+a=rtpmap:96 VP8/90000
+"""
+            )
+        )
+
+        # Codecs follow the order of the "m=" line.
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8", clockRate=90000, payloadType=96
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/rtx",
+                    clockRate=90000,
+                    payloadType=97,
+                    parameters={"apt": 96},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/H264", clockRate=90000, payloadType=98
+                ),
+            ],
+        )
+
+    def test_video_rtpmap_not_on_m_line(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+m=video 9 UDP/TLS/RTP/SAVPF 96
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=mid:0
+a=rtpmap:96 VP8/90000
+a=rtpmap:97 rtx/90000
+a=fmtp:97 apt=96
+a=rtcp-fb:97 nack
+"""
+            )
+        )
+
+        # A format missing from the "m=" line is ignored, with its attributes.
+        self.assertEqual(
+            d.media[0].rtp.codecs,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8", clockRate=90000, payloadType=96
+                ),
+            ],
+        )
+
     def test_safari(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
