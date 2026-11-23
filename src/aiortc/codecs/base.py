@@ -22,3 +22,11 @@ class Encoder(metaclass=ABCMeta):
     @abstractmethod
     def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         pass  # pragma: no cover
+
+    @abstractmethod
+    def reset(self) -> None:
+        """
+        Discard the state built from previous frames, before encoding frames
+        from a different source.
+        """
+        pass  # pragma: no cover

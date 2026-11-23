@@ -242,6 +242,11 @@ class Vp8Encoder(Encoder):
         self.picture_id = (self.picture_id + 1) % (1 << 15)
         return payloads, timestamp
 
+    def reset(self) -> None:
+        # Keep the PictureID, which MUST increase by 1 for each frame
+        # (RFC 7741 section 4.2).
+        self.codec = None
+
     @property
     def target_bitrate(self) -> int:
         """

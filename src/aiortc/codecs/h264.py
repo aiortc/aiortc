@@ -242,19 +242,17 @@ class H264Encoder(Encoder):
         if self.codec and (
             frame.width != self.codec.width
             or frame.height != self.codec.height
-            # we only adjust bitrate if it changes by over 10%
+            # We only adjust bitrate if it changes by over 10%.
             or abs(self.target_bitrate - self.codec.bit_rate) / self.codec.bit_rate
             > 0.1
         ):
-            self.buffer_data = b""
-            self.buffer_pts = None
-            self.codec = None
+            self.reset()
 
         if force_keyframe:
-            # force a complete image
+            # Force a complete image.
             frame.pict_type = av.video.frame.PictureType.I
         else:
-            # reset the picture type, otherwise no B-frames are produced
+            # Reset the picture type, otherwise no B-frames are produced.
             frame.pict_type = av.video.frame.PictureType.NONE
 
         if self.codec is None:
@@ -291,6 +289,11 @@ class H264Encoder(Encoder):
         packages = self._split_bitstream(bytes(packet))
         timestamp = convert_timebase(packet.pts, packet.time_base, VIDEO_TIME_BASE)
         return self._packetize(packages), timestamp
+
+    def reset(self) -> None:
+        self.buffer_data = b""
+        self.buffer_pts = None
+        self.codec = None
 
     @property
     def target_bitrate(self) -> int:

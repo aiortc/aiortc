@@ -2,6 +2,7 @@ import fractions
 from typing import Optional, cast
 
 from av import AudioFrame, AudioResampler, CodecContext
+from av.audio.codeccontext import AudioCodecContext
 from av.frame import Frame
 from av.packet import Packet
 
@@ -29,24 +30,12 @@ class OpusDecoder(Decoder):
 
 
 class OpusEncoder(Encoder):
+    codec: AudioCodecContext
+    first_packet_pts: Optional[int]
+    resampler: AudioResampler
+
     def __init__(self) -> None:
-        self.codec = CodecContext.create("libopus", "w")
-        self.codec.bit_rate = 96000
-        self.codec.format = "s16"
-        self.codec.layout = "stereo"
-        self.codec.options = {"application": "voip"}
-        self.codec.sample_rate = SAMPLE_RATE
-        self.codec.time_base = TIME_BASE
-
-        # Create our own resampler to control the frame size.
-        self.resampler = AudioResampler(
-            format="s16",
-            layout="stereo",
-            rate=SAMPLE_RATE,
-            frame_size=SAMPLES_PER_FRAME,
-        )
-
-        self.first_packet_pts: Optional[int] = None
+        self.reset()
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -75,3 +64,22 @@ class OpusEncoder(Encoder):
     def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
         return [bytes(packet)], timestamp
+
+    def reset(self) -> None:
+        self.codec = CodecContext.create("libopus", "w")
+        self.codec.bit_rate = 96000
+        self.codec.format = "s16"
+        self.codec.layout = "stereo"
+        self.codec.options = {"application": "voip"}
+        self.codec.sample_rate = SAMPLE_RATE
+        self.codec.time_base = TIME_BASE
+
+        # Create our own resampler to control the frame size.
+        self.resampler = AudioResampler(
+            format="s16",
+            layout="stereo",
+            rate=SAMPLE_RATE,
+            frame_size=SAMPLES_PER_FRAME,
+        )
+
+        self.first_packet_pts = None

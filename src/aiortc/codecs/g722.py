@@ -2,6 +2,7 @@ import fractions
 from typing import Optional, cast
 
 from av import AudioFrame, AudioResampler, CodecContext
+from av.audio.codeccontext import AudioCodecContext
 from av.frame import Frame
 from av.packet import Packet
 
@@ -34,21 +35,12 @@ class G722Decoder(Decoder):
 
 
 class G722Encoder(Encoder):
-    def __init__(self) -> None:
-        self.codec = CodecContext.create("g722", "w")
-        self.codec.format = "s16"
-        self.codec.layout = "mono"
-        self.codec.sample_rate = SAMPLE_RATE
-        self.codec.time_base = TIME_BASE
-        self.first_pts: Optional[int] = None
+    codec: AudioCodecContext
+    first_pts: Optional[int]
+    resampler: AudioResampler
 
-        # Create our own resampler to control the frame size.
-        self.resampler = AudioResampler(
-            format="s16",
-            layout="mono",
-            rate=SAMPLE_RATE,
-            frame_size=SAMPLES_PER_FRAME,
-        )
+    def __init__(self) -> None:
+        self.reset()
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -75,3 +67,19 @@ class G722Encoder(Encoder):
     def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, CLOCK_BASE)
         return [bytes(packet)], timestamp
+
+    def reset(self) -> None:
+        self.codec = CodecContext.create("g722", "w")
+        self.codec.format = "s16"
+        self.codec.layout = "mono"
+        self.codec.sample_rate = SAMPLE_RATE
+        self.codec.time_base = TIME_BASE
+        self.first_pts = None
+
+        # Create our own resampler to control the frame size.
+        self.resampler = AudioResampler(
+            format="s16",
+            layout="mono",
+            rate=SAMPLE_RATE,
+            frame_size=SAMPLES_PER_FRAME,
+        )

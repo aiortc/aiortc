@@ -1,4 +1,5 @@
 import asyncio
+import fractions
 import itertools
 from struct import pack
 from unittest import TestCase
@@ -15,7 +16,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpHeaderExtensionCapability,
     RTCRtpSendParameters,
 )
-from aiortc.rtcrtpsender import RTCEncodedFrame, RTCRtpSender
+from aiortc.rtcrtpsender import RTCEncodedFrame, RTCRtpSender, RtpTimeline
 from aiortc.rtp import (
     RTCP_PSFB_APP,
     RTCP_PSFB_FIR,
@@ -30,6 +31,8 @@ from aiortc.rtp import (
     pack_remb_fci,
 )
 from aiortc.stats import RTCStatsReport
+from aiortc.utils import uint32_add
+from av import AudioFrame
 
 from tests.test_mediastreams import VideoPacketStreamTrack
 
@@ -49,6 +52,36 @@ class BuggyStreamTrack(MediaStreamTrack):
 
     async def recv(self) -> None:
         raise Exception("I'm a buggy track!")
+
+
+class StereoAudioStreamTrack(MediaStreamTrack):
+    """
+    A dummy audio track which reads silence in stereo at 44.1kHz.
+    """
+
+    kind = "audio"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._timestamp = 0
+
+    async def recv(self) -> AudioFrame:
+        await asyncio.sleep(0.02)
+        frame = AudioFrame(format="s16", layout="stereo", samples=882)
+        for p in frame.planes:
+            p.update(bytes(p.buffer_size))
+        frame.pts = self._timestamp
+        frame.sample_rate = 44100
+        frame.time_base = fractions.Fraction(1, 44100)
+        self._timestamp += 882
+        return frame
+
+
+def timestamp_steps(timestamps: list[int]) -> list[int]:
+    """
+    Return the steps between consecutive RTP timestamps.
+    """
+    return [uint32_add(b, -a) for a, b in zip(timestamps, timestamps[1:])]
 
 
 class RTCRtpSenderTest(TestCase):
@@ -467,7 +500,7 @@ class RTCRtpSenderTest(TestCase):
         timestamps = itertools.count(step=3000)
 
         async def mock_next_encoded_frame(
-            codec: RTCRtpCodecParameters,
+            codec: RTCRtpCodecParameters, track: MediaStreamTrack
         ) -> RTCEncodedFrame:
             await asyncio.sleep(0.02)
             return RTCEncodedFrame([b"a", b"b", b"c"], next(timestamps), None)
@@ -483,6 +516,77 @@ class RTCRtpSenderTest(TestCase):
 
             markers = [(await queue.get()).marker for _ in range(6)]
             self.assertEqual(markers, [0, 0, 1, 0, 0, 1])
+
+            await sender.stop()
+
+    @asynctest
+    async def test_replace_track_audio(self) -> None:
+        """
+        RTP timestamps carry on when the track is replaced by one in another
+        format.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            timestamps = [(await queue.get()).timestamp for _ in range(3)]
+
+            sender.replaceTrack(StereoAudioStreamTrack())
+            for _ in range(5):
+                packet = await asyncio.wait_for(queue.get(), 1)
+                timestamps.append(packet.timestamp)
+
+            # Each frame lasts 160 ticks, the switch may add the elapsed time.
+            steps = timestamp_steps(timestamps)
+            self.assertTrue(all(160 <= step < 8000 for step in steps), steps)
+
+            await sender.stop()
+
+    @asynctest
+    async def test_replace_track_video(self) -> None:
+        """
+        RTP timestamps carry on when the track is replaced, even after a change
+        of bitrate recreated the encoder.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
+            await queue.get()
+
+            # Receive RTCP feedback REMB, which changes the bitrate.
+            remb = RtcpPsfbPacket(
+                fmt=RTCP_PSFB_APP,
+                ssrc=1234,
+                media_ssrc=0,
+                fci=pack_remb_fci(1000000, [sender._ssrc]),
+            )
+            await sender._handle_rtcp_packet(remb)
+            timestamps = [(await queue.get()).timestamp for _ in range(3)]
+
+            sender.replaceTrack(VideoStreamTrack())
+            for _ in range(3):
+                packet = await asyncio.wait_for(queue.get(), 1)
+                timestamps.append(packet.timestamp)
+
+            # Each frame lasts about 3000 ticks, the switch may add the elapsed
+            # time.
+            steps = timestamp_steps(timestamps)
+            self.assertTrue(all(2990 <= step < 90000 for step in steps), steps)
 
             await sender.stop()
 
@@ -550,3 +654,31 @@ class RTCRtpSenderTest(TestCase):
             # stop track and wait for RTP loop to exit
             track.stop()
             await asyncio.sleep(0.1)
+
+
+class RtpTimelineTest(TestCase):
+    @patch("aiortc.rtcrtpsender.random32")
+    @patch("aiortc.rtcrtpsender.time.monotonic")
+    def test_restart(self, mock_monotonic: MagicMock, mock_random32: MagicMock) -> None:
+        mock_random32.return_value = 1000
+        timeline = RtpTimeline(clock_rate=8000)
+
+        # Before any frame, a restart has no effect.
+        timeline.restart()
+        mock_monotonic.return_value = 0.0
+        self.assertEqual(timeline.timestamp(0), 1000)
+        mock_monotonic.return_value = 0.125
+        self.assertEqual(timeline.timestamp(160), 1160)
+
+        # A new source starting at once does not overlap the last frame.
+        timeline.restart()
+        self.assertEqual(timeline.timestamp(0), 1320)
+        mock_monotonic.return_value = 0.25
+        self.assertEqual(timeline.timestamp(160), 1480)
+
+        # A new source starting after a gap carries on after the elapsed time.
+        timeline.restart()
+        mock_monotonic.return_value = 1.25
+        self.assertEqual(timeline.timestamp(5000), 9480)
+        mock_monotonic.return_value = 1.375
+        self.assertEqual(timeline.timestamp(5160), 9640)
