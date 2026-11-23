@@ -307,6 +307,9 @@ class RTCRtpReceiver:
         self.__rtx_ssrc: dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
+        # SSRCs are only unique within an RTP session (RFC 3550 section 3), so
+        # stats IDs are scoped to this receiver.
+        self.__stats_id = str(id(self))
         self.__stopped = False
         self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
@@ -358,12 +361,16 @@ class RTCRtpReceiver:
         :rtype: :class:`RTCStatsReport`
         """
         for ssrc, stream in self.__remote_streams.items():
+            # RTX streams are not reported separately (webrtc-stats, "inbound-rtp").
+            if ssrc in self.__rtx_ssrc:
+                continue
+
             self.__stats.add(
                 RTCInboundRtpStreamStats(
                     # RTCStats
                     timestamp=clock.current_datetime(),
                     type="inbound-rtp",
-                    id="inbound-rtp_" + str(id(self)),
+                    id=f"inbound-rtp_{self.__stats_id}_{ssrc}",
                     # RTCStreamStats
                     ssrc=ssrc,
                     kind=self.__kind,
@@ -459,7 +466,7 @@ class RTCRtpReceiver:
                     # RTCStats
                     timestamp=clock.current_datetime(),
                     type="remote-outbound-rtp",
-                    id=f"remote-outbound-rtp_{id(self)}",
+                    id=f"remote-outbound-rtp_{self.__stats_id}_{packet.ssrc}",
                     # RTCStreamStats
                     ssrc=packet.ssrc,
                     kind=self.__kind,
