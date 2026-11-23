@@ -37,7 +37,12 @@ from aiortc.rtcrtpparameters import (
 from aiortc.rtcrtpreceiver import RTCRtpReceiver
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.sdp import ExtmapDescription, SessionDescription
-from aiortc.stats import RTCInboundRtpStreamStats, RTCStatsReport
+from aiortc.stats import (
+    RTCInboundRtpStreamStats,
+    RTCOutboundRtpStreamStats,
+    RTCStatsReport,
+)
+from av import AudioFrame
 
 from .test_contrib_media import MediaTestCase
 from .utils import asynctest, lf2crlf
@@ -77,11 +82,32 @@ class BogusStreamTrack(AudioStreamTrack):
     kind = "bogus"
 
 
+def audio_codecs(*names: str) -> list[RTCRtpCodecCapability]:
+    codecs = RTCRtpSender.getCapabilities("audio").codecs
+    return [codec for name in names for codec in codecs if codec.name == name]
+
+
 def mids(pc: RTCPeerConnection) -> list[Optional[str]]:
     mids = [x.mid for x in pc.getTransceivers()]
     if pc.sctp:
         mids.append(pc.sctp.mid)
     return sorted(mids)
+
+
+async def negotiate(pc1: RTCPeerConnection, pc2: RTCPeerConnection) -> None:
+    await pc1.setLocalDescription(await pc1.createOffer())
+    await pc2.setRemoteDescription(pc1.localDescription)
+    await pc2.setLocalDescription(await pc2.createAnswer())
+    await pc1.setRemoteDescription(pc2.localDescription)
+
+
+async def outbound_ssrc(sender: RTCRtpSender) -> int:
+    report = await sender.getStats()
+    return next(
+        stats.ssrc
+        for stats in report.values()
+        if isinstance(stats, RTCOutboundRtpStreamStats)
+    )
 
 
 async def packets_received(receiver: RTCRtpReceiver) -> int:
@@ -1450,6 +1476,107 @@ a=rtpmap:8 PCMA/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_audio_codec_removed_new_clock_rate(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+        pc1.addTrack(AudioStreamTrack())
+
+        pc2 = RTCPeerConnection()
+        pc2_tracks = track_remote_tracks(pc2)
+
+        async def recv_sample_rate(track: MediaStreamTrack) -> int:
+            frame = await track.recv()
+            assert isinstance(frame, AudioFrame)
+            return frame.sample_rate
+
+        # pc1 sends Opus.
+        await negotiate(pc1, pc2)
+        await self.assertIceCompleted(pc1, pc2)
+        for track in pc2_tracks:
+            self.assertEqual(await recv_sample_rate(track), 48000)
+        ssrcs = [await outbound_ssrc(sender) for sender in pc1.getSenders()]
+
+        # The answer removes Opus, so pc1 switches to PCMU. The SSRCs are kept,
+        # as pc2 could not tell the tracks apart by payload type.
+        for transceiver in pc2.getTransceivers():
+            transceiver.setCodecPreferences(audio_codecs("PCMU"))
+        await negotiate(pc1, pc2)
+        self.assertCodecNames(pc2.localDescription, ["PCMU", "PCMU"])
+
+        async def wait_for_pcmu(track: MediaStreamTrack) -> None:
+            while await recv_sample_rate(track) != 8000:
+                pass
+
+        for track in pc2_tracks:
+            await asyncio.wait_for(wait_for_pcmu(track), 2)
+        self.assertEqual(
+            [await outbound_ssrc(sender) for sender in pc1.getSenders()], ssrcs
+        )
+
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_connect_audio_codec_removed_same_clock_rate(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+        pc1.getTransceivers()[0].setCodecPreferences(audio_codecs("PCMU", "PCMA"))
+        sender = pc1.getSenders()[0]
+
+        pc2 = RTCPeerConnection()
+
+        # pc1 sends PCMU.
+        await negotiate(pc1, pc2)
+        await self.assertIceCompleted(pc1, pc2)
+        receiver = pc2.getReceivers()[0]
+        await self.sleepWhile(lambda: not receiver.getSynchronizationSources())
+        ssrc = await outbound_ssrc(sender)
+
+        # The answer removes PCMU, so pc1 switches to PCMA, whose clock rate
+        # is the same, so the SSRC is kept (RFC 9429 section 5.11).
+        pc2.getTransceivers()[0].setCodecPreferences(audio_codecs("PCMA"))
+        await negotiate(pc1, pc2)
+        self.assertCodecNames(pc2.localDescription, ["PCMA"])
+
+        await asyncio.sleep(0.5)
+        count = await packets_received(receiver)
+        await asyncio.sleep(0.5)
+        self.assertGreater(await packets_received(receiver), count)
+        self.assertEqual(await outbound_ssrc(sender), ssrc)
+
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_connect_audio_codec_unchanged_by_offer(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+
+        # The answer only accepts PCMU.
+        pc2 = RTCPeerConnection()
+        pc2.addTransceiver("audio", direction="recvonly")
+        pc2.getTransceivers()[0].setCodecPreferences(audio_codecs("PCMU"))
+
+        await negotiate(pc1, pc2)
+        await self.assertIceCompleted(pc1, pc2)
+        self.assertCodecNames(pc2.localDescription, ["PCMU"])
+
+        receiver = pc2.getReceivers()[0]
+        await self.sleepWhile(lambda: not receiver.getSynchronizationSources())
+
+        # A new offer lists Opus again, but pc1 keeps sending PCMU until it
+        # applies the answer (RFC 9429 section 5.11).
+        await pc1.setLocalDescription(await pc1.createOffer())
+
+        await asyncio.sleep(0.5)
+        count = await packets_received(receiver)
+        await asyncio.sleep(0.5)
+        self.assertGreater(await packets_received(receiver), count)
+
+        await pc1.close()
+        await pc2.close()
 
     @asynctest
     async def test_connect_audio_mid_changes(self) -> None:

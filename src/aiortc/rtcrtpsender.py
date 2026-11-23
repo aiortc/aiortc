@@ -140,6 +140,7 @@ class RTCRtpSender:
             self.__kind = trackOrKind
             self.replaceTrack(None)
         self.__cname: Optional[str] = None
+        self.__codec: Optional[RTCRtpCodecParameters] = None
         self._ssrc = random32()
         self._rtx_ssrc = random32()
         # FIXME: how should this be initialised?
@@ -161,6 +162,7 @@ class RTCRtpSender:
         self.__rtx_sequence_number = random_sequence_number()
         self.__started = False
         self.__stats = RTCStatsReport()
+        self.__stopped = False
         self.__transport = transport
 
         # stats
@@ -266,25 +268,37 @@ class RTCRtpSender:
 
         :param parameters: The :class:`RTCRtpSendParameters` for the sender.
         """
+        if self.__stopped:
+            return
+
+        self.__cname = parameters.rtcp.cname
+        self.__mid = parameters.muxId
+
+        # Send with the first codec that is not RTX, which only repairs
+        # the codec being sent (RFC 9429 section 5.11).
+        codec = next(c for c in parameters.codecs if not is_rtx(c))
+        if codec != self.__codec:
+            # Keep the SSRC even if the clock rate changes, unlike RFC 7160 section
+            # 4.1, as receivers routing by signalled SSRCs would drop a new one.
+            self.__codec = codec
+
+        # Make note of the RTX payload type that repairs this codec.
+        self.__rtx_payload_type = next(
+            (
+                c.payloadType
+                for c in parameters.codecs
+                if is_rtx(c) and c.parameters["apt"] == codec.payloadType
+            ),
+            None,
+        )
+
+        # Receive RTCP through the transport, and use the RTP header extension
+        # IDs of the latest negotiation.
+        self.__transport._register_rtp_sender(self, parameters)
+        self.__rtp_header_extensions_map.configure(parameters)
+
         if not self.__started:
-            self.__cname = parameters.rtcp.cname
-            self.__mid = parameters.muxId
-
-            # make note of the RTP header extension IDs
-            self.__transport._register_rtp_sender(self, parameters)
-            self.__rtp_header_extensions_map.configure(parameters)
-
-            # Send with the first codec that is not RTX, which only repairs
-            # the codec being sent (RFC 9429 section 5.11).
-            send_codec = next(c for c in parameters.codecs if not is_rtx(c))
-
-            # Make note of the RTX payload type that repairs this codec.
-            for codec in parameters.codecs:
-                if is_rtx(codec) and codec.parameters["apt"] == send_codec.payloadType:
-                    self.__rtx_payload_type = codec.payloadType
-                    break
-
-            self.__rtp_task = asyncio.ensure_future(self._run_rtp(send_codec))
+            self.__rtp_task = asyncio.ensure_future(self._run_rtp())
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 
@@ -292,10 +306,11 @@ class RTCRtpSender:
         """
         Irreversibly stop the sender.
         """
+        self.__stopped = True
         if self.__started:
             self.__transport._unregister_rtp_sender(self)
 
-            # shutdown RTP and RTCP tasks
+            # Shut down the RTP and RTCP tasks.
             await asyncio.gather(self.__rtp_started.wait(), self.__rtcp_started.wait())
             self.__rtp_task.cancel()
             self.__rtcp_task.cancel()
@@ -414,10 +429,11 @@ class RTCRtpSender:
         """
         self.__force_keyframe = True
 
-    async def _run_rtp(self, codec: RTCRtpCodecParameters) -> None:
+    async def _run_rtp(self) -> None:
         self.__log_debug("- RTP started")
         self.__rtp_started.set()
 
+        codec = self.__codec
         sequence_number = random_sequence_number()
         timeline = RtpTimeline(codec.clockRate)
         sending_resumed = True
@@ -425,6 +441,15 @@ class RTCRtpSender:
         track_ended = False
         try:
             while True:
+                # A new codec needs a new encoder, and a new clock rate a new
+                # timeline.
+                if self.__codec is not codec:
+                    if self.__codec.clockRate != codec.clockRate:
+                        timeline = RtpTimeline(self.__codec.clockRate)
+                    codec = self.__codec
+                    self.__encoder = None
+                    source = None
+
                 track = self.__track
                 if not track or track_ended:
                     sending_resumed = True
@@ -458,6 +483,10 @@ class RTCRtpSender:
                 if enc_frame is None:
                     if not self._enabled:
                         sending_resumed = True
+                    continue
+
+                # A frame encoded while the codec changed is dropped.
+                if self.__codec is not codec:
                     continue
 
                 timestamp = timeline.timestamp(enc_frame.timestamp)

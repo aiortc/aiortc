@@ -1127,7 +1127,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 if can_start_dtls(dtlsTransport):
                     await dtlsTransport.start(self.__remoteDtls[transceiver])
                 if dtlsTransport.state == "connected":
-                    if transceiver.currentDirection in ["sendonly", "sendrecv"]:
+                    # The format to send is chosen when an answer is applied,
+                    # not when a new offer is (RFC 9429 section 5.11).
+                    if (
+                        transceiver.currentDirection in ["sendonly", "sendrecv"]
+                        and self.signalingState == "stable"
+                    ):
                         await transceiver.sender.send(self.__localRtp(transceiver))
                     if transceiver.currentDirection in ["recvonly", "sendrecv"]:
                         await transceiver.receiver.receive(
