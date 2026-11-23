@@ -170,11 +170,17 @@ class RTCRtpSender:
         # RTCP sender reports and round-trip time.
         self.__lsr: Optional[int] = None
         self.__lsr_time: Optional[float] = None
-        self.__ntp_timestamp = 0
+        # The RTP timestamp and clock rate of the last frame sent, and the local
+        # time at which it was sent.
+        self.__rtp_clock_rate = 0
+        self.__rtp_time = 0.0
         self.__rtp_timestamp = 0
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt: Optional[float] = None
+        # Retransmissions sent on the stream itself rather than on the RTX stream.
+        self.__stream_retransmitted_bytes_sent = 0
+        self.__stream_retransmitted_packets_sent = 0
 
         # Frames, NACKs and retransmissions are counted for stats, not RTCP reports.
         self.__frames_encoded = 0
@@ -436,10 +442,11 @@ class RTCRtpSender:
         packet = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
         if packet and packet.sequence_number == sequence_number:
             payload_size = len(packet.payload)
-            if self.__rtx_payload_type is not None:
+            rtx_payload_type = self.__rtx_payload_type
+            if rtx_payload_type is not None:
                 packet = wrap_rtx(
                     packet,
-                    payload_type=self.__rtx_payload_type,
+                    payload_type=rtx_payload_type,
                     sequence_number=self.__rtx_sequence_number,
                     ssrc=self._rtx_ssrc,
                 )
@@ -453,6 +460,9 @@ class RTCRtpSender:
             # "outbound-rtp"), and RTX ones are not part of its RTCP sender reports.
             self.__retransmitted_bytes_sent += payload_size
             self.__retransmitted_packets_sent += 1
+            if rtx_payload_type is None:
+                self.__stream_retransmitted_bytes_sent += payload_size
+                self.__stream_retransmitted_packets_sent += 1
 
     def _send_keyframe(self) -> None:
         """
@@ -523,6 +533,12 @@ class RTCRtpSender:
 
                 timestamp = timeline.timestamp(enc_frame.timestamp)
 
+                # Sender reports extrapolate the RTP timestamp from this frame's,
+                # recorded before any of its packets can be retransmitted.
+                self.__rtp_clock_rate = codec.clockRate
+                self.__rtp_time = time.monotonic()
+                self.__rtp_timestamp = timestamp
+
                 for i, payload in enumerate(enc_frame.payloads):
                     packet = RtpPacket(
                         payload_type=codec.payloadType,
@@ -556,8 +572,6 @@ class RTCRtpSender:
                     packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
                     await self.transport._send_rtp(packet_bytes)
 
-                    self.__ntp_timestamp = clock.current_ntp_time()
-                    self.__rtp_timestamp = packet.timestamp
                     self.__octet_count += len(payload)
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
@@ -586,26 +600,52 @@ class RTCRtpSender:
         self.__log_debug("- RTCP started")
         self.__rtcp_started.set()
 
+        # Packet counts when the previous two reports were sent.
+        report_packet_counts = [0, 0]
+
         try:
             while True:
                 # The interval between RTCP packets is varied randomly over the
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
 
-                # RTCP SR
-                packets: list[AnyRtcpPacket] = [
-                    RtcpSrPacket(
-                        ssrc=self._ssrc,
-                        sender_info=RtcpSenderInfo(
-                            ntp_timestamp=self.__ntp_timestamp,
-                            rtp_timestamp=self.__rtp_timestamp,
-                            packet_count=self.__packet_count & 0xFFFFFFFF,
-                            octet_count=self.__octet_count & 0xFFFFFFFF,
-                        ),
-                    )
-                ]
-                self.__lsr = ((self.__ntp_timestamp) >> 16) & 0xFFFFFFFF
-                self.__lsr_time = time.monotonic()
+                # Retransmissions sent on the stream itself count as packets
+                # sent, unlike those sent on the RTX stream (RFC 3550 section 6.4.1).
+                packet_count = (
+                    self.__packet_count + self.__stream_retransmitted_packets_sent
+                )
+                octet_count = (
+                    self.__octet_count + self.__stream_retransmitted_bytes_sent
+                )
+
+                # An SR is only sent if data was sent since the report before
+                # last, otherwise an RR is sent (RFC 3550 section 6.4).
+                packets: list[AnyRtcpPacket]
+                if packet_count != report_packet_counts[0]:
+                    # The SR carries the time it is sent, and the RTP timestamp
+                    # extrapolated to that time (RFC 3550 section 6.4.1). The local
+                    # clock measures the elapsed time, as the wall clock can step.
+                    ntp_timestamp = clock.current_ntp_time()
+                    elapsed = time.monotonic() - self.__rtp_time
+                    packets = [
+                        RtcpSrPacket(
+                            ssrc=self._ssrc,
+                            sender_info=RtcpSenderInfo(
+                                ntp_timestamp=ntp_timestamp,
+                                rtp_timestamp=uint32_add(
+                                    self.__rtp_timestamp,
+                                    round(elapsed * self.__rtp_clock_rate),
+                                ),
+                                packet_count=packet_count & 0xFFFFFFFF,
+                                octet_count=octet_count & 0xFFFFFFFF,
+                            ),
+                        )
+                    ]
+                    self.__lsr = (ntp_timestamp >> 16) & 0xFFFFFFFF
+                    self.__lsr_time = time.monotonic()
+                else:
+                    packets = [RtcpRrPacket(ssrc=self._ssrc)]
+                report_packet_counts = [report_packet_counts[1], packet_count]
 
                 # RTCP SDES
                 if self.__cname is not None:
