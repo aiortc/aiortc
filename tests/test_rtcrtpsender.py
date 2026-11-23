@@ -6,7 +6,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from aiortc import MediaStreamTrack
-from aiortc.codecs import PCMU_CODEC
+from aiortc.codecs import PCMA_CODEC, PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcrtpparameters import (
@@ -44,6 +44,10 @@ VP8_CODEC = RTCRtpCodecParameters(
 
 H264_CODEC = RTCRtpCodecParameters(
     mimeType="video/H264", clockRate=90000, payloadType=98
+)
+
+OPUS_CODEC = RTCRtpCodecParameters(
+    mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
 )
 
 
@@ -311,6 +315,117 @@ class RTCRtpSenderTest(TestCase):
             await sender.send(RTCRtpSendParameters(codecs=[VP8_CODEC]))
 
             # clean shutdown
+            await sender.stop()
+
+    @asynctest
+    async def test_send_after_stop(self) -> None:
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            await sender.stop()
+
+            # A stopped sender is not registered again.
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            self.assertEqual(local_transport._rtp_router.senders, {})
+
+    @asynctest
+    async def test_send_codec_change(self) -> None:
+        """
+        A codec of the same clock rate is sent on the same RTP stream, whose
+        timestamps carry on.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            packets = [await queue.get() for _ in range(3)]
+
+            await sender.send(RTCRtpSendParameters(codecs=[PCMA_CODEC]))
+            while packets[-1].payload_type != PCMA_CODEC.payloadType:
+                packets.append(await asyncio.wait_for(queue.get(), 1))
+            packets.append(await queue.get())
+
+            self.assertEqual({packet.ssrc for packet in packets}, {sender._ssrc})
+
+            # Each frame lasts 160 ticks, the switch may add the elapsed time.
+            steps = timestamp_steps([packet.timestamp for packet in packets])
+            self.assertTrue(all(160 <= step < 8000 for step in steps), steps)
+
+            await sender.stop()
+
+    @asynctest
+    async def test_send_codec_change_clock_rate(self) -> None:
+        """
+        A codec of another clock rate is sent on the same RTP stream, with
+        timestamps at its own clock rate.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            packet = await queue.get()
+            ssrc = sender._ssrc
+
+            await sender.send(RTCRtpSendParameters(codecs=[OPUS_CODEC]))
+            while packet.payload_type != OPUS_CODEC.payloadType:
+                self.assertEqual(packet.ssrc, ssrc)
+                packet = await asyncio.wait_for(queue.get(), 1)
+
+            self.assertEqual(packet.ssrc, ssrc)
+
+            # The Opus encoder sends 20ms frames at 48kHz.
+            next_packet = await queue.get()
+            self.assertEqual(
+                timestamp_steps([packet.timestamp, next_packet.timestamp]), [960]
+            )
+
+            await sender.stop()
+
+    @asynctest
+    async def test_send_codec_change_while_encoding(self) -> None:
+        """
+        A frame encoded with the previous codec is not sent.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
+        timestamps = itertools.count(step=160)
+
+        async def mock_next_encoded_frame(
+            codec: RTCRtpCodecParameters, track: MediaStreamTrack
+        ) -> RTCEncodedFrame:
+            await asyncio.sleep(0.02)
+            if codec == PCMU_CODEC:
+                await sender.send(RTCRtpSendParameters(codecs=[PCMA_CODEC]))
+            return RTCEncodedFrame([b"a"], next(timestamps), None)
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(AudioStreamTrack(), local_transport)
+            sender._next_encoded_frame = mock_next_encoded_frame  # type: ignore
+            await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+
+            packet = await queue.get()
+            self.assertEqual(packet.payload_type, PCMA_CODEC.payloadType)
+
             await sender.stop()
 
     @asynctest
