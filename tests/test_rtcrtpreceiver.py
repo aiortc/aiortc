@@ -525,6 +525,55 @@ class RTCRtpReceiverTest(CodecTestCase):
             self.assertEqual(pli, [1234])
 
     @asynctest
+    async def test_rtp_lost_video_retransmission(self) -> None:
+        nacks = []
+        pli = []
+
+        async def mock_send_rtcp_nack(media_ssrc: int, lost: list[int]) -> None:
+            nacks.append((media_ssrc, lost))
+
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
+
+        async with create_receiver("video") as receiver:
+            receiver._send_rtcp_nack = mock_send_rtcp_nack  # type: ignore
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
+
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=131)
+
+            # Packet 1 is lost, and so is its retransmission.
+            await receiver._handle_rtp_packet(packets[0], arrival_time_ms=0)
+            await receiver._handle_rtp_packet(packets[2], arrival_time_ms=0)
+            self.assertEqual(nacks, [(1234, [1])])
+            for packet in packets[3:]:
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Packet 1 is given up on.
+            self.assertEqual(pli, [1234])
+
+    @asynctest
+    async def test_rtp_late_video_packet(self) -> None:
+        async with create_receiver("video") as receiver:
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
+
+            # Packet 1 arrives late, completing the frames queued behind it.
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=4)
+            for packet in [packets[0], packets[2], packets[3], packets[1]]:
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check all the frames are decoded.
+            for packet in packets:
+                frame = self.ensureIsInstance(
+                    await receiver.track.recv(), av.VideoFrame
+                )
+                self.assertEqual(frame.pts, packet.timestamp)
+
+    @asynctest
     async def test_rtp_audio_decode_error(self) -> None:
         pli = []
 
@@ -581,7 +630,7 @@ class RTCRtpReceiverTest(CodecTestCase):
             packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=5)
             packets[1].payload = b"\x10junk"
 
-            # Each frame is passed to the decoder when the next one starts.
+            # Each frame ends on its packet's marker bit, so it is decoded at once.
             with self.assertLogs("aiortc.rtcrtpreceiver", level="WARNING") as cm:
                 for packet in packets[0:4]:
                     await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
@@ -746,6 +795,51 @@ class RTCRtpReceiverTest(CodecTestCase):
             # receive RTX without payload
             packet = RtpPacket(payload_type=101, ssrc=2345)
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+    @asynctest
+    async def test_rtp_rtx_late(self) -> None:
+        pli = []
+
+        async def mock_send_rtcp_pli(media_ssrc: int) -> None:
+            pli.append(media_ssrc)
+
+        async with create_receiver("video") as receiver:
+            receiver._send_rtcp_pli = mock_send_rtcp_pli  # type: ignore
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(
+                RTCRtpReceiveParameters(
+                    codecs=[
+                        VP8_CODEC,
+                        RTCRtpCodecParameters(
+                            mimeType="video/rtx",
+                            clockRate=90000,
+                            payloadType=101,
+                            parameters={"apt": 100},
+                        ),
+                    ],
+                    encodings=[
+                        RTCRtpDecodingParameters(
+                            ssrc=1234,
+                            payloadType=100,
+                            rtx=RTCRtpRtxParameters(ssrc=2345),
+                        )
+                    ],
+                )
+            )
+
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=111)
+            for packet in packets:
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # A retransmission of packet 0 arrives far behind.
+            packet = wrap_rtx(
+                packets[0], payload_type=101, sequence_number=0, ssrc=2345
+            )
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check it does not reset the jitter buffer.
+            self.assertEqual(pli, [])
 
     @asynctest
     async def test_rtp_rtx_stats(self) -> None:

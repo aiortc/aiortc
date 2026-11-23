@@ -554,8 +554,9 @@ class RTCRtpReceiver:
             self.__remote_streams[packet.ssrc] = StreamStatistics(codec.clockRate)
         self.__remote_streams[packet.ssrc].add(packet)
 
-        # unwrap retransmission packet
-        if is_rtx(codec):
+        # Unwrap a retransmission packet.
+        retransmitted = is_rtx(codec)
+        if retransmitted:
             original_ssrc = self.__rtx_ssrc.get(packet.ssrc)
             if original_ssrc is None:
                 self.__log_debug("x RTX packet from unknown SSRC %d", packet.ssrc)
@@ -595,8 +596,10 @@ class RTCRtpReceiver:
             self.__log_debug("x RTP payload parsing failed: %s", exc)
             return
 
-        # Try to re-assemble an encoded frame.
-        pli_flag, encoded_frame = self.__jitter_buffer.add(packet)
+        # Try to re-assemble encoded frames.
+        pli_flag, encoded_frames = self.__jitter_buffer.add(
+            packet, retransmitted=retransmitted
+        )
 
         # Check if a PLI should be sent.
         if self.__decoder_error.is_set():
@@ -607,12 +610,13 @@ class RTCRtpReceiver:
         if pli_flag:
             await self._send_rtcp_pli(packet.ssrc)
 
-        # if we have a complete encoded frame, decode it
-        if encoded_frame is not None and self.__decoder_thread:
-            encoded_frame.timestamp = self.__timestamp_mapper.map(
-                encoded_frame.timestamp
-            )
-            self.__decoder_queue.put((codec, encoded_frame))
+        # Decode the complete encoded frames.
+        if self.__decoder_thread:
+            for encoded_frame in encoded_frames:
+                encoded_frame.timestamp = self.__timestamp_mapper.map(
+                    encoded_frame.timestamp
+                )
+                self.__decoder_queue.put((codec, encoded_frame))
 
     async def _run_rtcp(self) -> None:
         self.__log_debug("- RTCP started")
