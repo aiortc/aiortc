@@ -36,7 +36,7 @@ from aiortc.rtcrtpparameters import (
 )
 from aiortc.rtcrtpreceiver import RTCRtpReceiver
 from aiortc.rtcrtpsender import RTCRtpSender
-from aiortc.sdp import SessionDescription
+from aiortc.sdp import ExtmapDescription, SessionDescription
 from aiortc.stats import RTCInboundRtpStreamStats, RTCStatsReport
 
 from .test_contrib_media import MediaTestCase
@@ -5106,6 +5106,90 @@ a=rtpmap:8 PCMA/8000
         )
 
         # close
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_setRemoteDescription_extmap_attributes(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # Create an offer whose extensions carry attributes (RFC 6464, RFC 6904).
+        pc1.addTrack(AudioStreamTrack())
+        await pc1.setLocalDescription(await pc1.createOffer())
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        parsed.media[0].extmap = [
+            ExtmapDescription(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
+            ExtmapDescription(
+                id=2,
+                uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+                attributes="vad=on",
+            ),
+            ExtmapDescription(
+                id=3,
+                uri="urn:ietf:params:rtp-hdrext:encrypt",
+                attributes="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+            ),
+        ]
+        offer = RTCSessionDescription(sdp=str(parsed), type="offer")
+
+        # Check the answer leaves out the encrypted extension.
+        await pc2.setRemoteDescription(offer)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        answer = SessionDescription.parse(pc2.localDescription.sdp)
+        self.assertEqual(
+            answer.media[0].extmap,
+            [
+                ExtmapDescription(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
+                ExtmapDescription(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                ),
+            ],
+        )
+
+        # Close the connections.
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_setRemoteDescription_extmap_duplicate_uri(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # Create an offer with two instances of an extension (RFC 6464 section 4).
+        pc1.addTrack(AudioStreamTrack())
+        await pc1.setLocalDescription(await pc1.createOffer())
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        parsed.media[0].extmap = [
+            ExtmapDescription(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
+            ExtmapDescription(
+                id=2,
+                uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+                attributes="vad=on",
+            ),
+            ExtmapDescription(
+                id=5,
+                uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+                attributes="vad=off",
+            ),
+        ]
+        offer = RTCSessionDescription(sdp=str(parsed), type="offer")
+
+        # Check the answer only accepts the first instance.
+        await pc2.setRemoteDescription(offer)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        answer = SessionDescription.parse(pc2.localDescription.sdp)
+        self.assertEqual(
+            answer.media[0].extmap,
+            [
+                ExtmapDescription(id=1, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
+                ExtmapDescription(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                ),
+            ],
+        )
+
+        # Close the connections.
         await pc1.close()
         await pc2.close()
 

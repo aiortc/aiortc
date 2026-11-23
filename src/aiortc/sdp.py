@@ -11,7 +11,6 @@ from .rtcrtpparameters import (
     ParametersDict,
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
-    RTCRtpHeaderExtensionParameters,
     RTCRtpParameters,
 )
 from .rtcsctptransport import RTCSctpCapabilities
@@ -217,6 +216,23 @@ def parse_h264_profile_level_id(profile_str: str) -> tuple[H264Profile, H264Leve
 
 
 @dataclass
+class ExtmapDescription:
+    id: int
+    uri: str
+    direction: Optional[str] = None
+    attributes: Optional[str] = None
+
+    def __str__(self) -> str:
+        value = str(self.id)
+        if self.direction is not None:
+            value += f"/{self.direction}"
+        value += f" {self.uri}"
+        if self.attributes is not None:
+            value += f" {self.attributes}"
+        return value
+
+
+@dataclass
 class GroupDescription:
     semantic: str
     items: list[Union[int, str]]
@@ -253,6 +269,7 @@ class MediaDescription:
         self.host: Optional[str] = None
         self.profile = profile
         self.direction: Optional[str] = None
+        self.extmap: list[ExtmapDescription] = []
         self.msid: Optional[str] = None
 
         # rtcp
@@ -292,8 +309,8 @@ class MediaDescription:
         if self.direction is not None:
             lines.append(f"a={self.direction}")
 
-        for header in self.rtp.headerExtensions:
-            lines.append(f"a=extmap:{header.id} {header.uri}")
+        for extmap in self.extmap:
+            lines.append(f"a=extmap:{extmap}")
 
         if self.rtp.muxId:
             lines.append(f"a=mid:{self.rtp.muxId}")
@@ -465,13 +482,21 @@ class SessionDescription:
                     elif attr == "end-of-candidates":
                         current_media.ice_candidates_complete = True
                     elif attr == "extmap":
-                        ext_id, ext_uri = value.split()
+                        # The URI may be followed by extension attributes, whose
+                        # meaning depends on the extension (RFC 8285 section 8).
+                        ext_id, ext_uri, *ext_rest = value.split(maxsplit=2)
+                        ext_attributes = ext_rest[0] if ext_rest else None
+                        ext_direction = None
                         if "/" in ext_id:
                             ext_id, ext_direction = ext_id.split("/")
-                        extension = RTCRtpHeaderExtensionParameters(
-                            id=int(ext_id), uri=ext_uri
+                        current_media.extmap.append(
+                            ExtmapDescription(
+                                id=int(ext_id),
+                                uri=ext_uri,
+                                direction=ext_direction,
+                                attributes=ext_attributes,
+                            )
                         )
-                        current_media.rtp.headerExtensions.append(extension)
                     elif attr == "fingerprint":
                         algorithm, fingerprint = value.split()
                         current_media.dtls.fingerprints.append(
