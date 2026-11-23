@@ -2,7 +2,6 @@ import asyncio
 import fractions
 import itertools
 from struct import pack
-from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from aiortc import MediaStreamTrack
@@ -10,6 +9,7 @@ from aiortc.codecs import PCMA_CODEC, PCMU_CODEC
 from aiortc.exceptions import InvalidStateError
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 from aiortc.rtcrtpparameters import (
+    RTCRtcpParameters,
     RTCRtpCapabilities,
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
@@ -22,10 +22,15 @@ from aiortc.rtp import (
     RTCP_PSFB_FIR,
     RTCP_PSFB_PLI,
     RTCP_RTPFB_NACK,
+    AnyRtcpPacket,
+    RtcpByePacket,
     RtcpPsfbPacket,
     RtcpReceiverInfo,
     RtcpRrPacket,
     RtcpRtpfbPacket,
+    RtcpSdesPacket,
+    RtcpSenderInfo,
+    RtcpSrPacket,
     RtpPacket,
     is_rtcp,
     pack_remb_fci,
@@ -42,6 +47,7 @@ from tests.test_mediastreams import VideoPacketStreamTrack
 
 from .utils import (
     ClosedDtlsTransport,
+    TestCase,
     asynctest,
     dummy_dtls_transport_pair,
     stats_of_type,
@@ -49,6 +55,10 @@ from .utils import (
 
 VP8_CODEC = RTCRtpCodecParameters(
     mimeType="video/VP8", clockRate=90000, payloadType=100
+)
+
+VP8_RTX_CODEC = RTCRtpCodecParameters(
+    mimeType="video/rtx", clockRate=90000, payloadType=101, parameters={"apt": 100}
 )
 
 H264_CODEC = RTCRtpCodecParameters(
@@ -602,6 +612,183 @@ class RTCRtpSenderTest(TestCase):
                 outbound_rtp.bytesSent,
                 sum(len(p.payload) - (2 if p.ssrc == 2345 else 0) for p in sent),
             )
+
+    @patch("aiortc.rtcrtpsender.clock.current_ntp_time")
+    @patch("aiortc.rtcrtpsender.random")
+    @patch("aiortc.rtcrtpsender.time")
+    @asynctest
+    async def test_rtcp_sender_reports(
+        self,
+        mock_time: MagicMock,
+        mock_random: MagicMock,
+        mock_current_ntp_time: MagicMock,
+    ) -> None:
+        """
+        An SR is only sent if data was sent since the report before last, and
+        describes the time at which it is sent.
+        """
+        # Send RTCP every 0.5 seconds, with local and NTP times chosen by the test.
+        mock_random.random.return_value = 0
+        second = 1 << 32
+        start = 3_900_000_000 * second
+        now = [0.0]
+        step = [0]
+        mock_current_ntp_time.side_effect = lambda: (
+            start + round((now[0] + step[0]) * second)
+        )
+        mock_time.monotonic.side_effect = lambda: now[0]
+
+        connected = True
+        frame_ready = asyncio.Event()
+        resume = asyncio.Event()
+        rtcp: list[list[AnyRtcpPacket]] = []
+        rtp: list[RtpPacket] = []
+
+        async def mock_next_encoded_frame(
+            codec: RTCRtpCodecParameters, track: MediaStreamTrack
+        ) -> RTCEncodedFrame:
+            # Send a single frame, once the test allows it.
+            await frame_ready.wait()
+            frame_ready.clear()
+            return RTCEncodedFrame([b"a"], 3000, None)
+
+        async def mock_send_rtcp(packets: list[AnyRtcpPacket]) -> None:
+            if not isinstance(packets[0], RtcpByePacket):
+                rtcp.append(packets)
+                # Hold the RTCP loop until the test resumes it.
+                await resume.wait()
+                resume.clear()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not connected:
+                raise ConnectionError
+            if not is_rtcp(data):
+                rtp.append(RtpPacket.parse(data))
+
+        async def wait_for(items: list, count: int) -> None:
+            while len(items) < count:
+                await asyncio.sleep(0.05)
+
+        def check_report(packets: list[AnyRtcpPacket]) -> AnyRtcpPacket:
+            # Each report is an SR or RR followed by an SDES CNAME.
+            report, sdes = packets
+            self.assertEqual(sdes, RtcpSdesPacket.cname(sender._ssrc, "some-cname"))
+            return report
+
+        async def next_report(at: float) -> AnyRtcpPacket:
+            # Resume the RTCP loop, so it sends its next report at the given time.
+            count = len(rtcp)
+            now[0] = at
+            resume.set()
+            await asyncio.wait_for(wait_for(rtcp, count + 1), timeout=2)
+            return check_report(rtcp[-1])
+
+        def sender_info(at: float, count: int) -> RtcpSenderInfo:
+            # The packet was sent at time 0, so its RTP timestamp is extrapolated.
+            return RtcpSenderInfo(
+                ntp_timestamp=start + round((at + step[0]) * second),
+                rtp_timestamp=uint32_add(rtp[0].timestamp, round(at * 90000)),
+                packet_count=count,
+                octet_count=count,
+            )
+
+        async def answer(report: RtcpSrPacket) -> None:
+            # Receive an RR answering the given SR, 1/65536 second after it.
+            await sender._handle_rtcp_packet(
+                RtcpRrPacket(
+                    ssrc=1234,
+                    reports=[
+                        RtcpReceiverInfo(
+                            ssrc=sender._ssrc,
+                            fraction_lost=0,
+                            packets_lost=0,
+                            highest_sequence=rtp[0].sequence_number,
+                            jitter=0,
+                            lsr=(report.sender_info.ntp_timestamp >> 16) & 0xFFFFFFFF,
+                            dlsr=1,
+                        )
+                    ],
+                )
+            )
+
+        async def round_trip_time() -> float | None:
+            report = await sender.getStats()
+            [remote_inbound] = stats_of_type(report, RTCRemoteInboundRtpStreamStats)
+            return remote_inbound.roundTripTime
+
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
+            sender = RTCRtpSender(VideoStreamTrack(), local_transport)
+            sender._next_encoded_frame = mock_next_encoded_frame  # type: ignore
+            sender._send_rtcp = mock_send_rtcp  # type: ignore
+            await sender.send(
+                RTCRtpSendParameters(
+                    codecs=[VP8_CODEC], rtcp=RTCRtcpParameters(cname="some-cname")
+                )
+            )
+
+            # Check an empty RR is sent before any data.
+            await asyncio.wait_for(wait_for(rtcp, 1), timeout=2)
+            self.assertEqual(check_report(rtcp[0]), RtcpRrPacket(ssrc=sender._ssrc))
+
+            # Send a packet at time 0.
+            frame_ready.set()
+            await asyncio.wait_for(wait_for(rtp, 1), timeout=1)
+
+            # Check the next two reports are SRs carrying the time they are sent,
+            # and the RTP timestamp at that time (RFC 3550 section 6.4.1).
+            reports = []
+            for at in (1, 2):
+                report = self.ensureIsInstance(await next_report(at), RtcpSrPacket)
+                self.assertEqual(report.ssrc, sender._ssrc)
+                self.assertEqual(report.sender_info, sender_info(at, 1))
+                reports.append(report)
+
+            # Check an RR answering the first SR does not measure the round trip
+            # from the second one, but an RR answering the second one does.
+            now[0] = 2.25
+            await answer(reports[0])
+            self.assertIsNone(await round_trip_time())
+            await answer(reports[1])
+            self.assertAlmostEqual(await round_trip_time(), 0.25 - 1 / 65536)
+
+            # Check an empty RR is sent once no data was sent in two intervals.
+            self.assertEqual(await next_report(3), RtcpRrPacket(ssrc=sender._ssrc))
+
+            # Check a retransmission which could not be sent does not count.
+            connected = False
+            with self.assertRaises(ConnectionError):
+                await sender._retransmit(rtp[0].sequence_number)
+            connected = True
+            self.assertEqual(await next_report(4), RtcpRrPacket(ssrc=sender._ssrc))
+
+            # Retransmit the packet, on the stream itself as RTX is not negotiated.
+            await sender._retransmit(rtp[0].sequence_number)
+            self.assertEqual(len(rtp), 2)
+            self.assertEqual(rtp[1].ssrc, sender._ssrc)
+
+            # Check the retransmission is data sent, and counts towards the SR,
+            # without changing the relation between RTP and NTP timestamps.
+            report = self.ensureIsInstance(await next_report(5), RtcpSrPacket)
+            self.assertEqual(report.sender_info, sender_info(5, 2))
+
+            # Renegotiate RTX and step the wall clock, then check the retransmission
+            # sent on the stream still counts, until no data was sent in two
+            # intervals, and the RTP timestamp follows the local clock.
+            await sender.send(
+                RTCRtpSendParameters(
+                    codecs=[VP8_CODEC, VP8_RTX_CODEC],
+                    rtcp=RTCRtcpParameters(cname="some-cname"),
+                )
+            )
+            step[0] = 10
+            report = self.ensureIsInstance(await next_report(6), RtcpSrPacket)
+            self.assertEqual(report.sender_info, sender_info(6, 2))
+            self.assertEqual(await next_report(7), RtcpRrPacket(ssrc=sender._ssrc))
+
+            resume.set()
+            await sender.stop()
 
     @asynctest
     async def test_marker_audio(self) -> None:
