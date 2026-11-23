@@ -302,6 +302,12 @@ class RTCRtpSenderTest(TestCase):
                 ["outbound-rtp", "remote-inbound-rtp", "transport"],
             )
 
+            # Check the remote inbound stream is the one being sent.
+            remote_inbound = next(
+                s for s in report.values() if s.type == "remote-inbound-rtp"
+            )
+            self.assertEqual(remote_inbound.ssrc, sender._ssrc)
+
             # clean shutdown
             await sender.stop()
 
@@ -735,7 +741,7 @@ class RTCRtpSenderTest(TestCase):
                 ["outbound-rtp", "transport"],
             )
 
-            outbound_rtp = report["outbound-rtp_" + str(id(sender))]
+            outbound_rtp = next(s for s in report.values() if s.type == "outbound-rtp")
             self.assertEqual(outbound_rtp.packetsSent, 0)
 
             # clean shutdown

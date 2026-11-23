@@ -161,6 +161,9 @@ class RTCRtpSender:
         self.__rtx_sequence_number = random_sequence_number()
         self.__started = False
         self.__stats = RTCStatsReport()
+        # SSRCs are only unique within an RTP session (RFC 3550 section 3), so
+        # stats IDs are scoped to this sender.
+        self.__stats_id = str(id(self))
         self.__stopped = False
         self.__transport = transport
 
@@ -221,7 +224,7 @@ class RTCRtpSender:
                 # RTCStats
                 timestamp=clock.current_datetime(),
                 type="outbound-rtp",
-                id="outbound-rtp_" + str(id(self)),
+                id=f"outbound-rtp_{self.__stats_id}_{self._ssrc}",
                 # RTCStreamStats
                 ssrc=self._ssrc,
                 kind=self.__kind,
@@ -331,9 +334,9 @@ class RTCRtpSender:
                         # RTCStats
                         timestamp=clock.current_datetime(),
                         type="remote-inbound-rtp",
-                        id="remote-inbound-rtp_" + str(id(self)),
+                        id=f"remote-inbound-rtp_{self.__stats_id}_{report.ssrc}",
                         # RTCStreamStats
-                        ssrc=packet.ssrc,
+                        ssrc=report.ssrc,
                         kind=self.__kind,
                         transportId=self.transport._stats_id,
                         # RTCReceivedRtpStreamStats

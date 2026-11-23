@@ -652,6 +652,59 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
+    async def test_rtp_rtx_stats(self) -> None:
+        async with create_receiver("video") as receiver:
+            receiver._track = RemoteStreamTrack(kind="video")
+
+            await receiver.receive(
+                RTCRtpReceiveParameters(
+                    codecs=[
+                        VP8_CODEC,
+                        RTCRtpCodecParameters(
+                            mimeType="video/rtx",
+                            clockRate=90000,
+                            payloadType=101,
+                            parameters={"apt": 100},
+                        ),
+                    ],
+                    encodings=[
+                        RTCRtpDecodingParameters(
+                            ssrc=1234,
+                            payloadType=100,
+                            rtx=RTCRtpRtxParameters(ssrc=2345),
+                        )
+                    ],
+                )
+            )
+
+            # Receive a media packet, then its retransmission.
+            packet = RtpPacket(payload_type=100, sequence_number=1, ssrc=1234)
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+            packet = RtpPacket(payload_type=101, ssrc=2345, payload=b"\x00\x01")
+            await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check the retransmission is not reported as a stream of its own.
+            report = await receiver.getStats()
+            inbound = [s for s in report.values() if s.type == "inbound-rtp"]
+            self.assertEqual([s.ssrc for s in inbound], [1234])
+
+    @asynctest
+    async def test_rtp_ssrc_change_stats(self) -> None:
+        async with create_receiver("audio") as receiver:
+            receiver._track = RemoteStreamTrack(kind="audio")
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+
+            # Receive packets from two SSRCs.
+            for ssrc in [1234, 5678]:
+                packet = RtpPacket(payload_type=0, ssrc=ssrc)
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check each SSRC has its own stats.
+            report = await receiver.getStats()
+            inbound = [s for s in report.values() if s.type == "inbound-rtp"]
+            self.assertEqual([s.ssrc for s in inbound], [1234, 5678])
+
+    @asynctest
     async def test_rtp_rtx_unknown_ssrc(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
