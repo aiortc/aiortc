@@ -184,9 +184,10 @@ class RTCRtpSender:
         return self.__kind
 
     @property
-    def track(self) -> MediaStreamTrack:
+    def track(self) -> Optional[MediaStreamTrack]:
         """
-        The :class:`MediaStreamTrack` which is being handled by the sender.
+        The :class:`MediaStreamTrack` which is being handled by the sender, or
+        `None`.
         """
         return self.__track
 
@@ -236,6 +237,19 @@ class RTCRtpSender:
         return self.__stats
 
     def replaceTrack(self, track: Optional[MediaStreamTrack]) -> None:
+        """
+        Replace the track being sent, without renegotiation.
+
+        The new track is sent on the same RTP stream, whose timestamps carry
+        on. With `None`, or once a track has ended, nothing is sent until the
+        track is replaced.
+
+        :param track: A :class:`MediaStreamTrack` of the sender's kind, or `None`.
+        :raises TypeError: If the track's kind differs from the sender's.
+        """
+        if track is not None and track.kind != self.__kind:
+            raise TypeError(f"Expected a track of kind '{self.__kind}'")
+
         self.__track = track
         self.__track_replaced.set()
         if track is not None:
