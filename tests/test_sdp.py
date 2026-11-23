@@ -6,9 +6,9 @@ from unittest import TestCase
 from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
-    RTCRtpHeaderExtensionParameters,
 )
 from aiortc.sdp import (
+    ExtmapDescription,
     GroupDescription,
     H264Level,
     H264Profile,
@@ -156,9 +156,9 @@ a=ssrc:1944796561 label:ec1eb8de-8df8-4956-ae81-879e5d062d12"""
             ],
         )
         self.assertEqual(
-            d.media[0].rtp.headerExtensions,
+            d.media[0].extmap,
             [
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(
                     id=1, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
                 )
             ],
@@ -361,14 +361,14 @@ a=ssrc:882128807 cname:{ed463ac5-dabf-44d4-8b9f-e14318427b2b}
             ],
         )
         self.assertEqual(
-            d.media[0].rtp.headerExtensions,
+            d.media[0].extmap,
             [
-                RTCRtpHeaderExtensionParameters(
-                    id=1, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                ExtmapDescription(
+                    id=1,
+                    uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+                    direction="sendonly",
                 ),
-                RTCRtpHeaderExtensionParameters(
-                    id=2, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
-                ),
+                ExtmapDescription(id=2, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
             ],
         )
         self.assertEqual(d.media[0].rtp.muxId, "sdparta_0")
@@ -424,7 +424,7 @@ a=msid-semantic:WMS *
 m=audio 45274 UDP/TLS/RTP/SAVPF 109 9 0 8 101
 c=IN IP4 192.168.99.58
 a=sendrecv
-a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=extmap:1/sendonly urn:ietf:params:rtp-hdrext:ssrc-audio-level
 a=extmap:2 urn:ietf:params:rtp-hdrext:sdes:mid
 a=mid:sdparta_0
 a=msid:{dee771c7-671a-451e-b847-f86f8e87c7d8} {12692dea-686c-47ca-b3e9-48f38fc92b78}
@@ -521,7 +521,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "")
         self.assertEqual(d.media[0].rtcp_host, "1.2.3.4")
         self.assertEqual(d.media[0].rtcp_port, 16628)
@@ -680,7 +680,7 @@ a=ssrc:2690029308 label:lyNSTe6w2ijnMrDEiqTHFyhqjdAag3ysa0"""
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "")
         self.assertEqual(d.media[0].rtcp_host, "1.2.3.4")
         self.assertEqual(d.media[0].rtcp_port, 16628)
@@ -793,7 +793,7 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
@@ -850,6 +850,41 @@ a=setup:actpass
             ),
         )
 
+    def test_audio_extmap_attributes(self) -> None:
+        sdp = lf2crlf(
+            """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 9 UDP/TLS/RTP/SAVPF 0
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level vad=on
+a=extmap:2/sendonly urn:ietf:params:rtp-hdrext:encrypt urn:ietf:params:rtp-hdrext:smpte-tc 25@600/24
+a=extmap:3 urn:ietf:params:rtp-hdrext:toffset
+a=rtpmap:0 PCMU/8000
+"""
+        )
+        d = SessionDescription.parse(sdp)
+        self.assertEqual(
+            d.media[0].extmap,
+            [
+                ExtmapDescription(
+                    id=1,
+                    uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+                    attributes="vad=on",
+                ),
+                ExtmapDescription(
+                    id=2,
+                    uri="urn:ietf:params:rtp-hdrext:encrypt",
+                    direction="sendonly",
+                    attributes="urn:ietf:params:rtp-hdrext:smpte-tc 25@600/24",
+                ),
+                ExtmapDescription(id=3, uri="urn:ietf:params:rtp-hdrext:toffset"),
+            ],
+        )
+        self.assertEqual(str(d), sdp)
+
     def test_audio_ice_lite(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(
@@ -901,7 +936,7 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
@@ -1009,7 +1044,7 @@ a=rtpmap:8 PCMA/8000"""
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "audio")
         self.assertEqual(d.media[0].rtcp_host, "0.0.0.0")
         self.assertEqual(d.media[0].rtcp_port, 9)
@@ -1105,7 +1140,7 @@ a=rtpmap:0 PCMU/8000
                 ),
             ],
         )
-        self.assertEqual(d.media[0].rtp.headerExtensions, [])
+        self.assertEqual(d.media[0].extmap, [])
         self.assertEqual(d.media[0].rtp.muxId, "")
         self.assertEqual(d.media[0].rtcp_host, None)
         self.assertEqual(d.media[0].rtcp_port, 9)
@@ -1491,29 +1526,27 @@ a=ssrc:3305256354 label:420c6f28-439d-4ead-b93c-94e14c0a16b4
             ],
         )
         self.assertEqual(
-            d.media[0].rtp.headerExtensions,
+            d.media[0].extmap,
             [
-                RTCRtpHeaderExtensionParameters(
-                    id=2, uri="urn:ietf:params:rtp-hdrext:toffset"
-                ),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(id=2, uri="urn:ietf:params:rtp-hdrext:toffset"),
+                ExtmapDescription(
                     id=3,
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
                 ),
-                RTCRtpHeaderExtensionParameters(id=4, uri="urn:3gpp:video-orientation"),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(id=4, uri="urn:3gpp:video-orientation"),
+                ExtmapDescription(
                     id=5,
                     uri="http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
                 ),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(
                     id=6,
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
                 ),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(
                     id=7,
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/video-content-type",
                 ),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(
                     id=8,
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/video-timing",
                 ),
@@ -1737,18 +1770,14 @@ a=ssrc:3408404552 cname:{6f52d07e-17ef-42c5-932b-3b57c64fe049}
             ],
         )
         self.assertEqual(
-            d.media[0].rtp.headerExtensions,
+            d.media[0].extmap,
             [
-                RTCRtpHeaderExtensionParameters(
-                    id=3, uri="urn:ietf:params:rtp-hdrext:sdes:mid"
-                ),
-                RTCRtpHeaderExtensionParameters(
+                ExtmapDescription(id=3, uri="urn:ietf:params:rtp-hdrext:sdes:mid"),
+                ExtmapDescription(
                     id=4,
                     uri="http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
                 ),
-                RTCRtpHeaderExtensionParameters(
-                    id=5, uri="urn:ietf:params:rtp-hdrext:toffset"
-                ),
+                ExtmapDescription(id=5, uri="urn:ietf:params:rtp-hdrext:toffset"),
             ],
         )
         self.assertEqual(d.media[0].rtp.muxId, "sdparta_0")

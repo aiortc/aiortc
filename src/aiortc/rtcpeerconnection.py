@@ -143,13 +143,16 @@ def find_common_codecs(
 
 def find_common_header_extensions(
     local_extensions: list[RTCRtpHeaderExtensionParameters],
-    remote_extensions: list[RTCRtpHeaderExtensionParameters],
+    remote_extensions: list[sdp.ExtmapDescription],
 ) -> list[RTCRtpHeaderExtensionParameters]:
-    common = []
+    common: list[RTCRtpHeaderExtensionParameters] = []
     for rx in remote_extensions:
+        # Without attributes, a URI must not appear twice (RFC 8285 section 5).
+        if any(x.uri == rx.uri for x in common):
+            continue
         for lx in local_extensions:
             if lx.uri == rx.uri:
-                common.append(rx)
+                common.append(RTCRtpHeaderExtensionParameters(id=rx.id, uri=rx.uri))
     return common
 
 
@@ -258,13 +261,12 @@ def create_media_description_for_transceiver(
         fmt=[c.payloadType for c in transceiver._codecs],
     )
     media.direction = direction
+    media.extmap = [
+        sdp.ExtmapDescription(id=x.id, uri=x.uri) for x in transceiver._headerExtensions
+    ]
     media.msid = f"{transceiver.sender._stream_id} {transceiver.sender._track_id}"
 
-    media.rtp = RTCRtpParameters(
-        codecs=transceiver._codecs,
-        headerExtensions=transceiver._headerExtensions,
-        muxId=mid,
-    )
+    media.rtp = RTCRtpParameters(codecs=transceiver._codecs, muxId=mid)
     media.rtcp_host = DISCARD_HOST
     media.rtcp_port = DISCARD_PORT
     media.rtcp_mux = True
@@ -961,7 +963,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
                 transceiver._codecs = common
                 transceiver._headerExtensions = find_common_header_extensions(
-                    HEADER_EXTENSIONS[media.kind], media.rtp.headerExtensions
+                    HEADER_EXTENSIONS[media.kind], media.extmap
                 )
 
                 # configure direction
