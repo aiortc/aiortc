@@ -1279,10 +1279,18 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         return self.__pendingRemoteDescription or self.__currentRemoteDescription
 
     def __remoteRtp(self, transceiver: RTCRtpTransceiver) -> RTCRtpReceiveParameters:
-        media = self.__remoteDescription().media[transceiver._get_mline_index()]
+        mline_index = transceiver._get_mline_index()
+        media = self.__remoteDescription().media[mline_index]
+
+        # Incoming RTP uses the payload types from the local description,
+        # which may differ from the remote one (RFC 9429 section 5.9).
+        codecs = find_common_codecs(
+            transceiver._codecs,
+            self.__localDescription().media[mline_index].rtp.codecs,
+        )
 
         receiveParameters = RTCRtpReceiveParameters(
-            codecs=transceiver._codecs,
+            codecs=codecs,
             headerExtensions=transceiver._headerExtensions,
             muxId=media.rtp.muxId,
             rtcp=media.rtp.rtcp,
@@ -1291,14 +1299,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             # Create encodings for codecs other than RTX first, as the codec an
             # RTX codec repairs may be listed after it (RFC 4588 section 8.1).
             encodings: dict[int, RTCRtpDecodingParameters] = {}
-            for codec in transceiver._codecs:
+            for codec in codecs:
                 if not is_rtx(codec):
                     encodings[codec.payloadType] = RTCRtpDecodingParameters(
                         ssrc=media.ssrc[0].ssrc, payloadType=codec.payloadType
                     )
 
             # Then map each RTX codec to the encoding of the codec it repairs.
-            for codec in filter(is_rtx, transceiver._codecs):
+            for codec in filter(is_rtx, codecs):
                 apt = codec.parameters.get("apt")
                 if isinstance(apt, int) and apt in encodings and len(media.ssrc) == 2:
                     encodings[apt].rtx = RTCRtpRtxParameters(ssrc=media.ssrc[1].ssrc)

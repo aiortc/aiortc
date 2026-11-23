@@ -3028,6 +3028,77 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
+    async def test_connect_video_h264_answer_with_other_payload_types(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1_tracks = track_remote_tracks(pc1)
+
+        pc2 = RTCPeerConnection()
+
+        # Offer to receive video with the default codecs.
+        pc1.addTransceiver("video", direction="recvonly")
+        await pc1.setLocalDescription(await pc1.createOffer())
+        self.assertCodecNames(
+            pc1.localDescription, ["VP8", "rtx", "H264", "rtx", "H264", "rtx"]
+        )
+
+        # Accept only H264 constrained baseline, which the offer gives PT 101.
+        pc2.addTrack(VideoStreamTrack())
+        capabilities = RTCRtpSender.getCapabilities("video")
+        preferences = [
+            c
+            for c in capabilities.codecs
+            if c.name == "rtx" or c.parameters.get("profile-level-id") == "42e01f"
+        ]
+        pc2.getTransceivers()[0].setCodecPreferences(preferences)
+        await pc2.setRemoteDescription(pc1.localDescription)
+
+        # Create the answer.
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        await self.assertIceChecking(pc2)
+        self.assertCodecNames(pc2.localDescription, ["H264", "rtx"])
+
+        # Relabel the answer with the PTs of the other H264 profile, listing
+        # each twice as in issue #1486. The answerer still sends with the PTs
+        # of the offer (RFC 3264 section 6.1).
+        parsed = SessionDescription.parse(pc2.localDescription.sdp)
+        media = parsed.media[0]
+        self.assertEqual(media.fmt, [101, 102])
+        media.rtp.codecs[0].payloadType = 99
+        media.rtp.codecs[1].payloadType = 100
+        media.rtp.codecs[1].parameters["apt"] = 99
+        media.rtp.codecs = media.rtp.codecs * 2
+        media.fmt = [99, 100, 99, 100]
+        answer = RTCSessionDescription(sdp=str(parsed), type="answer")
+
+        # Record the receive parameters while applying the answer.
+        with patch.object(
+            RTCRtpReceiver,
+            "receive",
+            autospec=True,
+            side_effect=RTCRtpReceiver.receive,
+        ) as receive:
+            await pc1.setRemoteDescription(answer)
+            await self.assertIceCompleted(pc1, pc2)
+
+            # Check that pc1 receives video.
+            self.assertEqual(len(pc1_tracks), 1)
+            frame = await asyncio.wait_for(pc1_tracks[0].recv(), timeout=5)
+            self.assertIsNotNone(frame)
+
+        # Check that pc1 receives H264 and RTX with the PTs of its offer.
+        self.assertEqual(receive.call_count, 1)
+        parameters = receive.call_args.args[1]
+        self.assertEqual([c.payloadType for c in parameters.codecs], [101, 102])
+        self.assertEqual([e.payloadType for e in parameters.encodings], [101])
+        self.assertIsNotNone(parameters.encodings[0].rtx)
+
+        # Close the connections.
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+    @asynctest
     async def test_connect_video_no_ssrc(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
