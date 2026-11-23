@@ -14,7 +14,7 @@ from av.frame import Frame
 from av.packet import Packet
 from av.video.stream import VideoStream
 
-from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack
+from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, TimeBase
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,39 @@ class MediaBlackhole:
         self.__tracks = {}
 
 
+class PlaybackTimeline:
+    """
+    Make the timestamps of a file's streams start at 0, and keep them
+    increasing when playback loops back to the start of the file.
+
+    All the streams restart from where the longest one ended, so that they
+    stay in sync even if their durations differ.
+    """
+
+    def __init__(self) -> None:
+        self.__end = fractions.Fraction(0)
+        self.__offsets: dict[str, int] = {}
+        self.__start = fractions.Fraction(0)
+
+    def restart(self) -> None:
+        """
+        Continue the next timestamps from where playback ended.
+        """
+        self.__offsets = {}
+        self.__start = self.__end
+
+    def timestamp(self, kind: str, pts: int, duration: int, time_base: TimeBase) -> int:
+        """
+        Return the timestamp to use for a frame or packet of the given kind.
+        """
+        base = fractions.Fraction(time_base.numerator, time_base.denominator)
+        if kind not in self.__offsets:
+            self.__offsets[kind] = round(self.__start / base) - pts
+        pts += self.__offsets[kind]
+        self.__end = max(self.__end, (pts + duration) * base)
+        return pts
+
+
 def player_worker_decode(
     loop: asyncio.AbstractEventLoop,
     container: av.container.InputContainer,
@@ -106,7 +139,7 @@ def player_worker_decode(
         frame_size=int(audio_sample_rate * AUDIO_PTIME),
     )
 
-    video_first_pts = None
+    timeline = PlaybackTimeline()
 
     frame_time = None
     start_time = time.monotonic()
@@ -122,6 +155,8 @@ def player_worker_decode(
             # reports EOF once it has returned them all.
             if isinstance(exc, (StopIteration, EOFError)) and loop_playback:
                 container.seek(0)
+                audio_samples = 0
+                timeline.restart()
                 continue
             if audio_track:
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
@@ -137,8 +172,10 @@ def player_worker_decode(
 
         if isinstance(frame, AudioFrame) and audio_track:
             for frame in audio_resampler.resample(frame):
-                # fix timestamps
-                frame.pts = audio_samples
+                # Fix timestamps.
+                frame.pts = timeline.timestamp(
+                    "audio", audio_samples, frame.samples, audio_time_base
+                )
                 frame.time_base = audio_time_base
                 audio_samples += frame.samples
 
@@ -151,10 +188,10 @@ def player_worker_decode(
                 )
                 continue
 
-            # video from a webcam doesn't start at pts 0, cancel out offset
-            if video_first_pts is None:
-                video_first_pts = frame.pts
-            frame.pts -= video_first_pts
+            # Video from a webcam doesn't start at pts 0, and looping restarts it.
+            frame.pts = timeline.timestamp(
+                "video", frame.pts, frame.duration, frame.time_base
+            )
 
             frame_time = frame.time
             asyncio.run_coroutine_threadsafe(video_track._queue.put(frame), loop)
@@ -170,7 +207,7 @@ def player_worker_demux(
     throttle_playback: bool,
     loop_playback: bool,
 ) -> None:
-    video_first_pts = None
+    timeline = PlaybackTimeline()
     frame_time = None
     start_time = time.monotonic()
 
@@ -185,6 +222,7 @@ def player_worker_demux(
                 continue
             if isinstance(exc, StopIteration) and loop_playback:
                 container.seek(0)
+                timeline.restart()
                 continue
             if audio_track:
                 asyncio.run_coroutine_threadsafe(audio_track._queue.put(None), loop)
@@ -192,7 +230,7 @@ def player_worker_demux(
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
             break
 
-        # read up to 1 second ahead
+        # Read up to 1 second ahead.
         if throttle_playback:
             elapsed_time = time.monotonic() - start_time
             if frame_time and frame_time > elapsed_time + 1:
@@ -209,16 +247,19 @@ def player_worker_demux(
                 continue
             track = video_track
 
-            # video from a webcam doesn't start at pts 0, cancel out offset
-            if video_first_pts is None:
-                video_first_pts = packet.pts
-            packet.pts -= video_first_pts
-
         if (
             track is not None
             and packet.pts is not None
             and packet.time_base is not None
         ):
+            # Timestamps may not start at 0 (e.g. from a webcam), and looping
+            # restarts them.
+            pts = timeline.timestamp(
+                track.kind, packet.pts, packet.duration or 0, packet.time_base
+            )
+            if packet.dts is not None:
+                packet.dts += pts - packet.pts
+            packet.pts = pts
             frame_time = int(packet.pts * packet.time_base)
             asyncio.run_coroutine_threadsafe(track._queue.put(packet), loop)
 
