@@ -645,15 +645,39 @@ class RTCRtpSenderTest(TestCase):
 
     @asynctest
     async def test_track_ended(self) -> None:
+        """
+        Once its track has ended, the sender sends nothing until the track is
+        replaced.
+        """
+        queue: asyncio.Queue[RtpPacket] = asyncio.Queue()
+
+        async def mock_send_rtp(data: bytes) -> None:
+            if not is_rtcp(data):
+                await queue.put(RtpPacket.parse(data))
+
         async with dummy_dtls_transport_pair() as (local_transport, _):
+            local_transport._send_rtp = mock_send_rtp  # type: ignore
+
             track = AudioStreamTrack()
             sender = RTCRtpSender(track, local_transport)
-
             await sender.send(RTCRtpSendParameters(codecs=[PCMU_CODEC]))
+            await queue.get()
 
-            # stop track and wait for RTP loop to exit
+            # End the track, the sender keeps it but stops sending.
             track.stop()
             await asyncio.sleep(0.1)
+            while not queue.empty():
+                queue.get_nowait()
+            await asyncio.sleep(0.1)
+            self.assertTrue(queue.empty())
+            self.assertIs(sender.track, track)
+
+            # Replace the track, sending resumes with a new talkspurt.
+            sender.replaceTrack(AudioStreamTrack())
+            packet = await asyncio.wait_for(queue.get(), 1)
+            self.assertEqual(packet.marker, 1)
+
+            await sender.stop()
 
 
 class RtpTimelineTest(TestCase):
