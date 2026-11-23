@@ -168,6 +168,30 @@ class RtcpPacketTest(TestCase):
         )
         self.assertEqual(bytes(packet), data)
 
+    def test_sdes_chunk_alignment(self) -> None:
+        # RFC 3550 section 6.5: a chunk's item list ends with one null octet (no length
+        # octet follows it), then null octets pad the chunk to the next 32-bit boundary,
+        # where the next chunk starts. With an item value of 1, 4, 3 and 2 octets the
+        # first chunk ends with 1, 2, 3 and 4 null octets.
+        for value, nulls in ((b"a", 1), (b"abcd", 2), (b"abc", 3), (b"ab", 4)):
+            with self.subTest(nulls=nulls):
+                first = b"\x00\x00\x00\x01" + bytes([1, len(value)]) + value
+                first += b"\x00" * nulls
+                self.assertEqual(len(first) % 4, 0)
+                second = b"\x00\x00\x00\x02" + b"\x01\x05cname" + b"\x00"
+                payload = first + second
+                data = bytes([0x82, 0xCA, 0, len(payload) // 4]) + payload
+
+                packets = RtcpPacket.parse(data)
+                self.assertEqual(len(packets), 1)
+                packet = self.ensureIsInstance(packets[0], RtcpSdesPacket)
+                self.assertEqual([c.ssrc for c in packet.chunks], [1, 2])
+                self.assertEqual(packet.chunks[0].items, [(1, value)])
+                self.assertEqual(packet.chunks[1].items, [(1, b"cname")])
+
+                # Written back, each chunk ends the same way.
+                self.assertEqual(bytes(packet), data)
+
     def test_sdes_item_truncated(self) -> None:
         data = load("rtcp_sdes_item_truncated.bin")
 

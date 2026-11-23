@@ -523,9 +523,11 @@ class RtcpSdesPacket:
             payload += pack("!L", chunk.ssrc)
             for d_type, d_value in chunk.items:
                 payload += pack("!BB", d_type, len(d_value)) + d_value
-            payload += b"\x00\x00"
-        while len(payload) % 4:
+            # RFC 3550 section 6.5: a null octet ends the list, and null octets pad the
+            # chunk to the 32-bit boundary where the next one starts.
             payload += b"\x00"
+            while len(payload) % 4:
+                payload += b"\x00"
         return pack_rtcp_packet(RTCP_SDES, len(self.chunks), payload)
 
     @classmethod
@@ -539,18 +541,24 @@ class RtcpSdesPacket:
             pos += 4
 
             items = []
-            while pos < len(data) - 1:
-                d_type, d_length = unpack_from("!BB", data, pos)
+            while pos < len(data):
+                d_type = data[pos]
+                if d_type == 0:
+                    # RFC 3550 section 6.5: the list ends with a null octet, which has no
+                    # length octet, and null octets pad it to the next 32-bit boundary,
+                    # where the next chunk starts.
+                    pos += 1
+                    pos += -pos % 4
+                    break
+                if len(data) < pos + 2:
+                    raise ValueError("RTCP SDES item is truncated")
+                d_length = data[pos + 1]
                 pos += 2
 
                 if len(data) < pos + d_length:
                     raise ValueError("RTCP SDES item is truncated")
-                d_value = data[pos : pos + d_length]
+                items.append((d_type, data[pos : pos + d_length]))
                 pos += d_length
-                if d_type == 0:
-                    break
-                else:
-                    items.append((d_type, d_value))
             chunks.append(RtcpSourceInfo(ssrc=ssrc, items=items))
         return cls(chunks=chunks)
 
