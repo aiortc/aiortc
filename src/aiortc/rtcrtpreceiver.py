@@ -306,6 +306,7 @@ class RTCRtpReceiver:
         self.__rtx_ssrc: dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
+        self.__stopped = False
         self.__timestamp_mapper = TimestampMapper()
         self.__transport = transport
 
@@ -395,13 +396,17 @@ class RTCRtpReceiver:
 
         :param parameters: The :class:`RTCRtpParameters` for the receiver.
         """
-        if not self.__started:
-            for codec in parameters.codecs:
-                self.__codecs[codec.payloadType] = codec
-            for encoding in parameters.encodings:
-                if encoding.rtx:
-                    self.__rtx_ssrc[encoding.rtx.ssrc] = encoding.ssrc
+        if self.__stopped:
+            return
 
+        self.__codecs = {codec.payloadType: codec for codec in parameters.codecs}
+        self.__rtx_ssrc = {
+            encoding.rtx.ssrc: encoding.ssrc
+            for encoding in parameters.encodings
+            if encoding.rtx
+        }
+
+        if not self.__started:
             # start decoder thread
             self.__decoder_thread = threading.Thread(
                 target=decoder_worker,
@@ -415,9 +420,12 @@ class RTCRtpReceiver:
             )
             self.__decoder_thread.start()
 
-            self.__transport._register_rtp_receiver(self, parameters)
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
+
+        # The routing tables MUST follow a change to the "m=" section's
+        # configuration (RFC 9143 section 9.2).
+        self.__transport._register_rtp_receiver(self, parameters)
 
     def setTransport(self, transport: RTCDtlsTransport) -> None:
         self.__transport = transport
@@ -426,6 +434,7 @@ class RTCRtpReceiver:
         """
         Irreversibly stop the receiver.
         """
+        self.__stopped = True
         if self.__started:
             self.__transport._unregister_rtp_receiver(self)
             self.__stop_decoder()
