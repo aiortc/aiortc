@@ -5,7 +5,6 @@ import queue
 import random
 import threading
 import time
-from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
@@ -147,14 +146,20 @@ class StreamStatistics:
         self.cycles = 0
         self.bytes_received = 0
         self.packets_received = 0
+        self.heard_since_report = False
 
-        # jitter
+        # Retransmissions and NACKs are counted for stats, not RTCP reports.
+        self.nack_count = 0
+        self.retransmitted_bytes_received = 0
+        self.retransmitted_packets_received = 0
+
+        # Interarrival jitter (RFC 3550 section 6.4.1).
         self._clockrate = clockrate
         self._jitter_q4 = 0
         self._last_arrival: Optional[int] = None
         self._last_timestamp: Optional[int] = None
 
-        # fraction lost
+        # Fraction lost (RFC 3550 section 6.4.1).
         self._expected_prior = 0
         self._received_prior = 0
 
@@ -163,6 +168,7 @@ class StreamStatistics:
             packet.sequence_number, self.max_seq
         )
         self.bytes_received += len(packet.payload)
+        self.heard_since_report = True
         self.packets_received += 1
 
         if self.base_seq is None:
@@ -307,8 +313,6 @@ class RTCRtpReceiver:
         self.__rtcp_exited = asyncio.Event()
         self.__rtcp_started = asyncio.Event()
         self.__rtcp_task: Optional[asyncio.Future[None]] = None
-        self.__rtx_recovered_bytes: Counter[int] = Counter()
-        self.__rtx_recovered_packets: Counter[int] = Counter()
         self.__rtx_ssrc: dict[int, int] = {}
         self.__started = False
         self.__stats = RTCStatsReport()
@@ -320,7 +324,6 @@ class RTCRtpReceiver:
         self.__transport = transport
 
         # RTCP
-        self.__heard_ssrcs: set[int] = set()
         self.__lsr: dict[int, int] = {}
         self.__lsr_time: dict[int, float] = {}
         self.__remote_streams: dict[int, StreamStatistics] = {}
@@ -370,24 +373,35 @@ class RTCRtpReceiver:
             if ssrc in self.__rtx_ssrc:
                 continue
 
+            # Link the local and remote statistics, once an RTCP SR was received.
+            local_id = self.__stats_object_id("inbound-rtp", ssrc)
+            remote = self.__stats.get(
+                self.__stats_object_id("remote-outbound-rtp", ssrc)
+            )
+            if remote is not None:
+                remote.localId = local_id
+
             self.__stats.add(
                 RTCInboundRtpStreamStats(
                     # RTCStats
                     timestamp=clock.current_datetime(),
                     type="inbound-rtp",
-                    id=f"inbound-rtp_{self.__stats_id}_{ssrc}",
+                    id=local_id,
                     # RTCStreamStats
                     ssrc=ssrc,
                     kind=self.__kind,
                     transportId=self.transport._stats_id,
                     # RTCReceivedRtpStreamStats
                     packetsReceived=stream.packets_received
-                    + self.__rtx_recovered_packets[ssrc],
+                    + stream.retransmitted_packets_received,
                     packetsLost=stream.packets_lost,
-                    jitter=stream.jitter,
+                    jitter=stream.jitter / stream._clockrate,
                     # RTCInboundRtpStreamStats
                     bytesReceived=stream.bytes_received
-                    + self.__rtx_recovered_bytes[ssrc],
+                    + stream.retransmitted_bytes_received,
+                    nackCount=stream.nack_count,
+                    trackIdentifier=self.track.id,
+                    remoteId=remote.id if remote is not None else None,
                 )
             )
         self.__stats.update(self.transport._get_stats())
@@ -474,7 +488,7 @@ class RTCRtpReceiver:
                     # RTCStats
                     timestamp=clock.current_datetime(),
                     type="remote-outbound-rtp",
-                    id=f"remote-outbound-rtp_{self.__stats_id}_{packet.ssrc}",
+                    id=self.__stats_object_id("remote-outbound-rtp", packet.ssrc),
                     # RTCStreamStats
                     ssrc=packet.ssrc,
                     kind=self.__kind,
@@ -535,11 +549,10 @@ class RTCRtpReceiver:
             )
             return
 
-        # feed RTCP statistics
+        # Feed the RTCP statistics.
         if packet.ssrc not in self.__remote_streams:
             self.__remote_streams[packet.ssrc] = StreamStatistics(codec.clockRate)
         self.__remote_streams[packet.ssrc].add(packet)
-        self.__heard_ssrcs.add(packet.ssrc)
 
         # unwrap retransmission packet
         if is_rtx(codec):
@@ -561,8 +574,10 @@ class RTCRtpReceiver:
 
             # Retransmissions count towards the media stream's stats (webrtc-stats,
             # "inbound-rtp"), but not its RTCP statistics (RFC 4588 section 6.2).
-            self.__rtx_recovered_packets[original_ssrc] += 1
-            self.__rtx_recovered_bytes[original_ssrc] += len(packet.payload)
+            media_stream = self.__remote_streams.get(original_ssrc)
+            if media_stream is not None:
+                media_stream.retransmitted_packets_received += 1
+                media_stream.retransmitted_bytes_received += len(packet.payload)
 
         # send NACKs for any missing any packets
         if self.__nack_generator is not None and self.__nack_generator.add(packet):
@@ -611,8 +626,11 @@ class RTCRtpReceiver:
 
                 # Report sources heard since their last report, 31 at most and in
                 # round-robin order so all of them get reported (RFC 3550 section 6.4).
-                ssrcs = [x for x in self.__remote_streams if x in self.__heard_ssrcs]
-                ssrcs = ssrcs[:31]
+                ssrcs = [
+                    ssrc
+                    for ssrc, stream in self.__remote_streams.items()
+                    if stream.heard_since_report
+                ][:31]
                 reports = []
                 for ssrc in ssrcs:
                     stream = self.__remote_streams[ssrc]
@@ -640,8 +658,9 @@ class RTCRtpReceiver:
                     # Mark the sources as reported and move them to the end of the
                     # dict, so the others come first next time.
                     for ssrc in ssrcs:
-                        self.__heard_ssrcs.discard(ssrc)
-                        self.__remote_streams[ssrc] = self.__remote_streams.pop(ssrc)
+                        stream = self.__remote_streams.pop(ssrc)
+                        stream.heard_since_report = False
+                        self.__remote_streams[ssrc] = stream
 
                     # Send an RR even with nothing to report (RFC 3550 section 6.4.2).
                     packets: list[AnyRtcpPacket] = [
@@ -682,6 +701,9 @@ class RTCRtpReceiver:
                 fmt=RTCP_RTPFB_NACK, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc
             )
             packet.lost = lost
+            stream = self.__remote_streams.get(media_ssrc)
+            if stream is not None:
+                stream.nack_count += 1
             await self._send_rtcp([packet])
 
     async def _send_rtcp_pli(self, media_ssrc: int) -> None:
@@ -699,6 +721,9 @@ class RTCRtpReceiver:
 
     def _set_rtcp_ssrc(self, ssrc: int) -> None:
         self.__rtcp_ssrc = ssrc
+
+    def __stats_object_id(self, stats_type: str, ssrc: int) -> str:
+        return f"{stats_type}_{self.__stats_id}_{ssrc}"
 
     def __stop_decoder(self) -> None:
         """

@@ -33,15 +33,27 @@ from aiortc.rtp import (
     RtcpPacket,
     RtcpRrPacket,
     RtcpSdesPacket,
+    RtcpSenderInfo,
+    RtcpSrPacket,
     RtpPacket,
     wrap_rtx,
 )
-from aiortc.stats import RTCStatsReport
+from aiortc.stats import (
+    RTCInboundRtpStreamStats,
+    RTCRemoteOutboundRtpStreamStats,
+    RTCStatsReport,
+)
 from aiortc.utils import uint16_add
 from av.frame import Frame
 
 from .codecs import CodecTestCase
-from .utils import ClosedDtlsTransport, asynctest, dummy_dtls_transport_pair, load
+from .utils import (
+    ClosedDtlsTransport,
+    asynctest,
+    dummy_dtls_transport_pair,
+    load,
+    stats_of_type,
+)
 
 OPUS_CODEC = RTCRtpCodecParameters(
     mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -437,7 +449,7 @@ class RTCRtpReceiverTest(CodecTestCase):
                 ["inbound-rtp", "remote-outbound-rtp", "transport"],
             )
 
-            inbound_rtp = next(s for s in report.values() if s.type == "inbound-rtp")
+            [inbound_rtp] = stats_of_type(report, RTCInboundRtpStreamStats)
             self.assertEqual(inbound_rtp.packetsReceived, 10)
             self.assertEqual(inbound_rtp.bytesReceived, 1600)
 
@@ -604,6 +616,60 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
 
     @asynctest
+    async def test_rtp_inbound_stats(self) -> None:
+        async with create_receiver("video") as receiver:
+            receiver._set_rtcp_ssrc(5678)
+            receiver._track = RemoteStreamTrack(kind="video")
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
+
+            # Receive RTP with a gap, which sends a NACK.
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=3)
+            await receiver._handle_rtp_packet(packets[0], arrival_time_ms=0)
+            await receiver._handle_rtp_packet(packets[2], arrival_time_ms=0)
+
+            # Check the stats before any RTCP SR.
+            report = await receiver.getStats()
+            [inbound_rtp] = stats_of_type(report, RTCInboundRtpStreamStats)
+            self.assertEqual(inbound_rtp.trackIdentifier, receiver.track.id)
+            self.assertEqual(inbound_rtp.nackCount, 1)
+            self.assertIsNone(inbound_rtp.remoteId)
+
+            # Receive an RTCP SR for the stream.
+            sender_info = RtcpSenderInfo(
+                ntp_timestamp=0, rtp_timestamp=0, packet_count=3, octet_count=0
+            )
+            await receiver._handle_rtcp_packet(
+                RtcpSrPacket(ssrc=1234, sender_info=sender_info)
+            )
+
+            # Check the stats point to the remote outbound stream.
+            report = await receiver.getStats()
+            [inbound_rtp] = stats_of_type(report, RTCInboundRtpStreamStats)
+            [remote_outbound_rtp] = stats_of_type(
+                report, RTCRemoteOutboundRtpStreamStats
+            )
+            self.assertEqual(inbound_rtp.remoteId, remote_outbound_rtp.id)
+            self.assertEqual(remote_outbound_rtp.localId, inbound_rtp.id)
+
+    @patch("aiortc.rtcrtpreceiver.time")
+    @asynctest
+    async def test_rtp_jitter_stats(self, mock_time: MagicMock) -> None:
+        async with create_receiver("audio") as receiver:
+            receiver._track = RemoteStreamTrack(kind="audio")
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+
+            # Receive 20 ms packets, 30 ms then 20 ms apart.
+            arrivals = [1531562330.00, 1531562330.03, 1531562330.05]
+            for packet, arrival in zip(create_rtp_packets(3, 0), arrivals):
+                mock_time.monotonic.return_value = arrival
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check the jitter of 4 timestamp units is reported in seconds.
+            report = await receiver.getStats()
+            [inbound_rtp] = stats_of_type(report, RTCInboundRtpStreamStats)
+            self.assertEqual(inbound_rtp.jitter, 4 / 8000)
+
+    @asynctest
     async def test_rtp_invalid_payload(self) -> None:
         async with create_receiver("video") as receiver:
             receiver._track = RemoteStreamTrack(kind="video")
@@ -735,7 +801,7 @@ class RTCRtpReceiverTest(CodecTestCase):
 
             # Check the retransmission counts towards the media stream.
             report = await receiver.getStats()
-            inbound = [s for s in report.values() if s.type == "inbound-rtp"]
+            inbound = stats_of_type(report, RTCInboundRtpStreamStats)
             self.assertEqual([s.ssrc for s in inbound], [1234])
             self.assertEqual(inbound[0].packetsReceived, 3)
             self.assertEqual(inbound[0].bytesReceived, 30)
@@ -753,7 +819,7 @@ class RTCRtpReceiverTest(CodecTestCase):
 
             # Check each SSRC has its own stats.
             report = await receiver.getStats()
-            inbound = [s for s in report.values() if s.type == "inbound-rtp"]
+            inbound = stats_of_type(report, RTCInboundRtpStreamStats)
             self.assertEqual([s.ssrc for s in inbound], [1234, 5678])
 
     @asynctest
