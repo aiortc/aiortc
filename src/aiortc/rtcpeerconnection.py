@@ -499,14 +499,17 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # don't add track twice
         self.__assertTrackHasNoSender(track)
 
+        # Reuse a transceiver without a track, unless it is stopped (W3C
+        # webrtc-pc, addTrack).
         for transceiver in self.__transceivers:
-            if transceiver.kind == track.kind:
-                if transceiver.sender.track is None:
-                    transceiver.sender.replaceTrack(track)
-                    transceiver.direction = or_direction(
-                        transceiver.direction, "sendonly"
-                    )
-                    return transceiver.sender
+            if (
+                transceiver.kind == track.kind
+                and transceiver.sender.track is None
+                and not transceiver.stopped
+            ):
+                transceiver.sender.replaceTrack(track)
+                transceiver.direction = or_direction(transceiver.direction, "sendonly")
+                return transceiver.sender
 
         transceiver = self.__createTransceiver(
             direction="sendrecv", kind=track.kind, sender_track=track

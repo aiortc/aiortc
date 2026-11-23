@@ -846,6 +846,21 @@ class RTCPeerConnectionTest(TestCase):
         self.assertEqual(str(cm.exception), "RTCPeerConnection is closed")
 
     @asynctest
+    async def test_addTrack_stopped_transceiver(self) -> None:
+        pc = RTCPeerConnection()
+
+        # A stopped transceiver is not reused, even if it has no track.
+        stopped = pc.addTransceiver("audio")
+        await stopped.stop()
+        track = AudioStreamTrack()
+        sender = pc.addTrack(track)
+        self.assertIsNone(stopped.sender.track)
+        self.assertEqual(sender.track, track)
+        self.assertEqual(len(pc.getTransceivers()), 2)
+
+        await pc.close()
+
+    @asynctest
     async def test_addTransceiver_audio_inactive(self) -> None:
         pc = RTCPeerConnection()
 
