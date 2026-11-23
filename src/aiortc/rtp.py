@@ -647,6 +647,9 @@ class RtcpPacket:
 
 
 class RtpPacket:
+    # The depayloaded media data, set by the receiver for the jitter buffer.
+    _data: bytes
+
     def __init__(
         self,
         payload_type: int = 0,

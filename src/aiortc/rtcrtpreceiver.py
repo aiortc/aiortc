@@ -549,9 +549,9 @@ class RTCRtpReceiver:
         # parse codec-specific information
         try:
             if packet.payload:
-                packet._data = depayload(codec, packet.payload)  # type: ignore
+                packet._data = depayload(codec, packet.payload)
             else:
-                packet._data = b""  # type: ignore
+                packet._data = b""
         except ValueError as exc:
             self.__log_debug("x RTP payload parsing failed: %s", exc)
             return
