@@ -132,6 +132,7 @@ class RTCRtpSender:
         if transport.state == "closed":
             raise InvalidStateError
 
+        self.__track_replaced = asyncio.Event()
         if isinstance(trackOrKind, MediaStreamTrack):
             self.__kind = trackOrKind.kind
             self.replaceTrack(trackOrKind)
@@ -236,6 +237,7 @@ class RTCRtpSender:
 
     def replaceTrack(self, track: Optional[MediaStreamTrack]) -> None:
         self.__track = track
+        self.__track_replaced.set()
         if track is not None:
             self._track_id = track.id
         else:
@@ -406,13 +408,19 @@ class RTCRtpSender:
         timeline = RtpTimeline(codec.clockRate)
         sending_resumed = True
         source = None
+        track_ended = False
         try:
             while True:
                 track = self.__track
-                if not track:
+                if not track or track_ended:
                     sending_resumed = True
                     source = None
-                    await asyncio.sleep(0.02)
+
+                    # Nothing to send until the track is replaced. There is no
+                    # await since reading the track, so no replacement is missed.
+                    self.__track_replaced.clear()
+                    await self.__track_replaced.wait()
+                    track_ended = False
                     continue
 
                 # Frames from a new track may differ in format, and their
@@ -425,7 +433,14 @@ class RTCRtpSender:
 
                 # Fetch the next encoded frame. This can be `None` if the sender
                 # is disabled, in which case we just continue the loop.
-                enc_frame = await self._next_encoded_frame(codec, track)
+                try:
+                    enc_frame = await self._next_encoded_frame(codec, track)
+                except MediaStreamError:
+                    # An ended track remains the sender's track, but is not sent
+                    # until it is replaced (W3C webrtc-pc, RTCRtpSender.track).
+                    self.__log_debug("- track ended")
+                    track_ended = True
+                    continue
                 if enc_frame is None:
                     if not self._enabled:
                         sending_resumed = True
@@ -473,7 +488,7 @@ class RTCRtpSender:
                     sequence_number = uint16_add(sequence_number, 1)
 
                 sending_resumed = False
-        except (asyncio.CancelledError, ConnectionError, MediaStreamError):
+        except (asyncio.CancelledError, ConnectionError):
             pass
         except Exception:
             # we *need* to set __rtp_exited, otherwise RTCRtpSender.stop() will hang,
