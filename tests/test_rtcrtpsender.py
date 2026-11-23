@@ -591,6 +591,17 @@ class RTCRtpSenderTest(TestCase):
             await sender.stop()
 
     @asynctest
+    async def test_replace_track_wrong_kind(self) -> None:
+        async with dummy_dtls_transport_pair() as (local_transport, _):
+            track = AudioStreamTrack()
+            sender = RTCRtpSender(track, local_transport)
+
+            with self.assertRaises(TypeError) as cm:
+                sender.replaceTrack(VideoStreamTrack())
+            self.assertEqual(str(cm.exception), "Expected a track of kind 'audio'")
+            self.assertIs(sender.track, track)
+
+    @asynctest
     async def test_disabled(self) -> None:
         async with dummy_dtls_transport_pair() as (local_transport, _):
             sender = RTCRtpSender(AudioStreamTrack(), local_transport)
