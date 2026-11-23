@@ -849,18 +849,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 sessionDescription.sdp,
             )
 
-        # parse and validate description
+        # Parse and validate the description.
         description = sdp.SessionDescription.parse(sessionDescription.sdp)
         description.type = sessionDescription.type
         self.__validate_description(description, is_local=True)
 
-        # update signaling state
-        if description.type == "offer":
-            self.__setSignalingState("have-local-offer")
-        elif description.type == "answer":
-            self.__setSignalingState("stable")
-
-        # assign MID
+        # Assign the MIDs.
         for i, media in enumerate(description.media):
             mid = media.rtp.muxId
             self.__seenMids.add(mid)
@@ -870,14 +864,14 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             elif media.kind == "application":
                 self.__sctp.mid = mid
 
-        # set ICE role
+        # Set the ICE role.
         if description.type == "offer":
             for iceTransport in self.__iceTransports:
                 if not iceTransport._role_set:
                     iceTransport._connection.ice_controlling = True
                     iceTransport._role_set = True
 
-        # set DTLS role
+        # Set the DTLS role.
         if description.type == "answer":
             for i, media in enumerate(description.media):
                 if media.kind in ["audio", "video"]:
@@ -886,12 +880,25 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 elif media.kind == "application":
                     self.__sctp.transport._set_role(media.dtls.role)
 
-        # configure direction
+        # Configure the directions.
         for t in self.__transceivers:
             if description.type in ["answer", "pranswer"]:
                 t._setCurrentDirection(and_direction(t.direction, t._offerDirection))
 
-        # gather candidates
+        # Store the description before the signaling state changes, so that
+        # it is visible at once (W3C webrtc-pc, set the session description).
+        if description.type == "answer":
+            self.__currentLocalDescription = description
+            self.__pendingLocalDescription = None
+        else:
+            self.__pendingLocalDescription = description
+        if description.type == "offer":
+            self.__setSignalingState("have-local-offer")
+        elif description.type == "answer":
+            self.__setSignalingState("stable")
+
+        # Gather candidates and add them to the stored description. A pending
+        # __connect() task may run meanwhile, as the description is applied.
         await self.__gather()
         for i, media in enumerate(description.media):
             if media.kind in ["audio", "video"]:
@@ -900,15 +907,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             elif media.kind == "application":
                 add_transport_description(media, self.__sctp.transport)
 
-        # connect
+        # Start the transports and transceivers in the background.
         asyncio.ensure_future(self.__connect())
-
-        # replace description
-        if description.type == "answer":
-            self.__currentLocalDescription = description
-            self.__pendingLocalDescription = None
-        else:
-            self.__pendingLocalDescription = description
 
     async def setRemoteDescription(
         self, sessionDescription: RTCSessionDescription
@@ -1036,7 +1036,20 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                         role="server" if media.dtls.role == "client" else "client"
                     )
 
-        # remove bundled transports
+        # Store the description before the first await, so that a pending
+        # __connect() task does not see it half applied, and before the
+        # signaling state changes (W3C webrtc-pc, set the session description).
+        if description.type == "answer":
+            self.__currentRemoteDescription = description
+            self.__pendingRemoteDescription = None
+        else:
+            self.__pendingRemoteDescription = description
+        if description.type == "offer":
+            self.__setSignalingState("have-remote-offer")
+        elif description.type == "answer":
+            self.__setSignalingState("stable")
+
+        # Move the bundled media to the transport of the BUNDLE-tagged section.
         bundle = next((x for x in description.group if x.semantic == "BUNDLE"), None)
         if bundle and bundle.items:
             # find main media stream
@@ -1101,21 +1114,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         for event in trackEvents:
             self.emit("track", event.track)
 
-        # connect
+        # Start the transports and transceivers in the background.
         asyncio.ensure_future(self.__connect())
-
-        # update signaling state
-        if description.type == "offer":
-            self.__setSignalingState("have-remote-offer")
-        elif description.type == "answer":
-            self.__setSignalingState("stable")
-
-        # replace description
-        if description.type == "answer":
-            self.__currentRemoteDescription = description
-            self.__pendingRemoteDescription = None
-        else:
-            self.__pendingRemoteDescription = description
 
     async def __connect(self) -> None:
         # The connection may have been closed before this task got to run.

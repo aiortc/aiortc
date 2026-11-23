@@ -2868,6 +2868,34 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
+    async def test_connect_audio_then_video_no_task_error(self) -> None:
+        # Exceptions in background tasks are only reported when the task is
+        # collected, to the loop's exception handler.
+        errors: list[dict[str, Any]] = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda loop, context: errors.append(context)
+        )
+
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+
+        pc2 = RTCPeerConnection()
+
+        await negotiate(pc1, pc2)
+        await self.assertIceCompleted(pc1, pc2)
+
+        # Connecting the transceivers must not run while pc2 applies its answer,
+        # whose new "m=" section is then missing from its local description.
+        pc1.addTrack(VideoStreamTrack())
+        await negotiate(pc1, pc2)
+        await asyncio.sleep(0.5)
+        gc.collect()
+        self.assertEqual(errors, [])
+
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
     async def test_connect_audio_then_video(self) -> None:
         pc1 = RTCPeerConnection()
         pc1_states = track_states(pc1)
@@ -5195,6 +5223,20 @@ a=rtpmap:8 PCMA/8000
         await pc2.close()
 
     @asynctest
+    async def test_setLocalDescription_closed_during_gathering(self) -> None:
+        pc = RTCPeerConnection()
+        pc.addTrack(AudioStreamTrack())
+        offer = await pc.createOffer()
+
+        # The connection is closed while candidates are gathered, after the
+        # description was applied.
+        task = asyncio.ensure_future(pc.setLocalDescription(offer))
+        await asyncio.sleep(0)
+        await pc.close()
+        await task
+        self.assertEqual(pc.signalingState, "closed")
+
+    @asynctest
     async def test_setLocalDescription_implicit(self) -> None:
         pc = RTCPeerConnection()
         pc.addTrack(AudioStreamTrack())
@@ -5248,6 +5290,46 @@ a=rtpmap:8 PCMA/8000
         )
 
         # close
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_setDescription_signalingstatechange(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+        pc2 = RTCPeerConnection()
+
+        # The descriptions are updated before the signaling state changes
+        # (W3C webrtc-pc, set the session description).
+        events: list[tuple[str, str, Optional[str], Optional[str]]] = []
+
+        def record(name: str, pc: RTCPeerConnection) -> None:
+            @pc.on("signalingstatechange")
+            def signalingstatechange() -> None:
+                local = pc.localDescription
+                remote = pc.remoteDescription
+                events.append(
+                    (
+                        name,
+                        pc.signalingState,
+                        local.type if local else None,
+                        remote.type if remote else None,
+                    )
+                )
+
+        record("pc1", pc1)
+        record("pc2", pc2)
+        await negotiate(pc1, pc2)
+        self.assertEqual(
+            events,
+            [
+                ("pc1", "have-local-offer", "offer", None),
+                ("pc2", "have-remote-offer", None, "offer"),
+                ("pc2", "stable", "answer", "offer"),
+                ("pc1", "stable", "offer", "answer"),
+            ],
+        )
+
         await pc1.close()
         await pc2.close()
 
