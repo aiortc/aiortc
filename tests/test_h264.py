@@ -128,6 +128,21 @@ class H264Test(CodecTestCase):
         self.assertEqual(payloads, [b"\x00"])
         self.assertEqual(timestamp, 90)
 
+    def test_encoder_reset(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(H264_CODEC), H264Encoder)
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        encoder.encode(frame)
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        encoder.encode(frame)
+
+        # After a reset, a new source can restart its timestamps.
+        encoder.reset()
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        self.assertGreaterEqual(len(payloads), 1)
+        self.assertEqual(timestamp, 0)
+
     def test_encoder_target_bitrate(self) -> None:
         encoder = self.ensureIsInstance(get_encoder(H264_CODEC), H264Encoder)
         self.assertEqual(encoder.target_bitrate, 1000000)

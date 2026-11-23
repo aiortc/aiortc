@@ -157,6 +157,30 @@ class PcmuTest(CodecTestCase):
             ],
         )
 
+    def test_encoder_reset(self) -> None:
+        encoder = get_encoder(PCMU_CODEC)
+        self.assertIsInstance(encoder, PcmuEncoder)
+
+        for frame in self.create_audio_frames(layout="mono", sample_rate=8000, count=2):
+            encoder.encode(frame)
+
+        # After a reset, frames in another format are encoded from scratch.
+        encoder.reset()
+        output = [
+            encoder.encode(frame)
+            for frame in self.create_audio_frames(
+                layout="stereo", sample_rate=48000, count=3
+            )
+        ]
+        self.assertEqual(
+            output,
+            [
+                ([], None),  # No output due to buffering
+                ([PCMU_PAYLOAD], 0),
+                ([PCMU_PAYLOAD], 160),
+            ],
+        )
+
     def test_roundtrip(self) -> None:
         self.roundtrip_audio(PCMU_CODEC, layout="mono", sample_rate=8000)
 

@@ -84,6 +84,32 @@ class G722Test(CodecTestCase):
         self.assertEqual(payloads, [G722_PAYLOAD])
         self.assertEqual(timestamp, 8)
 
+    def test_encoder_reset(self) -> None:
+        encoder = get_encoder(G722_CODEC)
+        self.assertIsInstance(encoder, G722Encoder)
+
+        for frame in self.create_audio_frames(
+            layout="mono", sample_rate=16000, count=2
+        ):
+            encoder.encode(frame)
+
+        # After a reset, frames in another format are encoded from scratch.
+        encoder.reset()
+        output = [
+            encoder.encode(frame)
+            for frame in self.create_audio_frames(
+                layout="stereo", sample_rate=48000, count=3
+            )
+        ]
+        self.assertEqual(
+            [([len(p) for p in payloads], timestamp) for payloads, timestamp in output],
+            [
+                ([], None),  # No output due to buffering.
+                ([160], 0),
+                ([160], 160),
+            ],
+        )
+
     def test_roundtrip(self) -> None:
         self.roundtrip_audio(G722_CODEC, layout="mono", sample_rate=16000)
 

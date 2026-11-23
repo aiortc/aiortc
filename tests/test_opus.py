@@ -90,6 +90,32 @@ class OpusTest(CodecTestCase):
         self.assertEqual(payloads, [OPUS_PAYLOAD])
         self.assertEqual(timestamp, 48)
 
+    def test_encoder_reset(self) -> None:
+        encoder = get_encoder(OPUS_CODEC)
+        self.assertIsInstance(encoder, OpusEncoder)
+
+        for frame in self.create_audio_frames(
+            layout="stereo", sample_rate=48000, count=2
+        ):
+            encoder.encode(frame)
+
+        # After a reset, frames in another format are encoded from scratch.
+        encoder.reset()
+        output = [
+            encoder.encode(frame)
+            for frame in self.create_audio_frames(
+                layout="mono", sample_rate=8000, count=3
+            )
+        ]
+        self.assertEqual(
+            output,
+            [
+                ([], None),  # No output due to buffering.
+                ([OPUS_PAYLOAD], 0),
+                ([OPUS_PAYLOAD], 960),
+            ],
+        )
+
     def test_roundtrip(self) -> None:
         self.roundtrip_audio(OPUS_CODEC, layout="stereo", sample_rate=48000)
 

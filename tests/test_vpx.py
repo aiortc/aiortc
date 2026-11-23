@@ -203,6 +203,27 @@ class Vp8Test(CodecTestCase):
         self.assertEqual(payloads, [b"\x90\x80\x80\x00\x00"])
         self.assertEqual(timestamp, 90)
 
+    def test_encoder_reset(self) -> None:
+        encoder = self.ensureIsInstance(get_encoder(VP8_CODEC), Vp8Encoder)
+        encoder.picture_id = 0
+
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        encoder.encode(frame)
+
+        # Changing the bitrate recreates the codec, starting from pts 3000.
+        encoder.target_bitrate = 600000
+        frame = self.create_video_frame(width=640, height=480, pts=3000)
+        encoder.encode(frame)
+
+        # After a reset, a new source can restart its timestamps, and the
+        # PictureID keeps increasing.
+        encoder.reset()
+        frame = self.create_video_frame(width=640, height=480, pts=0)
+        payloads, timestamp = encoder.encode(frame)
+        descriptor, _ = VpxPayloadDescriptor.parse(payloads[0])
+        self.assertEqual(descriptor.picture_id, 2)
+        self.assertEqual(timestamp, 0)
+
     def test_encoder_large(self) -> None:
         encoder = self.ensureIsInstance(get_encoder(VP8_CODEC), Vp8Encoder)
 

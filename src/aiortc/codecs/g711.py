@@ -2,6 +2,7 @@ import fractions
 from typing import Literal, cast
 
 from av import AudioFrame, AudioResampler, CodecContext
+from av.audio.codeccontext import AudioCodecContext
 from av.frame import Frame
 from av.packet import Packet
 
@@ -30,20 +31,12 @@ class PcmDecoder(Decoder):
 
 
 class PcmEncoder(Encoder):
-    def __init__(self, codec_name: Literal["pcm_alaw", "pcm_mulaw"]) -> None:
-        self.codec = CodecContext.create(codec_name, "w")
-        self.codec.format = "s16"
-        self.codec.layout = "mono"
-        self.codec.sample_rate = SAMPLE_RATE
-        self.codec.time_base = TIME_BASE
+    codec: AudioCodecContext
+    resampler: AudioResampler
 
-        # Create our own resampler to control the frame size.
-        self.resampler = AudioResampler(
-            format="s16",
-            layout="mono",
-            rate=SAMPLE_RATE,
-            frame_size=SAMPLES_PER_FRAME,
-        )
+    def __init__(self, codec_name: Literal["pcm_alaw", "pcm_mulaw"]) -> None:
+        self.codec_name = codec_name
+        self.reset()
 
     def encode(
         self, frame: Frame, force_keyframe: bool = False
@@ -67,6 +60,21 @@ class PcmEncoder(Encoder):
     def pack(self, packet: Packet) -> tuple[list[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
         return [bytes(packet)], timestamp
+
+    def reset(self) -> None:
+        self.codec = CodecContext.create(self.codec_name, "w")
+        self.codec.format = "s16"
+        self.codec.layout = "mono"
+        self.codec.sample_rate = SAMPLE_RATE
+        self.codec.time_base = TIME_BASE
+
+        # Create our own resampler to control the frame size.
+        self.resampler = AudioResampler(
+            format="s16",
+            layout="mono",
+            rate=SAMPLE_RATE,
+            frame_size=SAMPLES_PER_FRAME,
+        )
 
 
 class PcmaDecoder(PcmDecoder):

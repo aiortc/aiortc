@@ -72,6 +72,49 @@ class RTCEncodedFrame:
         self.audio_level = audio_level
 
 
+class RtpTimeline:
+    """
+    Map encoder timestamps to RTP timestamps, which must increase monotonically
+    and linearly in time (RFC 3550 section 5.1), even when the source changes.
+    """
+
+    def __init__(self, clock_rate: int) -> None:
+        self.__clock_rate = clock_rate
+        self.__frame_duration = 0
+        self.__last_time = 0.0
+        self.__last_timestamp: Optional[int] = None
+        self.__origin = random32()
+        self.__restart = False
+
+    def restart(self) -> None:
+        """
+        Start a new source, whose timestamps are unrelated to the previous ones.
+        """
+        self.__restart = True
+
+    def timestamp(self, encoder_timestamp: int) -> int:
+        """
+        Return the RTP timestamp of a frame.
+        """
+        now = time.monotonic()
+        if self.__restart and self.__last_timestamp is not None:
+            # Carry on from the previous frame, after the elapsed time but
+            # without overlapping it.
+            elapsed = int((now - self.__last_time) * self.__clock_rate)
+            target = uint32_add(
+                self.__last_timestamp, max(elapsed, self.__frame_duration)
+            )
+            self.__origin = uint32_add(target, -encoder_timestamp)
+
+        timestamp = uint32_add(self.__origin, encoder_timestamp)
+        if self.__last_timestamp is not None and not self.__restart:
+            self.__frame_duration = uint32_add(timestamp, -self.__last_timestamp)
+        self.__last_time = now
+        self.__last_timestamp = timestamp
+        self.__restart = False
+        return timestamp
+
+
 class RTCRtpSender:
     """
     The :class:`RTCRtpSender` interface provides the ability to control and
@@ -293,10 +336,10 @@ class RTCRtpSender:
                 pass
 
     async def _next_encoded_frame(
-        self, codec: RTCRtpCodecParameters
+        self, codec: RTCRtpCodecParameters, track: MediaStreamTrack
     ) -> Optional[RTCEncodedFrame]:
         # Get [Frame|Packet].
-        data = await self.__track.recv()
+        data = await track.recv()
 
         # If the sender is disabled, drop the frame instead of encoding it.
         # We still want to read from the track in order to avoid frames
@@ -360,24 +403,35 @@ class RTCRtpSender:
         self.__rtp_started.set()
 
         sequence_number = random_sequence_number()
-        timestamp_origin = random32()
+        timeline = RtpTimeline(codec.clockRate)
         sending_resumed = True
+        source = None
         try:
             while True:
-                if not self.__track:
+                track = self.__track
+                if not track:
                     sending_resumed = True
+                    source = None
                     await asyncio.sleep(0.02)
                     continue
 
+                # Frames from a new track may differ in format, and their
+                # timestamps are unrelated to those of the previous track.
+                if track is not source:
+                    source = track
+                    if self.__encoder is not None:
+                        self.__encoder.reset()
+                    timeline.restart()
+
                 # Fetch the next encoded frame. This can be `None` if the sender
                 # is disabled, in which case we just continue the loop.
-                enc_frame = await self._next_encoded_frame(codec)
+                enc_frame = await self._next_encoded_frame(codec, track)
                 if enc_frame is None:
                     if not self._enabled:
                         sending_resumed = True
                     continue
 
-                timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
+                timestamp = timeline.timestamp(enc_frame.timestamp)
 
                 for i, payload in enumerate(enc_frame.payloads):
                     packet = RtpPacket(
