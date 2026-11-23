@@ -3,6 +3,8 @@
 from typing import Any
 from unittest import TestCase
 
+from aiortc.codecs import HEADER_EXTENSIONS
+from aiortc.rtcpeerconnection import find_common_header_extensions
 from aiortc.rtcrtpparameters import (
     RTCRtcpFeedback,
     RTCRtpCodecParameters,
@@ -1064,6 +1066,52 @@ a=fingerprint:sha-256 6B:8B:5D:EA:59:04:20:23:29:C8:87:1C:CC:87:32:BE:DD:8C:66:A
 a=setup:actpass
 """
             ),
+        )
+
+    def test_audio_extmap_with_extension_attributes(self) -> None:
+        # RFC 8285 section 5: a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
+        # RFC 6904 section 4 writes an encrypted extension that way.
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 863426017819471768 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 43580 RTP/AVP 0
+c=IN IP4 192.168.99.58
+a=sendrecv
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level vad=on
+a=extmap:2 urn:ietf:params:rtp-hdrext:encrypt urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=extmap:3/recvonly urn:ietf:params:rtp-hdrext:encrypt urn:ietf:params:rtp-hdrext:csrc-audio-level
+a=extmap:4/recvonly urn:ietf:params:rtp-hdrext:csrc-audio-level
+a=rtpmap:0 PCMU/8000
+"""
+            )
+        )
+        self.assertEqual(
+            d.media[0].rtp.headerExtensions,
+            [
+                RTCRtpHeaderExtensionParameters(
+                    id=1, uri="urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=2, uri="urn:ietf:params:rtp-hdrext:encrypt"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=3, uri="urn:ietf:params:rtp-hdrext:encrypt"
+                ),
+                RTCRtpHeaderExtensionParameters(
+                    id=4, uri="urn:ietf:params:rtp-hdrext:csrc-audio-level"
+                ),
+            ],
+        )
+
+        # The encrypted form is not supported, so an answer leaves it out.
+        common = find_common_header_extensions(
+            HEADER_EXTENSIONS["audio"], d.media[0].rtp.headerExtensions
+        )
+        self.assertNotIn(
+            "urn:ietf:params:rtp-hdrext:encrypt", [x.uri for x in common]
         )
 
     def test_audio_rtcp_without_port(self) -> None:

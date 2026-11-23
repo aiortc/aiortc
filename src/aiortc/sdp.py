@@ -465,7 +465,9 @@ class SessionDescription:
                     elif attr == "end-of-candidates":
                         current_media.ice_candidates_complete = True
                     elif attr == "extmap":
-                        ext_id, ext_uri = value.split()
+                        # RFC 8285 section 5: the URI may be followed by extension
+                        # attributes, as in the encrypted form of RFC 6904 section 4.
+                        ext_id, ext_uri = value.split()[:2]
                         if "/" in ext_id:
                             ext_id, ext_direction = ext_id.split("/")
                         extension = RTCRtpHeaderExtensionParameters(
