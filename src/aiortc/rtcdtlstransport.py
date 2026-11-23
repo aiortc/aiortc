@@ -254,6 +254,7 @@ class RtpRouter:
         self.senders: dict[int, RtpSender] = {}
         self.mid_table: dict[str, RtpReceiver] = {}
         self.ssrc_table: dict[int, RtpReceiver] = {}
+        self.learned_ssrc_table: dict[int, RtpReceiver] = {}
         self.payload_type_table: dict[int, set[RtpReceiver]] = {}
 
     def register_receiver(
@@ -263,6 +264,10 @@ class RtpRouter:
         payload_types: list[int],
         mid: Optional[str] = None,
     ) -> None:
+        # Replace any previous configuration, but keep the SSRCs learned from
+        # payload types, which are not remapped (RFC 9143 section 9.2).
+        self.__discard_configuration(receiver)
+
         self.receivers.add(receiver)
         if mid is not None:
             self.mid_table[mid] = receiver
@@ -285,10 +290,10 @@ class RtpRouter:
 
         # route to RTP receiver
         if isinstance(packet, RtcpSrPacket):
-            add_recipient(self.ssrc_table.get(packet.ssrc))
+            add_recipient(self.__get_ssrc_receiver(packet.ssrc))
         elif isinstance(packet, RtcpByePacket):
             for source in packet.sources:
-                add_recipient(self.ssrc_table.get(source))
+                add_recipient(self.__get_ssrc_receiver(source))
 
         # route to RTP sender
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
@@ -308,7 +313,7 @@ class RtpRouter:
         return recipients
 
     def route_rtp(self, packet: RtpPacket) -> Optional[RtpReceiver]:
-        ssrc_receiver = self.ssrc_table.get(packet.ssrc)
+        ssrc_receiver = self.__get_ssrc_receiver(packet.ssrc)
         pt_receivers = self.payload_type_table.get(packet.payload_type, set())
 
         # the SSRC and payload type are known and match
@@ -318,7 +323,7 @@ class RtpRouter:
         # the SSRC is unknown but the payload type matches, update the SSRC table
         if ssrc_receiver is None and len(pt_receivers) == 1:
             pt_receiver = list(pt_receivers)[0]
-            self.ssrc_table[packet.ssrc] = pt_receiver
+            self.learned_ssrc_table[packet.ssrc] = pt_receiver
             return pt_receiver
 
         # discard the packet
@@ -326,10 +331,8 @@ class RtpRouter:
 
     def unregister_receiver(self, receiver: RtpReceiver) -> None:
         self.receivers.discard(receiver)
-        self.__discard(self.mid_table, receiver)
-        self.__discard(self.ssrc_table, receiver)
-        for pt, receivers in self.payload_type_table.items():
-            receivers.discard(receiver)
+        self.__discard(self.learned_ssrc_table, receiver)
+        self.__discard_configuration(receiver)
 
     def unregister_sender(self, sender: RtpSender) -> None:
         self.__discard(self.senders, sender)
@@ -338,6 +341,19 @@ class RtpRouter:
         for k, v in list(d.items()):
             if v == value:
                 d.pop(k)
+
+    def __discard_configuration(self, receiver: RtpReceiver) -> None:
+        self.__discard(self.mid_table, receiver)
+        self.__discard(self.ssrc_table, receiver)
+        for receivers in self.payload_type_table.values():
+            receivers.discard(receiver)
+
+    def __get_ssrc_receiver(self, ssrc: int) -> Optional[RtpReceiver]:
+        # The SSRCs signalled in the SDP take precedence over learned ones.
+        receiver = self.ssrc_table.get(ssrc)
+        if receiver is None:
+            receiver = self.learned_ssrc_table.get(ssrc)
+        return receiver
 
 
 class RTCDtlsTransport(AsyncIOEventEmitter):

@@ -37,7 +37,7 @@ from aiortc.rtcrtpparameters import (
 from aiortc.rtcrtpreceiver import RTCRtpReceiver
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.sdp import SessionDescription
-from aiortc.stats import RTCStatsReport
+from aiortc.stats import RTCInboundRtpStreamStats, RTCStatsReport
 
 from .test_contrib_media import MediaTestCase
 from .utils import asynctest, lf2crlf
@@ -82,6 +82,15 @@ def mids(pc: RTCPeerConnection) -> list[Optional[str]]:
     if pc.sctp:
         mids.append(pc.sctp.mid)
     return sorted(mids)
+
+
+async def packets_received(receiver: RTCRtpReceiver) -> int:
+    report = await receiver.getStats()
+    return sum(
+        stats.packetsReceived
+        for stats in report.values()
+        if isinstance(stats, RTCInboundRtpStreamStats)
+    )
 
 
 def strip_ice_candidates(description: RTCSessionDescription) -> RTCSessionDescription:
@@ -2269,6 +2278,89 @@ a=rtpmap:8 PCMA/8000
             pc2_states["signalingState"],
             ["stable", "have-remote-offer", "stable", "closed"],
         )
+
+    @asynctest
+    async def test_connect_audio_two_tracks_ssrc_changes(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+        pc1.addTrack(AudioStreamTrack())
+
+        pc2 = RTCPeerConnection()
+
+        def receiving() -> list[bool]:
+            return [bool(r.getSynchronizationSources()) for r in pc2.getReceivers()]
+
+        # Advertise SSRCs which pc1 does not send, as an SFU does before it
+        # reuses the "m=" sections for new participants.
+        await pc1.setLocalDescription(await pc1.createOffer())
+        mangled = RTCSessionDescription(
+            sdp=re.sub(
+                "^a=ssrc:([0-9]+)",
+                lambda m: f"a=ssrc:{int(m.group(1)) ^ 1}",
+                pc1.localDescription.sdp,
+                flags=re.M,
+            ),
+            type=pc1.localDescription.type,
+        )
+        await pc2.setRemoteDescription(mangled)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        await pc1.setRemoteDescription(pc2.localDescription)
+        await self.assertIceCompleted(pc1, pc2)
+
+        # The tracks share payload types, so their RTP cannot be routed.
+        await asyncio.sleep(0.5)
+        self.assertEqual(receiving(), [False, False])
+
+        # Renegotiate with the SSRCs which pc1 actually sends, which must not
+        # restart a stopped receiver.
+        await pc2.getTransceivers()[0].stop()
+        await pc1.setLocalDescription(await pc1.createOffer())
+        await pc2.setRemoteDescription(pc1.localDescription)
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        await pc1.setRemoteDescription(pc2.localDescription)
+
+        await asyncio.sleep(0.5)
+        self.assertEqual(receiving(), [False, True])
+
+        await pc1.close()
+        await pc2.close()
+
+    @asynctest
+    async def test_connect_audio_without_ssrc_then_second_track(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1.addTrack(AudioStreamTrack())
+
+        pc2 = RTCPeerConnection()
+
+        async def negotiate() -> None:
+            # Strip out the SSRCs, so pc2 learns them from the payload types.
+            await pc1.setLocalDescription(await pc1.createOffer())
+            mangled = RTCSessionDescription(
+                sdp=re.sub("^a=ssrc.*\r\n", "", pc1.localDescription.sdp, flags=re.M),
+                type=pc1.localDescription.type,
+            )
+            await pc2.setRemoteDescription(mangled)
+            await pc2.setLocalDescription(await pc2.createAnswer())
+            await pc1.setRemoteDescription(pc2.localDescription)
+
+        await negotiate()
+        await self.assertIceCompleted(pc1, pc2)
+
+        receiver = pc2.getReceivers()[0]
+        await self.sleepWhile(lambda: not receiver.getSynchronizationSources())
+        self.assertEqual(len(receiver.getSynchronizationSources()), 1)
+
+        # The second track shares the payload types of the first one, whose
+        # learned SSRC must survive the renegotiation.
+        pc1.addTrack(AudioStreamTrack())
+        await negotiate()
+
+        count = await packets_received(receiver)
+        await asyncio.sleep(0.5)
+        self.assertGreater(await packets_received(receiver), count)
+
+        await pc1.close()
+        await pc2.close()
 
     @asynctest
     async def test_connect_audio_and_video(self) -> None:

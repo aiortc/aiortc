@@ -590,7 +590,7 @@ class RtpRouterTest(TestCase):
         self.assertEqual(
             router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1
         )
-        self.assertEqual(router.ssrc_table[5678], receiver1)
+        self.assertEqual(router.learned_ssrc_table[5678], receiver1)
 
         # unknown SSRC and payload type
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=6789, payload_type=100)), None)
@@ -620,3 +620,34 @@ class RtpRouterTest(TestCase):
         # unknown SSRC, ambiguous payload type
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), None)
         self.assertEqual(router.route_rtp(RtpPacket(ssrc=5678, payload_type=97)), None)
+
+    def test_route_rtp_reconfigured(self) -> None:
+        receiver1 = DummyRtpReceiver()
+        receiver2 = DummyRtpReceiver()
+
+        router = RtpRouter()
+        router.register_receiver(receiver1, ssrcs=[1234], payload_types=[96])
+
+        # Learn an SSRC from its payload type.
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1
+        )
+
+        # Share the payload type, then signal a new SSRC for the first receiver.
+        router.register_receiver(receiver2, ssrcs=[3456], payload_types=[96])
+        router.register_receiver(receiver1, ssrcs=[2345], payload_types=[96])
+
+        # The old SSRC is no longer routed, but the learned one still is.
+        self.assertEqual(router.route_rtp(RtpPacket(ssrc=1234, payload_type=96)), None)
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=2345, payload_type=96)), receiver1
+        )
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver1
+        )
+
+        # An SSRC signalled in the SDP takes precedence over a learned one.
+        router.register_receiver(receiver2, ssrcs=[5678], payload_types=[96])
+        self.assertEqual(
+            router.route_rtp(RtpPacket(ssrc=5678, payload_type=96)), receiver2
+        )
