@@ -61,41 +61,40 @@ class JitterBuffer:
         return pli_flag, self._remove_frame(packet.sequence_number)
 
     def _remove_frame(self, sequence_number: int) -> Optional[JitterFrame]:
-        frame = None
-        frames = 0
-        packets: list[RtpPacket] = []
-        remove = 0
+        # Find where the complete frames end, up to the first missing packet.
+        ends: list[int] = []
+        start = 0
         timestamp = None
 
         for count in range(self.capacity):
             pos = (self._origin + count) % self._capacity
             packet = self._packets[pos]
-            if packet is None:
+            if packet is None or len(ends) >= max(self._prefetch, 1):
                 break
-            if timestamp is None:
+            if count == start:
                 timestamp = packet.timestamp
             elif packet.timestamp != timestamp:
-                # we now have a complete frame, only store the first one
-                if frame is None:
-                    frame = JitterFrame(
-                        data=b"".join([x._data for x in packets]),  # type: ignore
-                        timestamp=timestamp,
-                    )
-                    remove = count
-
-                # check we have prefetched enough
-                frames += 1
-                if frames >= self._prefetch:
-                    self.remove(remove)
-                    return frame
-
-                # start a new frame
-                packets = []
+                ends.append(count)
+                start = count
                 timestamp = packet.timestamp
+            if self._is_video and packet.marker:
+                # The marker bit flags the last packet of a video frame
+                # (RFC 7741 section 4.1, RFC 6184 section 5.1).
+                ends.append(count + 1)
+                start = count + 1
 
-            packets.append(packet)
-
-        return None
+        # Check we have prefetched enough, then remove the first frame.
+        if len(ends) < max(self._prefetch, 1):
+            return None
+        packets = [
+            self._packets[(self._origin + i) % self._capacity] for i in range(ends[0])
+        ]
+        frame = JitterFrame(
+            data=b"".join([x._data for x in packets]),
+            timestamp=packets[0].timestamp,
+        )
+        self.remove(ends[0])
+        return frame
 
     def remove(self, count: int) -> None:
         assert count <= self._capacity

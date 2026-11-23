@@ -225,38 +225,56 @@ class JitterBufferTest(TestCase):
         jbuffer = JitterBuffer(capacity=16, prefetch=4)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
-        packet._data = b"0000"  # type: ignore
+        packet._data = b"0000"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=1, timestamp=1235)
-        packet._data = b"0001"  # type: ignore
+        packet._data = b"0001"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=2, timestamp=1236)
-        packet._data = b"0002"  # type: ignore
+        packet._data = b"0002"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=3, timestamp=1237)
-        packet._data = b"0003"  # type: ignore
+        packet._data = b"0003"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=4, timestamp=1238)
-        packet._data = b"0003"  # type: ignore
+        packet._data = b"0003"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"0000")
         self.assertEqual(frame.timestamp, 1234)
 
         packet = RtpPacket(sequence_number=5, timestamp=1239)
-        packet._data = b"0004"  # type: ignore
+        packet._data = b"0004"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"0001")
         self.assertEqual(frame.timestamp, 1235)
+
+    def test_remove_audio_frame_marker(self) -> None:
+        """
+        Audio jitter buffer, the marker bit starts a talkspurt.
+        """
+        jbuffer = JitterBuffer(capacity=16)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1234, marker=1)
+        packet._data = b"0000"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1235)
+        packet._data = b"0001"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"0000")
+        self.assertEqual(frame.timestamp, 1234)
 
     def test_remove_video_frame(self) -> None:
         """
@@ -265,22 +283,72 @@ class JitterBufferTest(TestCase):
         jbuffer = JitterBuffer(capacity=128, is_video=True)
 
         packet = RtpPacket(sequence_number=0, timestamp=1234)
-        packet._data = b"0000"  # type: ignore
+        packet._data = b"0000"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=1, timestamp=1234)
-        packet._data = b"0001"  # type: ignore
+        packet._data = b"0001"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=2, timestamp=1234)
-        packet._data = b"0002"  # type: ignore
+        packet._data = b"0002"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNone(frame)
 
         packet = RtpPacket(sequence_number=3, timestamp=1235)
-        packet._data = b"0003"  # type: ignore
+        packet._data = b"0003"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"000000010002")
+        self.assertEqual(frame.timestamp, 1234)
+
+    def test_remove_video_frame_marker(self) -> None:
+        """
+        Video jitter buffer, the marker bit ends a frame.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1234)
+        packet._data = b"0000"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1234, marker=1)
+        packet._data = b"0001"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"00000001")
+        self.assertEqual(frame.timestamp, 1234)
+        self.assertEqual(jbuffer._origin, 2)
+
+        packet = RtpPacket(sequence_number=2, timestamp=1235, marker=1)
+        packet._data = b"0002"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.data, b"0002")
+        self.assertEqual(frame.timestamp, 1235)
+        self.assertEqual(jbuffer._origin, 3)
+
+    def test_remove_video_frame_marker_missing(self) -> None:
+        """
+        Video jitter buffer, the marker bit ends a frame only without a gap.
+        """
+        jbuffer = JitterBuffer(capacity=128, is_video=True)
+
+        packet = RtpPacket(sequence_number=0, timestamp=1234)
+        packet._data = b"0000"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=2, timestamp=1234, marker=1)
+        packet._data = b"0002"
+        pli_flag, frame = jbuffer.add(packet)
+        self.assertIsNone(frame)
+
+        packet = RtpPacket(sequence_number=1, timestamp=1234)
+        packet._data = b"0001"
         pli_flag, frame = jbuffer.add(packet)
         self.assertIsNotNone(frame)
         self.assertEqual(frame.data, b"000000010002")

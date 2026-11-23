@@ -469,14 +469,14 @@ class RTCRtpReceiverTest(CodecTestCase):
             await receiver.receive(RTCRtpReceiveParameters(codecs=[VP8_CODEC]))
 
             # generate some packets
-            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=513)
+            packets = create_rtp_video_packets(self, codec=VP8_CODEC, frames=514)
 
             # receive RTP with a with a gap
             await receiver._handle_rtp_packet(packets[0], arrival_time_ms=0)
-            await receiver._handle_rtp_packet(packets[512], arrival_time_ms=0)
+            await receiver._handle_rtp_packet(packets[513], arrival_time_ms=0)
 
             # check NACK was triggered
-            lost_packets = list(range(384, 512))
+            lost_packets = list(range(385, 513))
             self.assertEqual(nacks[0], (1234, lost_packets))
 
             # check PLI was triggered
