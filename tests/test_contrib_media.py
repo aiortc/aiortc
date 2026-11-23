@@ -620,20 +620,20 @@ class MediaPlayerTest(MediaTestCase):
 
     @asynctest
     async def test_video_file_mpegts_looping(self) -> None:
-        path = self.create_video_file("test.ts", duration=5)
+        path = self.create_video_file("test.ts", duration=1)
         player = self.createMediaPlayer(path, loop=True)
 
-        # read all frames, then loop and re-read all frames
+        # Read all frames, then loop and re-read all frames.
         self.assertEqual(player.video.readyState, "live")
-        for i in range(100):
+        for i in range(60):
             frame = await player.video.recv()
             self.assertVideo(frame)
 
-        # read one more time, forcing a second loop
+        # Read one more time, forcing a second loop.
         await player.video.recv()
         self.assertEqual(player.video.readyState, "live")
 
-        # stop the player
+        # Stop the player.
         player.video.stop()
 
     @asynctest
