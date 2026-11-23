@@ -776,6 +776,52 @@ class MediaRecorderTest(MediaTestCase):
             self.assertVideoStream(container.streams[1], "h264")
 
     @asynctest
+    async def test_audio_first_does_not_fix_video_size_to_default(self) -> None:
+        class DelayedVideoTrack(VideoStreamTrack):
+            async def recv(self) -> av.VideoFrame:
+                if not hasattr(self, "_first_frame"):
+                    await asyncio.sleep(0.5)
+                    self._first_frame = False
+                pts, time_base = await self.next_timestamp()
+                frame = av.VideoFrame(width=320, height=240)
+                for plane in frame.planes:
+                    plane.update(bytes(plane.buffer_size))
+                frame.pts = pts
+                frame.time_base = time_base
+                return frame
+
+        path = self.temporary_path("test.mp4")
+        recorder = MediaRecorder(path)
+        recorder.addTrack(AudioStreamTrack())
+        recorder.addTrack(DelayedVideoTrack())
+        await recorder.start()
+        await asyncio.sleep(1)
+        await recorder.stop()
+
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 2)
+            self.assertVideoStream(container.streams[1], "h264", width=320, height=240)
+
+    @asynctest
+    async def test_audio_recording_continues_when_video_ends_before_first_frame(
+        self,
+    ) -> None:
+        class EndedVideoTrack(VideoStreamTrack):
+            async def recv(self) -> av.VideoFrame:
+                raise MediaStreamError
+
+        path = self.temporary_path("test.mp4")
+        recorder = MediaRecorder(path)
+        recorder.addTrack(AudioStreamTrack())
+        recorder.addTrack(EndedVideoTrack())
+        await recorder.start()
+        await asyncio.sleep(0.5)
+        await recorder.stop()
+
+        with av.open(path, "r") as container:
+            self.assertAudioStream(container.streams[0], "aac")
+
+    @asynctest
     async def test_audio_and_video_webm(self) -> None:
         path = self.temporary_path("test.webm")
         recorder = MediaRecorder(path)
