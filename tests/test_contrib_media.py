@@ -1,5 +1,6 @@
 import asyncio
 import errno
+import fractions
 import os
 import tempfile
 import time
@@ -12,7 +13,13 @@ from unittest.mock import patch
 import av
 import av.container
 import av.stream
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiortc.contrib.media import (
+    MediaBlackhole,
+    MediaPlayer,
+    MediaRecorder,
+    MediaRelay,
+    PlaybackTimeline,
+)
 from aiortc.mediastreams import (
     AudioStreamTrack,
     MediaStreamError,
@@ -637,6 +644,33 @@ class MediaPlayerTest(MediaTestCase):
         player.video.stop()
 
     @asynctest
+    async def test_audio_and_video_file_mpegts_looping(self) -> None:
+        path = self.create_audio_and_video_file("test.ts", duration=1)
+        player = self.createMediaPlayer(path, loop=True)
+
+        async def last_time(track: MediaStreamTrack, count: int) -> float:
+            for i in range(count):
+                data = await track.recv()
+            return float(data.pts * data.time_base)
+
+        # Play the file twice, timestamps keep increasing across the loop.
+        start = time.monotonic()
+        audio_time, video_time = await asyncio.gather(
+            last_time(player.audio, 100), last_time(player.video, 60)
+        )
+        self.assertEqual(player.audio.readyState, "live")
+        self.assertEqual(player.video.readyState, "live")
+        self.assertGreater(audio_time, 1.5)
+        self.assertGreater(video_time, 1.5)
+
+        # Playback is paced in real time.
+        self.assertGreater(time.monotonic() - start, 1.5)
+
+        # Stop the player.
+        player.audio.stop()
+        player.video.stop()
+
+    @asynctest
     async def test_video_file_png(self) -> None:
         path = self.create_video_file("test-%3d.png", duration=3)
         player = self.createMediaPlayer(path)
@@ -849,3 +883,27 @@ class MediaRecorderTest(MediaTestCase):
         with av.open(path, "r") as container:
             self.assertEqual(len(container.streams), 1)
             self.assertVideoStream(container.streams[0], "vp8")
+
+
+class PlaybackTimelineTest(TestCase):
+    def test_restart(self) -> None:
+        audio_time_base = fractions.Fraction(1, 48000)
+        video_time_base = fractions.Fraction(1, 90000)
+        timeline = PlaybackTimeline()
+
+        # Each stream starts at 0. The audio lasts 1.2s, the video 1s.
+        self.assertEqual(timeline.timestamp("audio", 960, 960, audio_time_base), 0)
+        self.assertEqual(timeline.timestamp("video", 6000, 3000, video_time_base), 0)
+        self.assertEqual(
+            timeline.timestamp("audio", 57600, 960, audio_time_base), 56640
+        )
+        self.assertEqual(
+            timeline.timestamp("video", 93000, 3000, video_time_base), 87000
+        )
+
+        # After a loop, both streams resume where the longest one ended.
+        timeline.restart()
+        self.assertEqual(timeline.timestamp("audio", 960, 960, audio_time_base), 57600)
+        self.assertEqual(
+            timeline.timestamp("video", 6000, 3000, video_time_base), 108000
+        )
