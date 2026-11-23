@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 from typing import Any, Optional, Union
 from unittest import TestCase
+from unittest.mock import patch
 
 import aioice.stun
 from aiortc import (
@@ -33,6 +34,7 @@ from aiortc.rtcrtpparameters import (
     RTCRtpCodecCapability,
     RTCRtpCodecParameters,
 )
+from aiortc.rtcrtpreceiver import RTCRtpReceiver
 from aiortc.rtcrtpsender import RTCRtpSender
 from aiortc.sdp import SessionDescription
 from aiortc.stats import RTCStatsReport
@@ -167,7 +169,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def find_common_codecs_dynamic(self) -> None:
+    def test_find_common_codecs_dynamic(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
@@ -200,7 +202,7 @@ class RTCRtpCodecParametersTest(TestCase):
             ],
         )
 
-    def find_common_codecs_feedback(self) -> None:
+    def test_find_common_codecs_feedback(self) -> None:
         local_codecs = [
             RTCRtpCodecParameters(
                 mimeType="video/VP8",
@@ -274,6 +276,45 @@ class RTCRtpCodecParametersTest(TestCase):
                     clockRate=90000,
                     payloadType=97,
                     parameters={"apt": 96},
+                ),
+            ],
+        )
+
+    def test_find_common_codecs_rtx_listed_first(self) -> None:
+        local_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=100
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=101,
+                parameters={"apt": 100},
+            ),
+        ]
+        remote_codecs = [
+            RTCRtpCodecParameters(
+                mimeType="video/rtx",
+                clockRate=90000,
+                payloadType=97,
+                parameters={"apt": 96},
+            ),
+            RTCRtpCodecParameters(
+                mimeType="video/VP8", clockRate=90000, payloadType=96
+            ),
+        ]
+        common = find_common_codecs(local_codecs, remote_codecs)
+        self.assertEqual(
+            common,
+            [
+                RTCRtpCodecParameters(
+                    mimeType="video/rtx",
+                    clockRate=90000,
+                    payloadType=97,
+                    parameters={"apt": 96},
+                ),
+                RTCRtpCodecParameters(
+                    mimeType="video/VP8", clockRate=90000, payloadType=96
                 ),
             ],
         )
@@ -2913,12 +2954,12 @@ a=rtpmap:8 PCMA/8000
         self.assertHasIceCandidates(pc1.localDescription)
         self.assertHasDtls(pc1.localDescription, "actpass")
 
-        # strip out vp8
+        # Strip out VP8 along with its RTX codec.
         parsed = SessionDescription.parse(pc1.localDescription.sdp)
-        parsed.media[0].rtp.codecs.pop(0)
-        parsed.media[0].fmt.pop(0)
+        del parsed.media[0].rtp.codecs[0:2]
+        del parsed.media[0].fmt[0:2]
         desc1 = RTCSessionDescription(sdp=str(parsed), type=pc1.localDescription.type)
-        self.assertCodecNames(desc1, ["rtx", "H264", "rtx", "H264", "rtx"])
+        self.assertCodecNames(desc1, ["H264", "rtx", "H264", "rtx"])
 
         # handle offer
         await pc2.setRemoteDescription(desc1)
@@ -3119,6 +3160,64 @@ a=rtpmap:8 PCMA/8000
         await pc1.close()
         await pc2.close()
         self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+    @asynctest
+    async def test_connect_video_rtx_listed_first(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc1_tracks = track_remote_tracks(pc1)
+
+        pc2 = RTCPeerConnection()
+        pc2_tracks = track_remote_tracks(pc2)
+
+        # Create an offer whose "m=" line lists each RTX codec first.
+        pc1.addTrack(VideoStreamTrack())
+        await pc1.setLocalDescription(await pc1.createOffer())
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        media = parsed.media[0]
+        media.rtp.codecs = [media.rtp.codecs[i] for i in (1, 0, 3, 2, 5, 4)]
+        media.fmt = [codec.payloadType for codec in media.rtp.codecs]
+        offer = RTCSessionDescription(sdp=str(parsed), type="offer")
+        self.assertCodecNames(offer, ["rtx", "VP8", "rtx", "H264", "rtx", "H264"])
+
+        # Check the answer keeps every RTX codec, in the order of the offer.
+        await pc2.setRemoteDescription(offer)
+        pc2.addTrack(VideoStreamTrack())
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        self.assertCodecNames(
+            pc2.localDescription, ["rtx", "VP8", "rtx", "H264", "rtx", "H264"]
+        )
+        answer = SessionDescription.parse(pc2.localDescription.sdp)
+        self.assertEqual(answer.media[0].fmt, media.fmt)
+
+        # Record the receive parameters of both peers while connecting.
+        with patch.object(
+            RTCRtpReceiver,
+            "receive",
+            autospec=True,
+            side_effect=RTCRtpReceiver.receive,
+        ) as receive:
+            await pc1.setRemoteDescription(pc2.localDescription)
+            await self.assertIceCompleted(pc1, pc2)
+
+            # Check both peers send video with VP8 rather than RTX.
+            for tracks in [pc1_tracks, pc2_tracks]:
+                self.assertEqual(len(tracks), 1)
+                await asyncio.wait_for(tracks[0].recv(), timeout=5)
+
+        # Check both peers map each RTX stream to the codec it repairs.
+        self.assertEqual(receive.call_count, 2)
+        for call in receive.call_args_list:
+            parameters = call.args[1]
+            self.assertEqual(
+                [e.payloadType for e in parameters.encodings], [97, 99, 101]
+            )
+            for encoding in parameters.encodings:
+                self.assertIsNotNone(encoding.rtx)
+
+        # Close the connections.
+        await pc1.close()
+        await pc2.close()
         self.assertClosed(pc2)
 
     @asynctest
