@@ -167,7 +167,7 @@ class RTCRtpSender:
         self.__stopped = False
         self.__transport = transport
 
-        # stats
+        # RTCP sender reports and round-trip time.
         self.__lsr: Optional[int] = None
         self.__lsr_time: Optional[float] = None
         self.__ntp_timestamp = 0
@@ -175,6 +175,13 @@ class RTCRtpSender:
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt: Optional[float] = None
+
+        # Frames, NACKs and retransmissions are counted for stats, not RTCP reports.
+        self.__frames_encoded = 0
+        self.__frames_sent = 0
+        self.__nack_count = 0
+        self.__retransmitted_bytes_sent = 0
+        self.__retransmitted_packets_sent = 0
 
         # logging
         self.__log_debug: Callable[..., None] = lambda *args: None
@@ -219,21 +226,36 @@ class RTCRtpSender:
 
         :rtype: :class:`RTCStatsReport`
         """
+        # Link the local and remote statistics, once an RTCP RR was received.
+        local_id = self.__stats_object_id("outbound-rtp", self._ssrc)
+        remote = self.__stats.get(
+            self.__stats_object_id("remote-inbound-rtp", self._ssrc)
+        )
+        if remote is not None:
+            remote.localId = local_id
+
+        # Frame counters MUST NOT exist for audio (webrtc-stats, framesEncoded).
+        is_video = self.__kind == "video"
+
         self.__stats.add(
             RTCOutboundRtpStreamStats(
                 # RTCStats
                 timestamp=clock.current_datetime(),
                 type="outbound-rtp",
-                id=f"outbound-rtp_{self.__stats_id}_{self._ssrc}",
+                id=local_id,
                 # RTCStreamStats
                 ssrc=self._ssrc,
                 kind=self.__kind,
                 transportId=self.transport._stats_id,
                 # RTCSentRtpStreamStats
-                packetsSent=self.__packet_count,
-                bytesSent=self.__octet_count,
+                packetsSent=self.__packet_count + self.__retransmitted_packets_sent,
+                bytesSent=self.__octet_count + self.__retransmitted_bytes_sent,
                 # RTCOutboundRtpStreamStats
                 trackId=str(id(self.track)),
+                nackCount=self.__nack_count,
+                framesEncoded=self.__frames_encoded if is_video else None,
+                framesSent=self.__frames_sent if is_video else None,
+                remoteId=remote.id if remote is not None else None,
             )
         )
         self.__stats.update(self.transport._get_stats())
@@ -334,7 +356,7 @@ class RTCRtpSender:
                         # RTCStats
                         timestamp=clock.current_datetime(),
                         type="remote-inbound-rtp",
-                        id=f"remote-inbound-rtp_{self.__stats_id}_{report.ssrc}",
+                        id=self.__stats_object_id("remote-inbound-rtp", report.ssrc),
                         # RTCStreamStats
                         ssrc=report.ssrc,
                         kind=self.__kind,
@@ -342,13 +364,14 @@ class RTCRtpSender:
                         # RTCReceivedRtpStreamStats
                         packetsReceived=self.__packet_count - report.packets_lost,
                         packetsLost=report.packets_lost,
-                        jitter=report.jitter,
+                        jitter=report.jitter / self.__codec.clockRate,
                         # RTCRemoteInboundRtpStreamStats
                         roundTripTime=self.__rtt,
-                        fractionLost=report.fraction_lost,
+                        fractionLost=report.fraction_lost / 256,
                     )
                 )
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
+            self.__nack_count += 1
             for seq in packet.lost:
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt in (
@@ -412,6 +435,7 @@ class RTCRtpSender:
         """
         packet = self.__rtp_history.get(sequence_number % RTP_HISTORY_SIZE)
         if packet and packet.sequence_number == sequence_number:
+            payload_size = len(packet.payload)
             if self.__rtx_payload_type is not None:
                 packet = wrap_rtx(
                     packet,
@@ -424,6 +448,11 @@ class RTCRtpSender:
             self.__log_debug("> %s", packet)
             packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
             await self.transport._send_rtp(packet_bytes)
+
+            # Retransmissions count towards the stream's stats (webrtc-stats,
+            # "outbound-rtp"), and RTX ones are not part of its RTCP sender reports.
+            self.__retransmitted_bytes_sent += payload_size
+            self.__retransmitted_packets_sent += 1
 
     def _send_keyframe(self) -> None:
         """
@@ -486,6 +515,7 @@ class RTCRtpSender:
                     if not self._enabled:
                         sending_resumed = True
                     continue
+                self.__frames_encoded += 1
 
                 # A frame encoded while the codec changed is dropped.
                 if self.__codec is not codec:
@@ -532,6 +562,7 @@ class RTCRtpSender:
                     self.__packet_count += 1
                     sequence_number = uint16_add(sequence_number, 1)
 
+                self.__frames_sent += 1
                 sending_resumed = False
         except (asyncio.CancelledError, ConnectionError):
             pass
@@ -604,3 +635,6 @@ class RTCRtpSender:
 
     def __log_warning(self, msg: str, *args: object) -> None:
         logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)
+
+    def __stats_object_id(self, stats_type: str, ssrc: int) -> str:
+        return f"{stats_type}_{self.__stats_id}_{ssrc}"

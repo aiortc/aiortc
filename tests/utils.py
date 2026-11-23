@@ -15,6 +15,7 @@ else:
 
 from aiortc.rtcdtlstransport import RTCCertificate, RTCDtlsTransport
 from aiortc.rtcicetransport import RTCIceTransport
+from aiortc.stats import RTCStatsReport
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -143,6 +144,13 @@ def load(name: str) -> bytes:
 def set_loss_pattern(transport: RTCIceTransport, loss_pattern: list[bool]) -> None:
     connection = cast(DummyConnection, transport._connection)
     connection.loss_pattern = loss_pattern
+
+
+def stats_of_type(report: RTCStatsReport, cls: type[T]) -> list[T]:
+    """
+    Return the statistics of a report which are of the given class.
+    """
+    return [stats for stats in report.values() if type(stats) is cls]
 
 
 if os.environ.get("AIORTC_DEBUG"):

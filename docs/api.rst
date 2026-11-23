@@ -118,15 +118,20 @@ Statistics
 
    .. autoclass:: RTCInboundRtpStreamStats()
       :members:
+      :inherited-members:
 
    .. autoclass:: RTCOutboundRtpStreamStats()
       :members:
+      :inherited-members:
 
    .. autoclass:: RTCRemoteInboundRtpStreamStats()
       :members:
+      :inherited-members:
 
    .. autoclass:: RTCRemoteOutboundRtpStreamStats()
       :members:
+      :inherited-members:
 
    .. autoclass:: RTCTransportStats()
       :members:
+      :inherited-members:
