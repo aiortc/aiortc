@@ -368,6 +368,17 @@ class RTCRtpReceiverTest(CodecTestCase):
             pass
 
     @asynctest
+    async def test_receive_after_stop(self) -> None:
+        async with create_receiver("audio") as receiver:
+            receiver._track = RemoteStreamTrack(kind="audio")
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+            await receiver.stop()
+
+            # A stopped receiver is not registered again.
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+            self.assertEqual(receiver.transport._rtp_router.receivers, set())
+
+    @asynctest
     async def test_rtp_and_rtcp(self) -> None:
         async with create_receiver("audio") as receiver:
             receiver._track = RemoteStreamTrack(kind="audio")

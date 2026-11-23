@@ -289,6 +289,89 @@ def create_media_description_for_transceiver(
     return media
 
 
+def add_bundle_group(description: sdp.SessionDescription, mids: list[str]) -> None:
+    """
+    Add a BUNDLE group listing those of the given MIDs whose "m=" sections are
+    not rejected (RFC 9429 sections 5.2.2 and 5.3.1).
+    """
+    accepted = [m.rtp.muxId for m in description.media if not is_rejected(m)]
+    items: list[Union[int, str]] = [mid for mid in mids if mid in accepted]
+    if items:
+        description.group.append(sdp.GroupDescription(semantic="BUNDLE", items=items))
+
+
+def get_bundle_mids(description: Optional[sdp.SessionDescription]) -> list[str]:
+    """
+    Return the MIDs in the BUNDLE group, the first being the BUNDLE tag
+    (RFC 9143 section 7.5).
+    """
+    if description is not None:
+        for group in description.group:
+            if group.semantic == "BUNDLE":
+                return [str(item) for item in group.items]
+    return []
+
+
+def get_bundle_tag(description: Optional[sdp.SessionDescription]) -> Optional[str]:
+    """
+    Return the MID of the BUNDLE-tagged "m=" section, if there is a BUNDLE group.
+    """
+    mids = get_bundle_mids(description)
+    return mids[0] if mids else None
+
+
+def is_rejected(media: sdp.MediaDescription) -> bool:
+    """
+    Return whether an "m=" section is rejected, which its zero port indicates
+    unless it is bundle-only (RFC 9143 section 6).
+    """
+    return media.port == 0 and not media.bundle_only
+
+
+def reject_stopped_media(
+    description: sdp.SessionDescription,
+    stopped: list[tuple[sdp.MediaDescription, sdp.MediaDescription]],
+    bundle_tag: Optional[str],
+) -> None:
+    """
+    Reject the "m=" sections of stopped transceivers, each given with the
+    offered "m=" section (RFC 9429 sections 5.2.2 and 5.3.1).
+
+    A rejected "m=" section has a zero port and no "a=msid" line. Its transport
+    attributes are kept, as earlier versions of aiortc require them.
+
+    Rejecting the negotiated BUNDLE-tagged "m=" section, whose transport is in
+    use, moves browsers to a new transport aiortc cannot follow, so it is only
+    made inactive while others remain.
+    """
+    stopped_media = [media for media, offered in stopped]
+    others_remain = any(
+        m.rtp.muxId != bundle_tag and not is_rejected(m) and m not in stopped_media
+        for m in description.media
+    )
+    for media, offered in stopped:
+        media.direction = "inactive"
+        if media.rtp.muxId == bundle_tag and others_remain:
+            continue
+
+        media.port = 0
+        media.host = DISCARD_HOST
+        media.extmap = []
+        media.msid = None
+        media.ssrc = []
+        media.ssrc_group = []
+        media.ice_candidates = []
+        media.ice_candidates_complete = False
+
+        # The format is ignored, but at least one is required, which may be
+        # the first offered one (RFC 3264 sections 6 and 8.2).
+        media.fmt = offered.fmt[:1]
+        media.rtp = RTCRtpParameters(
+            codecs=[c for c in offered.rtp.codecs if c.payloadType in media.fmt],
+            muxId=media.rtp.muxId,
+        )
+
+
 def and_direction(a: str, b: str) -> str:
     return sdp.DIRECTIONS[sdp.DIRECTIONS.index(a) & sdp.DIRECTIONS.index(b)]
 
@@ -358,6 +441,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         self.__currentRemoteDescription: Optional[sdp.SessionDescription] = None
         self.__pendingLocalDescription: Optional[sdp.SessionDescription] = None
         self.__pendingRemoteDescription: Optional[sdp.SessionDescription] = None
+
+        # The BUNDLE tag of the last answer, whose transport the group uses.
+        self.__negotiatedBundleTag: Optional[str] = None
 
     @property
     def connectionState(self) -> str:
@@ -604,7 +690,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         )
         description.type = "answer"
 
-        for remote_m in self.__remoteDescription().media:
+        remote = self.__remoteDescription()
+        stopped = []
+        for remote_m in remote.media:
             if remote_m.kind in ["audio", "video"]:
                 transceiver = self.__getTransceiverByMid(remote_m.rtp.muxId)
                 media = create_media_description_for_transceiver(
@@ -615,6 +703,8 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     ),
                     mid=transceiver.mid,
                 )
+                if transceiver.stopped:
+                    stopped.append((media, remote_m))
                 dtlsTransport = transceiver.receiver.transport
             else:
                 media = create_media_description_for_sctp(
@@ -630,10 +720,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
             description.media.append(media)
 
-        bundle = sdp.GroupDescription(semantic="BUNDLE", items=[])
-        for media in description.media:
-            bundle.items.append(media.rtp.muxId)
-        description.group.append(bundle)
+        reject_stopped_media(
+            description, stopped, bundle_tag=self.__negotiatedBundleTag
+        )
+        add_bundle_group(description, get_bundle_mids(remote))
 
         return wrap_session_description(description)
 
@@ -708,6 +798,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             return media[i] if i < len(media) else None
 
         # handle existing transceivers / sctp
+        stopped = []
         local_media = get_media(self.__localDescription())
         remote_media = get_media(self.__remoteDescription())
         for i in range(max(len(local_media), len(remote_media))):
@@ -718,14 +809,15 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             if media_kind in ["audio", "video"]:
                 transceiver = self.__getTransceiverByMid(mid)
                 transceiver._set_mline_index(i)
-                description.media.append(
-                    create_media_description_for_transceiver(
-                        transceiver,
-                        cname=self.__cname,
-                        direction=transceiver.direction,
-                        mid=mid,
-                    )
+                media = create_media_description_for_transceiver(
+                    transceiver,
+                    cname=self.__cname,
+                    direction=transceiver.direction,
+                    mid=mid,
                 )
+                if transceiver.stopped:
+                    stopped.append((media, media))
+                description.media.append(media)
             elif media_kind == "application":
                 self.__sctp_mline_index = i
                 description.media.append(
@@ -773,10 +865,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         ):
             add_datachannel_section()
 
-        bundle = sdp.GroupDescription(semantic="BUNDLE", items=[])
-        for media in description.media:
-            bundle.items.append(media.rtp.muxId)
-        description.group.append(bundle)
+        reject_stopped_media(
+            description, stopped, bundle_tag=self.__negotiatedBundleTag
+        )
+        add_bundle_group(description, [m.rtp.muxId for m in description.media])
 
         return wrap_session_description(description)
 
@@ -880,16 +972,22 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 elif media.kind == "application":
                     self.__sctp.transport._set_role(media.dtls.role)
 
-        # Configure the directions.
+        # Configure the directions, which are inactive for stopped transceivers.
         for t in self.__transceivers:
             if description.type in ["answer", "pranswer"]:
-                t._setCurrentDirection(and_direction(t.direction, t._offerDirection))
+                if t.stopped:
+                    t._setCurrentDirection("inactive")
+                else:
+                    t._setCurrentDirection(
+                        and_direction(t.direction, t._offerDirection)
+                    )
 
         # Store the description before the signaling state changes, so that
         # it is visible at once (W3C webrtc-pc, set the session description).
         if description.type == "answer":
             self.__currentLocalDescription = description
             self.__pendingLocalDescription = None
+            self.__negotiatedBundleTag = get_bundle_tag(description)
         else:
             self.__pendingLocalDescription = description
         if description.type == "offer":
@@ -901,7 +999,9 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         # __connect() task may run meanwhile, as the description is applied.
         await self.__gather()
         for i, media in enumerate(description.media):
-            if media.kind in ["audio", "video"]:
+            if is_rejected(media):
+                continue
+            elif media.kind in ["audio", "video"]:
                 transceiver = self.__getTransceiverByMLineIndex(i)
                 add_transport_description(media, transceiver.receiver.transport)
             elif media.kind == "application":
@@ -932,15 +1032,20 @@ class RTCPeerConnection(AsyncIOEventEmitter):
 
         # apply description
         iceCandidates: dict[RTCIceTransport, sdp.MediaDescription] = {}
+        rejectedTransceivers: list[RTCRtpTransceiver] = []
         trackEvents = []
         for i, media in enumerate(description.media):
             dtlsTransport: Optional[RTCDtlsTransport] = None
             self.__seenMids.add(media.rtp.muxId)
             if media.kind in ["audio", "video"]:
-                # find transceiver
+                # Find the transceiver, but do not give a rejected "m=" section
+                # one which has no MID yet.
+                rejected = is_rejected(media)
                 transceiver = None
                 for t in self.__transceivers:
-                    if t.kind == media.kind and t.mid in [None, media.rtp.muxId]:
+                    if t.kind == media.kind and (
+                        t.mid == media.rtp.muxId or (t.mid is None and not rejected)
+                    ):
                         transceiver = t
                         break
                 if transceiver is None:
@@ -951,32 +1056,43 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                     transceiver._set_mid(media.rtp.muxId)
                     transceiver._set_mline_index(i)
 
-                # negotiate codecs
-                common = filter_preferred_codecs(
-                    find_common_codecs(CODECS[media.kind], media.rtp.codecs),
-                    transceiver._preferred_codecs,
-                )
-
-                if not len(common):
-                    raise OperationError(
-                        "Failed to set remote {} description send parameters".format(
-                            media.kind
-                        )
+                # Negotiate the codecs, unless the "m=" section is rejected.
+                if not rejected:
+                    common = filter_preferred_codecs(
+                        find_common_codecs(CODECS[media.kind], media.rtp.codecs),
+                        transceiver._preferred_codecs,
                     )
+                    if common:
+                        transceiver._codecs = common
+                        transceiver._headerExtensions = find_common_header_extensions(
+                            HEADER_EXTENSIONS[media.kind], media.extmap
+                        )
+                    elif description.type == "offer":
+                        # An offered "m=" section without a supported format is
+                        # rejected in the answer (RFC 9429 section 5.3.1).
+                        rejected = True
+                    else:
+                        raise OperationError(
+                            f"Failed to set remote {media.kind} description "
+                            "send parameters"
+                        )
 
-                transceiver._codecs = common
-                transceiver._headerExtensions = find_common_header_extensions(
-                    HEADER_EXTENSIONS[media.kind], media.extmap
-                )
-
-                # configure direction
-                direction = reverse_direction(media.direction)
+                # A rejected "m=" section is inactive and stops its transceiver
+                # once the description is stored (W3C webrtc-pc, set the session
+                # description).
+                if rejected:
+                    direction = "inactive"
+                else:
+                    direction = reverse_direction(media.direction)
                 if description.type in ["answer", "pranswer"]:
                     transceiver._setCurrentDirection(direction)
                 else:
                     transceiver._offerDirection = direction
+                if rejected:
+                    rejectedTransceivers.append(transceiver)
+                    continue
 
-                # create remote stream track
+                # Create the remote track if media is received.
                 if (
                     direction in ["recvonly", "sendrecv"]
                     and not transceiver.receiver.track
@@ -1042,12 +1158,18 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         if description.type == "answer":
             self.__currentRemoteDescription = description
             self.__pendingRemoteDescription = None
+            self.__negotiatedBundleTag = get_bundle_tag(description)
         else:
             self.__pendingRemoteDescription = description
         if description.type == "offer":
             self.__setSignalingState("have-remote-offer")
         elif description.type == "answer":
             self.__setSignalingState("stable")
+
+        # Stop the transceivers of rejected "m=" sections.
+        for transceiver in rejectedTransceivers:
+            if not transceiver.stopped:
+                await transceiver.stop()
 
         # Move the bundled media to the transport of the BUNDLE-tagged section.
         bundle = next((x for x in description.group if x.semantic == "BUNDLE"), None)
@@ -1072,14 +1194,12 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 iceCandidates[primaryTransport.transport] = primaryMedia
 
             # replace transport for bundled media
-            oldTransports = set()
             otherMids = bundle.items[1:]
             for transceiver in self.__transceivers:
                 if (
                     transceiver.mid in otherMids
                     and transceiver.receiver.transport != primaryTransport
                 ):
-                    oldTransports.add(transceiver.receiver.transport)
                     transceiver.receiver.setTransport(primaryTransport)
                     transceiver.sender.setTransport(primaryTransport)
                     transceiver._bundled = True
@@ -1088,20 +1208,13 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 and self.__sctp.mid in otherMids
                 and self.__sctp.transport != primaryTransport
             ):
-                oldTransports.add(self.__sctp.transport)
                 self.__sctp.setTransport(primaryTransport)
                 self.__sctp._bundled = True
 
-            # stop and discard old ICE transports
-            for dtlsTransport in oldTransports:
-                await dtlsTransport.stop()
-                await dtlsTransport.transport.stop()
-                self.__dtlsTransports.discard(dtlsTransport)
-                self.__iceTransports.discard(dtlsTransport.transport)
-                iceCandidates.pop(dtlsTransport.transport, None)
-            self.__updateIceGatheringState()
-            self.__updateIceConnectionState()
-            self.__updateConnectionState()
+        # Discard the transports replaced by the bundled one, and those left
+        # only to stopped transceivers.
+        for dtlsTransport in await self.__discardUnusedTransports():
+            iceCandidates.pop(dtlsTransport.transport, None)
 
         # add remote candidates
         coros = [
@@ -1238,8 +1351,10 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                 dtlsTransport = self.__sctp.transport
                 bundled = True
         elif self.__configuration.bundlePolicy == RTCBundlePolicy.BALANCED:
+            # The transport of a stopped transceiver may have been discarded.
             transceiver = next(
-                filter(lambda t: t.kind == kind, self.__transceivers), None
+                filter(lambda t: t.kind == kind and not t.stopped, self.__transceivers),
+                None,
             )
             if transceiver:
                 dtlsTransport = transceiver.receiver.transport
@@ -1259,6 +1374,32 @@ class RTCPeerConnection(AsyncIOEventEmitter):
         transceiver._bundled = bundled
         self.__transceivers.append(transceiver)
         return transceiver
+
+    async def __discardUnusedTransports(self) -> set[RTCDtlsTransport]:
+        """
+        Stop and return the transports which no transceiver or data channel
+        uses any more, such as those of rejected "m=" sections which are not
+        bundled (RFC 9429 section 5.11).
+        """
+        used = {t.receiver.transport for t in self.__transceivers if not t.stopped}
+        if self.__sctp is not None:
+            used.add(self.__sctp.transport)
+
+        # Closing every transport would make the remote end close the
+        # connection, so they are kept if none is used.
+        if not used:
+            return set()
+
+        unused = self.__dtlsTransports - used
+        for dtlsTransport in unused:
+            await dtlsTransport.stop()
+            await dtlsTransport.transport.stop()
+            self.__dtlsTransports.discard(dtlsTransport)
+            self.__iceTransports.discard(dtlsTransport.transport)
+        self.__updateIceGatheringState()
+        self.__updateIceConnectionState()
+        self.__updateConnectionState()
+        return unused
 
     def __getTransceiverByMid(self, mid: str) -> Optional[RTCRtpTransceiver]:
         return next(filter(lambda x: x.mid == mid, self.__transceivers), None)
@@ -1441,7 +1582,22 @@ class RTCPeerConnection(AsyncIOEventEmitter):
                         f'"{self.signalingState}"'
                     )
 
+            # Rejecting the BUNDLE-tagged "m=" section while a BUNDLE group remains
+            # moves browsers to a new transport aiortc cannot follow.
+            if get_bundle_mids(description) and any(
+                is_rejected(media) and media.rtp.muxId == self.__negotiatedBundleTag
+                for media in description.media
+            ):
+                raise OperationError(
+                    "Rejecting the BUNDLE-tagged media section is not supported"
+                )
+
         for media in description.media:
+            # A rejected "m=" section may omit all its attributes (RFC 3264
+            # section 8.2).
+            if media.kind in ["audio", "video"] and is_rejected(media):
+                continue
+
             # check ICE credentials were provided
             if not media.ice.usernameFragment or not media.ice.password:
                 raise ValueError("ICE username fragment or password is missing")

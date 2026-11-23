@@ -1924,6 +1924,35 @@ a=setup:actpass
             ],
         )
 
+    def test_video_bundle_only(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE 0 1
+m=audio 9 UDP/TLS/RTP/SAVPF 0
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=mid:0
+a=rtpmap:0 PCMU/8000
+m=video 0 UDP/TLS/RTP/SAVPF 96
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=mid:1
+a=bundle-only
+a=rtpmap:96 VP8/90000
+"""
+            )
+        )
+
+        # A bundle-only "m=" section has a zero port (RFC 9143 section 6).
+        self.assertFalse(d.media[0].bundle_only)
+        self.assertTrue(d.media[1].bundle_only)
+        self.assertEqual(d.media[1].port, 0)
+        self.assertIn("a=mid:1\r\na=bundle-only\r\n", str(d))
+
     def test_video_fmtp_without_rtpmap(self) -> None:
         d = SessionDescription.parse(
             lf2crlf(

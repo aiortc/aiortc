@@ -268,6 +268,7 @@ class MediaDescription:
         self.port = port
         self.host: Optional[str] = None
         self.profile = profile
+        self.bundle_only = False
         self.direction: Optional[str] = None
         self.extmap: list[ExtmapDescription] = []
         self.msid: Optional[str] = None
@@ -314,6 +315,8 @@ class MediaDescription:
 
         if self.rtp.muxId:
             lines.append(f"a=mid:{self.rtp.muxId}")
+        if self.bundle_only:
+            lines.append("a=bundle-only")
 
         if self.msid:
             lines.append(f"a=msid:{self.msid}")
@@ -477,7 +480,9 @@ class SessionDescription:
                     current_media.host = ipaddress_from_sdp(line[2:])
                 elif line.startswith("a="):
                     attr, value = parse_attr(line)
-                    if attr == "candidate":
+                    if attr == "bundle-only":
+                        current_media.bundle_only = True
+                    elif attr == "candidate":
                         current_media.ice_candidates.append(candidate_from_sdp(value))
                     elif attr == "end-of-candidates":
                         current_media.ice_candidates_complete = True
