@@ -33,7 +33,8 @@ instance:
 
 - JSEP and SDP: RFC 9429, 8866, 3264 (offer/answer), 8843 (BUNDLE)
 - DTLS and SRTP: RFC 6347, 5764, 3711
-- RTP and RTCP: RFC 3550, 4585, 4588 (RTX), and the payload formats such
+- RTP and RTCP: RFC 3550, 8834 (WebRTC use of RTP), 4585, 5506 (reduced-size
+  RTCP), 4588 (RTX), 8285 (header extensions), and the payload formats such
   as RFC 7741 (VP8), 6184 (H.264) and 7587 (Opus)
 - SCTP and data channels: RFC 9260, 8261, 8831, 8832, 8841
 

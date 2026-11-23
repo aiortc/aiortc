@@ -28,7 +28,13 @@ from aiortc.rtcrtpreceiver import (
     StreamStatistics,
     TimestampMapper,
 )
-from aiortc.rtp import RtcpPacket, RtpPacket
+from aiortc.rtp import (
+    AnyRtcpPacket,
+    RtcpPacket,
+    RtcpRrPacket,
+    RtcpSdesPacket,
+    RtpPacket,
+)
 from aiortc.stats import RTCStatsReport
 from aiortc.utils import uint16_add
 from av.frame import Frame
@@ -667,6 +673,65 @@ class RTCRtpReceiverTest(CodecTestCase):
             # receive RTX with unknown SSRC
             packet = RtpPacket(payload_type=101, ssrc=1234)
             await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+    @patch("aiortc.rtcrtpreceiver.random")
+    @asynctest
+    async def test_rtcp_receiver_reports(self, mock_random: MagicMock) -> None:
+        # Send RTCP every 0.5 seconds.
+        mock_random.random.return_value = 0
+
+        resume = asyncio.Event()
+        sent: list[bytes] = []
+
+        async def mock_send_rtcp(packets: list[AnyRtcpPacket]) -> None:
+            sent.append(b"".join(bytes(packet) for packet in packets))
+            # Hold the RTCP loop until the test resumes it.
+            await resume.wait()
+
+        async def wait_for_reports(count: int) -> None:
+            while len(sent) < count:
+                await asyncio.sleep(0.05)
+
+        def reported_ssrcs(data: bytes) -> list[int]:
+            # Each report is an RR followed by an SDES CNAME.
+            rr, sdes = RtcpPacket.parse(data)
+            assert isinstance(rr, RtcpRrPacket)
+            self.assertEqual(rr.ssrc, 1234)
+            self.assertEqual(sdes, RtcpSdesPacket.cname(1234, "some-cname"))
+            return [report.ssrc for report in rr.reports]
+
+        async with create_receiver("audio") as receiver:
+            receiver._send_rtcp = mock_send_rtcp  # type: ignore
+            receiver._set_rtcp_cname("some-cname")
+            receiver._set_rtcp_ssrc(1234)
+            receiver._track = RemoteStreamTrack(kind="audio")
+            await receiver.receive(RTCRtpReceiveParameters(codecs=[PCMU_CODEC]))
+
+            # Receive packets from more sources than one RR packet can report.
+            for ssrc in range(1, 33):
+                packet = RtpPacket(payload_type=0, ssrc=ssrc)
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+
+            # Check only 31 sources are reported.
+            await asyncio.wait_for(wait_for_reports(1), timeout=2)
+            self.assertEqual(reported_ssrcs(sent[0]), list(range(1, 32)))
+
+            # Receive packets from all the sources again, while the report is sent.
+            for ssrc in range(1, 33):
+                packet = RtpPacket(payload_type=0, sequence_number=1, ssrc=ssrc)
+                await receiver._handle_rtp_packet(packet, arrival_time_ms=0)
+            resume.set()
+
+            # Check the source left out is reported first, then the rest.
+            await asyncio.wait_for(wait_for_reports(3), timeout=2)
+            self.assertEqual(
+                [reported_ssrcs(data) for data in sent[1:]],
+                [[32] + list(range(1, 31)), [31]],
+            )
+
+            # Check an empty RR is sent once no source is heard.
+            await asyncio.wait_for(wait_for_reports(4), timeout=2)
+            self.assertEqual(reported_ssrcs(sent[3]), [])
 
     @asynctest
     async def test_send_rtcp_nack(self) -> None:
