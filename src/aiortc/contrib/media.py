@@ -118,7 +118,9 @@ def player_worker_decode(
             if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
                 time.sleep(0.01)
                 continue
-            if isinstance(exc, StopIteration) and loop_playback:
+            # At the end of the file, a decoder which held back frames (e.g. H.264)
+            # reports EOF once it has returned them all.
+            if isinstance(exc, (StopIteration, EOFError)) and loop_playback:
                 container.seek(0)
                 continue
             if audio_track:
@@ -127,7 +129,7 @@ def player_worker_decode(
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
             break
 
-        # read up to 1 second ahead
+        # Read up to 1 second ahead.
         if throttle_playback:
             elapsed_time = time.monotonic() - start_time
             if frame_time and frame_time > elapsed_time + 1:
