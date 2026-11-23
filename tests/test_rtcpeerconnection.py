@@ -3093,6 +3093,35 @@ a=rtpmap:8 PCMA/8000
         )
 
     @asynctest
+    async def test_connect_video_rtpmap_out_of_order(self) -> None:
+        pc1 = RTCPeerConnection()
+        pc2 = RTCPeerConnection()
+
+        # Create an offer whose rtpmap lines list each RTX codec first.
+        pc1.addTrack(VideoStreamTrack())
+        await pc1.setLocalDescription(await pc1.createOffer())
+        parsed = SessionDescription.parse(pc1.localDescription.sdp)
+        codecs = parsed.media[0].rtp.codecs
+        parsed.media[0].rtp.codecs = [codecs[i] for i in (1, 0, 3, 2, 5, 4)]
+        offer = RTCSessionDescription(sdp=str(parsed), type="offer")
+
+        # Check the answer keeps every RTX codec, in the order of the offer.
+        await pc2.setRemoteDescription(offer)
+        pc2.addTrack(VideoStreamTrack())
+        await pc2.setLocalDescription(await pc2.createAnswer())
+        self.assertCodecNames(
+            pc2.localDescription, ["VP8", "rtx", "H264", "rtx", "H264", "rtx"]
+        )
+        answer = SessionDescription.parse(pc2.localDescription.sdp)
+        self.assertEqual(answer.media[0].fmt, parsed.media[0].fmt)
+
+        # Close the connections.
+        await pc1.close()
+        await pc2.close()
+        self.assertClosed(pc1)
+        self.assertClosed(pc2)
+
+    @asynctest
     async def test_connect_video_codec_preferences_offerer(self) -> None:
         VIDEO_SDP = H264_SDP + VP8_SDP
 

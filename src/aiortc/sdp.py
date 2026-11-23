@@ -384,8 +384,10 @@ class SessionDescription:
         ice_password = None
         ice_usernameFragment = None
 
-        def find_codec(pt: int) -> RTCRtpCodecParameters:
-            return next(filter(lambda x: x.payloadType == pt, current_media.rtp.codecs))
+        def find_codec(pt: int) -> Optional[RTCRtpCodecParameters]:
+            return next(
+                filter(lambda x: x.payloadType == pt, current_media.rtp.codecs), None
+            )
 
         session_lines, media_groups = grouplines(sdp)
 
@@ -539,17 +541,31 @@ class SessionDescription:
                         if ssrc_attr in SSRC_INFO_ATTRS:
                             setattr(ssrc_info, ssrc_attr, ssrc_value)
 
+            # Keep only the formats on the "m=" line, in its order of preference
+            # (RFC 8866 sections 5.14 and 6.6), as "a=" lines may come in any order.
+            if fmt_int is not None:
+                position: dict[int, int] = {}
+                for index, pt in enumerate(fmt_int):
+                    position.setdefault(pt, index)
+                current_media.rtp.codecs = sorted(
+                    (c for c in current_media.rtp.codecs if c.payloadType in position),
+                    key=lambda c: position[c.payloadType],
+                )
+
             if current_media.dtls.role is None:
                 current_media.dtls = None
 
-            # requires codecs to have been parsed
+            # Apply parameters and feedback once all codecs have been parsed.
             for line in media_lines[1:]:
                 if line.startswith("a="):
                     attr, value = parse_attr(line)
                     if attr == "fmtp":
                         format_id, format_desc = value.split(" ", 1)
+                        # Ignore parameters for a format with no codec, such as
+                        # one missing from the "m=" line or without "a=rtpmap".
                         codec = find_codec(int(format_id))
-                        codec.parameters = parameters_from_sdp(format_desc)
+                        if codec is not None:
+                            codec.parameters = parameters_from_sdp(format_desc)
                     elif attr == "rtcp-fb":
                         bits = value.split(" ", 2)
                         for codec in current_media.rtp.codecs:
