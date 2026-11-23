@@ -215,16 +215,17 @@ class RTCRtpSender:
             self.__transport._register_rtp_sender(self, parameters)
             self.__rtp_header_extensions_map.configure(parameters)
 
-            # make note of RTX payload type
+            # Send with the first codec that is not RTX, which only repairs
+            # the codec being sent (RFC 9429 section 5.11).
+            send_codec = next(c for c in parameters.codecs if not is_rtx(c))
+
+            # Make note of the RTX payload type that repairs this codec.
             for codec in parameters.codecs:
-                if (
-                    is_rtx(codec)
-                    and codec.parameters["apt"] == parameters.codecs[0].payloadType
-                ):
+                if is_rtx(codec) and codec.parameters["apt"] == send_codec.payloadType:
                     self.__rtx_payload_type = codec.payloadType
                     break
 
-            self.__rtp_task = asyncio.ensure_future(self._run_rtp(parameters.codecs[0]))
+            self.__rtp_task = asyncio.ensure_future(self._run_rtp(send_codec))
             self.__rtcp_task = asyncio.ensure_future(self._run_rtcp())
             self.__started = True
 

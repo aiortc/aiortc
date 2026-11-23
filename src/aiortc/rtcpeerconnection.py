@@ -107,19 +107,13 @@ def find_common_codecs(
     local_codecs: list[RTCRtpCodecParameters],
     remote_codecs: list[RTCRtpCodecParameters],
 ) -> list[RTCRtpCodecParameters]:
-    common = []
-    common_base: dict[int, RTCRtpCodecParameters] = {}
-    for c in remote_codecs:
-        # for RTX, check we accepted the base codec
+    # Match codecs other than RTX first, as only "apt" ties an RTX codec to the
+    # codec it repairs, which may be listed after it (RFC 4588 section 8.1).
+    matched: dict[int, RTCRtpCodecParameters] = {}
+    for index, c in enumerate(remote_codecs):
         if is_rtx(c):
-            apt = c.parameters.get("apt")
-            if isinstance(apt, int) and apt in common_base:
-                base = common_base[apt]
-                if c.clockRate == base.clockRate:
-                    common.append(copy.deepcopy(c))
             continue
 
-        # handle other codecs
         for codec in local_codecs:
             if is_codec_compatible(codec, c):
                 codec = copy.deepcopy(codec)
@@ -128,9 +122,22 @@ def find_common_codecs(
                 codec.rtcpFeedback = list(
                     filter(lambda x: x in c.rtcpFeedback, codec.rtcpFeedback)
                 )
-                common.append(codec)
-                common_base[codec.payloadType] = codec
+                matched[index] = codec
                 break
+
+    # Then list the codecs in the remote order, keeping an RTX codec only if
+    # the codec it repairs was matched.
+    common_base = {codec.payloadType: codec for codec in matched.values()}
+    common = []
+    for index, c in enumerate(remote_codecs):
+        if index in matched:
+            common.append(matched[index])
+        elif is_rtx(c):
+            apt = c.parameters.get("apt")
+            if isinstance(apt, int) and apt in common_base:
+                base = common_base[apt]
+                if c.clockRate == base.clockRate:
+                    common.append(copy.deepcopy(c))
     return common
 
 
@@ -1281,23 +1288,20 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             rtcp=media.rtp.rtcp,
         )
         if len(media.ssrc):
+            # Create encodings for codecs other than RTX first, as the codec an
+            # RTX codec repairs may be listed after it (RFC 4588 section 8.1).
             encodings: dict[int, RTCRtpDecodingParameters] = {}
             for codec in transceiver._codecs:
-                if is_rtx(codec):
-                    apt = codec.parameters.get("apt")
-                    if (
-                        isinstance(apt, int)
-                        and apt in encodings
-                        and len(media.ssrc) == 2
-                    ):
-                        encodings[apt].rtx = RTCRtpRtxParameters(
-                            ssrc=media.ssrc[1].ssrc
-                        )
-                    continue
+                if not is_rtx(codec):
+                    encodings[codec.payloadType] = RTCRtpDecodingParameters(
+                        ssrc=media.ssrc[0].ssrc, payloadType=codec.payloadType
+                    )
 
-                encodings[codec.payloadType] = RTCRtpDecodingParameters(
-                    ssrc=media.ssrc[0].ssrc, payloadType=codec.payloadType
-                )
+            # Then map each RTX codec to the encoding of the codec it repairs.
+            for codec in filter(is_rtx, transceiver._codecs):
+                apt = codec.parameters.get("apt")
+                if isinstance(apt, int) and apt in encodings and len(media.ssrc) == 2:
+                    encodings[apt].rtx = RTCRtpRtxParameters(ssrc=media.ssrc[1].ssrc)
             receiveParameters.encodings = list(encodings.values())
         return receiveParameters
 
