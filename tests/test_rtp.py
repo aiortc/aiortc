@@ -168,6 +168,35 @@ class RtcpPacketTest(TestCase):
         )
         self.assertEqual(bytes(packet), data)
 
+    def test_sdes_chunk_alignment(self) -> None:
+        # Each chunk ends with one to four null octets (RFC 3550 section 6.5).
+        for value, nulls in ((b"a", 1), (b"abcd", 2), (b"abc", 3), (b"ab", 4)):
+            with self.subTest(nulls=nulls):
+                first = b"\x00\x00\x00\x01" + bytes([1, len(value)]) + value
+                first += b"\x00" * nulls
+                self.assertEqual(len(first) % 4, 0)
+                second = b"\x00\x00\x00\x02" + b"\x01\x05cname" + b"\x00"
+                payload = first + second
+                data = bytes([0x82, 0xCA, 0, len(payload) // 4]) + payload
+
+                packets = RtcpPacket.parse(data)
+                self.assertEqual(len(packets), 1)
+                packet = self.ensureIsInstance(packets[0], RtcpSdesPacket)
+                self.assertEqual([c.ssrc for c in packet.chunks], [1, 2])
+                self.assertEqual(packet.chunks[0].items, [(1, value)])
+                self.assertEqual(packet.chunks[1].items, [(1, b"cname")])
+
+                # Check the packet is written back identically.
+                self.assertEqual(bytes(packet), data)
+
+    def test_sdes_item_length_truncated(self) -> None:
+        # The last octet holds an item type, but no length octet.
+        data = bytes.fromhex("81ca00020000000101016102")
+
+        with self.assertRaises(ValueError) as cm:
+            RtcpPacket.parse(data)
+        self.assertEqual(str(cm.exception), "RTCP SDES item is truncated")
+
     def test_sdes_item_truncated(self) -> None:
         data = load("rtcp_sdes_item_truncated.bin")
 
