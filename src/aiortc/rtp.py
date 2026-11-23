@@ -29,6 +29,8 @@ RTCP_BYE = 203
 RTCP_RTPFB = 205
 RTCP_PSFB = 206
 
+RTCP_SDES_CNAME = 1
+
 RTCP_RTPFB_NACK = 1
 
 RTCP_PSFB_PLI = 1
@@ -516,6 +518,17 @@ class RtcpRtpfbPacket:
 @dataclass
 class RtcpSdesPacket:
     chunks: list[RtcpSourceInfo] = field(default_factory=list)
+
+    @classmethod
+    def cname(cls, ssrc: int, cname: str) -> "RtcpSdesPacket":
+        """
+        Return an SDES packet carrying the CNAME of a source.
+        """
+        return cls(
+            chunks=[
+                RtcpSourceInfo(ssrc=ssrc, items=[(RTCP_SDES_CNAME, cname.encode())])
+            ]
+        )
 
     def __bytes__(self) -> bytes:
         payload = b""

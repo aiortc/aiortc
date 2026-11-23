@@ -34,7 +34,6 @@ from .rtp import (
     RtcpRtpfbPacket,
     RtcpSdesPacket,
     RtcpSenderInfo,
-    RtcpSourceInfo,
     RtcpSrPacket,
     RtpPacket,
     unpack_remb_fci,
@@ -576,16 +575,7 @@ class RTCRtpSender:
 
                 # RTCP SDES
                 if self.__cname is not None:
-                    packets.append(
-                        RtcpSdesPacket(
-                            chunks=[
-                                RtcpSourceInfo(
-                                    ssrc=self._ssrc,
-                                    items=[(1, self.__cname.encode("utf8"))],
-                                )
-                            ]
-                        )
-                    )
+                    packets.append(RtcpSdesPacket.cname(self._ssrc, self.__cname))
 
                 await self._send_rtcp(packets)
         except asyncio.CancelledError:

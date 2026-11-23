@@ -189,6 +189,12 @@ class RtcpPacketTest(TestCase):
                 # Check the packet is written back identically.
                 self.assertEqual(bytes(packet), data)
 
+    def test_sdes_cname(self) -> None:
+        packet = RtcpSdesPacket.cname(
+            1831097322, "{63f459ea-41fe-4474-9d33-9707c9ee79d1}"
+        )
+        self.assertEqual(bytes(packet), load("rtcp_sdes.bin"))
+
     def test_sdes_item_length_truncated(self) -> None:
         # The last octet holds an item type, but no length octet.
         data = bytes.fromhex("81ca00020000000101016102")

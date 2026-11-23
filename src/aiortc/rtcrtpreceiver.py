@@ -35,6 +35,7 @@ from .rtp import (
     RtcpReceiverInfo,
     RtcpRrPacket,
     RtcpRtpfbPacket,
+    RtcpSdesPacket,
     RtcpSrPacket,
     RtpPacket,
     clamp_packets_lost,
@@ -311,9 +312,11 @@ class RTCRtpReceiver:
         self.__transport = transport
 
         # RTCP
+        self.__heard_ssrcs: set[int] = set()
         self.__lsr: dict[int, int] = {}
         self.__lsr_time: dict[int, float] = {}
         self.__remote_streams: dict[int, StreamStatistics] = {}
+        self.__rtcp_cname: Optional[str] = None
         self.__rtcp_ssrc: Optional[int] = None
 
         # logging
@@ -504,7 +507,7 @@ class RTCRtpReceiver:
                         media_ssrc=0,
                         fci=pack_remb_fci(*remb),
                     )
-                    await self._send_rtcp(rtcp_packet)
+                    await self._send_rtcp([rtcp_packet])
 
         # keep track of sources
         self.__active_ssrc[packet.ssrc] = (time.monotonic(), clock.current_datetime())
@@ -521,6 +524,7 @@ class RTCRtpReceiver:
         if packet.ssrc not in self.__remote_streams:
             self.__remote_streams[packet.ssrc] = StreamStatistics(codec.clockRate)
         self.__remote_streams[packet.ssrc].add(packet)
+        self.__heard_ssrcs.add(packet.ssrc)
 
         # unwrap retransmission packet
         if is_rtx(codec):
@@ -585,9 +589,13 @@ class RTCRtpReceiver:
                 # range [0.5, 1.5] times the calculated interval.
                 await asyncio.sleep(0.5 + random.random())
 
-                # RTCP RR
+                # Report sources heard since their last report, 31 at most and in
+                # round-robin order so all of them get reported (RFC 3550 section 6.4).
+                ssrcs = [x for x in self.__remote_streams if x in self.__heard_ssrcs]
+                ssrcs = ssrcs[:31]
                 reports = []
-                for ssrc, stream in self.__remote_streams.items():
+                for ssrc in ssrcs:
+                    stream = self.__remote_streams[ssrc]
                     lsr = 0
                     dlsr = 0
                     if ssrc in self.__lsr:
@@ -608,9 +616,25 @@ class RTCRtpReceiver:
                         )
                     )
 
-                if self.__rtcp_ssrc is not None and reports:
-                    packet = RtcpRrPacket(ssrc=self.__rtcp_ssrc, reports=reports)
-                    await self._send_rtcp(packet)
+                if self.__rtcp_ssrc is not None:
+                    # Mark the sources as reported and move them to the end of the
+                    # dict, so the others come first next time.
+                    for ssrc in ssrcs:
+                        self.__heard_ssrcs.discard(ssrc)
+                        self.__remote_streams[ssrc] = self.__remote_streams.pop(ssrc)
+
+                    # Send an RR even with nothing to report (RFC 3550 section 6.4.2).
+                    packets: list[AnyRtcpPacket] = [
+                        RtcpRrPacket(ssrc=self.__rtcp_ssrc, reports=reports)
+                    ]
+
+                    # Compound packets include an SDES CNAME (RFC 3550 section 6.1).
+                    if self.__rtcp_cname is not None:
+                        packets.append(
+                            RtcpSdesPacket.cname(self.__rtcp_ssrc, self.__rtcp_cname)
+                        )
+
+                    await self._send_rtcp(packets)
 
         except asyncio.CancelledError:
             pass
@@ -618,10 +642,14 @@ class RTCRtpReceiver:
         self.__log_debug("- RTCP finished")
         self.__rtcp_exited.set()
 
-    async def _send_rtcp(self, packet: AnyRtcpPacket) -> None:
-        self.__log_debug("> %s", packet)
+    async def _send_rtcp(self, packets: list[AnyRtcpPacket]) -> None:
+        payload = b""
+        for packet in packets:
+            self.__log_debug("> %s", packet)
+            payload += bytes(packet)
+
         try:
-            await self.transport._send_rtp(bytes(packet))
+            await self.transport._send_rtp(payload)
         except ConnectionError:
             pass
 
@@ -634,7 +662,7 @@ class RTCRtpReceiver:
                 fmt=RTCP_RTPFB_NACK, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc
             )
             packet.lost = lost
-            await self._send_rtcp(packet)
+            await self._send_rtcp([packet])
 
     async def _send_rtcp_pli(self, media_ssrc: int) -> None:
         """
@@ -644,7 +672,10 @@ class RTCRtpReceiver:
             packet = RtcpPsfbPacket(
                 fmt=RTCP_PSFB_PLI, ssrc=self.__rtcp_ssrc, media_ssrc=media_ssrc
             )
-            await self._send_rtcp(packet)
+            await self._send_rtcp([packet])
+
+    def _set_rtcp_cname(self, cname: str) -> None:
+        self.__rtcp_cname = cname
 
     def _set_rtcp_ssrc(self, ssrc: int) -> None:
         self.__rtcp_ssrc = ssrc

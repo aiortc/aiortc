@@ -1369,6 +1369,7 @@ class RTCPeerConnection(AsyncIOEventEmitter):
             sender=RTCRtpSender(sender_track or kind, dtlsTransport),
             receiver=RTCRtpReceiver(kind, dtlsTransport),
         )
+        transceiver.receiver._set_rtcp_cname(self.__cname)
         transceiver.receiver._set_rtcp_ssrc(transceiver.sender._ssrc)
         transceiver.sender._stream_id = self.__stream_id
         transceiver._bundled = bundled
