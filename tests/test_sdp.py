@@ -14,6 +14,7 @@ from aiortc.sdp import (
     H264Profile,
     SessionDescription,
     SsrcDescription,
+    candidate_from_sdp,
     parse_h264_profile_level_id,
 )
 
@@ -22,6 +23,11 @@ from .utils import lf2crlf
 
 class SdpTest(TestCase):
     maxDiff = None
+
+    def assertParseFails(self, sdp: str, msg: str) -> None:
+        with self.assertRaises(ValueError) as cm:
+            SessionDescription.parse(lf2crlf(sdp))
+        self.assertEqual(str(cm.exception), msg)
 
     def test_audio_chrome(self) -> None:
         d = SessionDescription.parse(
@@ -2208,6 +2214,239 @@ a=sctpmap:5000 webrtc-datachannel 1024
         self.assertEqual(d.media[2].profile, "DTLS/SCTP")
         self.assertEqual(d.media[2].direction, None)
         self.assertEqual(d.media[2].msid, None)
+
+    def test_parse_invalid(self) -> None:
+        sdp = """v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=-
+c=IN IP4 0.0.0.0
+t=0 0
+a=fingerprint:sha-256 0a:BC
+a=setup:actpass
+m=audio 9 UDP/TLS/RTP/SAVPF 111
+c=IN IP4 0.0.0.0
+a=rtcp:9 IN IP4 0.0.0.0
+a=setup:actpass
+a=candidate:1 1 udp 2122260223 192.168.1.2 54321 typ host
+a=rtpmap:111 opus/48000/2
+"""
+        SessionDescription.parse(lf2crlf(sdp))
+
+        # Invalid connection addresses.
+        self.assertParseFails(
+            sdp.replace("s=-\nc=IN IP4 0.0.0.0", "s=-\nc=IN IP4"),
+            "Invalid connection address: IN IP4",
+        )
+        self.assertParseFails(
+            sdp.replace("SAVPF 111\nc=IN IP4 0.0.0.0", "SAVPF 111\nc=IN IP7 0.0.0.0"),
+            "Invalid connection address: IN IP7 0.0.0.0",
+        )
+        self.assertParseFails(
+            sdp.replace("a=rtcp:9 IN IP4 0.0.0.0", "a=rtcp:9 IN"),
+            "Invalid connection address: IN",
+        )
+
+        # Invalid version.
+        self.assertParseFails(sdp.replace("v=0", "v=1"), "Invalid version: 1")
+
+        # Invalid media descriptions.
+        self.assertParseFails(
+            sdp.replace("m=audio 9 UDP/TLS/RTP/SAVPF 111", "m=audio 9"),
+            "Invalid media description: audio 9",
+        )
+        self.assertParseFails(
+            sdp.replace("m=audio 9 ", "m=audio 65536 "), "Invalid port: 65536"
+        )
+
+        # Invalid payload types.
+        for pt in ["abc", "-1", "+1", "1.0", "1_0", "72", "128", "1000"]:
+            self.assertParseFails(
+                sdp.replace("SAVPF 111", f"SAVPF {pt}"), f"Invalid payload type: {pt}"
+            )
+
+        # Invalid session-level attributes.
+        for line, msg in [
+            ("a=fingerprint", "Invalid fingerprint attribute: "),
+            ("a=fingerprint:sha-256", "Invalid fingerprint attribute: sha-256"),
+            (
+                "a=fingerprint:sha-256 AA BB",
+                "Invalid fingerprint attribute: sha-256 AA BB",
+            ),
+            (
+                "a=fingerprint:sha-256 AA:B",
+                "Invalid fingerprint attribute: sha-256 AA:B",
+            ),
+            ("a=fingerprint:sha-256 ZZ", "Invalid fingerprint attribute: sha-256 ZZ"),
+            ("a=setup", "Invalid setup attribute: "),
+            ("a=setup:holdconn", "Invalid setup attribute: holdconn"),
+        ]:
+            self.assertParseFails(sdp.replace("t=0 0\n", f"t=0 0\n{line}\n"), msg)
+
+        # Invalid media-level attributes.
+        for line, msg in [
+            # Missing values or fields.
+            ("a=candidate", "Invalid candidate attribute: "),
+            (
+                "a=candidate:1 1 udp 2122260223 192.168.1.2 54321 typ",
+                "Invalid candidate attribute: 1 1 udp 2122260223 192.168.1.2 54321 typ",
+            ),
+            ("a=extmap", "Invalid extmap attribute: "),
+            ("a=extmap:1", "Invalid extmap attribute: 1"),
+            ("a=fingerprint", "Invalid fingerprint attribute: "),
+            ("a=fingerprint:sha-256", "Invalid fingerprint attribute: sha-256"),
+            (
+                "a=fingerprint:sha-256 AA BB",
+                "Invalid fingerprint attribute: sha-256 AA BB",
+            ),
+            (
+                "a=fingerprint:sha-256 AA:B",
+                "Invalid fingerprint attribute: sha-256 AA:B",
+            ),
+            ("a=fingerprint:sha-256 ZZ", "Invalid fingerprint attribute: sha-256 ZZ"),
+            ("a=fmtp", "Invalid fmtp attribute: "),
+            ("a=fmtp:111", "Invalid fmtp attribute: 111"),
+            ("a=rtcp", "Invalid rtcp attribute: "),
+            ("a=rtcp-fb", "Invalid rtcp-fb attribute: "),
+            ("a=rtcp-fb:111", "Invalid rtcp-fb attribute: 111"),
+            ("a=rtpmap", "Invalid rtpmap attribute: "),
+            ("a=rtpmap:111", "Invalid rtpmap attribute: 111"),
+            ("a=rtpmap:111 opus", "Invalid rtpmap attribute: opus"),
+            ("a=sctpmap", "Invalid sctpmap attribute: "),
+            ("a=sctpmap:5000", "Invalid sctpmap attribute: 5000"),
+            ("a=setup", "Invalid setup attribute: "),
+            ("a=setup:bogus", "Invalid setup attribute: bogus"),
+            ("a=ssrc", "Invalid ssrc attribute: "),
+            ("a=ssrc:1", "Invalid ssrc attribute: 1"),
+            # Invalid or out of range numbers.
+            ("a=extmap:+1 urn:a", "Invalid extmap attribute: +1"),
+            ("a=extmap:0 urn:a", "Invalid extmap attribute: 0"),
+            ("a=extmap:257 urn:a", "Invalid extmap attribute: 257"),
+            ("a=extmap:4095 urn:a", "Invalid extmap attribute: 4095"),
+            ("a=extmap:4352 urn:a", "Invalid extmap attribute: 4352"),
+            ("a=fmtp:111 minptime=x", "Invalid fmtp attribute: x"),
+            ("a=fmtp:128 minptime=10", "Invalid payload type: 128"),
+            ("a=max-message-size:-1", "Invalid max-message-size attribute: -1"),
+            ("a=rtcp:65536", "Invalid port: 65536"),
+            ("a=rtpmap:111 opus/0/2", "Invalid rtpmap attribute: 0"),
+            ("a=rtpmap:111 opus/48000/0", "Invalid rtpmap attribute: 0"),
+            ("a=rtpmap:128 opus/48000/2", "Invalid payload type: 128"),
+            ("a=sctp-port:65536", "Invalid port: 65536"),
+            ("a=sctpmap:x webrtc-datachannel", "Invalid port: x"),
+            ("a=ssrc:4294967296 cname:foo", "Invalid SSRC: 4294967296"),
+            ("a=ssrc-group:FID 1 -1", "Invalid SSRC: -1"),
+        ]:
+            self.assertParseFails(sdp + line + "\n", msg)
+
+    def test_parse_number_bounds(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 65535 UDP/TLS/RTP/SAVPF 0 127
+a=extmap:256 urn:a
+a=extmap:4096 urn:b
+a=extmap:4351 urn:c
+a=ssrc:4294967295 cname:foo
+"""
+            )
+        )
+        self.assertEqual(d.media[0].port, 65535)
+        self.assertEqual(d.media[0].fmt, [0, 127])
+        self.assertEqual([x.id for x in d.media[0].extmap], [256, 4096, 4351])
+        self.assertEqual(d.media[0].ssrc[0].ssrc, 4294967295)
+
+    def test_parse_application_fmtp(self) -> None:
+        # Formats of non-RTP media are not payload types, as in this offer from
+        # draft-ietf-mmusic-sctp-sdp-07, with an "a=rtpmap" line added.
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=application 9 DTLS/SCTP webrtc-datachannel
+a=fmtp:webrtc-datachannel max-message-size=100000
+a=rtpmap:webrtc-datachannel foo/1
+a=sctp-port:5000
+"""
+            )
+        )
+        self.assertEqual(d.media[0].fmt, ["webrtc-datachannel"])
+        self.assertEqual(d.media[0].rtp.codecs, [])
+        self.assertEqual(d.media[0].sctp_port, 5000)
+
+    def test_parse_ssrc_flag(self) -> None:
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 9 UDP/TLS/RTP/SAVPF 111
+a=ssrc:1 foo
+a=ssrc:1 cname:bar
+a=ssrc:2 cname
+"""
+            )
+        )
+        self.assertEqual(
+            d.media[0].ssrc,
+            [SsrcDescription(ssrc=1, cname="bar"), SsrcDescription(ssrc=2)],
+        )
+
+    def test_parse_trailing_whitespace(self) -> None:
+        lines = [
+            "v=0",
+            "o=- 0 0 IN IP4 127.0.0.1",
+            "s=-",
+            "t=0 0",
+            "a=fingerprint:sha-256 AA:BB",
+            "a=setup:actpass",
+            "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+            "a=rtpmap:111 opus/48000/2",
+            "a=fmtp:111 minptime=10",
+            "m=application 9 UDP/DTLS/SCTP webrtc-datachannel",
+            "a=sctp-port:5000",
+            "a=max-message-size:65536",
+        ]
+        d = SessionDescription.parse("".join(f"{line} \r\n" for line in lines))
+        self.assertEqual(d.media[0].dtls.fingerprints[0].value, "AA:BB")
+        self.assertEqual(d.media[0].rtp.codecs[0].parameters, {"minptime": 10})
+        self.assertEqual(d.media[1].sctp_port, 5000)
+        self.assertEqual(d.media[1].sctpCapabilities.maxMessageSize, 65536)
+
+
+class CandidateSdpTest(TestCase):
+    def assertParseFails(self, v: str, msg: str) -> None:
+        with self.assertRaises(ValueError) as cm:
+            candidate_from_sdp(v)
+        self.assertEqual(str(cm.exception), msg)
+
+    def test_parse_invalid(self) -> None:
+        # Fewer than the 8 mandatory fields.
+        self.assertParseFails("", "Invalid candidate attribute: ")
+        self.assertParseFails(
+            "1 1 udp 2122260223 192.168.1.2 54321 typ",
+            "Invalid candidate attribute: 1 1 udp 2122260223 192.168.1.2 54321 typ",
+        )
+
+        # Invalid or out of range numbers.
+        for v, msg in [
+            ("1 0 udp 1 1.2.3.4 5 typ host", "Invalid candidate attribute: 0"),
+            ("1 257 udp 1 1.2.3.4 5 typ host", "Invalid candidate attribute: 257"),
+            ("1 +1 udp 1 1.2.3.4 5 typ host", "Invalid candidate attribute: +1"),
+            ("1 1 udp 0 1.2.3.4 5 typ host", "Invalid candidate attribute: 0"),
+            (
+                "1 1 udp 2147483648 1.2.3.4 5 typ host",
+                "Invalid candidate attribute: 2147483648",
+            ),
+            ("1 1 udp 1 1.2.3.4 abc typ host", "Invalid port: abc"),
+            ("1 1 udp 1 1.2.3.4 65536 typ host", "Invalid port: 65536"),
+            ("1 1 udp 1 1.2.3.4 5 typ srflx rport x", "Invalid port: x"),
+        ]:
+            self.assertParseFails(v, msg)
 
 
 class H264SdpTest(TestCase):
