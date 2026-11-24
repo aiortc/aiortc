@@ -5,8 +5,8 @@ import os
 import tempfile
 import time
 import wave
-from collections.abc import Iterator
-from typing import Any, cast
+from collections.abc import Iterator, Sequence
+from typing import Any, Optional, cast
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -47,6 +47,34 @@ def get_stream_duration(stream: av.stream.Stream) -> float:
             return 0.0
     else:
         return float(stream.duration * stream.time_base)
+
+
+class FrameStreamTrack(MediaStreamTrack):
+    """
+    A track which delivers the given frames as fast as they are read.
+    """
+
+    def __init__(
+        self,
+        kind: str,
+        frames: Sequence[av.frame.Frame],
+        start: Optional[asyncio.Event] = None,
+    ) -> None:
+        super().__init__()
+        self.kind = kind
+        self.finished = asyncio.Event()
+        self._frames = list(frames)
+        self._start = start
+
+    async def recv(self) -> av.frame.Frame:
+        if self._start is not None:
+            await self._start.wait()
+        await asyncio.sleep(0)
+        if not self._frames:
+            self.finished.set()
+            self.stop()
+            raise MediaStreamError
+        return self._frames.pop(0)
 
 
 class VideoStreamTrackUhd(VideoStreamTrack):
@@ -810,6 +838,126 @@ class MediaRecorderTest(MediaTestCase):
             self.assertVideoStream(container.streams[1], "h264")
 
     @asynctest
+    async def test_audio_and_video_mp4_audio_first(self) -> None:
+        path = self.temporary_path("test.mp4")
+        audio = FrameStreamTrack(
+            "audio",
+            self.create_audio_frames(layout="mono", sample_rate=48000, count=50),
+        )
+        video = FrameStreamTrack(
+            "video",
+            self.create_video_frames(width=1280, height=720, count=30),
+            start=audio.finished,
+        )
+        recorder = MediaRecorder(path)
+        recorder.addTrack(audio)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(video.finished.wait(), timeout=5)
+        await recorder.stop()
+
+        # The video size comes from its first frame, though audio came first.
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams), 2)
+
+            self.assertAudioStream(container.streams[0], "aac")
+            self.assertVideoStream(container.streams[1], "h264", width=1280, height=720)
+
+    @asynctest
+    async def test_audio_and_video_mp4_untimed(self) -> None:
+        path = self.temporary_path("test.mp4")
+        audio_frames = self.create_audio_frames(
+            layout="mono", sample_rate=48000, count=50
+        )
+        for frame in audio_frames:
+            frame.pts = None
+        audio = FrameStreamTrack("audio", audio_frames)
+        video = FrameStreamTrack("video", [], start=asyncio.Event())
+        recorder = MediaRecorder(path)
+        recorder.addTrack(audio)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(audio.finished.wait(), timeout=5)
+        await recorder.stop()
+
+        # Audio without timestamps cannot be held, so it is written at once.
+        with av.open(path, "r") as container:
+            self.assertAlmostEqual(
+                get_stream_duration(container.streams.audio[0]), 1, delta=0.1
+            )
+
+    @asynctest
+    async def test_audio_and_video_mp4_video_ended(self) -> None:
+        path = self.temporary_path("test.mp4")
+        audio = FrameStreamTrack(
+            "audio",
+            self.create_audio_frames(layout="mono", sample_rate=48000, count=50),
+        )
+        video = FrameStreamTrack("video", [])
+        recorder = MediaRecorder(path)
+        recorder.addTrack(audio)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(audio.finished.wait(), timeout=5)
+
+        # A video track which ended does not hold back the audio.
+        self.assertTrue(os.path.exists(path))
+        await recorder.stop()
+
+        with av.open(path, "r") as container:
+            self.assertAudioStream(container.streams.audio[0], "aac")
+
+    @asynctest
+    async def test_audio_and_video_mp4_video_late(self) -> None:
+        path = self.temporary_path("test.mp4")
+        audio = FrameStreamTrack(
+            "audio",
+            self.create_audio_frames(layout="mono", sample_rate=48000, count=200),
+        )
+        video = FrameStreamTrack(
+            "video",
+            self.create_video_frames(width=1280, height=720, count=30),
+            start=audio.finished,
+        )
+        recorder = MediaRecorder(path)
+        recorder.addTrack(audio)
+        recorder.addTrack(video)
+        await recorder.start()
+        with self.assertLogs("aiortc.contrib.media", "WARNING"):
+            await asyncio.wait_for(video.finished.wait(), timeout=5)
+        await recorder.stop()
+
+        # The audio was written after 3 seconds, and the late video was dropped.
+        with av.open(path, "r") as container:
+            self.assertEqual(len(container.streams.video), 0)
+            self.assertAlmostEqual(
+                get_stream_duration(container.streams.audio[0]), 4, delta=0.1
+            )
+
+    @asynctest
+    async def test_audio_and_video_mp4_video_missing(self) -> None:
+        path = self.temporary_path("test.mp4")
+        audio = FrameStreamTrack(
+            "audio",
+            self.create_audio_frames(layout="mono", sample_rate=48000, count=50),
+        )
+        video = FrameStreamTrack("video", [], start=asyncio.Event())
+        recorder = MediaRecorder(path)
+        recorder.addTrack(audio)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(audio.finished.wait(), timeout=5)
+
+        # The audio is held while waiting for the video, then written on stop.
+        self.assertFalse(os.path.exists(path))
+        await recorder.stop()
+
+        with av.open(path, "r") as container:
+            self.assertAlmostEqual(
+                get_stream_duration(container.streams.audio[0]), 1, delta=0.1
+            )
+
+    @asynctest
     async def test_audio_and_video_webm(self) -> None:
         path = self.temporary_path("test.webm")
         recorder = MediaRecorder(path)
@@ -825,6 +973,26 @@ class MediaRecorderTest(MediaTestCase):
 
             self.assertAudioStream(container.streams[0], "opus")
             self.assertVideoStream(container.streams[1], "vp8")
+
+    @asynctest
+    async def test_video_mp4_untimed(self) -> None:
+        path = self.temporary_path("test.mp4")
+        video_frames = [av.VideoFrame(width=320, height=240) for i in range(30)]
+        for frame in video_frames:
+            for plane in frame.planes:
+                plane.update(bytes(plane.buffer_size))
+        video = FrameStreamTrack("video", video_frames)
+        recorder = MediaRecorder(path)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(video.finished.wait(), timeout=5)
+        await recorder.stop()
+
+        # Frames without timestamps are played at the stream's rate.
+        with av.open(path, "r") as container:
+            self.assertAlmostEqual(
+                get_stream_duration(container.streams[0]), 1, delta=0.1
+            )
 
     @asynctest
     async def test_video_png(self) -> None:
@@ -853,6 +1021,28 @@ class MediaRecorderTest(MediaTestCase):
         with av.open(path, "r") as container:
             self.assertEqual(len(container.streams), 1)
             self.assertVideoStream(container.streams[0], "h264")
+
+    @asynctest
+    async def test_video_mp4_60fps(self) -> None:
+        path = self.temporary_path("test.mp4")
+        video = FrameStreamTrack(
+            "video",
+            [
+                self.create_video_frame(width=320, height=240, pts=i * 1500)
+                for i in range(60)
+            ],
+        )
+        recorder = MediaRecorder(path)
+        recorder.addTrack(video)
+        await recorder.start()
+        await asyncio.wait_for(video.finished.wait(), timeout=5)
+        await recorder.stop()
+
+        # Each frame keeps its own timestamp.
+        with av.open(path, "r") as container:
+            self.assertVideoStream(container.streams[0], "h264", width=320, height=240)
+            pts = [frame.pts for frame in container.decode(video=0)]
+            self.assertEqual(len(set(pts)), 60)
 
     @asynctest
     async def test_video_mp4_uhd(self) -> None:
