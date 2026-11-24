@@ -2216,6 +2216,7 @@ a=sctpmap:5000 webrtc-datachannel 1024
         self.assertEqual(d.media[2].msid, None)
 
     def test_parse_invalid(self) -> None:
+        # The fingerprint mixes cases on purpose: both are accepted.
         sdp = """v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=-
@@ -2334,6 +2335,13 @@ a=rtpmap:111 opus/48000/2
             ("a=sctpmap:x webrtc-datachannel", "Invalid port: x"),
             ("a=ssrc:4294967296 cname:foo", "Invalid SSRC: 4294967296"),
             ("a=ssrc-group:FID 1 -1", "Invalid SSRC: -1"),
+            # Invalid header extension directions.
+            ("a=extmap:1/ urn:a", "Invalid extmap attribute: 1/ urn:a"),
+            ("a=extmap:1/bogus urn:a", "Invalid extmap attribute: 1/bogus urn:a"),
+            (
+                "a=extmap:1/sendonly/x urn:a",
+                "Invalid extmap attribute: 1/sendonly/x urn:a",
+            ),
         ]:
             self.assertParseFails(sdp + line + "\n", msg)
 
@@ -2376,6 +2384,37 @@ a=sctp-port:5000
         self.assertEqual(d.media[0].fmt, ["webrtc-datachannel"])
         self.assertEqual(d.media[0].rtp.codecs, [])
         self.assertEqual(d.media[0].sctp_port, 5000)
+
+    def test_parse_fmtp_whitespace(self) -> None:
+        # The example from RFC 7587 section 7, then a space before a semicolon.
+        d = SessionDescription.parse(
+            lf2crlf(
+                """v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=-
+t=0 0
+m=audio 54312 RTP/AVP 101 102
+a=rtpmap:101 opus/48000/2
+a=fmtp:101 maxplaybackrate=16000; sprop-maxcapturerate=16000; maxaveragebitrate=20000; stereo=1; useinbandfec=1; usedtx=0
+a=rtpmap:102 opus/48000/2
+a=fmtp:102 minptime=10 ;useinbandfec=1
+"""
+            )
+        )
+        self.assertEqual(
+            d.media[0].rtp.codecs[0].parameters,
+            {
+                "maxplaybackrate": 16000,
+                "sprop-maxcapturerate": "16000",
+                "maxaveragebitrate": "20000",
+                "stereo": 1,
+                "useinbandfec": 1,
+                "usedtx": "0",
+            },
+        )
+        self.assertEqual(
+            d.media[0].rtp.codecs[1].parameters, {"minptime": 10, "useinbandfec": 1}
+        )
 
     def test_parse_ssrc_flag(self) -> None:
         d = SessionDescription.parse(

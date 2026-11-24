@@ -196,6 +196,8 @@ def ipaddress_to_sdp(addr: str) -> str:
 def parameters_from_sdp(sdp: str) -> ParametersDict:
     parameters: ParametersDict = {}
     for param in sdp.split(";"):
+        # Semicolons may be followed by a space, as in RFC 7587 section 7.
+        param = param.strip()
         if "=" in param:
             k, v = param.split("=", 1)
             if k in FMTP_INT_PARAMETERS:
@@ -483,7 +485,7 @@ class SessionDescription:
 
         session_lines, media_groups = grouplines(sdp)
 
-        # parse session
+        # Parse the session-level lines.
         session = cls()
         for line in session_lines:
             if line.startswith("v="):
@@ -518,13 +520,13 @@ class SessionDescription:
                 elif attr == "setup":
                     dtls_role = dtls_role_from_sdp(value)
 
-        # parse media
+        # Parse the media sections.
         for media_lines in media_groups:
             m = re.match("^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$", media_lines[0])
             if not m:
                 raise ValueError(f"Invalid media description: {media_lines[0][2:]}")
 
-            # check payload types are valid
+            # Check the payload types are valid.
             kind = m.group(1)
             fmt = m.group(4).split()
             fmt_int: Optional[list[int]] = None
@@ -574,7 +576,10 @@ class SessionDescription:
                         ext_attributes = ext_rest[0] if ext_rest else None
                         ext_direction = None
                         if "/" in ext_id:
-                            ext_id, ext_direction = ext_id.split("/")
+                            ext_id, ext_direction = ext_id.split("/", 1)
+                            # The direction is one of four values (RFC 8285 section 8).
+                            if ext_direction not in DIRECTIONS:
+                                raise ValueError(f"Invalid extmap attribute: {value}")
                         # IDs are 1 to 256, or 4096 to 4351 to offer alternatives
                         # (RFC 8285 sections 4.3 and 7).
                         ext_id_int = int_from_sdp(
