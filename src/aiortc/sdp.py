@@ -2,7 +2,7 @@ import enum
 import ipaddress
 import re
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from . import rtp
 from .rtcdtlstransport import RTCDtlsFingerprint, RTCDtlsParameters
@@ -95,15 +95,18 @@ H264_PROFILE_PATTERNS = [
 
 
 def candidate_from_sdp(sdp: str) -> RTCIceCandidate:
-    bits = sdp.split()
-    assert len(bits) >= 8
+    bits = split_attr("candidate", sdp, minimum=8, maximum=None)
 
     candidate = RTCIceCandidate(
-        component=int(bits[1]),
+        # The component ID is 1 to 256 (RFC 8445 section 5.1.2.1).
+        component=int_from_sdp("candidate attribute", bits[1], minimum=1, maximum=256),
         foundation=bits[0],
         ip=bits[4],
-        port=int(bits[5]),
-        priority=int(bits[3]),
+        port=port_from_sdp(bits[5]),
+        # The priority is 1 to 2**31 - 1 (RFC 8445 section 5.1.2).
+        priority=int_from_sdp(
+            "candidate attribute", bits[3], minimum=1, maximum=2**31 - 1
+        ),
         protocol=bits[2],
         type=bits[7],
     )
@@ -112,7 +115,7 @@ def candidate_from_sdp(sdp: str) -> RTCIceCandidate:
         if bits[i] == "raddr":
             candidate.relatedAddress = bits[i + 1]
         elif bits[i] == "rport":
-            candidate.relatedPort = int(bits[i + 1])
+            candidate.relatedPort = port_from_sdp(bits[i + 1])
         elif bits[i] == "tcptype":
             candidate.tcpType = bits[i + 1]
 
@@ -134,10 +137,28 @@ def candidate_to_sdp(candidate: RTCIceCandidate) -> str:
     return sdp
 
 
+def dtls_role_from_sdp(sdp: str) -> str:
+    # The "holdconn" value MUST NOT be used with DTLS (RFC 8842 section 5.1).
+    if sdp not in DTLS_SETUP_ROLE:
+        raise ValueError(f"Invalid setup attribute: {sdp}")
+    return DTLS_SETUP_ROLE[sdp]
+
+
+def fingerprint_from_sdp(sdp: str) -> RTCDtlsFingerprint:
+    algorithm, value = split_attr("fingerprint", sdp, minimum=2, maximum=2)
+    # Hex bytes separated by colons (RFC 8122 section 5), in either case as
+    # the comparison with the certificate digest ignores case.
+    if not re.fullmatch("[0-9A-F]{2}(:[0-9A-F]{2})*", value, re.I):
+        raise ValueError(f"Invalid fingerprint attribute: {sdp}")
+    return RTCDtlsFingerprint(algorithm=algorithm, value=value)
+
+
 def grouplines(sdp: str) -> tuple[list[str], list[list[str]]]:
     session = []
     media = []
     for line in sdp.splitlines():
+        # Be lenient with trailing whitespace, which no value we parse ends with.
+        line = line.rstrip()
         if line.startswith("m="):
             media.append([line])
         elif len(media):
@@ -147,9 +168,23 @@ def grouplines(sdp: str) -> tuple[list[str], list[list[str]]]:
     return session, media
 
 
+def int_from_sdp(name: str, value: str, *, minimum: int, maximum: Optional[int]) -> int:
+    """
+    Parse a decimal integer between `minimum` and `maximum` inclusive, where
+    a `maximum` of `None` means there is no upper bound.
+    """
+    # Unlike int(), reject signs, underscores, whitespace and non-ASCII numerals.
+    if re.fullmatch("[0-9]+", value):
+        number = int(value)
+        if number >= minimum and (maximum is None or number <= maximum):
+            return number
+    raise ValueError(f"Invalid {name}: {value}")
+
+
 def ipaddress_from_sdp(sdp: str) -> str:
     m = re.match("^IN (IP4|IP6) ([^ ]+)$", sdp)
-    assert m
+    if not m:
+        raise ValueError(f"Invalid connection address: {sdp}")
     return m.group(2)
 
 
@@ -164,7 +199,9 @@ def parameters_from_sdp(sdp: str) -> ParametersDict:
         if "=" in param:
             k, v = param.split("=", 1)
             if k in FMTP_INT_PARAMETERS:
-                parameters[k] = int(v)
+                parameters[k] = int_from_sdp(
+                    "fmtp attribute", v, minimum=0, maximum=None
+                )
             else:
                 parameters[k] = v
         else:
@@ -182,12 +219,10 @@ def parameters_to_sdp(parameters: ParametersDict) -> str:
     return ";".join(params)
 
 
-def parse_attr(line: str) -> tuple[str, Optional[str]]:
-    if ":" in line:
-        bits = line[2:].split(":", 1)
-        return bits[0], bits[1]
-    else:
-        return line[2:], None
+def parse_attr(line: str) -> tuple[str, str]:
+    # A property attribute has no value (RFC 8866 section 5.13).
+    attr, _, value = line[2:].partition(":")
+    return attr, value
 
 
 def parse_h264_profile_level_id(profile_str: str) -> tuple[H264Profile, H264Level]:
@@ -213,6 +248,39 @@ def parse_h264_profile_level_id(profile_str: str) -> tuple[H264Profile, H264Leve
     raise ValueError(
         f"Unrecognized profile_iop = {profile_iop}, profile_idc = {profile_idc}"
     )
+
+
+def payload_type_from_sdp(sdp: str) -> int:
+    # RTP payload types are 7 bits (RFC 3550 section 5.1).
+    return int_from_sdp("payload type", sdp, minimum=0, maximum=127)
+
+
+def port_from_sdp(sdp: str) -> int:
+    return int_from_sdp("port", sdp, minimum=0, maximum=65535)
+
+
+def split_attr(
+    attr: str,
+    value: str,
+    *,
+    minimum: int,
+    maximum: Optional[int],
+    sep: Optional[str] = None,
+) -> list[str]:
+    """
+    Split an attribute value into at most `maximum` fields, the last keeping
+    the rest of the value, and require at least `minimum` fields. A `maximum`
+    of `None` splits the whole value.
+    """
+    bits = value.split(sep, -1 if maximum is None else maximum - 1)
+    if len(bits) < minimum:
+        raise ValueError(f"Invalid {attr} attribute: {value}")
+    return bits
+
+
+def ssrc_from_sdp(sdp: str) -> int:
+    # SSRCs are 32 bits (RFC 3550 section 5.1).
+    return int_from_sdp("SSRC", sdp, minimum=0, maximum=2**32 - 1)
 
 
 @dataclass
@@ -242,11 +310,15 @@ class GroupDescription:
 
 
 def parse_group(
-    dest: list[GroupDescription], value: str, type: Union[type[str], type[int]] = str
+    dest: list[GroupDescription],
+    value: str,
+    parse_item: Callable[[str], Union[int, str]] = str,
 ) -> None:
     bits = value.split()
     if bits:
-        dest.append(GroupDescription(semantic=bits[0], items=list(map(type, bits[1:]))))
+        dest.append(
+            GroupDescription(semantic=bits[0], items=list(map(parse_item, bits[1:])))
+        )
 
 
 @dataclass
@@ -415,7 +487,10 @@ class SessionDescription:
         session = cls()
         for line in session_lines:
             if line.startswith("v="):
-                session.version = int(line.strip()[2:])
+                # The version MUST be 0 (RFC 9429 section 5.8.1).
+                session.version = int_from_sdp(
+                    "version", line.strip()[2:], minimum=0, maximum=0
+                )
             elif line.startswith("o="):
                 session.origin = line.strip()[2:]
             elif line.startswith("s="):
@@ -427,10 +502,7 @@ class SessionDescription:
             elif line.startswith("a="):
                 attr, value = parse_attr(line)
                 if attr == "fingerprint":
-                    algorithm, fingerprint = value.split()
-                    dtls_fingerprints.append(
-                        RTCDtlsFingerprint(algorithm=algorithm, value=fingerprint)
-                    )
+                    dtls_fingerprints.append(fingerprint_from_sdp(value))
                 elif attr == "ice-lite":
                     ice_lite = True
                 elif attr == "ice-options":
@@ -444,25 +516,32 @@ class SessionDescription:
                 elif attr == "msid-semantic":
                     parse_group(session.msid_semantic, value)
                 elif attr == "setup":
-                    dtls_role = DTLS_SETUP_ROLE[value]
+                    dtls_role = dtls_role_from_sdp(value)
 
         # parse media
         for media_lines in media_groups:
             m = re.match("^m=([^ ]+) ([0-9]+) ([A-Z/]+) (.+)$", media_lines[0])
-            assert m
+            if not m:
+                raise ValueError(f"Invalid media description: {media_lines[0][2:]}")
 
             # check payload types are valid
             kind = m.group(1)
             fmt = m.group(4).split()
             fmt_int: Optional[list[int]] = None
             if kind in ["audio", "video"]:
-                fmt_int = [int(x) for x in fmt]
-                for pt in fmt_int:
-                    assert pt >= 0 and pt < 256
-                    assert pt not in rtp.FORBIDDEN_PAYLOAD_TYPES
+                fmt_int = []
+                for value in fmt:
+                    pt = payload_type_from_sdp(value)
+                    # Some payload types conflict with RTCP (RFC 5761 section 4).
+                    if pt in rtp.FORBIDDEN_PAYLOAD_TYPES:
+                        raise ValueError(f"Invalid payload type: {value}")
+                    fmt_int.append(pt)
 
             current_media = MediaDescription(
-                kind=kind, port=int(m.group(2)), profile=m.group(3), fmt=fmt_int or fmt
+                kind=kind,
+                port=port_from_sdp(m.group(2)),
+                profile=m.group(3),
+                fmt=fmt_int or fmt,
             )
             current_media.dtls = RTCDtlsParameters(
                 fingerprints=dtls_fingerprints[:], role=dtls_role
@@ -489,23 +568,31 @@ class SessionDescription:
                     elif attr == "extmap":
                         # The URI may be followed by extension attributes, whose
                         # meaning depends on the extension (RFC 8285 section 8).
-                        ext_id, ext_uri, *ext_rest = value.split(maxsplit=2)
+                        ext_id, ext_uri, *ext_rest = split_attr(
+                            attr, value, minimum=2, maximum=3
+                        )
                         ext_attributes = ext_rest[0] if ext_rest else None
                         ext_direction = None
                         if "/" in ext_id:
                             ext_id, ext_direction = ext_id.split("/")
+                        # IDs are 1 to 256, or 4096 to 4351 to offer alternatives
+                        # (RFC 8285 sections 4.3 and 7).
+                        ext_id_int = int_from_sdp(
+                            "extmap attribute", ext_id, minimum=1, maximum=4351
+                        )
+                        if 256 < ext_id_int < 4096:
+                            raise ValueError(f"Invalid extmap attribute: {ext_id}")
                         current_media.extmap.append(
                             ExtmapDescription(
-                                id=int(ext_id),
+                                id=ext_id_int,
                                 uri=ext_uri,
                                 direction=ext_direction,
                                 attributes=ext_attributes,
                             )
                         )
                     elif attr == "fingerprint":
-                        algorithm, fingerprint = value.split()
                         current_media.dtls.fingerprints.append(
-                            RTCDtlsFingerprint(algorithm=algorithm, value=fingerprint)
+                            fingerprint_from_sdp(value)
                         )
                     elif attr == "ice-options":
                         current_media.ice_options = value
@@ -515,29 +602,40 @@ class SessionDescription:
                         current_media.ice.usernameFragment = value
                     elif attr == "max-message-size":
                         current_media.sctpCapabilities = RTCSctpCapabilities(
-                            maxMessageSize=int(value)
+                            maxMessageSize=int_from_sdp(
+                                "max-message-size attribute",
+                                value,
+                                minimum=0,
+                                maximum=None,
+                            )
                         )
                     elif attr == "mid":
                         current_media.rtp.muxId = value
                     elif attr == "msid":
                         current_media.msid = value
                     elif attr == "rtcp":
-                        bits = value.split(" ", 1)
-                        current_media.rtcp_port = int(bits[0])
+                        bits = split_attr(attr, value, minimum=1, maximum=2)
+                        current_media.rtcp_port = port_from_sdp(bits[0])
                         if len(bits) > 1:
                             current_media.rtcp_host = ipaddress_from_sdp(bits[1])
                     elif attr == "rtcp-mux":
                         current_media.rtcp_mux = True
                     elif attr == "setup":
-                        current_media.dtls.role = DTLS_SETUP_ROLE[value]
+                        current_media.dtls.role = dtls_role_from_sdp(value)
                     elif attr in DIRECTIONS:
                         current_media.direction = attr
-                    elif attr == "rtpmap":
-                        format_id, format_desc = value.split(" ", 1)
-                        bits = format_desc.split("/")
+                    elif attr == "rtpmap" and fmt_int is not None:
+                        format_id, format_desc = split_attr(
+                            attr, value, minimum=2, maximum=2
+                        )
+                        bits = split_attr(
+                            attr, format_desc, minimum=2, maximum=3, sep="/"
+                        )
                         if current_media.kind == "audio":
                             if len(bits) > 2:
-                                channels = int(bits[2])
+                                channels = int_from_sdp(
+                                    "rtpmap attribute", bits[2], minimum=1, maximum=None
+                                )
                             else:
                                 channels = 1
                         else:
@@ -545,21 +643,31 @@ class SessionDescription:
                         codec = RTCRtpCodecParameters(
                             mimeType=current_media.kind + "/" + bits[0],
                             channels=channels,
-                            clockRate=int(bits[1]),
-                            payloadType=int(format_id),
+                            # A zero clock rate would divide by zero in jitter
+                            # calculations.
+                            clockRate=int_from_sdp(
+                                "rtpmap attribute", bits[1], minimum=1, maximum=None
+                            ),
+                            payloadType=payload_type_from_sdp(format_id),
                         )
                         current_media.rtp.codecs.append(codec)
                     elif attr == "sctpmap":
-                        format_id, format_desc = value.split(" ", 1)
-                        getattr(current_media, attr)[int(format_id)] = format_desc
+                        format_id, format_desc = split_attr(
+                            attr, value, minimum=2, maximum=2
+                        )
+                        current_media.sctpmap[port_from_sdp(format_id)] = format_desc
                     elif attr == "sctp-port":
-                        current_media.sctp_port = int(value)
+                        current_media.sctp_port = port_from_sdp(value)
                     elif attr == "ssrc-group":
-                        parse_group(current_media.ssrc_group, value, type=int)
+                        parse_group(current_media.ssrc_group, value, ssrc_from_sdp)
                     elif attr == "ssrc":
-                        ssrc_str, ssrc_desc = value.split(" ", 1)
-                        ssrc = int(ssrc_str)
-                        ssrc_attr, ssrc_value = ssrc_desc.split(":", 1)
+                        ssrc_str, ssrc_desc = split_attr(
+                            attr, value, minimum=2, maximum=2
+                        )
+                        ssrc = ssrc_from_sdp(ssrc_str)
+                        # A source-level attribute may be a flag, without a value
+                        # (RFC 5576 section 4.1).
+                        ssrc_attr, colon, ssrc_value = ssrc_desc.partition(":")
 
                         try:
                             ssrc_info = next(
@@ -568,7 +676,7 @@ class SessionDescription:
                         except StopIteration:
                             ssrc_info = SsrcDescription(ssrc=ssrc)
                             current_media.ssrc.append(ssrc_info)
-                        if ssrc_attr in SSRC_INFO_ATTRS:
+                        if colon and ssrc_attr in SSRC_INFO_ATTRS:
                             setattr(ssrc_info, ssrc_attr, ssrc_value)
 
             # Keep only the formats on the "m=" line, in its order of preference
@@ -589,15 +697,19 @@ class SessionDescription:
             for line in media_lines[1:]:
                 if line.startswith("a="):
                     attr, value = parse_attr(line)
-                    if attr == "fmtp":
-                        format_id, format_desc = value.split(" ", 1)
+                    # Formats are payload types only in RTP media (RFC 8866
+                    # section 5.14).
+                    if attr == "fmtp" and fmt_int is not None:
+                        format_id, format_desc = split_attr(
+                            attr, value, minimum=2, maximum=2
+                        )
                         # Ignore parameters for a format with no codec, such as
                         # one missing from the "m=" line or without "a=rtpmap".
-                        codec = find_codec(int(format_id))
+                        codec = find_codec(payload_type_from_sdp(format_id))
                         if codec is not None:
                             codec.parameters = parameters_from_sdp(format_desc)
                     elif attr == "rtcp-fb":
-                        bits = value.split(" ", 2)
+                        bits = split_attr(attr, value, minimum=2, maximum=3)
                         for codec in current_media.rtp.codecs:
                             if bits[0] in ["*", str(codec.payloadType)]:
                                 codec.rtcpFeedback.append(
