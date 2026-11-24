@@ -2,6 +2,7 @@ import asyncio
 import binascii
 import datetime
 import enum
+import functools
 import logging
 import os
 import time
@@ -126,6 +127,13 @@ def generate_certificate(key: ec.EllipticCurvePrivateKey) -> x509.Certificate:
     return builder.sign(key, hashes.SHA256(), default_backend())
 
 
+def write_keylog(path: str, connection: SSL.Connection, line: bytes) -> None:
+    # Access to the logged secrets must be limited (RFC 9850 section 3).
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "ab") as fp:
+        fp.write(line + b"\n")
+
+
 class State(enum.Enum):
     NEW = 0
     CONNECTING = 1
@@ -206,6 +214,13 @@ class RTCCertificate:
             b"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384"
         )
         ctx.set_tlsext_use_srtp(b":".join(x.openssl_profile for x in srtp_profiles))
+
+        # Key logging is for debugging and must not be used in production
+        # (RFC 9850 section 1.1).
+        keylog_path = os.environ.get("SSLKEYLOGFILE")
+        if keylog_path:
+            logger.warning("Logging DTLS secrets to %s", keylog_path)
+            ctx.set_keylog_callback(functools.partial(write_keylog, keylog_path))
 
         return ctx
 
