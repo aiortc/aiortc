@@ -78,19 +78,33 @@ function negotiate() {
     return pc.createOffer().then((offer) => {
         return pc.setLocalDescription(offer);
     }).then(() => {
-        // wait for ICE gathering to complete
+        // Wait for ICE gathering to complete, but stop at the first
+        // server-reflexive candidate or after a timeout, so that an
+        // unreachable STUN server does not hold up the offer.
         return new Promise((resolve) => {
             if (pc.iceGatheringState === 'complete') {
                 resolve();
-            } else {
-                function checkState() {
-                    if (pc.iceGatheringState === 'complete') {
-                        pc.removeEventListener('icegatheringstatechange', checkState);
-                        resolve();
-                    }
-                }
-                pc.addEventListener('icegatheringstatechange', checkState);
+                return;
             }
+            const done = () => {
+                clearTimeout(timer);
+                pc.removeEventListener('icecandidate', checkCandidate);
+                pc.removeEventListener('icegatheringstatechange', checkState);
+                resolve();
+            };
+            const checkCandidate = (evt) => {
+                if (evt.candidate && evt.candidate.type === 'srflx') {
+                    done();
+                }
+            };
+            const checkState = () => {
+                if (pc.iceGatheringState === 'complete') {
+                    done();
+                }
+            };
+            const timer = setTimeout(done, 2000);
+            pc.addEventListener('icecandidate', checkCandidate);
+            pc.addEventListener('icegatheringstatechange', checkState);
         });
     }).then(() => {
         var offer = pc.localDescription;
