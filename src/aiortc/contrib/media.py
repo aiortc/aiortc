@@ -18,6 +18,9 @@ from ..mediastreams import AUDIO_PTIME, MediaStreamError, MediaStreamTrack, Time
 
 logger = logging.getLogger(__name__)
 
+# The most media time a recorder holds while waiting for video to start, in seconds.
+RECORDER_MAX_HOLD = 3
+
 REAL_TIME_FORMATS = [
     "alsa",
     "android_camera",
@@ -446,6 +449,8 @@ class MediaPlayer:
 
 class MediaRecorderContext:
     def __init__(self, stream: _AudioOrVideoStream) -> None:
+        self.dropped = False
+        self.ended = False
         self.started = False
         self.stream = stream
         self.task: Optional[asyncio.Task[None]] = None
@@ -479,6 +484,7 @@ class MediaRecorder:
         self.__container: Optional[av.container.OutputContainer] = av.open(
             file=file, format=format, mode="w", options=options
         )
+        self.__held: Optional[list[Packet]] = []
         self.__tracks: dict[MediaStreamTrack, MediaRecorderContext] = {}
 
     def addTrack(self, track: MediaStreamTrack) -> None:
@@ -526,6 +532,9 @@ class MediaRecorder:
             for track, context in self.__tracks.items():
                 if context.task is not None:
                     context.task.cancel()
+            self.__release_held()
+            for track, context in self.__tracks.items():
+                if context.task is not None:
                     context.task = None
                     for packet in context.stream.encode(None):
                         self.__container.mux(packet)
@@ -534,6 +543,27 @@ class MediaRecorder:
             self.__container.close()
             self.__container = None
 
+    def __mux(self, packet: Packet) -> None:
+        if self.__held is not None and self.__waiting_for_video():
+            first = next((p for p in self.__held if p.stream is packet.stream), packet)
+            # Packets without timestamps cannot be measured, so they end the hold.
+            if packet.pts is not None and first.pts is not None:
+                time_base = fractions.Fraction(
+                    packet.time_base.numerator, packet.time_base.denominator
+                )
+                if (packet.pts - first.pts) * time_base < RECORDER_MAX_HOLD:
+                    self.__held.append(packet)
+                    return
+        self.__release_held()
+        self.__container.mux(packet)
+
+    def __release_held(self) -> None:
+        if self.__held is not None:
+            held = self.__held
+            self.__held = None
+            for packet in held:
+                self.__container.mux(packet)
+
     async def __run_track(
         self, track: MediaStreamTrack, context: MediaRecorderContext
     ) -> None:
@@ -541,22 +571,47 @@ class MediaRecorder:
             try:
                 frame = await track.recv()
             except MediaStreamError:
+                context.ended = True
+                if not self.__waiting_for_video():
+                    self.__release_held()
                 return
             assert isinstance(frame, (AudioFrame, VideoFrame)), (
                 "Only audio or video frames can be recorded"
             )
 
             if not context.started:
-                # Adjust the output size to match the first frame.
                 if isinstance(context.stream, VideoStream) and isinstance(
                     frame, VideoFrame
                 ):
-                    context.stream.width = frame.width
-                    context.stream.height = frame.height
+                    if context.stream.codec_context.is_open:
+                        # The header was written without this track's size.
+                        logger.warning(
+                            "MediaRecorder dropping video track %s, it started "
+                            "more than %d seconds after the other tracks",
+                            track.id,
+                            RECORDER_MAX_HOLD,
+                        )
+                        context.dropped = True
+                    else:
+                        # Adjust the output to the first frame, keeping its time base
+                        # so frames above the nominal rate keep distinct timestamps.
+                        context.stream.width = frame.width
+                        context.stream.height = frame.height
+                        if frame.time_base is not None:
+                            context.stream.codec_context.time_base = frame.time_base
                 context.started = True
 
-            for packet in context.stream.encode(frame):  # type: ignore
-                self.__container.mux(packet)
+            if not context.dropped:
+                for packet in context.stream.encode(frame):  # type: ignore
+                    self.__mux(packet)
+
+    def __waiting_for_video(self) -> bool:
+        # Writing the header opens the video encoders, freezing their size.
+        return any(
+            isinstance(context.stream, VideoStream)
+            and not (context.started or context.ended)
+            for context in self.__tracks.values()
+        )
 
 
 class RelayStreamTrack(MediaStreamTrack):
