@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import os
+import tempfile
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -34,7 +36,13 @@ from aiortc.rtp import (
 )
 from OpenSSL import SSL
 
-from .utils import asynctest, dummy_ice_transport_pair, load, set_loss_pattern
+from .utils import (
+    asynctest,
+    dummy_dtls_transport_pair,
+    dummy_ice_transport_pair,
+    load,
+    set_loss_pattern,
+)
 
 RTP = load("rtp.bin")
 RTCP = load("rtcp_sr.bin")
@@ -185,6 +193,31 @@ class RTCDtlsTransportTest(TestCase):
         # shutdown
         await session1.stop()
         await session2.stop()
+
+    @asynctest
+    async def test_keylog(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "keylog.txt")
+            with (
+                patch.dict(os.environ, {"SSLKEYLOGFILE": path}),
+                self.assertLogs("aiortc.rtcdtlstransport", "WARNING") as cm,
+            ):
+                async with dummy_dtls_transport_pair():
+                    pass
+
+            self.assertEqual(
+                cm.output,
+                [f"WARNING:aiortc.rtcdtlstransport:Logging DTLS secrets to {path}"] * 2,
+            )
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+            # Both endpoints log the same secrets (RFC 9850 section 2).
+            with open(path, "rb") as fp:
+                lines = fp.read().splitlines()
+            self.assertGreater(len(lines), 0)
+            for line in lines:
+                self.assertRegex(line, rb"^[A-Z_]+ [0-9a-f]{64} [0-9a-f]+$")
+                self.assertEqual(lines.count(line), 2)
 
     @asynctest
     async def test_rtp(self) -> None:
