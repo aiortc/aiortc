@@ -9,6 +9,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from struct import error as StructError
 from struct import pack, unpack_from
 from typing import Deque, Optional, Union, cast
 
@@ -114,6 +115,12 @@ def decode_params(body: bytes) -> list[tuple[int, bytes]]:
     pos = 0
     while pos <= len(body) - 4:
         param_type, param_length = unpack_from("!HH", body, pos)
+
+        # The length includes the 4-byte parameter header (RFC 9260 section 3.2.1).
+        if param_length < 4 or pos + param_length > len(body):
+            raise ValueError(
+                f"SCTP parameter has an invalid length of {param_length} bytes"
+            )
         params.append((param_type, body[pos + 4 : pos + param_length]))
         pos += param_length + padl(param_length)
     return params
@@ -202,7 +209,7 @@ class DataChunk(Chunk):
 
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
-        if body:
+        if body is not None:
             (self.tsn, self.stream_id, self.stream_seq, self.protocol) = unpack_from(
                 "!LHHL", body
             )
@@ -250,7 +257,7 @@ class ForwardTsnChunk(Chunk):
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
         self.streams: list[tuple[int, int]] = []
-        if body:
+        if body is not None:
             self.cumulative_tsn = unpack_from("!L", body, 0)[0]
             pos = 4
             while pos < len(body):
@@ -286,7 +293,7 @@ class HeartbeatAckChunk(BaseParamsChunk):
 class BaseInitChunk(Chunk):
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
-        if body:
+        if body is not None:
             (
                 self.initiate_tag,
                 self.advertised_rwnd,
@@ -336,7 +343,7 @@ class SackChunk(Chunk):
         self.flags = flags
         self.gaps = []
         self.duplicates = []
-        if body:
+        if body is not None:
             (
                 self.cumulative_tsn,
                 self.advertised_rwnd,
@@ -384,7 +391,7 @@ class ShutdownChunk(Chunk):
 
     def __init__(self, flags: int = 0, body: Optional[bytes] = None) -> None:
         self.flags = flags
-        if body:
+        if body is not None:
             self.cumulative_tsn = unpack_from("!L", body)[0]
         else:
             self.cumulative_tsn = 0
@@ -459,7 +466,12 @@ def parse_packet(data: bytes) -> tuple[int, int, int, list[Chunk]]:
         chunk_body = data[pos + SCTP_CHUNK_HEADER_LENGTH : pos + chunk_length]
         chunk_cls = CHUNK_TYPES.get(chunk_type)
         if chunk_cls:
-            chunks.append(chunk_cls(flags=chunk_flags, body=chunk_body))
+            try:
+                chunks.append(chunk_cls(flags=chunk_flags, body=chunk_body))
+            except StructError:
+                raise ValueError(
+                    f"SCTP chunk of type {chunk_type} has a truncated value"
+                ) from None
         pos += chunk_length + padl(chunk_length)
     return source_port, destination_port, verification_tag, chunks
 
@@ -854,6 +866,24 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         except ConnectionError:
             pass
 
+    def _build_init_ack(self, initiate_tag: int) -> InitAckChunk:
+        """
+        Build an INIT ACK chunk from the association's parameters.
+        """
+        init_ack = InitAckChunk()
+        init_ack.initiate_tag = initiate_tag
+        init_ack.advertised_rwnd = self._advertised_rwnd
+        init_ack.outbound_streams = self._outbound_streams_count
+        init_ack.inbound_streams = self._inbound_streams_max
+        init_ack.initial_tsn = self._local_tsn
+        self._set_extensions(init_ack.params)
+
+        # Generate the State Cookie.
+        cookie = pack("!L", self._get_timestamp())
+        cookie += hmac.new(self._hmac_key, cookie, "sha1").digest()
+        init_ack.params.append((SCTP_STATE_COOKIE, cookie))
+        return init_ack
+
     async def _init(self) -> None:
         """
         Initialize the association.
@@ -938,15 +968,19 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         except ValueError:
             return
 
-        # is this an init?
+        # Check whether this is an INIT.
         init_chunk = len([x for x in chunks if isinstance(x, InitChunk)])
         if init_chunk:
-            assert len(chunks) == 1
+            # An INIT bundled with other chunks is silently discarded
+            # (RFC 9260 section 12.3).
+            if len(chunks) != 1:
+                self.__log_debug("x INIT chunk is bundled with other chunks")
+                return
             expected_tag = 0
         else:
             expected_tag = self._local_verification_tag
 
-        # verify tag
+        # Check the verification tag.
         if verification_tag != expected_tag:
             self.__log_debug(
                 "Bad verification tag %d vs %d", verification_tag, expected_tag
@@ -1038,7 +1072,21 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         self.__log_debug("< %s", chunk)
 
-        # common
+        # DATA chunks, and the FORWARD TSN chunks which skip them, are only
+        # received in these states (RFC 9260 section 6).
+        if isinstance(
+            chunk, (DataChunk, ForwardTsnChunk)
+        ) and self._association_state not in (
+            self.State.ESTABLISHED,
+            self.State.SHUTDOWN_PENDING,
+            self.State.SHUTDOWN_SENT,
+        ):
+            self.__log_debug(
+                "x %s discarded in state %s", chunk, self._association_state
+            )
+            return
+
+        # Chunks handled in any state.
         if isinstance(chunk, DataChunk):
             await self._receive_data_chunk(chunk)
         elif isinstance(chunk, SackChunk):
@@ -1072,9 +1120,35 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             for param in chunk.params:
                 cls = RECONFIG_PARAM_TYPES.get(param[0])
                 if cls is not None:
-                    await self._receive_reconfig_param(cls.parse(param[1]))
+                    try:
+                        reconfig_param = cls.parse(param[1])
+                    except StructError:
+                        self.__log_debug("x RE-CONFIG parameter is truncated")
+                        continue
+                    await self._receive_reconfig_param(reconfig_param)
 
-        # an INIT may collide with our own, see RFC 9260 section 5.2.1
+        elif (
+            isinstance(chunk, InitChunk)
+            and self._association_state == self.State.SHUTDOWN_ACK_SENT
+        ):
+            # The INIT is discarded and the SHUTDOWN ACK sent again
+            # (RFC 9260 section 9.2).
+            self.__log_debug("x INIT chunk discarded during shutdown")
+            await self._send_chunk(ShutdownAckChunk())
+        elif isinstance(chunk, InitChunk) and self._association_state in (
+            self.State.ESTABLISHED,
+            self.State.SHUTDOWN_PENDING,
+            self.State.SHUTDOWN_RECEIVED,
+            self.State.SHUTDOWN_SENT,
+        ):
+            # An unexpected INIT is answered with a new tag but does not change
+            # the association, which is never restarted (RFC 9260 section 5.2.2).
+            self.__log_debug("x Unexpected INIT chunk, association not restarted")
+            await self._send_chunk(
+                self._build_init_ack(random32()), verification_tag=chunk.initiate_tag
+            )
+
+        # An INIT may collide with our own (RFC 9260 section 5.2.1).
         elif isinstance(chunk, InitChunk):
             self._last_received_tsn = tsn_minus_one(chunk.initial_tsn)
             self._reconfig_response_seq = tsn_minus_one(chunk.initial_tsn)
@@ -1094,19 +1168,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 self._outbound_streams_count, chunk.inbound_streams
             )
 
-            init_ack = InitAckChunk()
-            init_ack.initiate_tag = self._local_verification_tag
-            init_ack.advertised_rwnd = self._advertised_rwnd
-            init_ack.outbound_streams = self._outbound_streams_count
-            init_ack.inbound_streams = self._inbound_streams_max
-            init_ack.initial_tsn = self._local_tsn
-            self._set_extensions(init_ack.params)
-
-            # generate state cookie
-            cookie = pack("!L", self._get_timestamp())
-            cookie += hmac.new(self._hmac_key, cookie, "sha1").digest()
-            init_ack.params.append((SCTP_STATE_COOKIE, cookie))
-            await self._send_chunk(init_ack)
+            await self._send_chunk(self._build_init_ack(self._local_verification_tag))
         elif isinstance(chunk, CookieEchoChunk):
             # check state cookie MAC
             cookie = chunk.body
@@ -1188,7 +1250,13 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         self._sack_needed = True
 
-        # mark as received
+        # A TSN beyond the 16-bit Gap Ack Block offsets cannot be acknowledged, so
+        # the chunk is dropped and left out of the SACK (RFC 9260 section 6.2).
+        if uint32_gt(chunk.tsn, (self._last_received_tsn + 0xFFFF) % SCTP_TSN_MODULO):
+            self.__log_debug("x DATA chunk TSN %d is too far ahead", chunk.tsn)
+            return
+
+        # Mark the TSN as received.
         if self._mark_received(chunk.tsn):
             return
 
@@ -1258,6 +1326,27 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if uint32_gt(self._last_sacked_tsn, chunk.cumulative_tsn):
             return
 
+        # Gap Ack Blocks acknowledge TSNs above the Cumulative TSN Ack, from their
+        # start to their end (RFC 9260 section 3.3.4).
+        if any(start < 1 or start > end for start, end in chunk.gaps):
+            self.__log_debug("x SACK chunk has an invalid Gap Ack Block")
+            return
+
+        # Acknowledging a TSN which was not sent aborts the association
+        # (RFC 9260 section 12.4). The outbound queue only holds unsent chunks.
+        if self._outbound_queue:
+            highest_sent_tsn = tsn_minus_one(self._outbound_queue[0].tsn)
+        else:
+            highest_sent_tsn = tsn_minus_one(self._local_tsn)
+        highest_acked_tsn = (
+            chunk.cumulative_tsn + max((end for _, end in chunk.gaps), default=0)
+        ) % SCTP_TSN_MODULO
+        if uint32_gt(highest_acked_tsn, highest_sent_tsn):
+            self.__log_debug("x SACK chunk acknowledges TSN %d", highest_acked_tsn)
+            await self._abort()
+            self._set_state(self.State.CLOSED)
+            return
+
         received_time = time.monotonic()
         self._last_sacked_tsn = chunk.cumulative_tsn
         cwnd_fully_utilized = self._flight_size >= self._cwnd
@@ -1278,19 +1367,22 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             if done == 1 and schunk._sent_count == 1:
                 self._update_rto(received_time - schunk._sent_time)
 
-        # handle gap blocks
+        # Handle the Gap Ack Blocks.
         loss = False
         if chunk.gaps:
+            # Offsets covered by an earlier block are skipped, so each TSN in flight
+            # is added once however many blocks overlap.
             seen = set()
-            for gap in chunk.gaps:
-                for pos in range(gap[0], gap[1] + 1):
-                    highest_seen_tsn = (chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO
-                    seen.add(highest_seen_tsn)
+            covered = 0
+            for start, end in sorted(chunk.gaps):
+                for pos in range(max(start, covered + 1), end + 1):
+                    seen.add((chunk.cumulative_tsn + pos) % SCTP_TSN_MODULO)
+                covered = max(covered, end)
 
-            # determined Highest TSN Newly Acked (HTNA)
+            # Determine the Highest TSN Newly Acknowledged (RFC 9260 section 7.2.4).
             highest_newly_acked = chunk.cumulative_tsn
             for schunk in self._sent_queue:
-                if uint32_gt(schunk.tsn, highest_seen_tsn):
+                if uint32_gt(schunk.tsn, highest_acked_tsn):
                     break
                 if schunk.tsn in seen:
                     if not schunk._acked:
@@ -1299,7 +1391,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                         highest_newly_acked = schunk.tsn
                     self._flight_size_decrease(schunk)
 
-            # strike missing chunks prior to HTNA
+            # Count a miss for each missing TSN below it.
             for schunk in self._sent_queue:
                 if uint32_gt(schunk.tsn, highest_newly_acked):
                     break
@@ -1510,16 +1602,24 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         # transmit outbound data
         await self._transmit()
 
-    async def _send_chunk(self, chunk: Chunk) -> None:
+    async def _send_chunk(
+        self, chunk: Chunk, verification_tag: Optional[int] = None
+    ) -> None:
         """
         Transmit a chunk (no bundling for now).
+
+        The packet carries the peer's verification tag unless another is given.
         """
         self.__log_debug("> %s", chunk)
         await self.__transport._send_data(
             serialize_packet(
                 self._local_port,
                 self._remote_port,
-                self._remote_verification_tag,
+                (
+                    self._remote_verification_tag
+                    if verification_tag is None
+                    else verification_tag
+                ),
                 chunk,
             )
         )
@@ -1988,8 +2088,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if pp_id == WEBRTC_DCEP and len(data):
             msg_type = data[0]
             if msg_type == DATA_CHANNEL_OPEN and len(data) >= 12:
-                # we should not receive an open for an existing channel
-                assert stream_id not in self._data_channels
+                # A DATA_CHANNEL_OPEN on a used stream or which is not well formed
+                # is not acknowledged (RFC 8832 section 6).
+                if stream_id in self._data_channels:
+                    self.__log_debug("x DATA_CHANNEL_OPEN on used stream %d", stream_id)
+                    return
 
                 (
                     msg_type,
@@ -1999,12 +2102,19 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                     label_length,
                     protocol_length,
                 ) = unpack_from("!BBHLHH", data)
+                if 12 + label_length + protocol_length > len(data):
+                    self.__log_debug("x DATA_CHANNEL_OPEN has an invalid length")
+                    return
                 pos = 12
-                label = data[pos : pos + label_length].decode("utf8")
-                pos += label_length
-                protocol = data[pos : pos + protocol_length].decode("utf8")
+                try:
+                    label = data[pos : pos + label_length].decode("utf8")
+                    pos += label_length
+                    protocol = data[pos : pos + protocol_length].decode("utf8")
+                except UnicodeDecodeError:
+                    self.__log_debug("x DATA_CHANNEL_OPEN is not valid UTF-8")
+                    return
 
-                # check channel type
+                # Check the channel type.
                 maxPacketLifeTime = None
                 maxRetransmits = None
                 if (channel_type & 0x03) == 1:
@@ -2012,7 +2122,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 elif (channel_type & 0x03) == 2:
                     maxPacketLifeTime = reliability
 
-                # register channel
+                # Register the channel.
                 parameters = RTCDataChannelParameters(
                     label=label,
                     ordered=(channel_type & 0x80) == 0,
@@ -2025,24 +2135,25 @@ class RTCSctpTransport(AsyncIOEventEmitter):
                 channel._setReadyState("open")
                 self._data_channels[stream_id] = channel
 
-                # send ack
+                # Send the ACK.
                 self._data_channel_queue.append(
                     (channel, WEBRTC_DCEP, pack("!B", DATA_CHANNEL_ACK))
                 )
                 await self._data_channel_flush()
 
-                # emit channel
+                # Emit the channel.
                 self.emit("datachannel", channel)
-            elif msg_type == DATA_CHANNEL_ACK:
-                assert stream_id in self._data_channels
+            elif msg_type == DATA_CHANNEL_ACK and stream_id in self._data_channels:
                 channel = self._data_channels[stream_id]
 
                 # A closing data channel is not opened again (W3C WebRTC section 6.2.2).
                 if channel.readyState == "connecting":
                     channel._setReadyState("open")
         elif pp_id == WEBRTC_STRING and stream_id in self._data_channels:
-            # emit message
-            self._data_channels[stream_id].emit("message", data.decode("utf8"))
+            # Decoding as UTF-8 replaces invalid sequences (W3C WebRTC section 6.2.8).
+            self._data_channels[stream_id].emit(
+                "message", data.decode("utf8", errors="replace")
+            )
         elif pp_id == WEBRTC_STRING_EMPTY and stream_id in self._data_channels:
             # emit message
             self._data_channels[stream_id].emit("message", "")

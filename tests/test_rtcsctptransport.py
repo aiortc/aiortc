@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 from collections.abc import AsyncGenerator, Generator
+from struct import pack
 from typing import TypeVar, cast
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -8,6 +9,8 @@ from unittest.mock import MagicMock, patch
 from aiortc.exceptions import InvalidStateError
 from aiortc.rtcdatachannel import RTCDataChannel, RTCDataChannelParameters
 from aiortc.rtcsctptransport import (
+    DATA_CHANNEL_ACK,
+    DATA_CHANNEL_OPEN,
     LOCAL_MAX_MESSAGE_SIZE,
     RECONFIG_RESULT_IN_PROGRESS,
     RECONFIG_RESULT_SUCCESS_PERFORMED,
@@ -16,9 +19,13 @@ from aiortc.rtcsctptransport import (
     SCTP_DATA_LAST_FRAG,
     SCTP_DATA_UNORDERED,
     SCTP_MAX_PACKET_LENGTH,
+    SCTP_PRSCTP_SUPPORTED,
+    SCTP_STR_RESET_OUT_REQUEST,
     SCTP_STR_RESET_RESPONSE,
     USERDATA_MAX_LENGTH,
     WEBRTC_BINARY,
+    WEBRTC_DCEP,
+    WEBRTC_STRING,
     AbortChunk,
     Chunk,
     CookieEchoChunk,
@@ -28,6 +35,7 @@ from aiortc.rtcsctptransport import (
     HeartbeatAckChunk,
     HeartbeatChunk,
     InboundStream,
+    InitAckChunk,
     InitChunk,
     ReconfigChunk,
     RTCSctpCapabilities,
@@ -44,6 +52,7 @@ from aiortc.rtcsctptransport import (
     tsn_minus_one,
     tsn_plus_one,
 )
+from google_crc32c import value as crc32c
 
 from .utils import (
     ClosedDtlsTransport,
@@ -137,6 +146,14 @@ class SctpPacketTest(TestCase):
 
         self.assertIsInstance(chunks[0], cls)
         return cast(T, chunks[0])
+
+    def assertParseFails(self, chunk_type: int, body: bytes, message: str) -> None:
+        chunk = Chunk(body=body)
+        chunk.type = chunk_type
+        data = serialize_packet(5000, 5000, 0, chunk)
+        with self.assertRaises(ValueError) as cm:
+            parse_packet(data)
+        self.assertEqual(str(cm.exception), message)
 
     def test_parse_init(self) -> None:
         data = load("sctp_init.bin")
@@ -351,6 +368,46 @@ class SctpPacketTest(TestCase):
         chunk = self.roundtrip_packet(data, ShutdownAckChunk)
 
         self.assertEqual(chunk.type, 8)
+
+    def test_parse_parameter_invalid_length(self) -> None:
+        init_fields = pack("!LLHHL", 1, 65535, 1, 1, 1)
+        for chunk_type, fields in [
+            (AbortChunk.type, b""),
+            (ErrorChunk.type, b""),
+            (HeartbeatChunk.type, b""),
+            (HeartbeatAckChunk.type, b""),
+            (InitChunk.type, init_fields),
+            (InitAckChunk.type, init_fields),
+            (ReconfigChunk.type, b""),
+        ]:
+            # The length is shorter than the parameter header or exceeds the chunk.
+            for param_length in [0, 3, 8]:
+                with self.subTest(chunk_type=chunk_type, param_length=param_length):
+                    self.assertParseFails(
+                        chunk_type,
+                        fields + pack("!HH", 5, param_length),
+                        f"SCTP parameter has an invalid length of {param_length} bytes",
+                    )
+
+    def test_parse_truncated_value(self) -> None:
+        for chunk_type, body in [
+            (DataChunk.type, b""),
+            (DataChunk.type, b"\x00" * 11),
+            (ForwardTsnChunk.type, b""),
+            (ForwardTsnChunk.type, b"\x00" * 6),
+            (InitChunk.type, b""),
+            (InitAckChunk.type, b"\x00" * 15),
+            (SackChunk.type, b""),
+            # The SACK announces a gap block which is missing.
+            (SackChunk.type, pack("!LLHH", 0, 0, 1, 0)),
+            (ShutdownChunk.type, b""),
+        ]:
+            with self.subTest(chunk_type=chunk_type, body=body):
+                self.assertParseFails(
+                    chunk_type,
+                    body,
+                    f"SCTP chunk of type {chunk_type} has a truncated value",
+                )
 
 
 class ChunkFactory:
@@ -1654,6 +1711,30 @@ class RTCSctpTransportTest(TestCase):
             )
 
     @asynctest
+    async def test_bad_init_bundled(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._send_chunk = capture_send_chunk  # type: ignore
+            init = InitChunk()
+            init.initiate_tag = 1
+
+            # An INIT bundled with another chunk is discarded.
+            header = pack("!HHL", 5000, 5000, 0)
+            data = bytes(init) + bytes(ShutdownAckChunk())
+            checksum = crc32c(header + b"\x00\x00\x00\x00" + data)
+            await client._handle_data(header + pack("<L", checksum) + data)
+            self.assertEqual(sent, [])
+
+            # The same INIT on its own is answered.
+            await client._handle_data(serialize_packet(5000, 5000, 0, init))
+            self.assertEqual(len(sent), 1)
+            self.assertIsInstance(sent[0], InitAckChunk)
+
+    @asynctest
     async def test_bad_verification_tag(self) -> None:
         # verification tag is 12345 instead of 0
         data = load("sctp_init_bad_verification.bin")
@@ -1846,6 +1927,8 @@ class RTCSctpTransportTest(TestCase):
     async def test_receive_data(self) -> None:
         async with client_standalone() as client:
             client._last_received_tsn = 0
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
             # receive chunk
             chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
@@ -1867,9 +1950,36 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._last_received_tsn, 1)
 
     @asynctest
+    async def test_receive_data_far_ahead(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+
+            # The TSN is beyond the 16-bit gap offsets of a SACK.
+            chunk = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
+            chunk.tsn = 70000
+            chunk.user_data = b"foo"
+            await client._handle_data(
+                serialize_packet(5000, 5000, client._local_verification_tag, chunk)
+            )
+            self.assertEqual(client._last_received_tsn, 0)
+            sacks = [chunk for chunk in sent if isinstance(chunk, SackChunk)]
+            self.assertEqual(len(sacks), 1)
+            self.assertEqual(sacks[0].cumulative_tsn, 0)
+            self.assertEqual(sacks[0].gaps, [])
+
+    @asynctest
     async def test_receive_data_out_of_order(self) -> None:
         async with client_standalone() as client:
             client._last_received_tsn = 0
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
             # build chunks
             chunks = []
@@ -1922,6 +2032,120 @@ class RTCSctpTransportTest(TestCase):
             client._sack_needed = False
 
     @asynctest
+    async def test_receive_data_before_established(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        data = DataChunk(flags=(SCTP_DATA_FIRST_FRAG | SCTP_DATA_LAST_FRAG))
+        data.tsn = 1
+        data.user_data = b"foo"
+        forward_tsn = ForwardTsnChunk()
+        forward_tsn.cumulative_tsn = 1
+
+        for chunk in [data, forward_tsn]:
+            with self.subTest(chunk=chunk):
+                sent.clear()
+                async with client_standalone() as client:
+                    client._send_chunk = capture_send_chunk  # type: ignore
+                    client._set_state(RTCSctpTransport.State.COOKIE_WAIT)
+
+                    # The peer knows the verification tag from the INIT, but no
+                    # TSN has been received yet.
+                    await client._handle_data(
+                        serialize_packet(
+                            5000, 5000, client._local_verification_tag, chunk
+                        )
+                    )
+                    self.assertIsNone(client._last_received_tsn)
+                    self.assertEqual(sent, [])
+
+    @asynctest
+    async def test_receive_data_channel_ack_unknown_stream(self) -> None:
+        async with client_standalone() as client:
+            # An ACK on a stream without a data channel is ignored.
+            await client._data_channel_receive(
+                1, WEBRTC_DCEP, pack("!B", DATA_CHANNEL_ACK)
+            )
+            self.assertEqual(client._data_channels, {})
+
+    @asynctest
+    async def test_receive_data_channel_open_invalid(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channels = track_channels(client)
+
+            for data in [
+                # The label is longer than the message.
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 5, 0) + b"chat",
+                # The protocol is longer than the message.
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 4, 1) + b"chat",
+                # The label is not valid UTF-8.
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 1, 0) + b"\xff",
+                # The protocol is not valid UTF-8.
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 0, 1) + b"\xff",
+            ]:
+                with self.subTest(data=data):
+                    await client._data_channel_receive(1, WEBRTC_DCEP, data)
+                    self.assertEqual(channels, [])
+                    self.assertEqual(client._data_channels, {})
+                    self.assertEqual(sent, [])
+
+            # A well formed message opens the data channel.
+            await client._data_channel_receive(
+                1,
+                WEBRTC_DCEP,
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 4, 0) + b"chat",
+            )
+            self.assertEqual([channel.label for channel in channels], ["chat"])
+            self.assertEqual(len(sent), 1)
+
+    @asynctest
+    async def test_receive_data_channel_open_used_stream(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+            channels = track_channels(client)
+
+            # The stream is used by a data channel, so the message is ignored.
+            await client._data_channel_receive(
+                1,
+                WEBRTC_DCEP,
+                pack("!BBHLHH", DATA_CHANNEL_OPEN, 0, 0, 0, 4, 0) + b"chat",
+            )
+            self.assertEqual(channels, [])
+            self.assertIs(client._data_channels[1], channel)
+            self.assertEqual(sent, [])
+
+    @asynctest
+    async def test_receive_data_channel_string_invalid_utf8(self) -> None:
+        async with client_standalone() as client:
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+            received: list[str] = []
+            channel.on("message", received.append)
+
+            # Invalid UTF-8 is replaced rather than dropping the message.
+            await client._data_channel_receive(1, WEBRTC_STRING, b"chat\xff")
+            self.assertEqual(received, ["chat\ufffd"])
+
+    @asynctest
     async def test_receive_forward_tsn(self) -> None:
         received = []
 
@@ -1931,6 +2155,8 @@ class RTCSctpTransportTest(TestCase):
         async with client_standalone() as client:
             client._last_received_tsn = 101
             client._receive = mock_receive  # type: ignore
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
             factory = ChunkFactory(tsn=102)
             chunks = (
@@ -1997,6 +2223,8 @@ class RTCSctpTransportTest(TestCase):
         async with client_standalone() as client:
             client._last_received_tsn = 101
             client._receive = mock_receive  # type: ignore
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
             factory = ChunkFactory(tsn=102)
             chunks = factory.create([b"foo"]) + factory.create([b"bar", b"baz", b"qux"])
@@ -2030,6 +2258,8 @@ class RTCSctpTransportTest(TestCase):
         async with client_standalone() as client:
             client._last_received_tsn = 101
             client._receive = mock_receive  # type: ignore
+            client._send_chunk = noop_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
 
             factory = ChunkFactory(tsn=102)
             chunks = factory.create([b"foo"]) + factory.create([b"bar"])
@@ -2079,6 +2309,78 @@ class RTCSctpTransportTest(TestCase):
             # check response
             self.assertIsInstance(ack, HeartbeatAckChunk)
             self.assertEqual(ack.params, [(1, b"\x01\x02\x03\x04")])
+
+    @asynctest
+    async def test_receive_init_established(self) -> None:
+        sent: list[bytes] = []
+
+        async def capture_send_data(data: bytes) -> None:
+            sent.append(data)
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._remote_port = 5000
+            client._remote_verification_tag = 1234
+            client._ssthresh = 131072
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            client.transport._send_data = capture_send_data  # type: ignore
+
+            def association() -> tuple[object, ...]:
+                return (
+                    client._association_state,
+                    client._inbound_streams_count,
+                    client._last_received_tsn,
+                    client._outbound_streams_count,
+                    client._reconfig_response_seq,
+                    client._remote_extensions,
+                    client._remote_partial_reliability,
+                    client._remote_verification_tag,
+                    client._ssthresh,
+                )
+
+            before = association()
+
+            # The peer sends an INIT for a new association.
+            init = InitChunk()
+            init.initiate_tag = 5678
+            init.advertised_rwnd = 1500
+            init.outbound_streams = 1
+            init.inbound_streams = 1
+            init.initial_tsn = 1000
+            init.params = [(SCTP_PRSCTP_SUPPORTED, b"")]
+            await client._handle_data(serialize_packet(5000, 5000, 0, init))
+
+            # It is answered with a new tag, without changing the association.
+            self.assertEqual(association(), before)
+            self.assertEqual(len(sent), 1)
+            _, _, verification_tag, chunks = parse_packet(sent[0])
+            self.assertEqual(verification_tag, 5678)
+            assert isinstance(chunks[0], InitAckChunk)
+            self.assertNotEqual(chunks[0].initiate_tag, client._local_verification_tag)
+
+    @asynctest
+    async def test_receive_init_shutdown_ack_sent(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 0
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.SHUTDOWN_ACK_SENT)
+
+            # The INIT is discarded and the SHUTDOWN ACK is sent again.
+            init = InitChunk()
+            init.initiate_tag = 5678
+            init.initial_tsn = 1000
+            await client._receive_chunk(init)
+            self.assertEqual(client._last_received_tsn, 0)
+            self.assertEqual(
+                client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
+            )
+            self.assertEqual(len(sent), 1)
+            self.assertIsInstance(sent[0], ShutdownAckChunk)
 
     @asynctest
     async def test_receive_reconfig_reset_deferred(self) -> None:
@@ -2316,6 +2618,38 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._outbound_stream_seq, {})
             self.assertIsNone(client._reconfig_handle)
             self.assertIsNone(client._reconfig_request)
+
+    @asynctest
+    async def test_receive_reconfig_truncated_param(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        async with client_standalone() as client:
+            client._last_received_tsn = 1
+            client._send_chunk = capture_send_chunk  # type: ignore
+            client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            channel = RTCDataChannel(
+                client, RTCDataChannelParameters(label="chat", negotiated=True, id=1)
+            )
+
+            # The truncated request is skipped and the next one is handled.
+            request = StreamResetOutgoingParam(
+                request_sequence=1, response_sequence=0, last_tsn=1, streams=[1]
+            )
+            chunk = ReconfigChunk()
+            chunk.params.append((SCTP_STR_RESET_OUT_REQUEST, b"\x00\x00\x00\x01"))
+            chunk.params.append((SCTP_STR_RESET_OUT_REQUEST, bytes(request)))
+            await client._receive_chunk(chunk)
+            self.assertEqual(channel.readyState, "closing")
+            assert isinstance(sent[0], ReconfigChunk)
+            self.assertEqual(
+                StreamResetResponseParam.parse(sent[0].params[0][1]),
+                StreamResetResponseParam(
+                    response_sequence=1, result=RECONFIG_RESULT_SUCCESS_PERFORMED
+                ),
+            )
 
     @asynctest
     async def test_receive_sack_abandoned_fragments_flight_size(self) -> None:
@@ -2571,6 +2905,26 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(client._flight_size, USERDATA_MAX_LENGTH)
 
     @asynctest
+    async def test_receive_sack_invalid_gap(self) -> None:
+        async with client_standalone() as client:
+            client._advanced_peer_ack_tsn = 0
+            client._last_sacked_tsn = 0
+            client._local_tsn = 1
+            client._send_chunk = noop_send_chunk  # type: ignore
+
+            # Send 3 chunks, then receive a gap block which ends before it starts.
+            await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 3)
+            sack = SackChunk()
+            sack.cumulative_tsn = 0
+            sack.gaps = [(3, 2)]
+            await client._receive_chunk(sack)
+            self.assertEqual(outstanding_tsns(client), [1, 2, 3])
+            self.assertEqual(
+                [chunk._acked for chunk in client._sent_queue], [False, False, False]
+            )
+            self.assertEqual(client._flight_size, 3 * USERDATA_MAX_LENGTH)
+
+    @asynctest
     async def test_receive_sack_struck_again_before_retransmit(self) -> None:
         async def noop_transmit() -> None:
             pass
@@ -2598,6 +2952,39 @@ class RTCSctpTransportTest(TestCase):
 
             self.assertEqual(client._sent_queue[0]._retransmit, True)
             self.assertEqual(client._flight_size, USERDATA_MAX_LENGTH)
+
+    @asynctest
+    async def test_receive_sack_unsent_tsn(self) -> None:
+        sent: list[Chunk] = []
+
+        async def capture_send_chunk(chunk: Chunk) -> None:
+            sent.append(chunk)
+
+        for cumulative_tsn, gaps in [
+            # The Cumulative TSN Ack is beyond the last TSN sent.
+            (3, []),
+            # A gap block ends beyond the last TSN sent.
+            (0, [(2, 3)]),
+        ]:
+            with self.subTest(cumulative_tsn=cumulative_tsn, gaps=gaps):
+                sent.clear()
+                async with client_standalone() as client:
+                    client._advanced_peer_ack_tsn = 0
+                    client._last_sacked_tsn = 0
+                    client._local_tsn = 1
+                    client._send_chunk = capture_send_chunk  # type: ignore
+                    client._set_state(RTCSctpTransport.State.ESTABLISHED)
+
+                    # Send 2 chunks, then receive a SACK for TSN 3 which was not sent.
+                    await client._send(123, 456, b"M" * USERDATA_MAX_LENGTH * 2)
+                    sack = SackChunk()
+                    sack.cumulative_tsn = cumulative_tsn
+                    sack.gaps = gaps
+                    await client._receive_chunk(sack)
+                    self.assertIsInstance(sent[-1], AbortChunk)
+                    self.assertEqual(
+                        client._association_state, RTCSctpTransport.State.CLOSED
+                    )
 
     @asynctest
     async def test_receive_shutdown(self) -> None:
