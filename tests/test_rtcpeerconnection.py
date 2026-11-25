@@ -1013,7 +1013,7 @@ class RTCPeerConnectionTest(TestCase):
         # close twice
         await pc.close()
 
-        self.assertEqual(pc_states["signalingState"], ["stable", "closed"])
+        self.assertEqual(pc_states["signalingState"], ["stable"])
 
     @asynctest
     async def test_close_before_connect(self) -> None:
@@ -1157,31 +1157,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1293,31 +1293,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1368,31 +1368,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1499,31 +1499,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1707,31 +1707,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1811,31 +1811,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -1916,31 +1916,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -2020,31 +2020,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -2122,31 +2122,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -2225,31 +2225,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -2439,31 +2439,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     async def _test_connect_audio_and_video(
@@ -2540,31 +2540,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -2762,31 +2762,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
         media_test.tearDown()
 
@@ -3187,31 +3187,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -3306,27 +3306,23 @@ a=rtpmap:8 PCMA/8000
         self.assertClosed(pc2)
 
         # check state changes
-        self.assertEqual(pc1_states["connectionState"], ["new", "closed"])
-        self.assertEqual(pc1_states["iceConnectionState"], ["new", "closed"])
+        self.assertEqual(pc1_states["connectionState"], ["new"])
+        self.assertEqual(pc1_states["iceConnectionState"], ["new"])
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
-        self.assertEqual(
-            pc1_states["signalingState"], ["stable", "have-local-offer", "closed"]
-        )
+        self.assertEqual(pc1_states["signalingState"], ["stable", "have-local-offer"])
 
+        self.assertEqual(pc2_states["connectionState"], ["new", "connecting", "failed"])
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "failed", "closed"]
-        )
-        self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "failed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "failed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -3476,11 +3472,11 @@ a=rtpmap:8 PCMA/8000
         # check state changes
         self.assertEqual(
             pc1_states["connectionState"],
-            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+            ["new", "connecting", "connected", "connecting", "connected"],
         )
         self.assertEqual(
             pc1_states["iceConnectionState"],
-            ["new", "checking", "completed", "new", "completed", "closed"],
+            ["new", "checking", "completed", "new", "completed"],
         )
         self.assertEqual(
             pc1_states["iceGatheringState"],
@@ -3494,17 +3490,16 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-local-offer",
                 "stable",
-                "closed",
             ],
         )
 
         self.assertEqual(
             pc2_states["connectionState"],
-            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+            ["new", "connecting", "connected", "connecting", "connected"],
         )
         self.assertEqual(
             pc2_states["iceConnectionState"],
-            ["new", "checking", "completed", "new", "completed", "closed"],
+            ["new", "checking", "completed", "new", "completed"],
         )
         self.assertEqual(
             pc2_states["iceGatheringState"],
@@ -3518,7 +3513,6 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-remote-offer",
                 "stable",
-                "closed",
             ],
         )
 
@@ -3616,31 +3610,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -3724,31 +3718,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -3901,31 +3895,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -4106,31 +4100,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -4215,31 +4209,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -4449,31 +4443,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -4611,31 +4605,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -4768,31 +4762,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -5060,11 +5054,11 @@ a=rtpmap:8 PCMA/8000
         # check state changes
         self.assertEqual(
             pc1_states["connectionState"],
-            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+            ["new", "connecting", "connected", "connecting", "connected"],
         )
         self.assertEqual(
             pc1_states["iceConnectionState"],
-            ["new", "checking", "completed", "new", "completed", "closed"],
+            ["new", "checking", "completed", "new", "completed"],
         )
         self.assertEqual(
             pc1_states["iceGatheringState"],
@@ -5078,17 +5072,16 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-local-offer",
                 "stable",
-                "closed",
             ],
         )
 
         self.assertEqual(
             pc2_states["connectionState"],
-            ["new", "connecting", "connected", "connecting", "connected", "closed"],
+            ["new", "connecting", "connected", "connecting", "connected"],
         )
         self.assertEqual(
             pc2_states["iceConnectionState"],
-            ["new", "checking", "completed", "new", "completed", "closed"],
+            ["new", "checking", "completed", "new", "completed"],
         )
         self.assertEqual(
             pc2_states["iceGatheringState"],
@@ -5102,7 +5095,6 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-remote-offer",
                 "stable",
-                "closed",
             ],
         )
 
@@ -5257,31 +5249,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -5372,31 +5364,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -5479,31 +5471,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -5616,31 +5608,31 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc1_states["signalingState"],
-            ["stable", "have-local-offer", "stable", "closed"],
+            ["stable", "have-local-offer", "stable"],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
         )
         self.assertEqual(
             pc2_states["signalingState"],
-            ["stable", "have-remote-offer", "stable", "closed"],
+            ["stable", "have-remote-offer", "stable"],
         )
 
     @asynctest
@@ -6297,10 +6289,10 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc1_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc1_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc1_states["iceGatheringState"], ["new", "gathering", "complete"]
@@ -6313,15 +6305,14 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-local-offer",
                 "stable",
-                "closed",
             ],
         )
 
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["iceConnectionState"], ["new", "checking", "completed", "closed"]
+            pc2_states["iceConnectionState"], ["new", "checking", "completed"]
         )
         self.assertEqual(
             pc2_states["iceGatheringState"], ["new", "gathering", "complete"]
@@ -6334,7 +6325,6 @@ a=rtpmap:8 PCMA/8000
                 "stable",
                 "have-remote-offer",
                 "stable",
-                "closed",
             ],
         )
 
@@ -6392,10 +6382,10 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
 
     @asynctest
@@ -6457,10 +6447,10 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
 
     @asynctest
@@ -6522,10 +6512,10 @@ a=rtpmap:8 PCMA/8000
 
         # check state changes
         self.assertEqual(
-            pc1_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc1_states["connectionState"], ["new", "connecting", "connected"]
         )
         self.assertEqual(
-            pc2_states["connectionState"], ["new", "connecting", "connected", "closed"]
+            pc2_states["connectionState"], ["new", "connecting", "connected"]
         )
 
     @asynctest
