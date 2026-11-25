@@ -3,6 +3,94 @@ Changelog
 
 .. currentmodule:: aiortc
 
+1.17.0
+------
+
+Peer connection
+...............
+
+ * Apply new codecs and SSRCs when a session is renegotiated, for both sending
+   and receiving.
+ * Handle rejected "m=" sections, so that a transceiver stopped by either end no
+   longer prevents renegotiation, and do not reuse a stopped transceiver in
+   :meth:`RTCPeerConnection.addTrack`.
+ * Fix two BUNDLE bugs which made connectivity checks use the wrong candidates,
+   or left media on a stopped transport.
+ * Fix an `IndexError` in the background when applying a session description.
+
+SDP
+...
+
+ * Take the codecs and their order of preference from the "m=" line, match RTX
+   codecs wherever they are listed, and receive RTP with the payload types from
+   the local description.
+ * Raise a `ValueError` for malformed SDP, instead of various other exceptions.
+ * Accept "a=extmap" attributes with extension attributes, spaces between
+   "a=fmtp" parameters and a missing "a=msid-semantic" attribute.
+
+ICE
+...
+
+ * Make "closed" the final ICE transport state, and let ICE fail when no local
+   candidates were gathered instead of staying in the "new" state.
+ * Make the `server` example send its offer without waiting for ICE gathering
+   to complete.
+ * Require `aioice` 0.15.1, which is needed for ICE candidate statistics.
+
+DTLS
+....
+
+ * Add RSA cipher suites, for compatibility with servers using RSA
+   certificates.
+
+RTP
+...
+
+ * Document :meth:`RTCRtpSender.replaceTrack`. Replacing a track now keeps the
+   RTP timestamps increasing, resumes sending after a track has ended, and
+   raises a `TypeError` for a track of the wrong kind.
+ * Only set the RTP marker bit at the start of an audio talkspurt, and end a
+   received video frame on its marker bit.
+ * Release every complete frame from the jitter buffer, and give up on a
+   missing video packet after one second, sending a Picture Loss Indication
+   (PLI).
+ * Harden RTP and RTCP parsing against malformed values, which could close the
+   DTLS transport.
+ * Fix retransmission requests for packets lost just after the RTP sequence
+   number wraps.
+ * Fix the contents of RTCP receiver reports, only send RTCP sender reports
+   after sending data, with the time at which they are sent, and handle RTCP
+   SDES packets with several chunks.
+
+Data channels
+.............
+
+ * Harden SCTP against malformed and unexpected peer input. In particular, an
+   SCTP parameter with a length of zero no longer blocks the event loop.
+ * Make a data channel with a `maxPacketLifeTime` of 0 partially reliable,
+   instead of reliable.
+
+Statistics
+..........
+
+ * Add ICE candidate pair and candidate statistics, see
+   :class:`RTCIceCandidatePairStats` and :class:`RTCIceCandidateStats`.
+ * Add more of the mandatory RTP stream statistics: `bytesReceived`,
+   `nackCount` and `trackIdentifier` for inbound streams, `nackCount`,
+   `framesEncoded` and `framesSent` for outbound streams, and the `localId` and
+   `remoteId` links between local and remote statistics.
+ * Fix RTP stream statistics to follow the WebRTC statistics specification:
+   each RTP stream has its own ID, `jitter` is in seconds, `fractionLost` is a
+   fraction, and packet and byte counters include retransmissions.
+
+Media
+.....
+
+ * Fix :class:`~aiortc.contrib.media.MediaPlayer` looping: keep timestamps
+   increasing, and keep looping files whose decoders hold back frames.
+ * Fix the video size of :class:`~aiortc.contrib.media.MediaRecorder` when
+   audio arrives first, and record video faster than 30 frames per second.
+
 1.16.0
 ------
 
