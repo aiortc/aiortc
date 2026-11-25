@@ -31,12 +31,15 @@ the actual text rather than relying on memory. The API follows the W3C
 WebRTC specification, and the protocol stack follows the IETF RFCs, for
 instance:
 
-- JSEP and SDP: RFC 9429, 8866, 3264 (offer/answer), 8843 (BUNDLE)
-- DTLS and SRTP: RFC 6347, 5764, 3711
+- JSEP and SDP: RFC 9429, 8866, 3264 (offer/answer), 9143 (BUNDLE)
+- ICE: RFC 8445, 8839 (ICE in SDP)
+- DTLS and SRTP: RFC 6347, 5764, 3711, 8842 (DTLS in SDP), 8122
+  (fingerprints)
 - RTP and RTCP: RFC 3550, 8834 (WebRTC use of RTP), 4585, 5506 (reduced-size
   RTCP), 4588 (RTX), 8285 (header extensions), and the payload formats such
   as RFC 7741 (VP8), 6184 (H.264) and 7587 (Opus)
-- SCTP and data channels: RFC 9260, 8261, 8831, 8832, 8841
+- SCTP and data channels: RFC 9260, 3758 (partial reliability), 6525
+  (stream reconfiguration), 8261, 8831, 8832, 8841
 
 Note where a MUST, SHOULD or MAY applies, and justify behaviour changes
 in comments and commit messages.
