@@ -824,7 +824,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         """
         if not self.__started:
             self.__started = True
-            self.__state = "connecting"
+            self.__setState("connecting")
             self._remote_port = remotePort
             if remoteCaps is not None:
                 self._remote_max_message_size = remoteCaps.maxMessageSize
@@ -854,6 +854,8 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         if self._association_state != self.State.CLOSED:
             await self._abort()
         self.__transport._unregister_data_receiver(self)
+        # Closing the peer connection fires no state change event.
+        self.__state = "closed"
         self._set_state(self.State.CLOSED)
 
     async def _abort(self) -> None:
@@ -1102,6 +1104,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._set_state(self.State.CLOSED)
         elif isinstance(chunk, ShutdownChunk):
             self._t2_cancel()
+            self.__setState("closed")
             self._set_state(self.State.SHUTDOWN_RECEIVED)
             shutdown_ack = ShutdownAckChunk()
             await self._send_chunk(shutdown_ack)
@@ -1665,6 +1668,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
         self._sack_duplicates.clear()
         self._sack_needed = False
 
+    def __setState(self, state: str) -> None:
+        if state != self.__state:
+            self.__state = state
+            self.emit("statechange")
+
     def _set_state(self, state: "RTCSctpTransport.State") -> None:
         """
         Transition the SCTP association to a new state.
@@ -1674,7 +1682,7 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._association_state = state
 
         if state == self.State.ESTABLISHED:
-            self.__state = "connected"
+            self.__setState("connected")
             for channel in list(self._data_channels.values()):
                 if channel.negotiated and channel.readyState != "open":
                     channel._setReadyState("open")
@@ -1684,11 +1692,11 @@ class RTCSctpTransport(AsyncIOEventEmitter):
             self._t1_cancel()
             self._t2_cancel()
             self._t3_cancel()
-            self.__state = "closed"
 
             # close data channels
             for stream_id in list(self._data_channels.keys()):
                 self._data_channel_closed(stream_id)
+            self.__setState("closed")
 
             # no more events will be emitted, so remove all event listeners
             # to facilitate garbage collection.
