@@ -125,6 +125,16 @@ def track_channels(transport: RTCSctpTransport) -> list[RTCDataChannel]:
     return channels
 
 
+def track_states(transport: RTCSctpTransport) -> list[str]:
+    states = []
+
+    @transport.on("statechange")
+    def on_statechange() -> None:
+        states.append(transport.state)
+
+    return states
+
+
 async def wait_for_outcome(client: RTCSctpTransport, server: RTCSctpTransport) -> None:
     final = [RTCSctpTransport.State.ESTABLISHED, RTCSctpTransport.State.CLOSED]
     for i in range(100):
@@ -980,6 +990,25 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(server._remote_extensions, [192, 130])
 
             await asyncio.sleep(0.1)
+
+    @asynctest
+    async def test_connect_then_server_stops(self) -> None:
+        async with client_and_server() as (client, server):
+            client_states = track_states(client)
+            server_states = track_states(server)
+
+            await server.start(client.getCapabilities(), client.port)
+            await client.start(server.getCapabilities(), server.port)
+            await wait_for_outcome(client, server)
+            self.assertEqual(client.state, "connected")
+
+            # The server aborts the association, which closes the client.
+            await server.stop()
+            await asyncio.sleep(0.1)
+            self.assertEqual(client.state, "closed")
+            self.assertEqual(client_states, ["connecting", "connected", "closed"])
+            self.assertEqual(server.state, "closed")
+            self.assertEqual(server_states, ["connecting", "connected"])
 
     @asynctest
     async def test_connect_then_client_creates_data_channel(self) -> None:
@@ -2992,6 +3021,7 @@ class RTCSctpTransportTest(TestCase):
             client._last_received_tsn = 0
             client._send_chunk = noop_send_chunk  # type: ignore
             client._set_state(RTCSctpTransport.State.ESTABLISHED)
+            client_states = track_states(client)
 
             # receive shutdown
             chunk = ShutdownChunk()
@@ -3000,11 +3030,14 @@ class RTCSctpTransportTest(TestCase):
             self.assertEqual(
                 client._association_state, RTCSctpTransport.State.SHUTDOWN_ACK_SENT
             )
+            self.assertEqual(client.state, "closed")
+            self.assertEqual(client_states, ["closed"])
 
             # receive shutdown complete
             chunk2 = ShutdownCompleteChunk()
             await client._receive_chunk(chunk2)
             self.assertEqual(client._association_state, RTCSctpTransport.State.CLOSED)
+            self.assertEqual(client_states, ["closed"])
 
     @asynctest
     async def test_mark_received(self) -> None:
